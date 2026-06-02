@@ -25,7 +25,7 @@ def build_bigquery_local_config(*, environment: str = "dev", location: str) -> s
 
     return (
         'adapter = "bigquery"\n'
-        f'environment = "{environment}"\n\n'
+        f'target = "{environment}"\n\n'
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n'
@@ -40,11 +40,11 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
     return (
         f'name = "{project_name}"\n'
         'adapter = "bigquery"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{project_id}"\n'
         f'schema = "{dataset_name}"\n'
         'defer_sources_to = "dev"\n\n'
@@ -66,19 +66,20 @@ def build_bigquery_virtual_seed_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "bigquery"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{project_id}"\n'
         f'schema = "{dataset_name}"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n'
         f"{unsuffixed_line}\n"
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
 
@@ -110,15 +111,15 @@ def build_bigquery_source_deferral_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "bigquery"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{project_id}"\n'
         f'schema = "{dev_dataset_name}"\n'
         'defer_sources_to = "prod"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{project_id}"\n'
         f'schema = "{prod_dataset_name}"\n\n'
         "[defaults]\n"
@@ -137,7 +138,7 @@ def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     project_contents: str = (
         'name = "waffle_shop"\n'
         'adapter = "bigquery"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n\n'
@@ -145,11 +146,11 @@ def prepare_bigquery_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         'default_audit_severity = "warn"\n\n'
         "[defaults]\n"
         'materialized = "table"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{project_name}"\n'
         f'schema = "{dataset_name}"\n'
         'defer_sources_to = "dev"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{project_name}"\n'
         f'schema = "{dataset_name}"\n\n'
         "[path_defaults.staging]\n"
@@ -279,20 +280,20 @@ def prepare_bigquery_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     project_contents: str = (
         'name = "bigquery_diff_project"\n'
         'adapter = "bigquery"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{project_name}"\n'
         f'schema = "{dev_dataset}"\n\n'
-        "[environments.dev.clone]\n"
+        "[targets.dev.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = true\n\n"
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{project_name}"\n'
         f'schema = "{prod_dataset}"\n\n'
-        "[environments.prod.clone]\n"
+        "[targets.prod.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = false\n\n"
         "[defaults]\n"

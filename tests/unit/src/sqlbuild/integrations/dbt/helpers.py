@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
@@ -121,7 +121,7 @@ def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.NO_CHANGE,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name=model_name,

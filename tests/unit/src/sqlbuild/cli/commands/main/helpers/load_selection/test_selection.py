@@ -41,7 +41,7 @@ def test_given_load_selector_when_selecting_then_returns_expected_source_entries
         discovered_inputs=build_load_selection_inputs(),
         select=test_case.select,
         exclude=(),
-        environment_config=None,
+        target_config=None,
     )
 
     assert tuple(entry.name for entry in entries) == test_case.expected_entry_names

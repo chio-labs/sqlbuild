@@ -255,7 +255,7 @@ def build_scenario_snapshot_capture_plan(
             ScenarioSnapshotCaptureRelationPlan(
                 kind=fixture_plan.kind,
                 logical_name=fixture_plan.logical_name,
-                source_target=fixture_plan.target,
+                source_target=fixture_plan.destination,
                 file_path=spec.file_path,
                 capture_sql=spec.capture_sql,
             )
@@ -268,7 +268,7 @@ def build_scenario_snapshot_capture_plan(
             ScenarioSnapshotCaptureRelationPlan(
                 kind=ScenarioArtifactKind.SEED,
                 logical_name=seed_entry.name,
-                source_target=seed_entry.target,
+                source_target=seed_entry.destination,
                 file_path=spec.file_path,
                 capture_sql=spec.capture_sql,
             )

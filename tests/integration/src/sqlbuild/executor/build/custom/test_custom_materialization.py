@@ -9,7 +9,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
@@ -220,7 +220,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationTarget] = {"test_model": entry.target}
+    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
     audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -284,7 +284,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationTarget] = {"test_model": entry.target}
+    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
     actual_audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -350,7 +350,7 @@ CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
         reason=PlanReason.FULL_REFRESH,
         custom_config={"tracking_schema": "meta"},
         custom_placeholders={"start": "'2020-01-01'"},
-        environment="prod",
+        target="prod",
         effective_vars={"user": "kevin"},
         expected_is_first_run=True,
         expected_is_full_refresh=True,
@@ -359,7 +359,7 @@ CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
         expected_config_value="meta",
         expected_placeholder_key="start",
         expected_placeholder_value="'2020-01-01'",
-        expected_environment="prod",
+        expected_target="prod",
         expected_var_key="user",
         expected_var_value="kevin",
         expected_qualified_name="meta.partition_state",
@@ -371,7 +371,7 @@ CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
         reason=PlanReason.QUERY_CHANGED,
         custom_config={"mode": "incremental"},
         custom_placeholders={},
-        environment="dev",
+        target="dev",
         effective_vars={"schema_prefix": "staging"},
         expected_is_first_run=True,
         expected_is_full_refresh=False,
@@ -380,7 +380,7 @@ CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
         expected_config_value="incremental",
         expected_placeholder_key="",
         expected_placeholder_value="",
-        expected_environment="dev",
+        expected_target="dev",
         expected_var_key="schema_prefix",
         expected_var_value="staging",
         expected_qualified_name="meta.partition_state",
@@ -415,7 +415,8 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         captured["query_changed"] = ctx.query_changed
         captured["config"] = ctx.config
         captured["placeholders"] = ctx.placeholders
-        captured["environment"] = ctx.environment
+        captured["relation"] = ctx.target
+        captured["target"] = ctx.build_target
         captured["vars"] = ctx.vars
         captured["qualified_name"] = ctx.qualify_name(
             "partition_state", schema="meta", database=None
@@ -437,7 +438,7 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         connection=connection,
         entry=entry,
         materialize_fn=materialize,
-        environment=test_case.environment,
+        target=test_case.target,
         effective_vars=test_case.effective_vars,
     )
 
@@ -445,7 +446,8 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
     assert captured["is_full_refresh"] == test_case.expected_is_full_refresh
     assert captured["query_changed"] == test_case.expected_query_changed
     assert captured["config"][test_case.expected_config_key] == test_case.expected_config_value
-    assert captured["environment"] == test_case.expected_environment
+    assert captured["target"] == test_case.expected_target
+    assert captured["relation"] == "main.test_model"
     assert captured["vars"][test_case.expected_var_key] == test_case.expected_var_value
     assert captured["qualified_name"] == test_case.expected_qualified_name
     assert (

@@ -62,7 +62,7 @@ def test_given_external_loader_when_running_load_pipeline_then_does_not_open_con
         connection_config={},
         adapter=adapter,
         run_id="run-1",
-        environment=None,
+        target=None,
         vars={},
         is_reload=False,
         on_load_complete=completed_results.append,

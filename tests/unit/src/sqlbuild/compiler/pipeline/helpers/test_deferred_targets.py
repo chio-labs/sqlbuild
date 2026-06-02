@@ -10,10 +10,10 @@ from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
     DeferredTargetTestCase,
 )
@@ -128,7 +128,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     DEFERRED_TARGET_TEST_CASES,
     ids=[case.description for case in DEFERRED_TARGET_TEST_CASES],
 )
-def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
+def test_given_deferred_target_config_when_building_targets_then_resolves_expected_naming(
     test_case: DeferredTargetTestCase,
 ) -> None:
     project: CompiledProject = build_single_model_project(
@@ -137,7 +137,7 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
         physical_schema=test_case.logical_schema or test_case.default_schema,
         physical_database=test_case.logical_database or test_case.default_database,
     )
-    deferred_env: EnvironmentConfig = EnvironmentConfig(
+    deferred_target_config: TargetConfig = TargetConfig(
         schema=test_case.env_schema,
         database=test_case.env_database,
     )
@@ -147,16 +147,16 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
         if test_case.adapter_name == "bigquery"
         else DuckDbAdapter().render_qualified_name
     )
-    targets: dict[str, CompiledRelationTarget] = build_deferred_targets(
+    targets: dict[str, CompiledRelationDestination] = build_deferred_targets(
         project=project,
-        deferred_env=deferred_env,
+        deferred_target_config=deferred_target_config,
         effective_vars=test_case.effective_vars,
         default_schema=test_case.default_schema,
         default_database=test_case.default_database,
         render_qualified_name=render_qualified_name,
     )
 
-    result: CompiledRelationTarget = targets["test_model"]
+    result: CompiledRelationDestination = targets["test_model"]
     assert result.schema == test_case.expected_schema
     assert result.database == test_case.expected_database
     assert result.qualified_name == test_case.expected_qualified_name

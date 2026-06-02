@@ -192,17 +192,18 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
             "sqlbuild_project.toml": (
                 'name = "virtual_python_nodes_build"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n'
                 'defer_sources_to = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
             "tasks/prepare.py": (
@@ -316,16 +317,17 @@ def test_given_virtual_read_side_python_failure_when_building_then_prints_python
             "sqlbuild_project.toml": (
                 'name = "virtual_python_read_side_failure"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
             "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 7 AS order_id\n",
@@ -382,16 +384,17 @@ def test_given_virtual_read_side_python_skip_when_building_then_prints_python_sk
             "sqlbuild_project.toml": (
                 'name = "virtual_python_read_side_skip"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
             "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 7 AS order_id\n",
@@ -447,17 +450,18 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
             "sqlbuild_project.toml": (
                 'name = "virtual_no_python_nodes_build"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n'
                 'defer_sources_to = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
             "tasks/prepare.py": (
@@ -789,14 +793,14 @@ def test_given_waffle_shop_project_when_virtual_building_then_vde_outputs_are_qu
         """
 name = "waffle_shop"
 adapter = "duckdb"
-environment_mode = "virtual"
-default_environment = "dev"
+default_target = "dev"
+
+[settings]
+virtual_environments = true
+default_audit_severity = "warn"
 
 [connection]
 database = "waffle_shop.duckdb"
-
-[settings]
-default_audit_severity = "warn"
 
 [defaults]
 materialized = "table"
@@ -804,15 +808,15 @@ materialized = "table"
 [path_defaults.staging]
 materialized = "view"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "dev"
 
-[environments.dev.state]
+[targets.dev.state]
 backend = "duckdb"
 schema = "sqlbuild_state"
 
-[environments.dev.state.connection]
+[targets.dev.state.connection]
 database = "state.duckdb"
 """.lstrip(),
         encoding="utf-8",
@@ -2170,7 +2174,7 @@ def test_given_partial_virtual_promotion_when_target_stays_working_then_it_requi
         VirtualPromoteE2ETestCase(
             description="direct mode promotion fails with mode error",
             promote_command=("promote", "--from", "pr", "--to", "dev"),
-            expected_promote_fragments=("promote requires environment_mode = 'virtual'",),
+            expected_promote_fragments=("promote requires virtual_environments = true",),
             expected_query_results=(),
         )
     ],
@@ -2187,10 +2191,10 @@ def test_given_direct_mode_project_when_promoting_then_it_fails_with_mode_error(
             "sqlbuild_project.toml": (
                 'name = "direct_promote_guard"\n'
                 'adapter = "duckdb"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n'
             ),
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",

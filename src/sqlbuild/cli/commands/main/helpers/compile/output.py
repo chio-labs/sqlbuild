@@ -173,8 +173,8 @@ def _model_resource(
         "lineage": _lineage_summary(lineage=lineage, model=model),
         "query_sql": model.query_sql,
     }
-    if model.target.qualified_name is not None:
-        item["qualified_name"] = model.target.qualified_name
+    if model.destination.qualified_name is not None:
+        item["qualified_name"] = model.destination.qualified_name
     return item
 
 
@@ -192,8 +192,8 @@ def _seed_resource(seed: CompiledSeed) -> dict[str, object]:
         "relative_path": str(seed.seed_file.relative_path),
         "column_count": len(seed.schema_entry.columns),
     }
-    if seed.target.qualified_name is not None:
-        item["qualified_name"] = seed.target.qualified_name
+    if seed.destination.qualified_name is not None:
+        item["qualified_name"] = seed.destination.qualified_name
     return item
 
 
@@ -208,8 +208,8 @@ def _function_resource(function: CompiledFunction) -> dict[str, object]:
             {"name": column.name, "type": column.type} for column in function.return_columns
         ],
     }
-    if function.target.qualified_name is not None:
-        item["qualified_name"] = function.target.qualified_name
+    if function.destination.qualified_name is not None:
+        item["qualified_name"] = function.destination.qualified_name
     return item
 
 

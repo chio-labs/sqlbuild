@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.helpers.strategy import build_logical_ddl
 from sqlbuild.compiler.planner.types import PlanAction
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
@@ -169,7 +169,7 @@ BUILD_DDL_TEST_CASES: list[BuildLogicalDdlTestCase] = [
 def test_given_action_and_sql_when_building_ddl_then_contains_expected_fragment(
     test_case: BuildLogicalDdlTestCase,
 ) -> None:
-    target: CompiledRelationTarget = CompiledRelationTarget(
+    target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="staging",
         name="orders",

@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import TargetConfig
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -15,7 +15,7 @@ def select_load_entries(
     discovered_inputs: DiscoveredProjectInputs,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
 ) -> tuple[SourceEntry, ...]:
     """Select source and intermediate loader execution entries for sqb load."""
 
@@ -25,7 +25,7 @@ def select_load_entries(
             for source_file in discovered_inputs.source_files
             for source in source_file.source_entries
         ),
-        environment_config=environment_config,
+        target_config=target_config,
     )
     managed_sources: dict[str, SourceEntry] = {
         source.name: source for source in sources if source.loader is not None
@@ -95,7 +95,7 @@ def select_load_entries(
         upstream_loaders=upstream_loaders,
     ):
         if loader_name not in selected_terminal_loaders:
-            entries.append(_loader_to_source_entry(loaders[loader_name], environment_config))
+            entries.append(_loader_to_source_entry(loaders[loader_name], target_config))
     entries.extend(
         managed_sources[source_name] for source_name in sources_order(sources, selected_sources)
     )
@@ -106,7 +106,7 @@ def select_load_reference_entries(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     selected_sources: tuple[SourceEntry, ...],
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
 ) -> tuple[SourceEntry, ...]:
     """Return unselected upstream intermediate loader entries used only for refs."""
 
@@ -132,7 +132,7 @@ def select_load_reference_entries(
             continue
         reference_loader_names.update(_upstream_loader_closure(source.loader, upstream_loaders))
     return tuple(
-        _loader_to_source_entry(loaders[loader_name], environment_config)
+        _loader_to_source_entry(loaders[loader_name], target_config)
         for loader_name in _topological_loader_order(
             loader_names=reference_loader_names,
             upstream_loaders=upstream_loaders,
@@ -355,17 +355,17 @@ def _selected_loader_name(
 
 
 def _environment_sources(
-    *, sources: tuple[SourceEntry, ...], environment_config: EnvironmentConfig | None
+    *, sources: tuple[SourceEntry, ...], target_config: TargetConfig | None
 ) -> tuple[SourceEntry, ...]:
     return tuple(
         replace(
             source,
             database=source.database
-            if source.database is not None or environment_config is None
-            else environment_config.database,
+            if source.database is not None or target_config is None
+            else target_config.database,
             schema=source.schema
-            if source.schema is not None or environment_config is None
-            else environment_config.schema,
+            if source.schema is not None or target_config is None
+            else target_config.schema,
         )
         for source in sources
     )
@@ -373,13 +373,13 @@ def _environment_sources(
 
 def _loader_to_source_entry(
     loader: DiscoveredLoaderFunction,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
 ) -> SourceEntry:
-    database: str | None = environment_config.database if environment_config is not None else None
-    schema: str | None = environment_config.schema if environment_config is not None else None
+    database: str | None = target_config.database if target_config is not None else None
+    schema: str | None = target_config.schema if target_config is not None else None
     table: str = f"__loader__{loader.name}"
-    if loader.target is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.target.split(".") if part)
+    if loader.destination is not None:
+        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
         if len(parts) == 1:
             table = parts[0]
         elif len(parts) == 2:
@@ -387,7 +387,7 @@ def _loader_to_source_entry(
         elif len(parts) == 3:
             database, schema, table = parts
         else:
-            table = loader.target
+            table = loader.destination
     return SourceEntry(
         name=loader.name,
         database=database,

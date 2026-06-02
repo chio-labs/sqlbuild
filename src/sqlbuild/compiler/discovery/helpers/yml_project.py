@@ -22,20 +22,19 @@ from sqlbuild.spec.models.project import (
     ClonePolicy,
     DbtConfig,
     DefaultsConfig,
-    EnvironmentConfig,
     JanitorConfig,
     LocalClonePolicy,
     LocalConfig,
-    LocalEnvironmentConfig,
     LocalStateConfig,
+    LocalTargetConfig,
     ProjectConfig,
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
     SettingsConfig,
     SnapshotsConfig,
     StateConfig,
+    TargetConfig,
 )
-from sqlbuild.spec.models.types import EnvironmentMode
 
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
     {"allow", "deny", "require_confirmation"}
@@ -57,8 +56,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
 
     name: str = _require_str(payload=payload, key="name", file_path=file_path)
     adapter: str = _require_str(payload=payload, key="adapter", file_path=file_path)
-    environment_mode: EnvironmentMode = _load_environment_mode(payload=payload, file_path=file_path)
-    default_environment: str | None = _optional_str(payload=payload, key="default_environment")
+    default_target: str | None = _optional_str(payload=payload, key="default_target")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
@@ -69,8 +67,8 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     vars_map: dict[str, str] = _load_string_mapping(
         payload=payload.get("vars"), file_path=file_path
     )
-    environments: dict[str, EnvironmentConfig] = _load_environments(
-        payload=payload.get("environments"),
+    targets: dict[str, TargetConfig] = _load_targets(
+        payload=payload.get("targets"),
         file_path=file_path,
     )
     janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
@@ -88,14 +86,13 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     return ProjectConfig(
         name=name,
         adapter=adapter,
-        environment_mode=environment_mode,
-        default_environment=default_environment,
+        default_target=default_target,
         connection=connection,
         settings=settings,
         defaults=defaults,
         path_defaults=path_defaults,
         vars=vars_map,
-        environments=environments,
+        targets=targets,
         janitor=janitor,
         snapshots=snapshots,
         scenario=scenario,
@@ -111,11 +108,11 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
         return LocalConfig()
 
     payload: dict[str, object] = _load_config_mapping(file_path=file_path)
-    environment: str | None = _optional_str(payload=payload, key="environment")
+    target: str | None = _optional_str(payload=payload, key="target")
     adapter: str | None = _optional_str(payload=payload, key="adapter")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
-    environments: dict[str, LocalEnvironmentConfig] = _load_local_environments(
-        payload=payload.get("environments"),
+    targets: dict[str, LocalTargetConfig] = _load_local_targets(
+        payload=payload.get("targets"),
         file_path=file_path,
     )
     local_settings_result: tuple[SettingsConfig, frozenset[str]] = _load_local_settings(
@@ -128,10 +125,10 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     )
     scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     return LocalConfig(
-        environment=environment,
+        target=target,
         adapter=adapter,
         connection=connection,
-        environments=environments,
+        targets=targets,
         settings=settings,
         setting_overrides=setting_overrides,
         vars=vars_map,
@@ -230,19 +227,6 @@ def _optional_mapping(*, payload: dict[str, object], key: str) -> dict[str, obje
     return cast(dict[str, object], value)
 
 
-def _load_environment_mode(*, payload: dict[str, object], file_path: Path) -> EnvironmentMode:
-    environment_mode_value: str | None = _optional_str(payload=payload, key="environment_mode")
-    if environment_mode_value is None:
-        return EnvironmentMode.DIRECT
-    try:
-        return EnvironmentMode(environment_mode_value)
-    except ValueError as error:
-        allowed_values: str = ", ".join(mode.value for mode in EnvironmentMode)
-        raise ProjectConfigError(
-            f"{file_path} environment_mode must be one of: {allowed_values}"
-        ) from error
-
-
 def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="settings", file_path=file_path
@@ -268,6 +252,11 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     )
     sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
     auto_load_sources: bool = _optional_bool(mapping=mapping, key="auto_load_sources", default=True)
+    virtual_environments: bool = _optional_bool(
+        mapping=mapping,
+        key="virtual_environments",
+        default=False,
+    )
     concurrency_key: str = "max_concurrency" if "max_concurrency" in mapping else "concurrency"
     concurrency: int = _optional_int(mapping=mapping, key=concurrency_key, default=1)
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
@@ -283,6 +272,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         sql_validation=sql_validation,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
+        virtual_environments=virtual_environments,
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
@@ -427,35 +417,35 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
     return path_defaults
 
 
-def _load_environments(*, payload: object, file_path: Path) -> dict[str, EnvironmentConfig]:
+def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig]:
     mapping: dict[str, object] = _coerce_mapping(
-        payload=payload, label="environments", file_path=file_path
+        payload=payload, label="targets", file_path=file_path
     )
-    environments: dict[str, EnvironmentConfig] = {}
-    env_name: str
-    env_payload: object
-    for env_name, env_payload in mapping.items():
-        env_mapping: dict[str, object] = _coerce_mapping(
-            payload=env_payload,
-            label=f"environments.{env_name}",
+    targets: dict[str, TargetConfig] = {}
+    target_name: str
+    target_payload: object
+    for target_name, target_payload in mapping.items():
+        target_mapping: dict[str, object] = _coerce_mapping(
+            payload=target_payload,
+            label=f"targets.{target_name}",
             file_path=file_path,
         )
         clone_mapping: dict[str, object] = _coerce_mapping(
-            payload=env_mapping.get("clone"),
-            label=f"environments.{env_name}.clone",
+            payload=target_mapping.get("clone"),
+            label=f"targets.{target_name}.clone",
             file_path=file_path,
         )
         state_mapping: dict[str, object] = _coerce_mapping(
-            payload=env_mapping.get("state"),
-            label=f"environments.{env_name}.state",
+            payload=target_mapping.get("state"),
+            label=f"targets.{target_name}.state",
             file_path=file_path,
         )
-        environments[env_name] = EnvironmentConfig(
-            connection=_optional_mapping(payload=env_mapping, key="connection"),
-            vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
-            database=_optional_str(payload=env_mapping, key="database"),
-            schema=_optional_str(payload=env_mapping, key="schema"),
-            defer_sources_to=_optional_str(payload=env_mapping, key="defer_sources_to"),
+        targets[target_name] = TargetConfig(
+            connection=_optional_mapping(payload=target_mapping, key="connection"),
+            vars=_load_string_mapping(payload=target_mapping.get("vars"), file_path=file_path),
+            database=_optional_str(payload=target_mapping, key="database"),
+            schema=_optional_str(payload=target_mapping, key="schema"),
+            defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             clone=ClonePolicy(
                 allow_as_source=_optional_bool(
                     mapping=clone_mapping,
@@ -483,40 +473,38 @@ def _load_environments(*, payload: object, file_path: Path) -> dict[str, Environ
                 ),
             ),
         )
-    return environments
+    return targets
 
 
-def _load_local_environments(
-    *, payload: object, file_path: Path
-) -> dict[str, LocalEnvironmentConfig]:
+def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalTargetConfig]:
     mapping: dict[str, object] = _coerce_mapping(
-        payload=payload, label="environments", file_path=file_path
+        payload=payload, label="targets", file_path=file_path
     )
-    environments: dict[str, LocalEnvironmentConfig] = {}
-    env_name: str
-    env_payload: object
-    for env_name, env_payload in mapping.items():
-        env_mapping: dict[str, object] = _coerce_mapping(
-            payload=env_payload,
-            label=f"environments.{env_name}",
+    targets: dict[str, LocalTargetConfig] = {}
+    target_name: str
+    target_payload: object
+    for target_name, target_payload in mapping.items():
+        target_mapping: dict[str, object] = _coerce_mapping(
+            payload=target_payload,
+            label=f"targets.{target_name}",
             file_path=file_path,
         )
         clone_mapping: dict[str, object] = _coerce_mapping(
-            payload=env_mapping.get("clone"),
-            label=f"environments.{env_name}.clone",
+            payload=target_mapping.get("clone"),
+            label=f"targets.{target_name}.clone",
             file_path=file_path,
         )
         state_mapping: dict[str, object] = _coerce_mapping(
-            payload=env_mapping.get("state"),
-            label=f"environments.{env_name}.state",
+            payload=target_mapping.get("state"),
+            label=f"targets.{target_name}.state",
             file_path=file_path,
         )
-        environments[env_name] = LocalEnvironmentConfig(
-            connection=_optional_mapping(payload=env_mapping, key="connection"),
-            vars=_load_string_mapping(payload=env_mapping.get("vars"), file_path=file_path),
-            database=_optional_str(payload=env_mapping, key="database"),
-            schema=_optional_str(payload=env_mapping, key="schema"),
-            defer_sources_to=_optional_str(payload=env_mapping, key="defer_sources_to"),
+        targets[target_name] = LocalTargetConfig(
+            connection=_optional_mapping(payload=target_mapping, key="connection"),
+            vars=_load_string_mapping(payload=target_mapping.get("vars"), file_path=file_path),
+            database=_optional_str(payload=target_mapping, key="database"),
+            schema=_optional_str(payload=target_mapping, key="schema"),
+            defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             clone=LocalClonePolicy(
                 allow_as_source=_optional_nullable_bool(
                     mapping=clone_mapping,
@@ -541,7 +529,7 @@ def _load_local_environments(
                 ),
             ),
         )
-    return environments
+    return targets
 
 
 def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:

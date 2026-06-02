@@ -15,7 +15,7 @@ from sqlbuild.adapter.shared.models import (
 
 
 class DiffMixin(ABC):
-    """Compares relation data across environments."""
+    """Compares relation data across targets."""
 
     @abstractmethod
     def diff_schema(

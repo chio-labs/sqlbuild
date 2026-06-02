@@ -6,11 +6,11 @@ from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
 @dataclass(frozen=True)
-class EnvironmentConfigResolutionTestCase:
+class TargetConfigResolutionTestCase:
     description: str
     project_config: ProjectConfig
     local_config: LocalConfig
-    environment_name: str
+    target_name: str
     expected_backend: str | None
     expected_schema: str | None
     expected_connection: dict[str, object]

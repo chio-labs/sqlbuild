@@ -31,8 +31,8 @@ def build_model_node(
     query_hash: str = compute_query_hash(raw_code)
 
     return {
-        "database": model.target.database,
-        "schema": model.target.schema,
+        "database": model.destination.database,
+        "schema": model.destination.schema,
         "name": model.name,
         "resource_type": RESOURCE_TYPE_MODEL,
         "package_name": project_name,
@@ -40,7 +40,7 @@ def build_model_node(
         "original_file_path": str(relative_path),
         "unique_id": unique_id,
         "fqn": build_fqn(project_name=project_name, relative_path=relative_path),
-        "alias": model.target.name,
+        "alias": model.destination.name,
         "checksum": {
             "name": CHECKSUM_HASH_NAME,
             "checksum": query_hash,
@@ -58,7 +58,7 @@ def build_model_node(
         "created_at": 0.0,
         "config_call_dict": {},
         "unrendered_config_call_dict": {},
-        "relation_name": model.target.qualified_name,
+        "relation_name": model.destination.qualified_name,
         "raw_code": raw_code,
         "compiled_code": compiled_code,
         "depends_on": build_depends_on(

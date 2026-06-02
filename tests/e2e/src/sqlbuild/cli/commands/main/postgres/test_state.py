@@ -51,7 +51,7 @@ POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[
         allow_reset=False,
         command=("--no-color", "state", "reset", "--auto-approve"),
         expected_exit_code=1,
-        expected_error_fragment=("set `allow_reset = true` under `[environments.<name>.state]`"),
+        expected_error_fragment=("set `allow_reset = true` under `[targets.<name>.state]`"),
     ),
     PostgresStateLifecycleErrorE2ETestCase(
         description="reset blocks without auto approve",
@@ -195,21 +195,22 @@ def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_
             "sqlbuild_project.toml": (
                 'name = "postgres_state_adopt_detach"\n'
                 'adapter = "postgres"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "postgres"\n'
                 f'schema = "{state_schema}"\n'
                 'unsuffixed_virtual_env = "dev"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
@@ -802,21 +803,22 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
             "sqlbuild_project.toml": (
                 'name = "postgres_janitor_detached_vde"\n'
                 'adapter = "postgres"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "postgres"\n'
                 f'schema = "{state_schema}"\n'
                 'unsuffixed_virtual_env = "dev"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
@@ -1645,20 +1647,21 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
             "sqlbuild_project.toml": (
                 'name = "postgres_virtual_rollback"\n'
                 'adapter = "postgres"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "postgres"\n'
                 f'schema = "{state_schema}"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
@@ -2338,20 +2341,21 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
             "sqlbuild_project.toml": (
                 'name = "postgres_virtual_seed"\n'
                 'adapter = "postgres"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "postgres"\n'
                 f'schema = "{state_schema}"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
@@ -3266,7 +3270,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
     [
         PostgresVirtualParityE2ETestCase(
             description="postgres direct mode promotion guard",
-            expected_stdout_fragments=("promote requires environment_mode = 'virtual'",),
+            expected_stdout_fragments=("promote requires virtual_environments = true",),
             expected_exit_code=1,
         )
     ],
@@ -3285,14 +3289,14 @@ def test_given_postgres_direct_mode_project_when_promoting_then_fails_with_mode_
             "sqlbuild_project.toml": (
                 'name = "postgres_direct_promote_guard"\n'
                 'adapter = "postgres"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n'
             ),
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
@@ -3357,7 +3361,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                 prod_warehouse_schema=prod_warehouse_schema,
                 dev_warehouse_schema=dev_warehouse_schema,
             ),
-            "sqlbuild_local.toml": 'environment = "prod"\n',
+            "sqlbuild_local.toml": 'target = "prod"\n',
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 7 AS id\n",
             "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
             "models/dim_customers.sql": "MODEL ();\n\nSELECT 1 AS customer_id\n",
@@ -3370,7 +3374,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
             == 0
         )
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
-        (project_dir / "sqlbuild_local.toml").write_text('environment = "dev"\n')
+        (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n')
         assert (
             run_sqb(command=("--no-color", "state", "init"), project_dir=project_dir).returncode
             == 0
@@ -3640,20 +3644,21 @@ def test_given_postgres_missing_logical_view_when_repairing_then_view_is_recreat
             "sqlbuild_project.toml": (
                 'name = "postgres_reconcile_repair"\n'
                 'adapter = "postgres"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "postgres"\n'
                 f'schema = "{state_schema}"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
@@ -3743,20 +3748,21 @@ def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_re
             "sqlbuild_project.toml": (
                 'name = "postgres_reconcile_attach"\n'
                 'adapter = "postgres"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'
                 f'user = "{postgres_e2e_config["user"]}"\n'
                 f'password = "{postgres_e2e_config["password"]}"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 f'schema = "{warehouse_schema}"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "postgres"\n'
                 f'schema = "{state_schema}"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 f'host = "{postgres_e2e_config["host"]}"\n'
                 f"port = {postgres_e2e_config['port']}\n"
                 f'dbname = "{postgres_e2e_config["dbname"]}"\n'

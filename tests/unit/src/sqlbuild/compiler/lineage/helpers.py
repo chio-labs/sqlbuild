@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompileModelConfig,
     InferredColumn,
@@ -25,7 +25,7 @@ def make_compiled_project(
 ) -> CompiledProject:
     return CompiledProject(
         run_id="test-run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(sqlglot=sqlglot_enabled),
@@ -47,7 +47,7 @@ def make_compiled_model(
         relative_path=Path(f"models/{name}.sql"),
         query_sql=query_sql,
         config=CompileModelConfig(),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,
@@ -79,7 +79,7 @@ def make_compiled_seed(*, name: str, columns: tuple[str, ...]) -> CompiledSeed:
             model_entries=(),
             seed_entries=(),
         ),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,

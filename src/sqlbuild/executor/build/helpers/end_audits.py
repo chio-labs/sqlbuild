@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -18,8 +18,8 @@ def run_end_audits(
     end_audits: tuple[AuditPlanEntry, ...],
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationTarget],
-    seed_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
 ) -> tuple[AuditExecutionResult, ...]:
     """Execute all end audits and return results."""

@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -73,7 +73,7 @@ def build_project_from_test_case(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(values=config_values),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -105,7 +105,7 @@ def build_project_from_test_case(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -133,13 +133,13 @@ def build_project_from_test_case(
                 arguments=(FunctionArgument(name="value", type="INTEGER"),),
                 returns="INTEGER",
                 body_sql=body_sql,
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=function_name,
                     qualified_name=f"{target_schema}.{function_name}",
                 ),
-                fingerprint_target=CompiledRelationTarget(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=function_name,
@@ -153,7 +153,7 @@ def build_project_from_test_case(
 
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection=test_case.effective_connection,
         effective_vars={},
         settings=SettingsConfig(
@@ -221,7 +221,7 @@ def build_project_from_source_cursor_input_test_case(
                 "cursor_inputs": {test_case.source_name: test_case.cursor_input_column},
             }
         ),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema="staging",
             name=test_case.model_name,
@@ -230,7 +230,7 @@ def build_project_from_source_cursor_input_test_case(
     )
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(),
@@ -264,13 +264,13 @@ def write_previous_function_fingerprints(
         write_fingerprint(
             connection=connection,
             execute=adapter.execute,
-            database=function.target.database,
-            schema=function.target.schema or "",
+            database=function.destination.database,
+            schema=function.destination.schema or "",
             fingerprint=Fingerprint(
                 model_name=function.name,
-                target_database=function.target.database,
-                target_schema=function.target.schema,
-                target_name=function.target.name,
+                target_database=function.destination.database,
+                target_schema=function.destination.schema,
+                target_name=function.destination.name,
                 run_id="previous_run",
                 query_hash=compute_query_hash(fingerprint_sql),
                 ast_hash=None,
@@ -309,7 +309,7 @@ def build_project_from_format_test_case(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(values=config_values),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -341,7 +341,7 @@ def build_project_from_format_test_case(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -352,7 +352,7 @@ def build_project_from_format_test_case(
 
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection=test_case.effective_connection,
         effective_vars={},
         models=tuple(models),

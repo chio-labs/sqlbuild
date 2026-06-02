@@ -8,7 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
@@ -30,8 +30,8 @@ def run_pending_source_audits(
     blocked_keys: set[CompiledObjectKey],
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationTarget],
-    seed_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
     all_source_audit_results: list[AuditExecutionResult],
     fail_fast: bool,

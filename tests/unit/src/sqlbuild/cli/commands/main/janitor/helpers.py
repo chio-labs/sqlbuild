@@ -31,7 +31,7 @@ def build_janitor_plan() -> JanitorPlan:
         relation_type="table",
     )
     return JanitorPlan(
-        environment_name="dev",
+        target_name="dev",
         retention_days=30,
         candidates=(
             JanitorDeleteCandidate(

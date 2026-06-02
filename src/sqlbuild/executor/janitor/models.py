@@ -114,7 +114,7 @@ class JanitorSkippedSchema:
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 
-    environment_name: str | None
+    target_name: str | None
     retention_days: int
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
     checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)

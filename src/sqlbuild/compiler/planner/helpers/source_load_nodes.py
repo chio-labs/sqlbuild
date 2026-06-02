@@ -52,7 +52,7 @@ def build_source_load_entries(
                 key=key,
                 name=source_entry.name,
                 loader=source_entry.loader,
-                target=source_entry.table or source_entry.name,
+                destination=source_entry.table or source_entry.name,
                 resource_kind=_source_load_resource_kind(source_entry),
                 write_strategy=source_entry.write_strategy,
                 cursor_column=source_entry.cursor_column,

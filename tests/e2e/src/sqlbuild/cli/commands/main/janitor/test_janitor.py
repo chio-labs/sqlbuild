@@ -690,17 +690,19 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
             "sqlbuild_project.toml": (
                 'name = "virtual_janitor_detached_vde"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                "\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n'
                 'unsuffixed_virtual_env = "dev"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n\n'
                 "[janitor]\n"
                 "enabled = true\n"
@@ -796,17 +798,19 @@ def test_given_old_detached_vde_when_running_janitor_then_retention_allows_clean
             "sqlbuild_project.toml": (
                 'name = "virtual_janitor_detached_vde_retention"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                "\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n'
                 'unsuffixed_virtual_env = "dev"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n\n'
                 "[janitor]\n"
                 "enabled = true\n"

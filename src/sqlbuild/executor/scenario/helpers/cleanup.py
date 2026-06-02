@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     ScenarioExecutionPlan,
@@ -12,7 +12,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 
 
 def collect_scenario_cleanup_targets(
@@ -32,7 +32,7 @@ def collect_scenario_cleanup_targets(
             seen=seen,
             kind=fixture_plan.kind,
             logical_name=fixture_plan.logical_name,
-            target=fixture_plan.target,
+            target=fixture_plan.destination,
             adapter=adapter,
         )
 
@@ -43,7 +43,7 @@ def collect_scenario_cleanup_targets(
             seen=seen,
             kind=ScenarioArtifactKind.SEED,
             logical_name=seed_entry.name,
-            target=seed_entry.target,
+            target=seed_entry.destination,
             adapter=adapter,
         )
 
@@ -51,7 +51,7 @@ def collect_scenario_cleanup_targets(
         entry.name: entry for entry in scenario_plan.model_entries
     }
     model_name: str
-    model_target: CompiledRelationTarget
+    model_target: CompiledRelationDestination
     for model_name, model_target in sorted(scenario_plan.relation_plan.model_targets.items()):
         if model_name in scenario_plan.relation_plan.ref_fixture_targets:
             continue
@@ -78,11 +78,11 @@ def _append_target(
     seen: set[str],
     kind: ScenarioArtifactKind,
     logical_name: str,
-    target: CompiledRelationTarget,
+    target: CompiledRelationDestination,
     adapter: BaseAdapter,
     materialization_type: MaterializationType = MaterializationType.TABLE,
 ) -> None:
-    target_relation: str = resolve_target_qualified_name(adapter=adapter, target=target)
+    target_relation: str = resolve_destination_qualified_name(adapter=adapter, target=target)
     if target_relation in seen:
         return
     seen.add(target_relation)

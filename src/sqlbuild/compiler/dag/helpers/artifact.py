@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -158,8 +158,8 @@ def _build_seed_node(seed: CompiledSeed) -> DagNode:
         id=_node_id(seed.key),
         kind=CompiledResourceType.SEED.value,
         name=seed.name,
-        asset_key=_target_asset_key(seed.target),
-        target=_dag_target(seed.target),
+        asset_key=_target_asset_key(seed.destination),
+        target=_dag_target(seed.destination),
         path=str(seed.seed_file.relative_path),
         description=seed.schema_entry.description,
         meta=seed.schema_entry.meta,
@@ -172,8 +172,8 @@ def _build_function_node(function: CompiledFunction) -> DagNode:
         id=_node_id(function.key),
         kind=CompiledResourceType.FUNCTION.value,
         name=function.name,
-        asset_key=_target_asset_key(function.target),
-        target=_dag_target(function.target),
+        asset_key=_target_asset_key(function.destination),
+        target=_dag_target(function.destination),
         path=str(function.relative_path),
         language=function.language.value,
         return_kind="table" if function.return_columns else "scalar",
@@ -193,8 +193,8 @@ def _build_model_node(model: CompiledModel) -> DagNode:
         id=_node_id(model.key),
         kind=CompiledResourceType.MODEL.value,
         name=model.name,
-        asset_key=_target_asset_key(model.target),
-        target=_dag_target(model.target),
+        asset_key=_target_asset_key(model.destination),
+        target=_dag_target(model.destination),
         path=str(model.relative_path),
         description=(model.schema_entry.description if model.schema_entry is not None else None),
         tags=_model_tags(model),
@@ -384,7 +384,7 @@ def _build_python_check(node: DiscoveredPythonNode, *, python_graph: PythonNodeG
     )
 
 
-def _dag_target(target: CompiledRelationTarget) -> DagTarget:
+def _dag_target(target: CompiledRelationDestination) -> DagTarget:
     return DagTarget(
         database=target.database,
         schema=target.schema,
@@ -395,7 +395,7 @@ def _dag_target(target: CompiledRelationTarget) -> DagTarget:
     )
 
 
-def _target_asset_key(target: CompiledRelationTarget) -> tuple[str, ...]:
+def _target_asset_key(target: CompiledRelationDestination) -> tuple[str, ...]:
     return tuple(
         part
         for part in (
@@ -446,11 +446,11 @@ def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:
 def _loader_to_source_entry(
     *, project: CompiledProject, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
-    database: str | None = project.effective_environment_database
-    schema: str | None = project.effective_environment_schema
+    database: str | None = project.effective_target_database
+    schema: str | None = project.effective_target_schema
     table: str = f"__loader__{loader.name}"
-    if loader.target is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.target.split(".") if part)
+    if loader.destination is not None:
+        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
         if len(parts) == 1:
             table = parts[0]
         elif len(parts) == 2:
@@ -458,7 +458,7 @@ def _loader_to_source_entry(
         elif len(parts) == 3:
             database, schema, table = parts
         else:
-            table = loader.target
+            table = loader.destination
     return SourceEntry(
         name=loader.name,
         database=database,

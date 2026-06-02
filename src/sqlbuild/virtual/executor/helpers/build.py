@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -59,18 +59,18 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
 )
 from sqlbuild.shared.helpers.naming import (
+    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
-    resolve_target_qualified_name,
 )
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
+    build_destination_from_physical_relation,
     build_rewritten_model_targets,
-    build_target_from_physical_relation,
-    build_virtual_target,
+    build_virtual_destination,
     relation_type_for_model,
     rewrite_project_function_targets,
     rewrite_project_model_targets,
@@ -158,19 +158,19 @@ def run_virtual_build(
     prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]] = (
         load_custom_prepare_version_functions(discovered_inputs.materialization_files)
     )
-    physical_environment_name: str | None = resolve_environment_name(
+    physical_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
     unsuffixed_virtual_environment_name: str | None = None
-    if physical_environment_name is not None:
-        unsuffixed_virtual_environment_name = resolve_environment_config(
+    if physical_target_name is not None:
+        unsuffixed_virtual_environment_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=physical_environment_name,
+            target_name=physical_target_name,
         ).state.unsuffixed_virtual_env
-    target_vde_name: str | None = virtual_environment_name or physical_environment_name
+    target_vde_name: str | None = virtual_environment_name or physical_target_name
     if target_vde_name is None:
         target_vde_name = "default"
 
@@ -185,7 +185,7 @@ def run_virtual_build(
             state_connection=state_connection,
             config=config,
             target_vde_name=target_vde_name,
-            baseline_vde_name=physical_environment_name,
+            baseline_vde_name=physical_target_name,
         )
         bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
@@ -232,7 +232,7 @@ def run_virtual_build(
         for model_name in selected_model_names
         if model_name in semantics.expected_version_hashes
     }
-    rewritten_targets: dict[str, CompiledRelationTarget] = build_rewritten_model_targets(
+    rewritten_targets: dict[str, CompiledRelationDestination] = build_rewritten_model_targets(
         project=graph.project,
         adapter=adapter,
         selected_model_version_hashes=selected_model_version_hashes,
@@ -312,25 +312,25 @@ def run_virtual_build(
             selected_keys=frozenset(),
             model_targets={
                 model.name: (
-                    build_target_from_physical_relation(
+                    build_destination_from_physical_relation(
                         adapter=adapter,
                         relation=bound_physical_relations[model.name],
-                        fallback_target=model.target,
+                        fallback_target=model.destination,
                     )
                     if model.name in bound_physical_relations
-                    else model.target
+                    else model.destination
                 )
                 for model in graph.project.models
             },
             function_targets={
-                function.name: function.target for function in graph.project.functions
+                function.name: function.destination for function in graph.project.functions
             },
-            seed_targets={seed.name: seed.target for seed in graph.project.seeds},
+            seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
             source_map={source.name: source.source_entry for source in graph.project.sources},
         )
     plan_output = apply_virtual_plan_output(
         plan_output=plan_output,
-        environment_name=target_vde_name,
+        target_name=target_vde_name,
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
@@ -382,7 +382,7 @@ def run_virtual_build(
                 connection_config=connection_config,
                 connection=ingress_connection,
                 run_id=rewritten_project.run_id,
-                environment=target_vde_name,
+                target=target_vde_name,
                 vars=rewritten_project.effective_vars,
                 is_reload=reload_sources,
                 default_database=adapter.default_database(),
@@ -462,7 +462,7 @@ def run_virtual_build(
             config=config,
             target_vde_name=target_vde_name,
             unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
-            baseline_vde_name=physical_environment_name,
+            baseline_vde_name=physical_target_name,
             bound_version_hashes=semantics.bound_version_hashes,
             bound_function_refs=bound_function_refs,
             plan_output=executor_plan_output,
@@ -602,7 +602,7 @@ def _run_read_side_python_nodes(
             connection_config=connection_config,
             connection=connection,
             run_id=run_id,
-            environment=environment,
+            target=environment,
             vars=vars,
             is_reload=is_reload,
             default_database=default_database,
@@ -674,16 +674,16 @@ def _prepare_custom_virtual_version(
     recorder: StatementRecorder = StatementRecorder()
     adapter.ensure_schema(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
     if adapter.relation_exists(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
-        name=entry.target.name,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
     ):
         adapter.drop(connection, target=target, if_exists=True, statement_recorder=recorder)
     source: str = resolve_qualified_name_parts(
@@ -698,9 +698,9 @@ def _prepare_custom_virtual_version(
             connection=connection,
             prior_relation=source,
             target=target,
-            target_database=entry.target.database,
-            target_schema=entry.target.schema,
-            target_name=entry.target.name,
+            target_database=entry.destination.database,
+            target_schema=entry.destination.schema,
+            target_name=entry.destination.name,
             config=dict(entry.custom_config),
             placeholders=dict(entry.custom_placeholders),
             run_id=run_id,
@@ -872,7 +872,9 @@ def _persist_successful_virtual_build(
                         ),
                     ),
                 )
-            target: CompiledRelationTarget | None = entry.target if entry is not None else None
+            target: CompiledRelationDestination | None = (
+                entry.destination if entry is not None else None
+            )
             if target is not None:
                 existing_physical_relation: PhysicalRelationRecord | None = (
                     backend.get_physical_relation(
@@ -1083,8 +1085,8 @@ def _create_logical_vde_views(
     plan_output: PlanOutput,
     final_version_hashes: dict[str, str],
 ) -> None:
-    physical_targets: dict[str, CompiledRelationTarget] = {
-        model.name: plan_output.model_targets.get(model.name, model.target)
+    physical_targets: dict[str, CompiledRelationDestination] = {
+        model.name: plan_output.model_targets.get(model.name, model.destination)
         for model in project.models
     }
     connection: Any = adapter.connect(connection_config)
@@ -1094,12 +1096,12 @@ def _create_logical_vde_views(
         for model in project.models:
             if model.name not in final_version_hashes:
                 continue
-            physical_target: CompiledRelationTarget | None = physical_targets.get(model.name)
+            physical_target: CompiledRelationDestination | None = physical_targets.get(model.name)
             if physical_target is None:
                 continue
-            virtual_target: CompiledRelationTarget = build_virtual_target(
+            virtual_target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 virtual_environment_name=target_vde_name,
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
@@ -1111,10 +1113,10 @@ def _create_logical_vde_views(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_target_qualified_name(adapter=adapter, target=virtual_target),
+                target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_target_qualified_name(adapter=adapter, target=physical_target)
+                    + resolve_destination_qualified_name(adapter=adapter, target=physical_target)
                 ),
                 statement_recorder=recorder,
             )

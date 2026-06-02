@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -116,7 +116,7 @@ def build_test_model(
         relative_path=Path(relative_path),
         query_sql=query_sql,
         config=CompileModelConfig(values=config_values or {}),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=database,
             schema=schema,
             name=effective_alias,
@@ -183,7 +183,7 @@ def build_test_seed(
             model_entries=(),
             seed_entries=(),
         ),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=database,
             schema=schema,
             name=name,
@@ -207,7 +207,7 @@ def build_test_plan_entry(
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None, schema="public", name=name, qualified_name=f"public.{name}"
         ),
         fingerprint_query_sql=resolved_sql,
@@ -226,7 +226,7 @@ def build_test_project(
 
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=models,

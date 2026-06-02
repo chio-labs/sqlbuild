@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 
 
 def clone_relation(
@@ -116,11 +116,11 @@ def relation_exists(
 ) -> bool:
     return adapter.relation_exists(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
-        name=entry.target.name,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
     )
 
 
 def qualified_name(*, adapter: BaseAdapter, entry: SeedPlanEntry | ModelPlanEntry) -> str:
-    return resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    return resolve_destination_qualified_name(adapter=adapter, target=entry.destination)

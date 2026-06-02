@@ -29,11 +29,11 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
-    EnvironmentConfig,
     LocalConfig,
     ProjectConfig,
     ScenarioConfig,
     SettingsConfig,
+    TargetConfig,
 )
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
 from sqlbuild.spec.models.source import SourceEntry
@@ -78,7 +78,7 @@ class MacroContext:
 
     adapter_name: str
     sqlglot_enabled: bool
-    environment_name: str | None
+    target_name: str | None
     vars: dict[str, object] = field(default_factory=dict)
 
 
@@ -244,8 +244,8 @@ class CompileProjectInputs:
     local_config: LocalConfig
     discovered_inputs: DiscoveredProjectInputs
     run_id: str = ""
-    effective_environment_name: str | None = None
-    effective_environment: EnvironmentConfig | None = None
+    effective_target_name: str | None = None
+    effective_target: TargetConfig | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
     effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
     effective_vars: dict[str, object] = field(default_factory=dict)
@@ -262,7 +262,7 @@ class CompileProjectInputs:
 
 
 @dataclass(frozen=True)
-class CompiledRelationTarget:
+class CompiledRelationDestination:
     """Logical and physical target naming resolved during compile."""
 
     database: str | None
@@ -283,7 +283,7 @@ class CompiledModel:
     relative_path: Path
     query_sql: str
     config: CompileModelConfig
-    target: CompiledRelationTarget
+    destination: CompiledRelationDestination
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -313,7 +313,7 @@ class CompiledSeed:
     seed_file: DiscoveredSeedFile
     schema_entry: SchemaSeedEntry
     schema_file: DiscoveredSchemaFile
-    target: CompiledRelationTarget
+    destination: CompiledRelationDestination
 
 
 @dataclass(frozen=True)
@@ -327,8 +327,8 @@ class CompiledFunction:
     arguments: tuple[FunctionArgument, ...]
     returns: str
     body_sql: str
-    target: CompiledRelationTarget
-    fingerprint_target: CompiledRelationTarget
+    destination: CompiledRelationDestination
+    fingerprint_destination: CompiledRelationDestination
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
@@ -381,11 +381,11 @@ class CompiledProject:
     """Planner-ready whole-project compile output."""
 
     run_id: str
-    effective_environment_name: str | None
+    effective_target_name: str | None
     effective_connection: dict[str, object]
     effective_vars: dict[str, object]
-    effective_environment_database: str | None = None
-    effective_environment_schema: str | None = None
+    effective_target_database: str | None = None
+    effective_target_schema: str | None = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     models: tuple[CompiledModel, ...] = field(default_factory=tuple)

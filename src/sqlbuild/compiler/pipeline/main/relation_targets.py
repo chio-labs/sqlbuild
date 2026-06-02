@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -19,10 +19,10 @@ def build_python_relation_targets(
 
     targets: dict[SqlResourceRef, str] = {}
     model_name: str
-    target: CompiledRelationTarget
+    target: CompiledRelationDestination
     for model_name, target in plan_output.model_targets.items():
         targets[SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=model_name)] = (
-            resolve_target_qualified_name(adapter=adapter, target=target)
+            resolve_destination_qualified_name(adapter=adapter, target=target)
         )
     for source in project.sources:
         targets[SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=source.name)] = (

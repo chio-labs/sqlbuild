@@ -34,7 +34,7 @@ class LoaderRelationRef:
     """A loader-visible relation reference with cursor helpers."""
 
     name: str
-    target: str
+    destination: str
     database: str | None
     schema: str | None
     table_name: str
@@ -57,7 +57,7 @@ class LoaderRelationRef:
             name=self.table_name,
         ):
             return None
-        sql: str = f"SELECT MAX({column}) FROM {self.target}"
+        sql: str = f"SELECT MAX({column}) FROM {self.destination}"
         self.statement_recorder.record(sql)
         cursor: Any = self.adapter.execute(self.connection, sql)
         row: object | None = cursor.fetchone()
@@ -73,12 +73,12 @@ class LoaderContext:
     adapter: BaseAdapter
     connection_config: dict[str, object]
     connection: Any
-    target: str
-    target_database: str | None
-    target_schema: str | None
-    target_name: str
+    destination: str
+    destination_database: str | None
+    destination_schema: str | None
+    destination_name: str
     run_id: str
-    environment: str | None
+    target: str | None
     vars: dict[str, object]
     is_reload: bool
     use_color: bool
@@ -116,13 +116,13 @@ class LoaderContext:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,
-            database=self.target_database if database is None else database,
-            schema=self.target_schema if schema is None else schema,
+            database=self.destination_database if database is None else database,
+            schema=self.destination_schema if schema is None else schema,
             name=name,
         )
 
     def qualify_in_target_schema(self, name: str) -> str:
-        """Return a relation name qualified into the target database/schema."""
+        """Return a relation name qualified into the destination database/schema."""
 
         return self.qualify_name(name)
 

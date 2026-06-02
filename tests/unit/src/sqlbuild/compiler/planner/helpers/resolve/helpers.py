@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 
 
-def build_target(qualified: str | None, name: str) -> CompiledRelationTarget:
+def build_target(qualified: str | None, name: str) -> CompiledRelationDestination:
     """Build a minimal target for deferred tests."""
 
-    return CompiledRelationTarget(database=None, schema=None, name=name, qualified_name=qualified)
+    return CompiledRelationDestination(
+        database=None, schema=None, name=name, qualified_name=qualified
+    )
 
 
 class BracketUdfCallAdapter(DuckDbAdapter):

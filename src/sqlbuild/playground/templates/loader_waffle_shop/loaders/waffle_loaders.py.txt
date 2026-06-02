@@ -81,8 +81,8 @@ def raw_orders(ctx):
     prices = ctx.loader(fetch_prices)
     cursor = ctx.query(
         f"SELECT e.order_id, e.customer_id, e.waffle_type, e.quantity, "
-        f"p.price_cents, e.load_seq FROM {events.target} e "
-        f"JOIN {prices.target} p ON e.waffle_type = p.waffle_type "
+        f"p.price_cents, e.load_seq FROM {events.destination} e "
+        f"JOIN {prices.destination} p ON e.waffle_type = p.waffle_type "
         f"ORDER BY e.order_id"
     )
     return [
@@ -102,7 +102,8 @@ def raw_orders(ctx):
 def raw_customers(ctx):
     customers = ctx.loader(fetch_customers)
     cursor = ctx.query(
-        f"SELECT customer_id, plan_name, load_seq FROM {customers.target} ORDER BY customer_id"
+        f"SELECT customer_id, plan_name, load_seq FROM {customers.destination} "
+        "ORDER BY customer_id"
     )
     return [
         {"customer_id": row[0], "plan_name": row[1], "load_seq": row[2]}

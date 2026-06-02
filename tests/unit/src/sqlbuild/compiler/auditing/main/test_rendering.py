@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     RenderAuditSqlTestCase,
@@ -118,10 +118,10 @@ RENDER_TEST_CASES: list[RenderAuditSqlTestCase] = [
 def test_given_unresolved_sql_when_rendering_then_returns_expected(
     test_case: RenderAuditSqlTestCase,
 ) -> None:
-    model_targets: dict[str, CompiledRelationTarget] = build_render_model_targets(
+    model_targets: dict[str, CompiledRelationDestination] = build_render_model_targets(
         test_case.model_targets
     )
-    seed_targets: dict[str, CompiledRelationTarget] = build_render_seed_targets(
+    seed_targets: dict[str, CompiledRelationDestination] = build_render_seed_targets(
         test_case.seed_targets
     )
     source_map: dict[str, SourceEntry] = build_render_source_map(test_case.source_map_entries)

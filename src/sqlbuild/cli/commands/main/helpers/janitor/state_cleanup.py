@@ -9,7 +9,6 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredLockCandidate,
     JanitorStateBackupCandidate,
 )
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.state.main.state_janitor_retention import inspect_state_janitor_retention
 from sqlbuild.virtual.state.models import StateJanitorInspection
 
@@ -22,7 +21,7 @@ def state_janitor_retention(
 ) -> StateJanitorInspection | None:
     """Inspect state-only cleanup when janitor runs in virtual mode."""
 
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
+    if not discovered_inputs.project_config.settings.virtual_environments:
         return None
     return inspect_state_janitor_retention(
         project_dir=project_dir,

@@ -164,10 +164,10 @@ def test_given_sql_and_vars_when_substituting_then_returns_expected(
     test_case: SubstituteSqlVarsTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    environment_name: str
+    target_name: str
     environment_value: str
-    for environment_name, environment_value in test_case.environment_variables.items():
-        monkeypatch.setenv(environment_name, environment_value)
+    for target_name, environment_value in test_case.environment_variables.items():
+        monkeypatch.setenv(target_name, environment_value)
 
     result: str = substitute_sql_vars(
         sql=test_case.sql,

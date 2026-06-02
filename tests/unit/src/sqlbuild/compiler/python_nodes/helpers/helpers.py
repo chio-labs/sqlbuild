@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSource,
     CompileModelConfig,
 )
@@ -352,7 +352,7 @@ def build_orders_project_graph() -> ProjectGraph:
         relative_path=Path("models/orders.sql"),
         query_sql="select * from __source('raw_orders')",
         config=CompileModelConfig(values={"tags": ["daily"]}),
-        target=CompiledRelationTarget(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name="orders",
@@ -361,7 +361,7 @@ def build_orders_project_graph() -> ProjectGraph:
     )
     project: CompiledProject = CompiledProject(
         run_id="run-id",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=(orders_model,),

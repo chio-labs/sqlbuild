@@ -102,7 +102,7 @@ def test_given_python_check_when_executing_then_returns_expected_result(
         connection_config={},
         connection=object(),
         run_id="run_1",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
         run_state=run_state,

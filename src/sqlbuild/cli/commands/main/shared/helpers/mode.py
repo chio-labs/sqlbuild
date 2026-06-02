@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.types import EnvironmentMode
 
 
 def enforce_direct_mode_command_support(
@@ -12,9 +11,9 @@ def enforce_direct_mode_command_support(
 ) -> None:
     """Block commands that are not yet supported in virtual mode."""
 
-    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+    if discovered_inputs.project_config.settings.virtual_environments:
         raise CliUserError(
-            f"{command_name} is not supported when environment_mode = 'virtual'",
+            f"{command_name} is not supported when virtual_environments = true",
             code="C241",
         )
 
@@ -26,8 +25,8 @@ def enforce_no_defer_to_in_virtual_mode(
 
     if defer_to is None:
         return
-    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+    if discovered_inputs.project_config.settings.virtual_environments:
         raise CliUserError(
-            f"{command_name} does not support --defer-to when environment_mode = 'virtual'",
+            f"{command_name} does not support --defer-to when virtual_environments = true",
             code="C242",
         )

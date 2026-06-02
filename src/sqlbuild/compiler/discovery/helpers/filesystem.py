@@ -476,7 +476,7 @@ def _append_python_node_function(
                 name=loader_definition.name,
                 function=function,
                 depends_on=loader_definition.depends_on,
-                target=loader_definition.target,
+                destination=loader_definition.destination,
                 write_strategy=loader_definition.write_strategy,
                 cursor_column=loader_definition.cursor_column,
                 unique_key=loader_definition.unique_key,

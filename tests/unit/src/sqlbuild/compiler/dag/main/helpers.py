@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -81,13 +81,13 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         file_path=Path("seeds/country_codes.csv"),
         relative_path=Path("seeds/country_codes.csv"),
     )
-    model_target: CompiledRelationTarget = CompiledRelationTarget(
+    model_target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="analytics",
         name="orders",
         qualified_name="analytics.orders",
     )
-    function_target: CompiledRelationTarget = CompiledRelationTarget(
+    function_target: CompiledRelationDestination = CompiledRelationDestination(
         database=None,
         schema="analytics",
         name="normalize_email",
@@ -95,10 +95,10 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
     )
     project: CompiledProject = CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
-        effective_environment_schema="raw",
+        effective_target_schema="raw",
         loader_functions=(
             DiscoveredLoaderFunction(
                 file_path=Path("loaders/orders.py"),
@@ -135,7 +135,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                     columns=(SchemaColumn(name="country_code", type="TEXT"),),
                 ),
                 schema_file=schema_file,
-                target=CompiledRelationTarget(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="country_codes",
@@ -152,8 +152,8 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 arguments=(FunctionArgument(name="email", type="TEXT"),),
                 returns="TEXT",
                 body_sql="lower(email)",
-                target=function_target,
-                fingerprint_target=function_target,
+                destination=function_target,
+                fingerprint_destination=function_target,
                 language=FunctionLanguage.SQL,
             ),
         ),
@@ -165,7 +165,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 relative_path=Path("models/orders.sql"),
                 query_sql="SELECT 1 AS order_id",
                 config=CompileModelConfig(values={"materialized": "table", "tags": ["daily"]}),
-                target=model_target,
+                destination=model_target,
                 schema_entry=SchemaModelEntry(
                     name="orders",
                     description="Clean orders",

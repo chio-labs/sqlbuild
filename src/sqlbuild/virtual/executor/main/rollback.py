@@ -16,7 +16,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.helpers.rollback import (
     guard_partial_rollback_scope,
     publish_function_versions,
@@ -77,17 +77,17 @@ def run_virtual_rollback(
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
-    active_environment_name: str | None = resolve_environment_name(
+    active_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
     unsuffixed_virtual_environment_name: str | None = None
-    if active_environment_name is not None:
-        unsuffixed_virtual_environment_name = resolve_environment_config(
+    if active_target_name is not None:
+        unsuffixed_virtual_environment_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=active_environment_name,
+            target_name=active_target_name,
         ).state.unsuffixed_virtual_env
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")

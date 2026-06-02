@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -28,8 +28,8 @@ def apply_target_defaults(
     models: tuple[CompiledModel, ...] = tuple(
         replace(
             m,
-            target=_resolve_target(
-                m.target,
+            destination=_resolve_target(
+                m.destination,
                 default_schema,
                 default_database,
                 render_qualified_name,
@@ -40,8 +40,8 @@ def apply_target_defaults(
     seeds: tuple[CompiledSeed, ...] = tuple(
         replace(
             s,
-            target=_resolve_target(
-                s.target,
+            destination=_resolve_target(
+                s.destination,
                 default_schema,
                 default_database,
                 render_qualified_name,
@@ -52,7 +52,7 @@ def apply_target_defaults(
     functions: tuple[CompiledFunction, ...] = tuple(
         replace(
             f,
-            target=_resolve_function_target(
+            destination=_resolve_function_target(
                 function=f,
                 default_schema=default_schema,
                 default_database=default_database,
@@ -61,8 +61,8 @@ def apply_target_defaults(
                     python_functions_inherit_default_namespace
                 ),
             ),
-            fingerprint_target=_resolve_target(
-                f.fingerprint_target,
+            fingerprint_destination=_resolve_target(
+                f.fingerprint_destination,
                 default_schema,
                 default_database,
                 render_qualified_name,
@@ -80,12 +80,12 @@ def _resolve_function_target(
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
     python_functions_inherit_default_namespace: bool,
-) -> CompiledRelationTarget:
+) -> CompiledRelationDestination:
     apply_defaults: bool = (
         function.language != FunctionLanguage.PYTHON or python_functions_inherit_default_namespace
     )
-    resolved: CompiledRelationTarget = _resolve_target(
-        function.target,
+    resolved: CompiledRelationDestination = _resolve_target(
+        function.destination,
         default_schema if apply_defaults else None,
         default_database if apply_defaults else None,
         render_qualified_name,
@@ -96,11 +96,11 @@ def _resolve_function_target(
 
 
 def _resolve_target(
-    target: CompiledRelationTarget,
+    target: CompiledRelationDestination,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
-) -> CompiledRelationTarget:
+) -> CompiledRelationDestination:
     """Fill in adapter defaults for None schema/database on a target."""
 
     schema: str | None = target.schema if target.schema is not None else default_schema
@@ -116,7 +116,7 @@ def _resolve_target(
         and qualified_name == target.qualified_name
     ):
         return target
-    return CompiledRelationTarget(
+    return CompiledRelationDestination(
         database=database,
         schema=schema,
         name=target.name,

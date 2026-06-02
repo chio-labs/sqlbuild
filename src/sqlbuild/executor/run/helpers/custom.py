@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, SchemaFinding
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.auditing.main.execute import execute_audit
@@ -21,7 +21,7 @@ from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -30,25 +30,27 @@ def execute_custom_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationTarget],
-    seed_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
     materialize_fn: Callable[[MaterializationContext], MaterializationResult],
     run_id: str,
     query_change_tracking: bool,
-    environment: str,
+    target: str,
     effective_vars: dict[str, object],
     existing_relation: RelationInfo | None,
     on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
-    target_database: str | None = entry.target.database
-    target_schema: str | None = entry.target.schema
-    target_name: str = entry.target.name
-    target_qualified: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    target_database: str | None = entry.destination.database
+    target_schema: str | None = entry.destination.schema
+    target_name: str = entry.destination.name
+    target_qualified: str = resolve_destination_qualified_name(
+        adapter=adapter, target=entry.destination
+    )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
@@ -108,7 +110,7 @@ def execute_custom_entry(
         placeholders=placeholders_dict,
         existing_relation=existing_relation,
         run_id=run_id,
-        environment=environment,
+        build_target=target,
         vars=effective_vars,
         unique_key=entry.unique_key,
         declared_columns=declared_columns,
@@ -247,8 +249,8 @@ def _build_run_audits(
     model_audits: tuple[AuditPlanEntry, ...],
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationTarget],
-    seed_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
     model_name: str,
 ) -> Callable[[str], tuple[AuditExecutionResult, ...]]:

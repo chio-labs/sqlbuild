@@ -154,10 +154,10 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
             "sqlbuild_project.toml": (
                 'name = "demo"\n'
                 'adapter = "duckdb"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 'database = ":memory:"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n'
             ),
             "functions/python/is_positive_int.py": (
@@ -241,13 +241,13 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
             "sqlbuild_project.toml": (
                 'name = "demo"\n'
                 'adapter = "duckdb"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 'database = ":memory:"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev_schema"\n'
             ),
-            "sqlbuild_local.toml": 'environment = "dev"\n',
+            "sqlbuild_local.toml": 'target = "dev"\n',
             "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id, 'alice' AS name",
         },
         expected_status=BuildStatus.SUCCESS,

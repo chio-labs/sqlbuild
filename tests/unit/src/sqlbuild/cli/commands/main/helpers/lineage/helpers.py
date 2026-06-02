@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -54,7 +54,7 @@ def build_lineage_test_graph() -> ProjectGraph:
     )
     project: CompiledProject = CompiledProject(
         run_id="test-run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(),
@@ -107,7 +107,7 @@ def build_lineage_test_graph() -> ProjectGraph:
                 ),
                 schema_entry=SchemaSeedEntry(name="waffle_types"),
                 schema_file=schema_file,
-                target=_target("waffle_types"),
+                destination=_target("waffle_types"),
             ),
         ),
     )
@@ -235,13 +235,13 @@ def _model(
         relative_path=Path(relative_path),
         query_sql=query_sql,
         config=CompileModelConfig(),
-        target=_target(name),
+        destination=_target(name),
         inferred_columns=tuple(InferredColumn(column) for column in inferred_columns),
     )
 
 
-def _target(name: str) -> CompiledRelationTarget:
-    return CompiledRelationTarget(
+def _target(name: str) -> CompiledRelationDestination:
+    return CompiledRelationDestination(
         database=None,
         schema="main",
         name=name,

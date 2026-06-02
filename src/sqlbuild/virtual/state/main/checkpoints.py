@@ -1,4 +1,4 @@
-"""Public checkpoint helpers for virtual environments."""
+"""Public checkpoint helpers for virtual targets."""
 
 from __future__ import annotations
 

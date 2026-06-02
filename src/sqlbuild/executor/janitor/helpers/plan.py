@@ -24,18 +24,18 @@ def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
     for model in project.models:
         keys.add(
             JanitorRelationKey(
-                database=model.target.database,
-                schema=model.target.schema,
-                name=model.target.name,
+                database=model.destination.database,
+                schema=model.destination.schema,
+                name=model.destination.name,
             )
         )
     seed: CompiledSeed
     for seed in project.seeds:
         keys.add(
             JanitorRelationKey(
-                database=seed.target.database,
-                schema=seed.target.schema,
-                name=seed.target.name,
+                database=seed.destination.database,
+                schema=seed.destination.schema,
+                name=seed.destination.name,
             )
         )
     return keys
@@ -47,10 +47,10 @@ def collect_target_schemas(project: CompiledProject) -> set[tuple[str | None, st
     schemas: set[tuple[str | None, str | None]] = set()
     model: CompiledModel
     for model in project.models:
-        schemas.add((model.target.database, model.target.schema))
+        schemas.add((model.destination.database, model.destination.schema))
     seed: CompiledSeed
     for seed in project.seeds:
-        schemas.add((seed.target.database, seed.target.schema))
+        schemas.add((seed.destination.database, seed.destination.schema))
     return schemas
 
 

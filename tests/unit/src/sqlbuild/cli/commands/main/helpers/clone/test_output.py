@@ -56,16 +56,16 @@ def test_given_clone_result_when_rendering_then_styles_status_rows(
 ) -> None:
     render_clone_output(
         result=test_case.result,
-        from_environment="prod",
-        to_environment="dev",
+        from_target="prod",
+        to_target="dev",
         use_color=False,
     )
     no_color_output: str = capsys.readouterr().out
 
     render_clone_output(
         result=test_case.result,
-        from_environment="prod",
-        to_environment="dev",
+        from_target="prod",
+        to_target="dev",
         use_color=True,
     )
     color_output: str = capsys.readouterr().out

@@ -1,4 +1,4 @@
-"""Execute model diffs across compiled environments."""
+"""Execute model diffs across compiled targets."""
 
 from __future__ import annotations
 

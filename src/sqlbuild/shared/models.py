@@ -78,7 +78,7 @@ class LoaderDefinition:
 
     name: str
     depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ()
-    target: str | None = None
+    destination: str | None = None
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = ()

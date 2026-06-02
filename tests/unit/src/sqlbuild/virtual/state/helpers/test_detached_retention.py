@@ -28,14 +28,14 @@ DETACHED_RETENTION_TEST_CASES: tuple[DetachedRetentionHelperTestCase, ...] = (
     DetachedRetentionHelperTestCase(
         description="retention zero cleans detached refs immediately and retains active refs",
         retention_days=0,
-        expected_cleanup_environment_names=("old_detached", "new_detached", "unknown_age"),
+        expected_cleanup_target_names=("old_detached", "new_detached", "unknown_age"),
         expected_cleanup_relation_names=("orders__v_new", "orders__v_old"),
         expected_retained_relation_names=("orders__v_active",),
     ),
     DetachedRetentionHelperTestCase(
         description="positive retention cleans only detached environments older than retention",
         retention_days=7,
-        expected_cleanup_environment_names=("old_detached",),
+        expected_cleanup_target_names=("old_detached",),
         expected_cleanup_relation_names=("orders__v_old",),
         expected_retained_relation_names=("orders__v_active", "orders__v_new"),
     ),
@@ -93,7 +93,7 @@ def test_given_virtual_environments_when_inspecting_detached_retention_then_clas
             environment.virtual_environment_name
             for environment in inspection.cleanup_virtual_environments
         )
-        == test_case.expected_cleanup_environment_names
+        == test_case.expected_cleanup_target_names
     )
     assert (
         tuple(relation.relation_name for relation in inspection.cleanup_physical_relations)

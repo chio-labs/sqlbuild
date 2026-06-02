@@ -19,9 +19,9 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
 
 _PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
-        'name = "demo"\nadapter = "duckdb"\ndefault_environment = "dev"\n\n'
+        'name = "demo"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
         '[connection]\ndatabase = ":memory:"\n\n'
-        '[environments.dev]\nschema = "dev_schema"\n'
+        '[targets.dev]\nschema = "dev_schema"\n'
     ),
     "models/staging/stg_orders.sql": (
         "MODEL (materialized table\ntags [staging]);\n\nSELECT 1 AS order_id"
@@ -107,7 +107,7 @@ def test_given_compiled_project_when_resolving_diff_selectors_then_returns_expec
     project: CompiledProject = compile_project_for_diff_environment(
         discovered_inputs=discovered_inputs,
         adapter=DuckDbAdapter(),
-        environment_name="dev",
+        target_name="dev",
         no_sql_validation=True,
     )
 

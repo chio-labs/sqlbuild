@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.constants import (
     GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN,
     GENERIC_AUDIT_RAW_PARAMETER_PATTERN,
     MACRO_CALL_PATTERN,
-    PRESERVE_ENVIRONMENT_VALUE,
+    PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import (
@@ -98,10 +98,10 @@ from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
-    EnvironmentConfig,
     LocalConfig,
     ProjectConfig,
     SettingsConfig,
+    TargetConfig,
 )
 from sqlbuild.spec.models.schema import (
     SchemaAuditInstance,
@@ -121,8 +121,8 @@ def build_model_inputs(
     *,
     effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
-    environment_config: EnvironmentConfig | None,
-    effective_environment_name: str | None,
+    target_config: TargetConfig | None,
+    effective_target_name: str | None,
     run_id: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
@@ -154,9 +154,9 @@ def build_model_inputs(
             matched_path_default=matched_path_default,
             model_header_values=model_file.header_values,
             effective_vars=effective_vars,
-            environment_config=environment_config,
+            target_config=target_config,
             model_name=model_file.file_path.stem,
-            effective_environment_name=effective_environment_name,
+            effective_target_name=effective_target_name,
             run_id=run_id,
         )
         # Keep the interpolated-but-unexpanded form for SQL test macro mocks.
@@ -239,7 +239,7 @@ def build_model_inputs(
                 context_values=build_model_context_values(
                     values=effective_config.values,
                     model_name=model_file.file_path.stem,
-                    effective_environment_name=effective_environment_name,
+                    effective_target_name=effective_target_name,
                     run_id=run_id,
                     include_target_values=True,
                 ),
@@ -359,7 +359,7 @@ def build_sql_function_inputs(
     *,
     effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     adapter_name: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
@@ -375,7 +375,7 @@ def build_sql_function_inputs(
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
     database, schema = _resolve_function_namespace(
         defaults=discovered_inputs.project_config.defaults,
-        environment_config=environment_config,
+        target_config=target_config,
         effective_vars=effective_vars,
     )
     known_names: set[str] = set()
@@ -814,21 +814,21 @@ def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> N
 def _resolve_function_namespace(
     *,
     defaults: DefaultsConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
     database: str | None = defaults.database
     schema: str | None = defaults.schema
-    if environment_config is not None:
-        if environment_config.database is not None:
+    if target_config is not None:
+        if target_config.database is not None:
             database = _expand_function_environment_value(
-                raw_value=environment_config.database,
+                raw_value=target_config.database,
                 effective_vars=effective_vars,
                 context_label="environment database",
             )
-        if environment_config.schema is not None:
+        if target_config.schema is not None:
             schema = _expand_function_environment_value(
-                raw_value=environment_config.schema,
+                raw_value=target_config.schema,
                 effective_vars=effective_vars,
                 context_label="environment schema",
             )
@@ -838,7 +838,7 @@ def _resolve_function_namespace(
 def _expand_function_environment_value(
     *, raw_value: str, effective_vars: dict[str, object], context_label: str
 ) -> str | None:
-    if raw_value == PRESERVE_ENVIRONMENT_VALUE:
+    if raw_value == PRESERVE_TARGET_VALUE:
         return None
     return str(
         expand_template_data(
@@ -2183,14 +2183,14 @@ def build_effective_connection(
     *,
     project_config: ProjectConfig,
     local_config: LocalConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> dict[str, object]:
     """Merge base project connection with the selected environment overrides."""
 
     connection: dict[str, object] = dict(project_config.connection)
-    if environment_config is not None:
-        connection.update(environment_config.connection)
+    if target_config is not None:
+        connection.update(target_config.connection)
     connection.update(local_config.connection)
     return cast(
         dict[str, object],
@@ -2279,14 +2279,14 @@ def build_effective_vars(
     *,
     project_config: ProjectConfig,
     local_config: LocalConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     cli_vars: dict[str, object],
 ) -> dict[str, object]:
     """Merge effective vars using the locked precedence order."""
 
     values: dict[str, object] = dict(project_config.vars)
-    if environment_config is not None:
-        values.update(environment_config.vars)
+    if target_config is not None:
+        values.update(target_config.vars)
     values.update(local_config.vars)
     values.update(cli_vars)
     return expand_effective_vars(values)
@@ -2299,9 +2299,9 @@ def build_model_config(
     matched_path_default: str | None,
     model_header_values: dict[str, object],
     effective_vars: dict[str, object],
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     model_name: str,
-    effective_environment_name: str | None,
+    effective_target_name: str | None,
     run_id: str,
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
@@ -2323,19 +2323,19 @@ def build_model_config(
     early_resolved_values: dict[str, object] = resolve_early_model_templates(
         values=layered_values,
         effective_vars=effective_vars,
-        effective_environment_name=effective_environment_name,
+        effective_target_name=effective_target_name,
         run_id=run_id,
     )
     model_resolved_values: dict[str, object] = resolve_model_context_templates(
         values=early_resolved_values,
         model_name=model_name,
-        effective_environment_name=effective_environment_name,
+        effective_target_name=effective_target_name,
         run_id=run_id,
     )
     model_resolved_values = resolve_model_context_templates(
         values=model_resolved_values,
         model_name=model_name,
-        effective_environment_name=effective_environment_name,
+        effective_target_name=effective_target_name,
         run_id=run_id,
     )
     raw_logical_schema: object | None = model_resolved_values.get("schema")
@@ -2347,11 +2347,11 @@ def build_model_config(
     apply_environment_database_schema_overrides(
         values=model_resolved_values,
         effective_vars=effective_vars,
-        environment_config=environment_config,
+        target_config=target_config,
         model_context_values=build_model_context_values(
             values=model_resolved_values,
             model_name=model_name,
-            effective_environment_name=effective_environment_name,
+            effective_target_name=effective_target_name,
             run_id=run_id,
             include_target_values=False,
         ),
@@ -2359,7 +2359,7 @@ def build_model_config(
     target_resolved_values: dict[str, object] = resolve_target_context_templates(
         values=model_resolved_values,
         model_name=model_name,
-        effective_environment_name=effective_environment_name,
+        effective_target_name=effective_target_name,
         run_id=run_id,
     )
     target_resolved_values.update(raw_hook_values)
@@ -2796,7 +2796,7 @@ def resolve_early_model_templates(
     *,
     values: dict[str, object],
     effective_vars: dict[str, object],
-    effective_environment_name: str | None,
+    effective_target_name: str | None,
     run_id: str,
 ) -> dict[str, object]:
     """Resolve `${name}`, `${ENV:...}`, and early `run.*` model templates."""
@@ -2807,7 +2807,7 @@ def resolve_early_model_templates(
             values,
             variables=effective_vars,
             context_values=build_run_context_values(
-                effective_environment_name=effective_environment_name,
+                effective_target_name=effective_target_name,
                 run_id=run_id,
             ),
             context_label="model config",
@@ -2822,7 +2822,7 @@ def resolve_model_context_templates(
     *,
     values: dict[str, object],
     model_name: str,
-    effective_environment_name: str | None,
+    effective_target_name: str | None,
     run_id: str,
 ) -> dict[str, object]:
     """Resolve model-bound `CTX` values once logical model identity is known."""
@@ -2835,7 +2835,7 @@ def resolve_model_context_templates(
             context_values=build_model_context_values(
                 values=values,
                 model_name=model_name,
-                effective_environment_name=effective_environment_name,
+                effective_target_name=effective_target_name,
                 run_id=run_id,
                 include_target_values=False,
             ),
@@ -2851,7 +2851,7 @@ def resolve_target_context_templates(
     *,
     values: dict[str, object],
     model_name: str,
-    effective_environment_name: str | None,
+    effective_target_name: str | None,
     run_id: str,
 ) -> dict[str, object]:
     """Resolve late `target.*` values after environment overrides finalize naming."""
@@ -2864,7 +2864,7 @@ def resolve_target_context_templates(
             context_values=build_model_context_values(
                 values=values,
                 model_name=model_name,
-                effective_environment_name=effective_environment_name,
+                effective_target_name=effective_target_name,
                 run_id=run_id,
                 include_target_values=True,
             ),
@@ -2880,7 +2880,7 @@ def build_model_context_values(
     *,
     values: dict[str, object],
     model_name: str,
-    effective_environment_name: str | None,
+    effective_target_name: str | None,
     run_id: str,
     include_target_values: bool,
 ) -> dict[str, str | None]:
@@ -2894,7 +2894,7 @@ def build_model_context_values(
     logical_alias: str = model_name if not isinstance(raw_alias, str) else raw_alias
     context_values: dict[str, str | None] = {
         **build_run_context_values(
-            effective_environment_name=effective_environment_name,
+            effective_target_name=effective_target_name,
             run_id=run_id,
         ),
         CompileContextKey.MODEL_NAME: model_name,
@@ -2921,13 +2921,13 @@ def build_model_context_values(
 
 
 def build_run_context_values(
-    *, effective_environment_name: str | None, run_id: str
+    *, effective_target_name: str | None, run_id: str
 ) -> dict[str, str | None]:
     """Build the compile-time CTX values known before resource-specific resolution."""
 
     return {
         CompileContextKey.RUN_ID: run_id,
-        CompileContextKey.RUN_ENVIRONMENT: effective_environment_name,
+        CompileContextKey.RUN_TARGET: effective_target_name,
     }
 
 
@@ -2935,20 +2935,17 @@ def apply_environment_database_schema_overrides(
     *,
     values: dict[str, object],
     effective_vars: dict[str, object],
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     model_context_values: dict[str, str | None],
 ) -> None:
     """Apply environment database/schema overrides using the logical config as CTX."""
 
-    if environment_config is None:
+    if target_config is None:
         return
 
-    if (
-        environment_config.database is not None
-        and environment_config.database != PRESERVE_ENVIRONMENT_VALUE
-    ):
+    if target_config.database is not None and target_config.database != PRESERVE_TARGET_VALUE:
         values["database"] = expand_template_data(
-            environment_config.database,
+            target_config.database,
             variables=effective_vars,
             context_values=model_context_values,
             context_label="environment database",
@@ -2956,12 +2953,9 @@ def apply_environment_database_schema_overrides(
             preserve_context_tokens=False,
             preserve_unknown_context=False,
         )
-    if (
-        environment_config.schema is not None
-        and environment_config.schema != PRESERVE_ENVIRONMENT_VALUE
-    ):
+    if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
         values["schema"] = expand_template_data(
-            environment_config.schema,
+            target_config.schema,
             variables=effective_vars,
             context_values=model_context_values,
             context_label="environment schema",

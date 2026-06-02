@@ -81,8 +81,8 @@ def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugRes
             status_message="found",
         ),
         DebugLine(
-            label="environment",
-            message=_resolve_environment_label(discovered_inputs=discovered_inputs),
+            label="target",
+            message=_resolve_target_label(discovered_inputs=discovered_inputs),
             status=DebugCheckStatus.OK,
             status_message="resolved",
         ),
@@ -126,12 +126,12 @@ def _build_runtime_lines() -> list[DebugLine]:
     ]
 
 
-def _resolve_environment_label(*, discovered_inputs: DiscoveredProjectInputs) -> str:
-    environment: str | None = discovered_inputs.local_config.environment
-    if environment is not None:
-        return environment
-    if discovered_inputs.project_config.default_environment is not None:
-        return discovered_inputs.project_config.default_environment
+def _resolve_target_label(*, discovered_inputs: DiscoveredProjectInputs) -> str:
+    target_name: str | None = discovered_inputs.local_config.target
+    if target_name is not None:
+        return target_name
+    if discovered_inputs.project_config.default_target is not None:
+        return discovered_inputs.project_config.default_target
     return "default"
 
 

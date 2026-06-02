@@ -28,14 +28,14 @@ def build_postgres_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
@@ -59,21 +59,22 @@ def build_postgres_virtual_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{warehouse_schema}"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "postgres"\n'
         f'schema = "{state_schema}"\n'
         f"{unsuffixed_line}\n"
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
@@ -125,27 +126,28 @@ def build_postgres_virtual_clone_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f"{connection_toml}\n"
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'schema = "{prod_warehouse_schema}"\n\n'
-        "[environments.prod.clone]\n"
+        "[targets.prod.clone]\n"
         "allow_as_source = true\n\n"
-        "[environments.prod.state]\n"
+        "[targets.prod.state]\n"
         'backend = "postgres"\n'
         f'schema = "{prod_state_schema}"\n\n'
-        "[environments.prod.state.connection]\n"
+        "[targets.prod.state.connection]\n"
         f"{connection_toml}\n"
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{dev_warehouse_schema}"\n\n'
-        "[environments.dev.clone]\n"
+        "[targets.dev.clone]\n"
         "allow_as_target = true\n\n"
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "postgres"\n'
         f'schema = "{dev_state_schema}"\n\n'
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         f"{connection_toml}"
     )
 
@@ -156,17 +158,17 @@ def build_postgres_source_deferral_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{dev_schema_name}"\n'
         'defer_sources_to = "prod"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'schema = "{prod_schema_name}"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
@@ -263,21 +265,21 @@ def prepare_postgres_diff_project(
     project_contents: str = (
         'name = "postgres_diff_project"\n'
         'adapter = "postgres"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{dev_schema}"\n\n'
-        "[environments.dev.clone]\n"
+        "[targets.dev.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = true\n\n"
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'schema = "{prod_schema}"\n\n'
-        "[environments.prod.clone]\n"
+        "[targets.prod.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = false\n\n"
         "[defaults]\n"
@@ -439,7 +441,7 @@ def prepare_postgres_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -
     project_file_path.write_text(
         'name = "waffle_shop"\n'
         'adapter = "postgres"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
@@ -450,7 +452,7 @@ def prepare_postgres_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -
         'default_audit_severity = "warn"\n\n'
         "[defaults]\n"
         'materialized = "table"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
         "[path_defaults.staging]\n"
