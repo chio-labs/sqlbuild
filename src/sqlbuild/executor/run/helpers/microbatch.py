@@ -75,10 +75,12 @@ def execute_microbatch_entry(
 ) -> ModelExecutionResult:
     """Execute one microbatch incremental model through batched delta/DML."""
 
-    target_database: str | None = entry.target.database
-    target_schema: str | None = entry.target.schema
-    target_table: str = entry.target.name
-    target_qualified: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
+    target_database: str | None = entry.destination.database
+    target_schema: str | None = entry.destination.schema
+    target_table: str = entry.destination.name
+    target_qualified: str = resolve_destination_qualified_name(
+        adapter=adapter, target=entry.destination
+    )
     delta_table: str = f"{target_table}__delta"
     delta_qualified: str = resolve_qualified_name_parts(
         adapter=adapter,

@@ -310,7 +310,7 @@ class ModelPlanEntry:
     materialization_type: MaterializationType
     action: PlanAction
     reason: PlanReason
-    target: CompiledRelationDestination
+    destination: CompiledRelationDestination
     fingerprint_query_sql: str
     resolved_sql: str
     logical_ddl: str
@@ -363,7 +363,7 @@ class SeedPlanEntry:
 
     key: CompiledObjectKey
     name: str
-    target: CompiledRelationDestination
+    destination: CompiledRelationDestination
     file_path: Path
     columns: tuple[ColumnInfo, ...]
     csv_settings: SeedCsvSettings
@@ -377,7 +377,7 @@ class SourceLoadPlanEntry:
     key: CompiledObjectKey
     name: str
     loader: str
-    target: str
+    destination: str
     resource_kind: ExecutionResourceKind = ExecutionResourceKind.SOURCE
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
@@ -393,12 +393,12 @@ class FunctionPlanEntry:
     key: CompiledObjectKey
     name: str
     relative_path: Path
-    target: CompiledRelationDestination
+    destination: CompiledRelationDestination
     arguments: tuple[object, ...]
     returns: str
     body_sql: str
     fingerprint_query_sql: str
-    fingerprint_target: CompiledRelationDestination
+    fingerprint_destination: CompiledRelationDestination
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None
@@ -535,7 +535,7 @@ class ScenarioFixturePlan:
 
     kind: ScenarioArtifactKind
     logical_name: str
-    target: CompiledRelationDestination
+    destination: CompiledRelationDestination
     sql: str
 
 
@@ -544,7 +544,7 @@ class ScenarioExpectedExpectationPlan:
     """Expected-output comparison inputs for one scenario target model."""
 
     model_name: str
-    actual_target: CompiledRelationDestination
+    actual_destination: CompiledRelationDestination
     expected_sql: str
 
 

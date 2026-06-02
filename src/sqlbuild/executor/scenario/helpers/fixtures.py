@@ -68,7 +68,7 @@ def execute_scenario_seed_entries(
                 ),
                 error_message=(
                     f"scenario seed '{seed_entry.name}' failed to load into "
-                    f"'{seed_entry.target.qualified_name or seed_entry.target.name}': "
+                    f"'{seed_entry.destination.qualified_name or seed_entry.destination.name}': "
                     f"{error_message}"
                 ),
             )

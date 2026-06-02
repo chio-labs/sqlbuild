@@ -162,7 +162,7 @@ def build_scenario_fixture_plan(
     return ScenarioFixturePlan(
         kind=kind,
         logical_name=logical_name,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="scenario_schema",
             name=target_name,
@@ -224,11 +224,11 @@ def build_scenario_cleanup_test_plan(
             ),
             model_targets={
                 "daily_revenue": model_target,
-                "stg_customers": ref_fixture.target,
+                "stg_customers": ref_fixture.destination,
             },
-            source_fixture_targets={"raw__orders": source_fixture.target},
-            ref_fixture_targets={"stg_customers": ref_fixture.target},
-            seed_fixture_targets={"country_codes": seed_fixture.target},
+            source_fixture_targets={"raw__orders": source_fixture.destination},
+            ref_fixture_targets={"stg_customers": ref_fixture.destination},
+            seed_fixture_targets={"country_codes": seed_fixture.destination},
         ),
         fixture_plans=(source_fixture, ref_fixture, seed_fixture),
         model_entries=(
@@ -242,7 +242,7 @@ def build_scenario_cleanup_test_plan(
                 materialization_type=model_materialization_type,
                 action=PlanAction.CREATE_TABLE,
                 reason=PlanReason.FIRST_RUN,
-                target=model_target,
+                destination=model_target,
                 fingerprint_query_sql="SELECT 1 AS revenue",
                 resolved_sql="SELECT 1 AS revenue",
                 logical_ddl="CREATE TABLE daily_revenue AS SELECT 1 AS revenue",
@@ -272,7 +272,7 @@ def build_scenario_cleanup_test_plan_with_project_seed() -> ScenarioExecutionPla
                     name="country_codes",
                 ),
                 name="country_codes",
-                target=seed_target,
+                destination=seed_target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
                 csv_settings=default_seed_csv_settings,
@@ -297,7 +297,7 @@ def build_scenario_model_test_plan(
         qualified_name="scenario_schema.__sqb_51b385aebe20__seed__country_codes",
     )
     model_targets: dict[str, CompiledRelationDestination] = {
-        entry.name: entry.target for entry in model_entries
+        entry.name: entry.destination for entry in model_entries
     }
     return ScenarioExecutionPlan(
         key=CompiledObjectKey(
@@ -345,7 +345,7 @@ def build_scenario_model_entry(
         materialization_type=materialization_type,
         action=action,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="scenario_schema",
             name=target_name,

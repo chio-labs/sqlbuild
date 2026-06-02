@@ -32,7 +32,7 @@ def collect_scenario_cleanup_targets(
             seen=seen,
             kind=fixture_plan.kind,
             logical_name=fixture_plan.logical_name,
-            target=fixture_plan.target,
+            target=fixture_plan.destination,
             adapter=adapter,
         )
 
@@ -43,7 +43,7 @@ def collect_scenario_cleanup_targets(
             seen=seen,
             kind=ScenarioArtifactKind.SEED,
             logical_name=seed_entry.name,
-            target=seed_entry.target,
+            target=seed_entry.destination,
             adapter=adapter,
         )
 

@@ -26,7 +26,7 @@ def try_write_fingerprint(
 
     if not query_change_tracking:
         return
-    target_schema: str | None = entry.target.schema
+    target_schema: str | None = entry.destination.schema
     if target_schema is None:
         warnings.append(
             "fingerprint write skipped for "
@@ -37,9 +37,9 @@ def try_write_fingerprint(
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
             model_name=entry.name,
-            target_database=entry.target.database,
-            target_schema=entry.target.schema,
-            target_name=entry.target.name,
+            target_database=entry.destination.database,
+            target_schema=entry.destination.schema,
+            target_name=entry.destination.name,
             run_id=run_id,
             query_hash=compute_query_hash(entry.fingerprint_query_sql),
             ast_hash=compute_ast_hash(entry.fingerprint_query_sql),
@@ -52,7 +52,7 @@ def try_write_fingerprint(
         write_fingerprint(
             connection=connection,
             execute=execute_fn,
-            database=entry.target.database,
+            database=entry.destination.database,
             schema=target_schema,
             fingerprint=fingerprint,
             render_qualified_name=adapter.render_qualified_name,

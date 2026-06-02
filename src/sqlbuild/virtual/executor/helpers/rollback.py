@@ -212,7 +212,7 @@ def validate_physical_relations_exist(
             target: CompiledRelationDestination = build_virtual_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
-                fallback_target=model.target,
+                fallback_target=model.destination,
             )
             if not adapter.relation_exists(
                 connection,
@@ -273,7 +273,7 @@ def publish_function_versions(
                 continue
             target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
-                target=function.target,
+                target=function.destination,
                 virtual_target_name=virtual_target_name,
             )
             adapter.ensure_schema(

@@ -388,7 +388,7 @@ def _build_scenario_function_entry(
         key=function.key,
         name=function.name,
         relative_path=function.relative_path,
-        target=function.target,
+        destination=function.destination,
         arguments=function.arguments,
         returns=function.returns,
         body_sql=resolve_function_sql(
@@ -402,7 +402,7 @@ def _build_scenario_function_entry(
             star_exclude_keyword=adapter.star_exclude_keyword(),
         ),
         fingerprint_query_sql=build_compiled_function_fingerprint_sql(function),
-        fingerprint_target=function.fingerprint_target,
+        fingerprint_destination=function.fingerprint_destination,
         return_columns=function.return_columns,
         language=function.language,
         source_file_path=function.source_file_path,
@@ -459,7 +459,7 @@ def build_scenario_fixture_plans(
             ScenarioFixturePlan(
                 kind=ScenarioArtifactKind.SOURCE,
                 logical_name=source_name,
-                target=_required_target(
+                destination=_required_target(
                     relation_plan.source_fixture_targets,
                     source_name,
                     kind=ScenarioArtifactKind.SOURCE,
@@ -482,7 +482,7 @@ def build_scenario_fixture_plans(
             ScenarioFixturePlan(
                 kind=ScenarioArtifactKind.REF,
                 logical_name=ref_name,
-                target=_required_target(
+                destination=_required_target(
                     relation_plan.ref_fixture_targets,
                     ref_name,
                     kind=ScenarioArtifactKind.REF,
@@ -505,7 +505,7 @@ def build_scenario_fixture_plans(
             ScenarioFixturePlan(
                 kind=ScenarioArtifactKind.SEED,
                 logical_name=seed_name,
-                target=_required_target(
+                destination=_required_target(
                     relation_plan.seed_fixture_targets,
                     seed_name,
                     kind=ScenarioArtifactKind.SEED,
@@ -528,7 +528,7 @@ def build_scenario_fixture_plans(
             ScenarioFixturePlan(
                 kind=ScenarioArtifactKind.DBT_REF,
                 logical_name=dbt_ref_name,
-                target=_required_target(
+                destination=_required_target(
                     relation_plan.dbt_ref_fixture_targets,
                     dbt_ref_name,
                     kind=ScenarioArtifactKind.DBT_REF,
@@ -573,7 +573,7 @@ def build_scenario_seed_entries(
             SeedPlanEntry(
                 key=seed.key,
                 name=seed.name,
-                target=_required_target(
+                destination=_required_target(
                     relation_plan.seed_targets,
                     seed_name,
                     kind=ScenarioArtifactKind.SEED,
@@ -655,14 +655,14 @@ def _build_expected_check_plan(
     sqlglot_dialect: str | None,
 ) -> ScenarioExpectedExpectationPlan:
     model_name: str = expected_cte.name.removeprefix("__expected__")
-    actual_target: CompiledRelationDestination = _required_target(
+    actual_destination: CompiledRelationDestination = _required_target(
         relation_plan.model_targets,
         model_name,
         kind=ScenarioArtifactKind.MODEL,
     )
     return ScenarioExpectedExpectationPlan(
         model_name=model_name,
-        actual_target=actual_target,
+        actual_destination=actual_destination,
         expected_sql=resolve_scenario_check_sql(
             sql=expected_cte.sql_body,
             relation_plan=relation_plan,

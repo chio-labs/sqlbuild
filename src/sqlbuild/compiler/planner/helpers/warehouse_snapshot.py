@@ -190,16 +190,16 @@ def _resolve_database(project: CompiledProject) -> str | None:
 
     model: CompiledModel
     for model in project.models:
-        if model.target.database is not None:
-            return model.target.database
+        if model.destination.database is not None:
+            return model.destination.database
     seed: CompiledSeed
     for seed in project.seeds:
-        if seed.target.database is not None:
-            return seed.target.database
+        if seed.destination.database is not None:
+            return seed.destination.database
     function: CompiledFunction
     for function in project.functions:
-        if function.target.database is not None:
-            return function.target.database
+        if function.destination.database is not None:
+            return function.destination.database
     return None
 
 
@@ -209,16 +209,16 @@ def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
     schemas: set[str] = set()
     model: CompiledModel
     for model in project.models:
-        if model.target.schema is not None:
-            schemas.add(model.target.schema)
+        if model.destination.schema is not None:
+            schemas.add(model.destination.schema)
     seed: CompiledSeed
     for seed in project.seeds:
-        if seed.target.schema is not None:
-            schemas.add(seed.target.schema)
+        if seed.destination.schema is not None:
+            schemas.add(seed.destination.schema)
     function: CompiledFunction
     for function in project.functions:
-        if function.target.schema is not None:
-            schemas.add(function.target.schema)
+        if function.destination.schema is not None:
+            schemas.add(function.destination.schema)
     return tuple(sorted(schemas))
 
 
@@ -231,10 +231,10 @@ def _build_metadata_name_filter(
     if selected_keys is None:
         model: CompiledModel
         for model in project.models:
-            names.add(model.target.name)
+            names.add(model.destination.name)
         seed: CompiledSeed
         for seed in project.seeds:
-            names.add(seed.target.name)
+            names.add(seed.destination.name)
     else:
         selected_names: frozenset[str] = frozenset(key.name for key in selected_keys)
         model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
@@ -246,7 +246,7 @@ def _build_metadata_name_filter(
         for key in selected_keys:
             selected_model: CompiledModel | None = model_map.get(key.name)
             if selected_model is not None:
-                names.add(selected_model.target.name)
+                names.add(selected_model.destination.name)
                 _add_model_upstream_names(
                     model=selected_model,
                     model_map=model_map,
@@ -257,7 +257,7 @@ def _build_metadata_name_filter(
                 continue
             selected_seed: CompiledSeed | None = seed_map.get(key.name)
             if selected_seed is not None:
-                names.add(selected_seed.target.name)
+                names.add(selected_seed.destination.name)
                 continue
             selected_source: SourceEntry | None = source_map.get(key.name)
             if selected_source is not None:
@@ -295,12 +295,12 @@ def _add_model_upstream_names(
         if reference.ref_kind == SqlReferenceKind.REF:
             upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
             if upstream_model is not None:
-                names.add(upstream_model.target.name)
+                names.add(upstream_model.destination.name)
             continue
         if reference.ref_kind == SqlReferenceKind.SEED:
             upstream_seed: CompiledSeed | None = seed_map.get(reference.ref_name)
             if upstream_seed is not None:
-                names.add(upstream_seed.target.name)
+                names.add(upstream_seed.destination.name)
             continue
 
 
@@ -447,9 +447,9 @@ def _collect_cursor_models(
 
         target_tag: str | None = None
         target_relation: str | None = None
-        if model.target.qualified_name is not None and model.name in existing_relations:
+        if model.destination.qualified_name is not None and model.name in existing_relations:
             target_tag = f"{model.name}__target__max"
-            target_relation = model.target.qualified_name
+            target_relation = model.destination.qualified_name
 
         upstreams: list[_UpstreamCursorInfo] = []
         ref: CompileSqlReference
@@ -667,7 +667,7 @@ def _resolve_upstream_qualified_name(
             return deferred_targets[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
-            return upstream_model.target.qualified_name
+            return upstream_model.destination.qualified_name
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
         source: CompiledSource | None = source_map.get(ref.ref_name)
         if source is not None:

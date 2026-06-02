@@ -25,13 +25,13 @@ def execute_seed(
 
     start: float = time.monotonic()
     target_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=seed_entry.target
+        adapter=adapter, target=seed_entry.destination
     )
     try:
         adapter.ensure_schema(
             connection,
-            database=seed_entry.target.database,
-            schema=seed_entry.target.schema,
+            database=seed_entry.destination.database,
+            schema=seed_entry.destination.schema,
             statement_recorder=statement_recorder,
         )
         adapter.load_seed(

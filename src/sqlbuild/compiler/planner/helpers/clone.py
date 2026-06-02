@@ -133,7 +133,7 @@ def build_clone_model_entries(
                 else PlanAction.CREATE_TABLE
             ),
             reason=PlanReason.NO_CHANGE,
-            target=model.target,
+            destination=model.destination,
             fingerprint_query_sql="",
             resolved_sql=resolved_sql,
             logical_ddl="",
@@ -164,7 +164,7 @@ def build_source_model_entries(
                     else PlanAction.CREATE_TABLE
                 ),
                 reason=PlanReason.NO_CHANGE,
-                target=model.target,
+                destination=model.destination,
                 fingerprint_query_sql="",
                 resolved_sql="",
                 logical_ddl="",
@@ -182,7 +182,7 @@ def build_clone_seed_entries(
         SeedPlanEntry(
             key=seed.key,
             name=seed.name,
-            target=seed.target,
+            destination=seed.destination,
             file_path=seed.seed_file.file_path,
             columns=tuple(),
             csv_settings=seed.schema_entry.csv_settings,
@@ -201,7 +201,7 @@ def build_source_seed_entries(
         SeedPlanEntry(
             key=seed.key,
             name=seed.name,
-            target=seed.target,
+            destination=seed.destination,
             file_path=seed.seed_file.file_path,
             columns=tuple(),
             csv_settings=seed.schema_entry.csv_settings,

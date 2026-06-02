@@ -89,7 +89,7 @@ def build_incremental_plan_entry(
         materialization_type=MaterializationType.INCREMENTAL,
         action=action,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=target_schema,
             name=target_name,

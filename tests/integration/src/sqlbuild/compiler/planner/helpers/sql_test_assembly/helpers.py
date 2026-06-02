@@ -112,7 +112,7 @@ def build_test_and_project(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="main",
                     name=model_name,

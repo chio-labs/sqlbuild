@@ -152,7 +152,7 @@ def build_test_and_project(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="staging",
                     name=model_name,
@@ -177,13 +177,13 @@ def build_test_and_project(
                 arguments=(),
                 returns="BOOLEAN",
                 body_sql="SELECT TRUE",
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="main",
                     name=function_name,
                     qualified_name=qualified_name,
                 ),
-                fingerprint_target=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="main",
                     name=function_name,

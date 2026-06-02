@@ -98,7 +98,7 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
                 key=source_key,
                 name="raw_orders",
                 loader=loader_name,
-                target="raw_orders",
+                destination="raw_orders",
             ),
         ),
         source_map={

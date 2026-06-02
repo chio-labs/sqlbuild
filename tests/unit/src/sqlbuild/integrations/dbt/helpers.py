@@ -121,7 +121,7 @@ def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.NO_CHANGE,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name=model_name,

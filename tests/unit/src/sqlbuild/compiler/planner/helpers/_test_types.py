@@ -392,7 +392,7 @@ class ScenarioExecutionPlanTestCase:
     expected_seed_entry_targets: dict[str, str]
     expected_function_entry_targets: dict[str, str]
     expected_function_entry_sql_fragments: dict[str, tuple[str, ...]]
-    expected_expected_actual_targets: dict[str, str]
+    expected_expected_actual_destinations: dict[str, str]
     expected_expected_sql: dict[str, str]
     expected_assertion_sql: dict[str, str]
 

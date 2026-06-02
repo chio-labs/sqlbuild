@@ -433,9 +433,12 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     assert tuple(m.name for m in compiled.models) == test_case.expected_model_names
     assert tuple(m.deps for m in compiled.models) == test_case.expected_model_deps
     assert tuple(m.macro_deps for m in compiled.models) == test_case.expected_model_macro_deps
-    assert tuple(m.target.name for m in compiled.models) == test_case.expected_model_target_names
     assert (
-        tuple(m.target.schema for m in compiled.models) == test_case.expected_model_target_schemas
+        tuple(m.destination.name for m in compiled.models) == test_case.expected_model_target_names
+    )
+    assert (
+        tuple(m.destination.schema for m in compiled.models)
+        == test_case.expected_model_target_schemas
     )
     assert tuple(s.name for s in compiled.sources) == test_case.expected_source_names
     assert (
@@ -446,12 +449,16 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         tuple(s.source_entry.schema for s in compiled.sources) == test_case.expected_source_schemas
     )
     assert tuple(s.name for s in compiled.seeds) == test_case.expected_seed_names
-    assert tuple(s.target.schema for s in compiled.seeds) == test_case.expected_seed_target_schemas
     assert (
-        tuple(s.target.database for s in compiled.seeds) == test_case.expected_seed_target_databases
+        tuple(s.destination.schema for s in compiled.seeds)
+        == test_case.expected_seed_target_schemas
     )
     assert (
-        tuple(s.target.qualified_name for s in compiled.seeds)
+        tuple(s.destination.database for s in compiled.seeds)
+        == test_case.expected_seed_target_databases
+    )
+    assert (
+        tuple(s.destination.qualified_name for s in compiled.seeds)
         == test_case.expected_seed_target_qualified_names
     )
     assert tuple(a.name for a in compiled.audits) == test_case.expected_audit_names

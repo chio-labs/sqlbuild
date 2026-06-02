@@ -39,7 +39,7 @@ def build_deferred_targets(
     model: CompiledModel
     for model in project.models:
         targets[model.name] = _resolve_deferred_target(
-            target=model.target,
+            target=model.destination,
             deferred_env=deferred_env,
             effective_vars=effective_vars,
             default_schema=default_schema,
@@ -49,7 +49,7 @@ def build_deferred_targets(
     seed: CompiledSeed
     for seed in project.seeds:
         targets[seed.name] = _resolve_deferred_target(
-            target=seed.target,
+            target=seed.destination,
             deferred_env=deferred_env,
             effective_vars=effective_vars,
             default_schema=default_schema,

@@ -24,7 +24,7 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="analytics",
             name="orders",
@@ -47,7 +47,7 @@ def build_contract_model_plan_entry(
         materialization_type=entry.materialization_type,
         action=entry.action,
         reason=entry.reason,
-        target=entry.target,
+        destination=entry.destination,
         fingerprint_query_sql=entry.fingerprint_query_sql,
         resolved_sql=entry.resolved_sql,
         logical_ddl=entry.logical_ddl,
@@ -73,7 +73,7 @@ def build_snapshot_execution_plan_entry(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="main",
             name="customer_snapshot",

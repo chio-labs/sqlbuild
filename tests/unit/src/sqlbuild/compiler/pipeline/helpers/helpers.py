@@ -34,7 +34,7 @@ def build_single_model_project(
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(),
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=physical_database,
             schema=physical_schema,
             name="test_model",

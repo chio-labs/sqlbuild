@@ -337,7 +337,7 @@ def _drop_logical_vde_views(
     for model in project.models:
         virtual_target: CompiledRelationDestination = build_virtual_destination(
             adapter=adapter,
-            target=model.target,
+            target=model.destination,
             virtual_target_name=virtual_target_name,
             unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
         )

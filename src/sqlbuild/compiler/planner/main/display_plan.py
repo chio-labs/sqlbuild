@@ -36,7 +36,7 @@ def build_display_only_sqlbuild_plan(
                 materialization_type=materialization_type,
                 action=_display_action(materialization_type),
                 reason=PlanReason.FULL_REFRESH if full_refresh else PlanReason.NO_CHANGE,
-                target=model.target,
+                destination=model.destination,
                 fingerprint_query_sql=model.query_sql,
                 resolved_sql=model.query_sql,
                 logical_ddl="",

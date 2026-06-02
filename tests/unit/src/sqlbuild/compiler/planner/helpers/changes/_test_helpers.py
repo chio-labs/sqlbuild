@@ -37,7 +37,7 @@ def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> Compile
         relative_path=Path(f"models/{test_case.model_name}.sql"),
         query_sql=test_case.query_sql,
         config=CompileModelConfig(values=test_case.config_values),
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None, schema="staging", name=test_case.model_name, qualified_name=None
         ),
         schema_entry=schema_entry,

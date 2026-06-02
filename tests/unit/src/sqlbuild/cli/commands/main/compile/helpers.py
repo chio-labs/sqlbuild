@@ -153,7 +153,7 @@ def build_target_writer_plan_output() -> PlanOutput:
                 materialization_type=MaterializationType.TABLE,
                 action=PlanAction.CREATE_TABLE,
                 reason=PlanReason.FIRST_RUN,
-                target=target,
+                destination=target,
                 fingerprint_query_sql="SELECT 1 AS order_id",
                 resolved_sql="SELECT 1 AS order_id",
                 logical_ddl="CREATE TABLE analytics.orders AS SELECT 1 AS order_id",
@@ -163,7 +163,7 @@ def build_target_writer_plan_output() -> PlanOutput:
             SeedPlanEntry(
                 key=seed_key,
                 name="country_codes",
-                target=target,
+                destination=target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
                 csv_settings=SeedCsvSettings(),
@@ -174,13 +174,13 @@ def build_target_writer_plan_output() -> PlanOutput:
                 key=function_key,
                 name="is_completed_order",
                 relative_path=Path("functions/sql/is_completed_order.sql"),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
                     qualified_name="analytics.is_completed_order",
                 ),
-                fingerprint_target=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
@@ -195,13 +195,13 @@ def build_target_writer_plan_output() -> PlanOutput:
                 key=python_function_key,
                 name="is_completed_order_py",
                 relative_path=Path("functions/python/is_completed_order_py.py"),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order_py",
                     qualified_name="analytics.is_completed_order_py",
                 ),
-                fingerprint_target=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order_py",
@@ -289,7 +289,7 @@ def build_static_target_writer_project() -> CompiledProject:
                 relative_path=Path("staging/orders.sql"),
                 query_sql="SELECT 2 AS order_id",
                 config=CompileModelConfig(values={}),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="orders",
@@ -306,13 +306,13 @@ def build_static_target_writer_project() -> CompiledProject:
                 arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
                 returns="BOOLEAN",
                 body_sql="order_status = 'completed'",
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
                     qualified_name="analytics.is_completed_order",
                 ),
-                fingerprint_target=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="is_completed_order",
@@ -343,7 +343,7 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
                 relative_path=Path(f"models/{name}.sql"),
                 query_sql="SELECT 1 AS id",
                 config=CompileModelConfig(values={}),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name=name,

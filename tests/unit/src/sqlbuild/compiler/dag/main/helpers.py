@@ -135,7 +135,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                     columns=(SchemaColumn(name="country_code", type="TEXT"),),
                 ),
                 schema_file=schema_file,
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="country_codes",
@@ -152,8 +152,8 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 arguments=(FunctionArgument(name="email", type="TEXT"),),
                 returns="TEXT",
                 body_sql="lower(email)",
-                target=function_target,
-                fingerprint_target=function_target,
+                destination=function_target,
+                fingerprint_destination=function_target,
                 language=FunctionLanguage.SQL,
             ),
         ),
@@ -165,7 +165,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 relative_path=Path("models/orders.sql"),
                 query_sql="SELECT 1 AS order_id",
                 config=CompileModelConfig(values={"materialized": "table", "tags": ["daily"]}),
-                target=model_target,
+                destination=model_target,
                 schema_entry=SchemaModelEntry(
                     name="orders",
                     description="Clean orders",

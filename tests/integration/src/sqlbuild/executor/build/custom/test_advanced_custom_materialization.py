@@ -296,7 +296,7 @@ def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_bloc
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id, 'bad_data' AS status")
-    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.target}
+    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
     audit: AuditPlanEntry = build_failing_audit(name="check_rows", target_name="test_model")
 
     result: ModelExecutionResult = run_custom_entry(

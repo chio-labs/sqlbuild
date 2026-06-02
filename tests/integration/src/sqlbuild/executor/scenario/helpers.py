@@ -94,9 +94,9 @@ def build_duckdb_cleanup_plan() -> ScenarioExecutionPlan:
             ),
             model_targets={
                 "daily_revenue": model_target,
-                "stg_customers": ref_fixture.target,
+                "stg_customers": ref_fixture.destination,
             },
-            ref_fixture_targets={"stg_customers": ref_fixture.target},
+            ref_fixture_targets={"stg_customers": ref_fixture.destination},
         ),
         fixture_plans=fixture_plans,
     )
@@ -204,7 +204,7 @@ def build_duckdb_expected_check_plan(*, expected_sql: str) -> ScenarioExecutionP
         expected_expectations=(
             ScenarioExpectedExpectationPlan(
                 model_name="daily_revenue",
-                actual_target=model_target,
+                actual_destination=model_target,
                 expected_sql=expected_sql,
             ),
         ),
@@ -270,7 +270,7 @@ def _fixture_plan(
     return ScenarioFixturePlan(
         kind=kind,
         logical_name=logical_name,
-        target=_target(physical_name=physical_name),
+        destination=_target(physical_name=physical_name),
         sql=sql,
     )
 
@@ -292,7 +292,7 @@ def _model_entry(*, name: str, target: CompiledRelationDestination, sql: str) ->
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        target=target,
+        destination=target,
         fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl="",

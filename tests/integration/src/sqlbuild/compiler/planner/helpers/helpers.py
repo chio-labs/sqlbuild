@@ -92,7 +92,7 @@ def build_project_with_targets(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=f"SELECT * FROM {model_name}",
                 config=CompileModelConfig(),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -122,7 +122,7 @@ def build_project_with_targets(
                         "incremental_strategy": "delete_insert",
                     }
                 ),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=spec.schema,
                     name=spec.name,
@@ -152,7 +152,7 @@ def build_project_with_targets(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema=target_schema,
                     name=seed_name,

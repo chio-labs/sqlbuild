@@ -192,11 +192,11 @@ def run_virtual_plan_pipeline(
                 execution_order=tuple(graph.upstream_deps),
                 upstream_deps=graph.upstream_deps,
                 downstream_deps=graph.downstream_deps,
-                model_targets={model.name: model.target for model in graph.project.models},
+                model_targets={model.name: model.destination for model in graph.project.models},
                 function_targets={
-                    function.name: function.target for function in graph.project.functions
+                    function.name: function.destination for function in graph.project.functions
                 },
-                seed_targets={seed.name: seed.target for seed in graph.project.seeds},
+                seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
                 source_map={source.name: source.source_entry for source in graph.project.sources},
             )
         plan_output = rewrite_virtual_plan_entries(
@@ -303,7 +303,7 @@ def _read_bound_state(
             virtual_target_name=target_name,
         )
         model_targets: dict[str, CompiledRelationDestination] = {
-            model.name: model.target for model in graph.project.models
+            model.name: model.destination for model in graph.project.models
         }
         physical_relations: dict[str, PhysicalRelationRecord] = {}
         for model_name, version_hash in bound_version_hashes.items():

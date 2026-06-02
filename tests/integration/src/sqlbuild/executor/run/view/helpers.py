@@ -58,7 +58,7 @@ def build_view_plan_entry(
         materialization_type=MaterializationType.VIEW,
         action=PlanAction.CREATE_VIEW,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=target_schema,
             name=target_name,

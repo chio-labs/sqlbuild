@@ -52,7 +52,7 @@ def build_snapshot_full_refresh_entry(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FULL_REFRESH,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="main",
             name=name,
@@ -80,7 +80,7 @@ def build_progress_snapshot_plan_output(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="main",
             name=name,

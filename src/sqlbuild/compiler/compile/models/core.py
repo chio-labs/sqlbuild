@@ -283,7 +283,7 @@ class CompiledModel:
     relative_path: Path
     query_sql: str
     config: CompileModelConfig
-    target: CompiledRelationDestination
+    destination: CompiledRelationDestination
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -313,7 +313,7 @@ class CompiledSeed:
     seed_file: DiscoveredSeedFile
     schema_entry: SchemaSeedEntry
     schema_file: DiscoveredSchemaFile
-    target: CompiledRelationDestination
+    destination: CompiledRelationDestination
 
 
 @dataclass(frozen=True)
@@ -327,8 +327,8 @@ class CompiledFunction:
     arguments: tuple[FunctionArgument, ...]
     returns: str
     body_sql: str
-    target: CompiledRelationDestination
-    fingerprint_target: CompiledRelationDestination
+    destination: CompiledRelationDestination
+    fingerprint_destination: CompiledRelationDestination
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL

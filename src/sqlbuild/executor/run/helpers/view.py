@@ -35,9 +35,11 @@ def execute_view_entry(
 ) -> ModelExecutionResult:
     """Execute one view model through its full materialization lifecycle."""
 
-    target_database: str | None = entry.target.database
-    target_schema: str | None = entry.target.schema
-    target_qualified: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
+    target_database: str | None = entry.destination.database
+    target_schema: str | None = entry.destination.schema
+    target_qualified: str = resolve_destination_qualified_name(
+        adapter=adapter, target=entry.destination
+    )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()

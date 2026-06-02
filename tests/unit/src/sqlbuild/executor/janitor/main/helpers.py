@@ -404,7 +404,7 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 relative_path=Path("models/orders.sql"),
                 query_sql="select 1",
                 config=CompileModelConfig(),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="orders",
@@ -420,7 +420,7 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 seed_file=cast(Any, object()),
                 schema_entry=SchemaSeedEntry(name="countries"),
                 schema_file=cast(Any, object()),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name="countries",

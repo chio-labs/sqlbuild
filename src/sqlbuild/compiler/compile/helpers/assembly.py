@@ -166,7 +166,7 @@ def _assemble_compiled_model(
         relative_path=model_input.model_file.relative_path,
         query_sql=model_input.query_sql,
         config=model_input.config,
-        target=_build_model_relation_target(model_input=model_input, model_name=model_name),
+        destination=_build_model_relation_target(model_input=model_input, model_name=model_name),
         references=model_input.references,
         schema_entry=model_input.schema_entry,
         inferred_columns=inferred_columns,
@@ -282,7 +282,7 @@ def _assemble_compiled_seed(
         seed_file=seed_input.seed_file,
         schema_entry=seed_input.schema_entry,
         schema_file=seed_input.schema_file,
-        target=target,
+        destination=target,
     )
 
 
@@ -304,13 +304,13 @@ def _assemble_compiled_function(
         body_sql=function_input.body_sql,
         return_columns=function_input.return_columns,
         references=function_input.references,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=function_input.database,
             schema=function_input.schema,
             name=function_input.name,
             qualified_name=None,
         ),
-        fingerprint_target=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationDestination(
             database=function_input.fingerprint_database,
             schema=function_input.fingerprint_schema,
             name=function_input.name,

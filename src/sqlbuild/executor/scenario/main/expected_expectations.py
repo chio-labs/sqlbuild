@@ -29,7 +29,7 @@ def execute_scenario_expected_expectation(
     """Compare one scenario-built model relation with its expected query."""
 
     actual_relation: str = resolve_destination_qualified_name(
-        adapter=adapter, target=expectation.actual_target
+        adapter=adapter, target=expectation.actual_destination
     )
     comparison_sql: str = build_scenario_expected_comparison_sql(
         actual_sql=f"SELECT * FROM {actual_relation}",

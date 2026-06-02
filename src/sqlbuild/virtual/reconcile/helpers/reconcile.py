@@ -400,19 +400,19 @@ def list_virtual_relation_types(
         result: dict[str, str] = {}
         for model in graph.project.models:
             virtual_schema: str | None
-            if model.target.schema is None:
+            if model.destination.schema is None:
                 virtual_schema = None
             elif unsuffixed_virtual_target_name == virtual_target_name:
-                virtual_schema = model.target.schema
+                virtual_schema = model.destination.schema
             else:
-                virtual_schema = f"{model.target.schema}__{virtual_target_name}"
+                virtual_schema = f"{model.destination.schema}__{virtual_target_name}"
             relations: tuple[RelationInfo, ...] = adapter.list_relations(
                 connection,
-                database=model.target.database,
+                database=model.destination.database,
                 schemas=((virtual_schema,) if virtual_schema is not None else None),
             )
             for relation in relations:
-                if relation.name == model.target.name:
+                if relation.name == model.destination.name:
                     result[model.name] = relation.relation_type
                     break
         return result

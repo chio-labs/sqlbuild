@@ -195,7 +195,7 @@ def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_
     seed_entry: SeedPlanEntry = SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="country_codes"),
         name="country_codes",
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema="scenario_schema",
             name="__sqb_51b385aebe20__seed__country_codes",

@@ -43,7 +43,7 @@ def test_given_model_target_when_building_physical_target_then_it_uses_physical_
     project: CompiledProject = build_virtual_executor_test_project()
     target: CompiledRelationDestination = build_physical_destination(
         adapter=adapter,
-        target=project.models[1].target,
+        target=project.models[1].destination,
         model_name=test_case.model_name,
         version_hash=test_case.version_hash,
     )
@@ -117,8 +117,8 @@ def test_given_rewritten_targets_when_rewriting_project_then_only_model_targets_
         rewritten_targets=rewritten_targets,
     )
 
-    assert rewritten_project.models[0].target == project.models[0].target
-    assert rewritten_project.models[1].target.name == test_case.expected_rewritten_name
+    assert rewritten_project.models[0].destination == project.models[0].destination
+    assert rewritten_project.models[1].destination.name == test_case.expected_rewritten_name
 
 
 RELATION_TYPE_TEST_CASES: list[RelationTypeTestCase] = [
