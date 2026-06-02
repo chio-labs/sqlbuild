@@ -269,7 +269,7 @@ def _validate_terminal_loader_config_ownership(
 def _loader_has_decorator_config(loader_function: DiscoveredLoaderFunction) -> bool:
     return any(
         (
-            loader_function.target is not None,
+            loader_function.destination is not None,
             loader_function.write_strategy is not None,
             loader_function.cursor_column is not None,
             bool(loader_function.unique_key),

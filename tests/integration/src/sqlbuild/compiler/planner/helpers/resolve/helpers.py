@@ -11,7 +11,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompileModelConfig,
     CompileSqlReference,
 )
@@ -45,7 +45,7 @@ def build_model(
         relative_path=Path(f"models/{name}.sql"),
         query_sql=query_sql,
         config=CompileModelConfig(values=config),
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema=schema,
             name=name,
@@ -68,7 +68,7 @@ def resolve_and_execute(
     *,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    model_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     connection: Any,

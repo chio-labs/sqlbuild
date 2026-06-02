@@ -22,7 +22,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -267,7 +267,7 @@ def _assemble_compiled_seed(
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> CompiledSeed:
-    target: CompiledRelationTarget = _build_seed_relation_target(
+    target: CompiledRelationDestination = _build_seed_relation_target(
         seed_entry=seed_input.schema_entry,
         defaults=defaults,
         target_config=target_config,
@@ -304,13 +304,13 @@ def _assemble_compiled_function(
         body_sql=function_input.body_sql,
         return_columns=function_input.return_columns,
         references=function_input.references,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=function_input.database,
             schema=function_input.schema,
             name=function_input.name,
             qualified_name=None,
         ),
-        fingerprint_target=CompiledRelationTarget(
+        fingerprint_target=CompiledRelationDestination(
             database=function_input.fingerprint_database,
             schema=function_input.fingerprint_schema,
             name=function_input.name,
@@ -558,14 +558,14 @@ def _resolve_test_name(test_input: CompileSqlTestInput) -> str:
 
 def _build_model_relation_target(
     *, model_input: CompileModelInput, model_name: str
-) -> CompiledRelationTarget:
+) -> CompiledRelationDestination:
     raw_database: object | None = model_input.config.values.get("database")
     raw_schema: object | None = model_input.config.values.get("schema")
     raw_alias: object | None = model_input.config.values.get("alias")
     database: str | None = raw_database if isinstance(raw_database, str) else None
     schema: str | None = raw_schema if isinstance(raw_schema, str) else None
     name: str = raw_alias if isinstance(raw_alias, str) else model_name
-    return CompiledRelationTarget(
+    return CompiledRelationDestination(
         database=database,
         schema=schema,
         name=name,
@@ -581,7 +581,7 @@ def _build_seed_relation_target(
     defaults: DefaultsConfig,
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
-) -> CompiledRelationTarget:
+) -> CompiledRelationDestination:
     resolved_namespace: tuple[str | None, str | None] = _resolve_target_namespace(
         defaults=defaults,
         target_config=target_config,
@@ -607,7 +607,7 @@ def _build_seed_relation_target(
             effective_vars=effective_vars,
             context_label=f"seed '{seed_entry.name}' schema",
         )
-    return CompiledRelationTarget(
+    return CompiledRelationDestination(
         database=database,
         schema=schema,
         name=seed_entry.name,

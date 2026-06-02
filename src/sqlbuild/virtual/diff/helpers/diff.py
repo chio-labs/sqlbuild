@@ -8,13 +8,13 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_targets
-from sqlbuild.virtual.planner.main.targets import build_virtual_target_from_physical_relation
+from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     VirtualEnvironmentRecord,
@@ -93,8 +93,8 @@ def rewrite_project_to_physical_relations(
 ) -> CompiledProject:
     """Rewrite a project's model targets to tracked physical relations."""
 
-    targets: dict[str, CompiledRelationTarget] = {
-        model.name: build_virtual_target_from_physical_relation(
+    targets: dict[str, CompiledRelationDestination] = {
+        model.name: build_virtual_destination_from_physical_relation(
             adapter=adapter,
             relation=relations[model.name],
             fallback_target=model.target,

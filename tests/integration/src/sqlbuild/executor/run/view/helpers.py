@@ -14,7 +14,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
@@ -58,7 +58,7 @@ def build_view_plan_entry(
         materialization_type=MaterializationType.VIEW,
         action=PlanAction.CREATE_VIEW,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema=target_schema,
             name=target_name,
@@ -194,8 +194,8 @@ def _execute_view_test(
         test_case=test_case,
         resolved_target_name=target_qualified,
     )
-    model_targets: dict[str, CompiledRelationTarget] = {
-        "dim_view": CompiledRelationTarget(
+    model_targets: dict[str, CompiledRelationDestination] = {
+        "dim_view": CompiledRelationDestination(
             database=None,
             schema=test_case.target_schema,
             name=test_case.target_name,

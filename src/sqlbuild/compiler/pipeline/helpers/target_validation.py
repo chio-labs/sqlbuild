@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
@@ -35,10 +35,10 @@ def _validate_required_target_parts(
     *,
     adapter_name: str,
     resource_kind: str,
-    targets: dict[str, CompiledRelationTarget],
+    targets: dict[str, CompiledRelationDestination],
 ) -> None:
     resource_name: str
-    target: CompiledRelationTarget
+    target: CompiledRelationDestination
     for resource_name, target in targets.items():
         missing_parts: list[str] = []
         if target.database is None:

@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
@@ -58,7 +58,7 @@ def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns
             ),
         ),
         function_targets={
-            "missing_function": CompiledRelationTarget(
+            "missing_function": CompiledRelationDestination(
                 database=None,
                 schema="main",
                 name="missing_function",

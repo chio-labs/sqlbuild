@@ -15,7 +15,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadedRelation,
     ScenarioRunResult,
 )
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.shared.helpers.scenario_expected_comparison_sql import (
     build_scenario_expected_comparison_sql,
 )
@@ -88,7 +88,7 @@ def write_scenario_runtime_target(
             / _EXPECTATIONS_DIR
             / f"expected__{expected_expectation.model_name}.sql"
         )
-        actual_relation: str = resolve_target_qualified_name(
+        actual_relation: str = resolve_destination_qualified_name(
             adapter=adapter,
             target=expected_expectation.actual_target,
         )
@@ -243,7 +243,7 @@ def _write_local_expectation_artifacts(
         expected_path: Path = (
             local_run_dir / _EXPECTATIONS_DIR / f"expected__{expected_expectation.model_name}.sql"
         )
-        actual_relation: str = resolve_target_qualified_name(
+        actual_relation: str = resolve_destination_qualified_name(
             adapter=adapter,
             target=expected_expectation.actual_target,
         )

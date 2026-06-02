@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -384,7 +384,7 @@ def _build_python_check(node: DiscoveredPythonNode, *, python_graph: PythonNodeG
     )
 
 
-def _dag_target(target: CompiledRelationTarget) -> DagTarget:
+def _dag_target(target: CompiledRelationDestination) -> DagTarget:
     return DagTarget(
         database=target.database,
         schema=target.schema,
@@ -395,7 +395,7 @@ def _dag_target(target: CompiledRelationTarget) -> DagTarget:
     )
 
 
-def _target_asset_key(target: CompiledRelationTarget) -> tuple[str, ...]:
+def _target_asset_key(target: CompiledRelationDestination) -> tuple[str, ...]:
     return tuple(
         part
         for part in (
@@ -449,8 +449,8 @@ def _loader_to_source_entry(
     database: str | None = project.effective_target_database
     schema: str | None = project.effective_target_schema
     table: str = f"__loader__{loader.name}"
-    if loader.target is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.target.split(".") if part)
+    if loader.destination is not None:
+        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
         if len(parts) == 1:
             table = parts[0]
         elif len(parts) == 2:
@@ -458,7 +458,7 @@ def _loader_to_source_entry(
         elif len(parts) == 3:
             database, schema, table = parts
         else:
-            table = loader.target
+            table = loader.destination
     return SourceEntry(
         name=loader.name,
         database=database,

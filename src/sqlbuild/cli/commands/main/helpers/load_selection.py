@@ -378,8 +378,8 @@ def _loader_to_source_entry(
     database: str | None = target_config.database if target_config is not None else None
     schema: str | None = target_config.schema if target_config is not None else None
     table: str = f"__loader__{loader.name}"
-    if loader.target is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.target.split(".") if part)
+    if loader.destination is not None:
+        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
         if len(parts) == 1:
             table = parts[0]
         elif len(parts) == 2:
@@ -387,7 +387,7 @@ def _loader_to_source_entry(
         elif len(parts) == 3:
             database, schema, table = parts
         else:
-            table = loader.target
+            table = loader.destination
     return SourceEntry(
         name=loader.name,
         database=database,

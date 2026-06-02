@@ -19,7 +19,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
@@ -99,12 +99,12 @@ def build_scenario_relation_plan(
         source.name: source.source_entry for source in project.sources
     }
 
-    model_targets: dict[str, CompiledRelationTarget] = {}
-    source_fixture_targets: dict[str, CompiledRelationTarget] = {}
-    ref_fixture_targets: dict[str, CompiledRelationTarget] = {}
-    dbt_ref_fixture_targets: dict[str, CompiledRelationTarget] = {}
-    seed_fixture_targets: dict[str, CompiledRelationTarget] = {}
-    seed_targets: dict[str, CompiledRelationTarget] = {}
+    model_targets: dict[str, CompiledRelationDestination] = {}
+    source_fixture_targets: dict[str, CompiledRelationDestination] = {}
+    ref_fixture_targets: dict[str, CompiledRelationDestination] = {}
+    dbt_ref_fixture_targets: dict[str, CompiledRelationDestination] = {}
+    seed_fixture_targets: dict[str, CompiledRelationDestination] = {}
+    seed_targets: dict[str, CompiledRelationDestination] = {}
     source_map: dict[str, SourceEntry] = {}
 
     model_name: str
@@ -119,7 +119,7 @@ def build_scenario_relation_plan(
 
     ref_name: str
     for ref_name in graph_plan.ref_fixture_names:
-        target: CompiledRelationTarget = _target_for_artifact(
+        target: CompiledRelationDestination = _target_for_artifact(
             artifacts=artifacts,
             kind=ScenarioArtifactKind.REF,
             logical_name=ref_name,
@@ -208,13 +208,17 @@ def resolve_scenario_check_sql(
         )
 
     def _replace_ref(match: re.Match[str]) -> str:
-        target: CompiledRelationTarget | None = relation_plan.model_targets.get(match.group("name"))
+        target: CompiledRelationDestination | None = relation_plan.model_targets.get(
+            match.group("name")
+        )
         if target is None or target.qualified_name is None:
             return match.group(0)
         return target.qualified_name
 
     def _replace_seed(match: re.Match[str]) -> str:
-        target: CompiledRelationTarget | None = relation_plan.seed_targets.get(match.group("name"))
+        target: CompiledRelationDestination | None = relation_plan.seed_targets.get(
+            match.group("name")
+        )
         if target is None or target.qualified_name is None:
             return match.group(0)
         return target.qualified_name
@@ -226,7 +230,7 @@ def resolve_scenario_check_sql(
         return render_source_relation(source)
 
     def _replace_dbt_ref(match: re.Match[str]) -> str:
-        target: CompiledRelationTarget | None = relation_plan.dbt_ref_fixture_targets.get(
+        target: CompiledRelationDestination | None = relation_plan.dbt_ref_fixture_targets.get(
             _dbt_ref_fixture_name(match)
         )
         if target is None or target.qualified_name is None:
@@ -261,7 +265,9 @@ def build_scenario_execution_plan(
     functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
         function.key: function for function in project.functions
     }
-    function_targets: dict[str, CompiledRelationTarget] = build_function_targets(project.functions)
+    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+        project.functions
+    )
     scenario_model_names: frozenset[str] = frozenset(graph_plan.model_names)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
         project
@@ -300,7 +306,7 @@ def build_scenario_execution_plan(
     key: CompiledObjectKey
     for key in ordered_model_keys:
         model: CompiledModel = models_by_name[key.name]
-        scenario_target: CompiledRelationTarget = _required_target(
+        scenario_target: CompiledRelationDestination = _required_target(
             relation_plan.model_targets,
             model.name,
             kind=ScenarioArtifactKind.MODEL,
@@ -375,7 +381,7 @@ def _build_scenario_function_entry(
     function: CompiledFunction,
     adapter: BaseAdapter,
     relation_plan: ScenarioRelationPlan,
-    function_targets: dict[str, CompiledRelationTarget],
+    function_targets: dict[str, CompiledRelationDestination],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
 ) -> FunctionPlanEntry:
     return FunctionPlanEntry(
@@ -649,7 +655,7 @@ def _build_expected_check_plan(
     sqlglot_dialect: str | None,
 ) -> ScenarioExpectedExpectationPlan:
     model_name: str = expected_cte.name.removeprefix("__expected__")
-    actual_target: CompiledRelationTarget = _required_target(
+    actual_target: CompiledRelationDestination = _required_target(
         relation_plan.model_targets,
         model_name,
         kind=ScenarioArtifactKind.MODEL,
@@ -810,12 +816,12 @@ def _required_fixture_sql(fixture_sql: dict[str, str], logical_name: str, *, kin
 
 
 def _required_target(
-    targets: dict[str, CompiledRelationTarget],
+    targets: dict[str, CompiledRelationDestination],
     name: str,
     *,
     kind: ScenarioArtifactKind,
-) -> CompiledRelationTarget:
-    target: CompiledRelationTarget | None = targets.get(name)
+) -> CompiledRelationDestination:
+    target: CompiledRelationDestination | None = targets.get(name)
     if target is None:
         raise PlannerInputError(
             f"Scenario relation plan is missing {kind.value} target '{name}'",
@@ -829,7 +835,9 @@ def _scenario_target_name_for_marker(
     *, function_name: str, referenced_name: str, relation_plan: ScenarioRelationPlan
 ) -> str | None:
     if function_name == SqlReferenceKind.REF.function_name:
-        target: CompiledRelationTarget | None = relation_plan.model_targets.get(referenced_name)
+        target: CompiledRelationDestination | None = relation_plan.model_targets.get(
+            referenced_name
+        )
         return None if target is None else target.qualified_name
     if function_name == SqlReferenceKind.SEED.function_name:
         target = relation_plan.seed_targets.get(referenced_name)
@@ -845,7 +853,7 @@ def _scenario_target_name_for_marker(
 
 def _resolve_model_dbt_ref_fixtures(*, query_sql: str, relation_plan: ScenarioRelationPlan) -> str:
     def _replace_dbt_ref(match: re.Match[str]) -> str:
-        target: CompiledRelationTarget | None = relation_plan.dbt_ref_fixture_targets.get(
+        target: CompiledRelationDestination | None = relation_plan.dbt_ref_fixture_targets.get(
             _dbt_ref_fixture_name(match)
         )
         if target is None or target.qualified_name is None:
@@ -870,7 +878,7 @@ def _target_for_artifact(
     logical_name: str,
     database: str | None,
     schema: str | None,
-) -> CompiledRelationTarget:
+) -> CompiledRelationDestination:
     identity: ScenarioArtifactIdentity = ScenarioArtifactIdentity(
         kind=kind,
         logical_name=logical_name,
@@ -887,7 +895,7 @@ def _target_for_artifact(
         schema=schema,
         name=physical_name,
     )
-    return CompiledRelationTarget(
+    return CompiledRelationDestination(
         database=database,
         schema=schema,
         name=physical_name,

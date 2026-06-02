@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationDestination
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
@@ -172,7 +172,7 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -255,7 +255,7 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -336,7 +336,7 @@ def test_given_existing_historical_timestamp_changes_snapshot_when_executing_the
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -406,7 +406,7 @@ def test_given_new_historical_timestamp_changes_when_executing_then_uses_adapter
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema="main",
             name="customer_snapshot",

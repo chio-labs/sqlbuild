@@ -12,7 +12,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -175,7 +175,7 @@ def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,

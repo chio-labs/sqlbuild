@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
 from sqlbuild.virtual.executor.helpers.rewrite import (
-    build_physical_target,
+    build_physical_destination,
     build_rewritten_model_targets,
     relation_type_for_model,
     rewrite_project_model_targets,
@@ -41,7 +41,7 @@ def test_given_model_target_when_building_physical_target_then_it_uses_physical_
 ) -> None:
     adapter: DuckDbAdapter = build_adapter()
     project: CompiledProject = build_virtual_executor_test_project()
-    target: CompiledRelationTarget = build_physical_target(
+    target: CompiledRelationDestination = build_physical_destination(
         adapter=adapter,
         target=project.models[1].target,
         model_name=test_case.model_name,
@@ -71,7 +71,7 @@ def test_given_selected_and_bound_models_when_rewriting_targets_then_it_uses_phy
     adapter: DuckDbAdapter = build_adapter()
     project: CompiledProject = build_virtual_executor_test_project()
 
-    rewritten_targets: dict[str, CompiledRelationTarget] = build_rewritten_model_targets(
+    rewritten_targets: dict[str, CompiledRelationDestination] = build_rewritten_model_targets(
         project=project,
         adapter=adapter,
         selected_model_version_hashes=test_case.selected_model_version_hashes,
@@ -105,7 +105,7 @@ def test_given_rewritten_targets_when_rewriting_project_then_only_model_targets_
 ) -> None:
     adapter: DuckDbAdapter = build_adapter()
     project: CompiledProject = build_virtual_executor_test_project()
-    rewritten_targets: dict[str, CompiledRelationTarget] = build_rewritten_model_targets(
+    rewritten_targets: dict[str, CompiledRelationDestination] = build_rewritten_model_targets(
         project=project,
         adapter=adapter,
         selected_model_version_hashes=test_case.selected_model_version_hashes,

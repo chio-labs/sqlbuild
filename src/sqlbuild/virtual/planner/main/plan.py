@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
@@ -43,7 +43,7 @@ from sqlbuild.virtual.planner.helpers.state_metadata import (
     decode_model_version_query_sqls,
     read_previous_function_query_sqls,
 )
-from sqlbuild.virtual.planner.helpers.targets import build_target_from_physical_relation
+from sqlbuild.virtual.planner.helpers.targets import build_destination_from_physical_relation
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
@@ -253,7 +253,7 @@ def _read_bound_state(
 ) -> tuple[
     dict[str, str],
     dict[str, str],
-    dict[str, CompiledRelationTarget],
+    dict[str, CompiledRelationDestination],
     dict[str, RelationInfo],
     dict[str, str],
     dict[str, str],
@@ -302,7 +302,7 @@ def _read_bound_state(
             graph=graph,
             virtual_target_name=target_name,
         )
-        model_targets: dict[str, CompiledRelationTarget] = {
+        model_targets: dict[str, CompiledRelationDestination] = {
             model.name: model.target for model in graph.project.models
         }
         physical_relations: dict[str, PhysicalRelationRecord] = {}
@@ -315,8 +315,8 @@ def _read_bound_state(
             )
             if relation is not None:
                 physical_relations[model_name] = relation
-        deferred_targets: dict[str, CompiledRelationTarget] = {
-            model_name: build_target_from_physical_relation(
+        deferred_targets: dict[str, CompiledRelationDestination] = {
+            model_name: build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
                 fallback_target=model_targets[model_name],

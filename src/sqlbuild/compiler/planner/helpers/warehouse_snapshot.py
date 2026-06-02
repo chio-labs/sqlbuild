@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompileSqlReference,
@@ -82,7 +82,7 @@ def build_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> WarehouseSnapshot:
     """Gather warehouse state and validate selected upstream availability."""
@@ -125,7 +125,7 @@ def gather_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -377,7 +377,7 @@ def _gather_cursor_snapshots(
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
     on_progress: Callable[[str], None] | None,
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
@@ -421,7 +421,7 @@ def _collect_cursor_models(
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
@@ -656,7 +656,7 @@ def _resolve_upstream_qualified_name(
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None,
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
     selected_names: frozenset[str] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""

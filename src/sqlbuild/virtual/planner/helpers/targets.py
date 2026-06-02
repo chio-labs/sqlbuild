@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 
-def build_target_from_physical_relation(
+def build_destination_from_physical_relation(
     *,
     adapter: BaseAdapter,
     relation: PhysicalRelationRecord,
-    fallback_target: CompiledRelationTarget,
-) -> CompiledRelationTarget:
+    fallback_target: CompiledRelationDestination,
+) -> CompiledRelationDestination:
     """Rebuild a compiled target from a stored physical relation record."""
 
-    return CompiledRelationTarget(
+    return CompiledRelationDestination(
         database=relation.database_name,
         schema=relation.schema_name,
         name=relation.relation_name,

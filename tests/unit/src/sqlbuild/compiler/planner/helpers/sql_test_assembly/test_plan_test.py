@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledDirectLogicSqlTestPayload,
@@ -616,13 +616,13 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
                     arguments=(),
                     returns="VARCHAR",
                     body_sql="",
-                    target=CompiledRelationTarget(
+                    target=CompiledRelationDestination(
                         database=None,
                         schema="main",
                         name="format_cents",
                         qualified_name="main.format_cents",
                     ),
-                    fingerprint_target=CompiledRelationTarget(
+                    fingerprint_target=CompiledRelationDestination(
                         database=None,
                         schema="main",
                         name="format_cents__fingerprint",
@@ -721,13 +721,13 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
                     arguments=(),
                     returns="TABLE",
                     body_sql="",
-                    target=CompiledRelationTarget(
+                    target=CompiledRelationDestination(
                         database=None,
                         schema="main",
                         name="customer_orders",
                         qualified_name="main.customer_orders",
                     ),
-                    fingerprint_target=CompiledRelationTarget(
+                    fingerprint_target=CompiledRelationDestination(
                         database=None,
                         schema="main",
                         name="customer_orders__fingerprint",

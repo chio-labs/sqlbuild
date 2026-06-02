@@ -19,7 +19,7 @@ from sqlbuild.spec.models.types import SourceWriteStrategy
 class DiscoveredPythonLoaderMetadata:
     """Loader-specific metadata carried by an internal Python loader node."""
 
-    target: str | None = None
+    destination: str | None = None
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
