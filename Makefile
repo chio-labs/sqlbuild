@@ -101,6 +101,16 @@ verify:
 	uv run check-type-annotation-conventions src tests
 
 
+verify-quick:
+	uv run ruff format .
+	uv run ruff check --fix .
+	uv run ty check src tests
+	uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv
+	uv run check-test-conventions tests
+	uv run check-structure-conventions src/sqlbuild scripts
+	uv run check-type-annotation-conventions src tests
+
+
 check-ci:
 	uv run ruff format --check .
 	uv run ruff check .
