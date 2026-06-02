@@ -152,7 +152,7 @@ def build_scenario_pipeline_result(*, scenario_names: tuple[str, ...]) -> Compil
     return CompilePipelineResult(
         project=CompiledProject(
             run_id="scenario-test-run",
-            effective_environment_name=None,
+            effective_target_name=None,
             effective_connection={},
             effective_vars={},
             sql_scenarios=scenarios,

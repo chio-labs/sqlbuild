@@ -16,8 +16,8 @@ def run_diff_pipeline(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    from_environment: str,
-    to_environment: str,
+    from_target: str,
+    to_target: str,
     no_sql_validation: bool,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
@@ -29,7 +29,7 @@ def run_diff_pipeline(
     left_project: CompiledProject = compile_project_for_diff_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        environment_name=from_environment,
+        target_name=from_target,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
@@ -37,7 +37,7 @@ def run_diff_pipeline(
     right_project: CompiledProject = compile_project_for_diff_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        environment_name=to_environment,
+        target_name=to_target,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,

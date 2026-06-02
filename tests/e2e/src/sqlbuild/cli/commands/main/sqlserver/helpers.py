@@ -34,14 +34,14 @@ def build_sqlserver_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "sqlserver"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'database = "{config["database"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
@@ -64,21 +64,22 @@ def build_sqlserver_virtual_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "sqlserver"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'database = "{config["database"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{schema_name}"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n'
         f"{unsuffixed_line}\n"
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
 
@@ -89,17 +90,17 @@ def build_sqlserver_source_deferral_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "sqlserver"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'database = "{config["database"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{dev_schema_name}"\n'
         'defer_sources_to = "prod"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'schema = "{prod_schema_name}"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'

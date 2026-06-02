@@ -6,8 +6,13 @@ import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.exceptions import SpecConfigError
-from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig, StateConfig
-from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.spec.models.project import (
+    LocalConfig,
+    ProjectConfig,
+    SettingsConfig,
+    StateConfig,
+    TargetConfig,
+)
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import StateBackendConfig
@@ -25,10 +30,10 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
-                environment_mode=EnvironmentMode.VIRTUAL,
-                default_environment="dev",
-                environments={
-                    "dev": EnvironmentConfig(
+                settings=SettingsConfig(virtual_environments=True),
+                default_target="dev",
+                targets={
+                    "dev": TargetConfig(
                         state=StateConfig(backend="sqlite", schema="sqlbuild_state")
                     )
                 },
@@ -44,9 +49,9 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
-                environment_mode=EnvironmentMode.VIRTUAL,
-                default_environment="dev",
-                environments={"dev": EnvironmentConfig(state=StateConfig(schema="sqlbuild_state"))},
+                settings=SettingsConfig(virtual_environments=True),
+                default_target="dev",
+                targets={"dev": TargetConfig(state=StateConfig(schema="sqlbuild_state"))},
             ),
             local_config=LocalConfig(),
         ),
@@ -59,9 +64,9 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
-                environment_mode=EnvironmentMode.VIRTUAL,
-                default_environment="dev",
-                environments={"dev": EnvironmentConfig(state=StateConfig(backend="duckdb"))},
+                settings=SettingsConfig(virtual_environments=True),
+                default_target="dev",
+                targets={"dev": TargetConfig(state=StateConfig(backend="duckdb"))},
             ),
             local_config=LocalConfig(),
         ),
@@ -69,18 +74,18 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
         expected_message_fragment="state config must define schema",
     ),
     StateBackendConfigResolutionErrorTestCase(
-        description="blocks unknown active environment",
+        description="blocks unknown active target",
         discovered_inputs=DiscoveredProjectInputs(
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
-                environment_mode=EnvironmentMode.VIRTUAL,
-                default_environment="missing",
+                settings=SettingsConfig(virtual_environments=True),
+                default_target="missing",
             ),
             local_config=LocalConfig(),
         ),
         expected_error_type=SpecConfigError,
-        expected_message_fragment="Unknown environment 'missing'",
+        expected_message_fragment="Unknown target 'missing'",
     ),
     StateBackendConfigResolutionErrorTestCase(
         description="blocks state commands outside virtual mode",
@@ -88,10 +93,9 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
-                environment_mode=EnvironmentMode.DIRECT,
-                default_environment="dev",
-                environments={
-                    "dev": EnvironmentConfig(
+                default_target="dev",
+                targets={
+                    "dev": TargetConfig(
                         state=StateConfig(backend="duckdb", schema="sqlbuild_state")
                     )
                 },
@@ -99,7 +103,7 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
             local_config=LocalConfig(),
         ),
         expected_error_type=StateBackendConfigError,
-        expected_message_fragment="State commands require environment_mode = 'virtual'",
+        expected_message_fragment="State commands require virtual_environments = true",
     ),
 )
 
@@ -113,10 +117,10 @@ STATE_BACKEND_CONFIG_RESOLUTION_ERROR_TEST_CASES: tuple[
                 project_config=ProjectConfig(
                     name="demo",
                     adapter="duckdb",
-                    environment_mode=EnvironmentMode.VIRTUAL,
-                    default_environment="dev",
-                    environments={
-                        "dev": EnvironmentConfig(
+                    settings=SettingsConfig(virtual_environments=True),
+                    default_target="dev",
+                    targets={
+                        "dev": TargetConfig(
                             state=StateConfig(
                                 backend="duckdb",
                                 schema="sqlbuild_state",

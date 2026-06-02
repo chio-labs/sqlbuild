@@ -17,7 +17,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
@@ -37,7 +37,7 @@ def run_virtual_reconcile(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_environment_name: str | None,
+    virtual_target_name: str | None,
     command: str | None,
     model_name: str | None,
     physical_relation_name: str | None,
@@ -46,27 +46,24 @@ def run_virtual_reconcile(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )
-    resolved_virtual_environment_name: str | None = (
-        virtual_environment_name
-        or resolve_environment_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            selected_environment=None,
-        )
-    )
-    active_environment_name: str | None = resolve_environment_name(
+    resolved_virtual_target_name: str | None = virtual_target_name or resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    unsuffixed_virtual_environment_name: str | None = None
-    if active_environment_name is not None:
-        unsuffixed_virtual_environment_name = resolve_environment_config(
+    active_target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=None,
+    )
+    unsuffixed_virtual_target_name: str | None = None
+    if active_target_name is not None:
+        unsuffixed_virtual_target_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=active_environment_name,
+            target_name=active_target_name,
         ).state.unsuffixed_virtual_env
-    if resolved_virtual_environment_name is None:
+    if resolved_virtual_target_name is None:
         raise PlannerInputError(
             "reconcile requires --virtual-env or a default environment",
             code="C247",
@@ -81,7 +78,7 @@ def run_virtual_reconcile(
         refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=resolved_virtual_environment_name,
+            virtual_target_name=resolved_virtual_target_name,
         )
         ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
         physical_map: dict[str, PhysicalRelationRecord] = {}
@@ -102,21 +99,21 @@ def run_virtual_reconcile(
                 backend,
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=resolved_virtual_environment_name,
+                virtual_target_name=resolved_virtual_target_name,
                 owner_id=f"reconcile:{uuid4()}",
                 ttl=timedelta(minutes=10),
             )
             if lease is None:
                 raise PlannerInputError(
-                    f"virtual environment '{resolved_virtual_environment_name}' is locked",
+                    f"virtual environment '{resolved_virtual_target_name}' is locked",
                     code="S014",
                 )
             repair_view(
                 graph=graph,
                 adapter=adapter,
                 connection_config=connection_config,
-                virtual_environment_name=resolved_virtual_environment_name,
-                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                virtual_target_name=resolved_virtual_target_name,
+                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
                 model_name=model_name,
                 physical_map=physical_map,
             )
@@ -130,7 +127,7 @@ def run_virtual_reconcile(
             return (
                 "Repair\n"
                 f"  model   {model_name}\n"
-                f"  VDE     {resolved_virtual_environment_name}\n"
+                f"  VDE     {resolved_virtual_target_name}\n"
                 "  action  recreate logical view from state\n"
                 "  result  repaired"
             )
@@ -145,13 +142,13 @@ def run_virtual_reconcile(
                 backend,
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=resolved_virtual_environment_name,
+                virtual_target_name=resolved_virtual_target_name,
                 owner_id=f"reconcile:{uuid4()}",
                 ttl=timedelta(minutes=10),
             )
             if lease is None:
                 raise PlannerInputError(
-                    f"virtual environment '{resolved_virtual_environment_name}' is locked",
+                    f"virtual environment '{resolved_virtual_target_name}' is locked",
                     code="S014",
                 )
             selected_relation: PhysicalRelationRecord = resolve_attach_relation(
@@ -166,17 +163,17 @@ def run_virtual_reconcile(
                 graph=graph,
                 adapter=adapter,
                 connection_config=connection_config,
-                virtual_environment_name=resolved_virtual_environment_name,
-                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                virtual_target_name=resolved_virtual_target_name,
+                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
                 model_name=model_name,
             )
             backend.replace_virtual_environment_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=resolved_virtual_environment_name,
+                virtual_target_name=resolved_virtual_target_name,
                 refs=build_attached_refs(
                     existing_refs=refs,
-                    virtual_environment_name=resolved_virtual_environment_name,
+                    virtual_target_name=resolved_virtual_target_name,
                     model_name=model_name,
                     version_hash=selected_relation.version_hash,
                 ),
@@ -185,8 +182,8 @@ def run_virtual_reconcile(
                 graph=graph,
                 adapter=adapter,
                 connection_config=connection_config,
-                virtual_environment_name=resolved_virtual_environment_name,
-                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                virtual_target_name=resolved_virtual_target_name,
+                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
                 model_name=model_name,
                 physical_map={model_name: selected_relation},
             )
@@ -200,7 +197,7 @@ def run_virtual_reconcile(
             return (
                 "Attach\n"
                 f"  model     {model_name}\n"
-                f"  VDE       {resolved_virtual_environment_name}\n"
+                f"  VDE       {resolved_virtual_target_name}\n"
                 f"  physical  {physical_relation_name}\n"
                 "  result    attached"
             )
@@ -210,14 +207,14 @@ def run_virtual_reconcile(
             state_connection=state_connection,
             schema=config.schema,
             action=ReconcileAction.REPORT,
-            message=f"report for {resolved_virtual_environment_name}",
+            message=f"report for {resolved_virtual_target_name}",
         )
         return build_reconcile_report(
             graph=graph,
             adapter=adapter,
             connection_config=connection_config,
-            virtual_environment_name=resolved_virtual_environment_name,
-            unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            virtual_target_name=resolved_virtual_target_name,
+            unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
             model_name=model_name,
             ref_map=ref_map,
             physical_map=physical_map,
@@ -238,8 +235,8 @@ def build_reconcile_report(
     graph: ProjectGraph,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_environment_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    virtual_target_name: str,
+    unsuffixed_virtual_target_name: str | None,
     model_name: str | None,
     ref_map: dict[str, str],
     physical_map: dict[str, PhysicalRelationRecord],
@@ -253,8 +250,8 @@ def build_reconcile_report(
         graph=graph,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_environment_name=virtual_environment_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        virtual_target_name=virtual_target_name,
+        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
     )
     issues: list[str] = []
     for model in graph.project.models:
@@ -277,8 +274,8 @@ def build_reconcile_report(
         elif normalize_relation_type(relation_type) == RelationType.TABLE:
             issues.append(f"logical target is table: {model.name}")
     if not issues:
-        return f"Reconcile report for {virtual_environment_name}: no issues."
-    return "Reconcile report for " + virtual_environment_name + ":\n- " + "\n- ".join(issues)
+        return f"Reconcile report for {virtual_target_name}: no issues."
+    return "Reconcile report for " + virtual_target_name + ":\n- " + "\n- ".join(issues)
 
 
 def repair_view(
@@ -286,8 +283,8 @@ def repair_view(
     graph: ProjectGraph,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_environment_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    virtual_target_name: str,
+    unsuffixed_virtual_target_name: str | None,
     model_name: str,
     physical_map: dict[str, PhysicalRelationRecord],
 ) -> None:
@@ -295,8 +292,8 @@ def repair_view(
         graph=graph,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_environment_name=virtual_environment_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        virtual_target_name=virtual_target_name,
+        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
         model_name=model_name,
     )
     relation: PhysicalRelationRecord | None = physical_map.get(model_name)
@@ -312,8 +309,8 @@ def repair_view(
         project=graph.project,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_environment_name=virtual_environment_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        virtual_target_name=virtual_target_name,
+        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
         physical_relations={model_name: relation},
     )
 
@@ -323,16 +320,16 @@ def validate_logical_target_repairable(
     graph: ProjectGraph,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_environment_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    virtual_target_name: str,
+    unsuffixed_virtual_target_name: str | None,
     model_name: str,
 ) -> None:
     relation_types: dict[str, str] = list_virtual_relation_types(
         graph=graph,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_environment_name=virtual_environment_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        virtual_target_name=virtual_target_name,
+        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
     )
     relation_type: str | None = relation_types.get(model_name)
     if relation_type is not None and normalize_relation_type(relation_type) == RelationType.TABLE:
@@ -374,7 +371,7 @@ def resolve_attach_relation(
 def build_attached_refs(
     *,
     existing_refs: tuple[VirtualEnvironmentRefRecord, ...],
-    virtual_environment_name: str,
+    virtual_target_name: str,
     model_name: str,
     version_hash: str,
 ) -> tuple[VirtualEnvironmentRefRecord, ...]:
@@ -382,7 +379,7 @@ def build_attached_refs(
     ref_map[model_name] = version_hash
     return tuple(
         VirtualEnvironmentRefRecord(
-            virtual_environment_name=virtual_environment_name,
+            virtual_target_name=virtual_target_name,
             model_name=name,
             version_hash=hash_value,
         )
@@ -395,8 +392,8 @@ def list_virtual_relation_types(
     graph: ProjectGraph,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_environment_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    virtual_target_name: str,
+    unsuffixed_virtual_target_name: str | None,
 ) -> dict[str, str]:
     connection: Any = adapter.connect(connection_config)
     try:
@@ -405,10 +402,10 @@ def list_virtual_relation_types(
             virtual_schema: str | None
             if model.target.schema is None:
                 virtual_schema = None
-            elif unsuffixed_virtual_environment_name == virtual_environment_name:
+            elif unsuffixed_virtual_target_name == virtual_target_name:
                 virtual_schema = model.target.schema
             else:
-                virtual_schema = f"{model.target.schema}__{virtual_environment_name}"
+                virtual_schema = f"{model.target.schema}__{virtual_target_name}"
             relations: tuple[RelationInfo, ...] = adapter.list_relations(
                 connection,
                 database=model.target.database,

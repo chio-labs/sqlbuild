@@ -51,7 +51,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
 
 
 def run_compile_pipeline(
@@ -158,10 +158,10 @@ def _build_result(
     deferred_targets: dict[str, CompiledRelationTarget] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:
-        deferred_env: EnvironmentConfig = resolve_deferred_env(
+        deferred_env: TargetConfig = resolve_deferred_env(
             discovered_inputs=discovered_inputs,
             defer_to=defer_to,
-            current_env_name=project.effective_environment_name,
+            current_env_name=project.effective_target_name,
         )
         deferred_targets = build_deferred_targets(
             project=project,

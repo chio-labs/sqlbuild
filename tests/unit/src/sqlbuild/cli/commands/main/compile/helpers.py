@@ -74,9 +74,9 @@ def prepare_static_compile_project(root: Path) -> Path:
             (
                 'name = "offline_compile"',
                 'adapter = "duckdb"',
-                'default_environment = "dev"',
+                'default_target = "dev"',
                 "",
-                "[environments.dev]",
+                "[targets.dev]",
                 'schema = "main"',
             )
         )
@@ -99,9 +99,9 @@ def prepare_python_compile_project(root: Path) -> Path:
             (
                 'name = "offline_compile"',
                 'adapter = "duckdb"',
-                'default_environment = "dev"',
+                'default_target = "dev"',
                 "",
-                "[environments.dev]",
+                "[targets.dev]",
                 'schema = "main"',
             )
         )
@@ -278,7 +278,7 @@ def build_static_target_writer_project() -> CompiledProject:
     )
     return CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=(
@@ -357,7 +357,7 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
 
     project: CompiledProject = CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=tuple(models),

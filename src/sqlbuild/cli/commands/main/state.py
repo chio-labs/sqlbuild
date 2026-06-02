@@ -49,7 +49,7 @@ def run_state(
             project_dir=project_dir,
             command=checkpoint_command,
             checkpoint_id=checkpoint_id,
-            virtual_environment_name=virtual_environment,
+            virtual_target_name=virtual_environment,
             no_color=no_color,
         )
     use_color: bool = not no_color and supports_color()

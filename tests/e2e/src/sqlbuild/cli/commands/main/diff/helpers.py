@@ -20,15 +20,15 @@ def prepare_diff_project(tmp_path: Path) -> Path:
                 """
                 name = "diff_project"
                 adapter = "duckdb"
-                default_environment = "dev"
+                default_target = "dev"
 
                 [connection]
                 database = "diff.duckdb"
 
-                [environments.prod]
+                [targets.prod]
                 schema = "prod"
 
-                [environments.dev]
+                [targets.dev]
                 schema = "dev"
 
                 [defaults]
@@ -144,7 +144,7 @@ def build_environment(*, project_dir: Path, environment: str) -> None:
     """Build one environment for the diff fixture."""
 
     (project_dir / "sqlbuild_local.toml").write_text(
-        f'environment = "{environment}"\n',
+        f'target = "{environment}"\n',
         encoding="utf-8",
     )
     result: subprocess.CompletedProcess[str] = run_sqb(

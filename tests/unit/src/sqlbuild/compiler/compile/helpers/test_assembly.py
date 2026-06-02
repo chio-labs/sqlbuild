@@ -120,7 +120,7 @@ SELECT 1
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [vars]
 project = "reporting"
@@ -128,17 +128,17 @@ project = "reporting"
 [defaults]
 schema = "analytics"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "${ENV:TARGET_DB}_${project}"
 schema = "seeds_${project}"
 """.strip()
             + "\n",
             "sqlbuild_local.toml": """
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "${ENV:LOCAL_TARGET_DB}_${project}"
 """.strip()
             + "\n",
@@ -177,7 +177,7 @@ seeds:
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [vars]
 seed_schema_suffix = "lookups"
@@ -186,9 +186,9 @@ seed_schema_suffix = "lookups"
 database = "default_db"
 schema = "default_schema"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "env_db"
 schema = "env_schema"
 """.strip()
@@ -272,9 +272,9 @@ SELECT 1
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "bigquery"
-default_environment = "dev"
+default_target = "dev"
 
-[environments.dev]
+[targets.dev]
 database = "project_id"
 schema = "analytics_dev"
 """.strip()

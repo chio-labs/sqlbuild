@@ -51,10 +51,10 @@ def state_indexes_for_test(
 
 
 def virtual_environment_ref_for_test(
-    virtual_environment_name: str, model_name: str, version_hash: str
+    virtual_target_name: str, model_name: str, version_hash: str
 ) -> VirtualEnvironmentRefRecord:
     return VirtualEnvironmentRefRecord(
-        virtual_environment_name=virtual_environment_name,
+        virtual_target_name=virtual_target_name,
         model_name=model_name,
         version_hash=version_hash,
     )
@@ -155,7 +155,7 @@ class FakeStateBackend(StateBackend):
         return None
 
     def get_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> VirtualEnvironmentRecord | None:
         return None
 
@@ -165,7 +165,7 @@ class FakeStateBackend(StateBackend):
         return ()
 
     def delete_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> None:
         return None
 
@@ -174,13 +174,13 @@ class FakeStateBackend(StateBackend):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentRefRecord, ...],
     ) -> None:
         return None
 
     def get_virtual_environment_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         return ()
 
@@ -189,13 +189,13 @@ class FakeStateBackend(StateBackend):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     ) -> None:
         return None
 
     def get_virtual_environment_function_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         return ()
 
@@ -211,7 +211,7 @@ class FakeStateBackend(StateBackend):
         return None
 
     def list_virtual_environment_checkpoints(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
         return ()
 

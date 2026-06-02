@@ -73,7 +73,6 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
 
 
 def run_build(
@@ -142,7 +141,7 @@ def run_build(
         if load_sources is not None
         else build_effective_settings_config(discovered_inputs=discovered_inputs).auto_load_sources
     )
-    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+    if discovered_inputs.project_config.settings.virtual_environments:
         return run_virtual_build(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
@@ -153,7 +152,7 @@ def run_build(
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
-            virtual_environment_name=virtual_env,
+            virtual_target_name=virtual_env,
             include_stale_upstreams=include_stale_upstreams,
             changes_only=changes_only,
             auto_load_sources=should_load_sources,
@@ -342,7 +341,7 @@ def run_build(
                     connection_config=connection_config,
                     connection=check_connection,
                     run_id=pipeline_result.project.run_id,
-                    environment=pipeline_result.project.effective_environment_name,
+                    target=pipeline_result.project.effective_target_name,
                     vars=pipeline_result.project.effective_vars,
                     is_reload=reload_sources,
                     run_state=check_run_state,

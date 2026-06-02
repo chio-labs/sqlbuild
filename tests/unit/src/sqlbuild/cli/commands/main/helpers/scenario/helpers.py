@@ -31,7 +31,7 @@ def build_project_with_scenarios(project_dir: Path) -> CompiledProject:
     )
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         sql_scenarios=scenarios,

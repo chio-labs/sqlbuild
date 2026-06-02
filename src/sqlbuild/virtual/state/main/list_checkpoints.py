@@ -16,7 +16,7 @@ def list_virtual_environment_checkpoints(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    virtual_environment_name: str,
+    virtual_target_name: str,
 ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
     """List checkpoints for a virtual environment."""
 
@@ -30,7 +30,7 @@ def list_virtual_environment_checkpoints(
         return backend.list_virtual_environment_checkpoints(
             connection,
             schema=config.schema,
-            virtual_environment_name=virtual_environment_name,
+            virtual_target_name=virtual_target_name,
         )
     finally:
         backend.close(connection)

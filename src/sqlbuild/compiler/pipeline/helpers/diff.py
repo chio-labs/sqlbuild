@@ -18,7 +18,7 @@ def compile_project_for_diff_environment(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    environment_name: str,
+    target_name: str,
     no_sql_validation: bool,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
@@ -28,7 +28,7 @@ def compile_project_for_diff_environment(
     return build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        selected_environment=environment_name,
+        selected_target=target_name,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,

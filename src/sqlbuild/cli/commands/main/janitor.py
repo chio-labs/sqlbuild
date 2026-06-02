@@ -60,8 +60,8 @@ from sqlbuild.executor.janitor.models import (
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.spec.models.environments import resolve_environment_config
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.targets import resolve_target_config
 from sqlbuild.virtual.executor.main.virtual_target import build_virtual_target
 from sqlbuild.virtual.state.main.delete_checkpoint import delete_virtual_environment_checkpoint
 from sqlbuild.virtual.state.main.delete_lock import delete_lock
@@ -141,7 +141,7 @@ def run_janitor(
         retention: CheckpointRetentionInspection | None = checkpoint_retention(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
-            virtual_environment_name=project.effective_environment_name,
+            virtual_target_name=project.effective_target_name,
         )
         detached_retention: DetachedVirtualEnvironmentInspection | None = (
             detached_environment_retention(
@@ -154,16 +154,16 @@ def run_janitor(
             expired_environment_retention(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
-                active_virtual_environment_name=project.effective_environment_name,
+                active_virtual_target_name=project.effective_target_name,
                 retention_days=effective_retention_days,
             )
         )
-        unsuffixed_virtual_environment_name: str | None = None
-        if project.effective_environment_name is not None:
-            unsuffixed_virtual_environment_name = resolve_environment_config(
+        unsuffixed_virtual_target_name: str | None = None
+        if project.effective_target_name is not None:
+            unsuffixed_virtual_target_name = resolve_target_config(
                 project_config=discovered_inputs.project_config,
                 local_config=discovered_inputs.local_config,
-                environment_name=project.effective_environment_name,
+                target_name=project.effective_target_name,
             ).state.unsuffixed_virtual_env
         state_retention: StateJanitorInspection | None = state_janitor_retention(
             project_dir=effective_project_dir,
@@ -242,17 +242,17 @@ def run_janitor(
             delete_detached_virtual_environment=lambda candidate: delete_virtual_environment(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
-                virtual_environment_name=candidate.virtual_environment_name,
+                virtual_target_name=candidate.virtual_target_name,
             ),
             delete_expired_virtual_environment=lambda candidate: delete_virtual_environment(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
-                virtual_environment_name=_drop_logical_vde_views(
+                virtual_target_name=_drop_logical_vde_views(
                     project=project,
                     adapter=adapter,
                     connection=connection,
-                    virtual_environment_name=candidate.virtual_environment_name,
-                    unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                    virtual_target_name=candidate.virtual_target_name,
+                    unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
                 ),
             ),
             delete_state_backup=lambda candidate: delete_state_backup(
@@ -330,16 +330,16 @@ def _drop_logical_vde_views(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: object,
-    virtual_environment_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    virtual_target_name: str,
+    unsuffixed_virtual_target_name: str | None,
 ) -> str:
     recorder: StatementRecorder = StatementRecorder()
     for model in project.models:
         virtual_target: CompiledRelationTarget = build_virtual_target(
             adapter=adapter,
             target=model.target,
-            virtual_environment_name=virtual_environment_name,
-            unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            virtual_target_name=virtual_target_name,
+            unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
         )
         adapter.drop_view(
             connection,
@@ -347,4 +347,4 @@ def _drop_logical_vde_views(
             if_exists=True,
             statement_recorder=recorder,
         )
-    return virtual_environment_name
+    return virtual_target_name

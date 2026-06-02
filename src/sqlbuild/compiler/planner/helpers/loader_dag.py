@@ -189,8 +189,8 @@ def upstream_loader_dependency_names(
 def loader_to_source_entry(
     *, project: CompiledProject, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
-    database: str | None = project.effective_environment_database
-    schema: str | None = project.effective_environment_schema
+    database: str | None = project.effective_target_database
+    schema: str | None = project.effective_target_schema
     table: str = f"__loader__{loader.name}"
     if loader.target is not None:
         parts: tuple[str, ...] = tuple(part for part in loader.target.split(".") if part)

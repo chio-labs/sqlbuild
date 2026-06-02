@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import RowDiffResult, RowDiffSampleRow, Sche
 
 @dataclass(frozen=True)
 class ModelDiffResult:
-    """Diff result for one model across two environments."""
+    """Diff result for one model across two targets."""
 
     name: str
     left_relation: str

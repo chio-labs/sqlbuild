@@ -86,7 +86,7 @@ def test_given_external_source_load_when_preloading_then_records_progress_and_no
         adapter=adapter,
         connection_config={},
         run_id="run-1",
-        environment="dev",
+        target="dev",
         effective_vars={},
         is_reload=False,
         start_cursor_ts=None,

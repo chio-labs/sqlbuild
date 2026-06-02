@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.planner.helpers.output import (
     rewrite_virtual_plan_entries,
     with_virtual_metadata,
@@ -62,7 +62,7 @@ def run_virtual_plan_pipeline(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
-    virtual_environment_name: str | None = None,
+    virtual_target_name: str | None = None,
     include_stale_upstreams: bool = False,
     changes_only: bool = False,
     auto_load_sources: bool = False,
@@ -122,7 +122,7 @@ def run_virtual_plan_pipeline(
             project_dir=project_dir,
             adapter=adapter,
             graph=graph,
-            virtual_environment_name=virtual_environment_name,
+            virtual_target_name=virtual_target_name,
         )
         stale_model_names: tuple[str, ...] = build_stale_model_names(
             model_names=tuple(model.name for model in graph.project.models),
@@ -211,9 +211,9 @@ def run_virtual_plan_pipeline(
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
-            environment_name=_resolve_virtual_environment_name(
-                physical_environment_name=graph.project.effective_environment_name,
-                virtual_environment_name=virtual_environment_name,
+            target_name=_resolve_virtual_target_name(
+                physical_target_name=graph.project.effective_target_name,
+                virtual_target_name=virtual_target_name,
             ),
             stale_model_names=stale_model_names,
             stale_root_names=tuple(sorted(stale_root_reasons)),
@@ -249,7 +249,7 @@ def _read_bound_state(
     project_dir: Path,
     adapter: BaseAdapter,
     graph: ProjectGraph,
-    virtual_environment_name: str | None,
+    virtual_target_name: str | None,
 ) -> tuple[
     dict[str, str],
     dict[str, str],
@@ -265,21 +265,21 @@ def _read_bound_state(
     )
     state_connection: Any = backend.connect(config.connection)
     try:
-        physical_environment_name: str | None = resolve_environment_name(
+        physical_target_name: str | None = resolve_target_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            selected_environment=None,
+            selected_target=None,
         )
-        environment_name: str | None = _resolve_virtual_environment_name(
-            physical_environment_name=physical_environment_name,
-            virtual_environment_name=virtual_environment_name,
+        target_name: str | None = _resolve_virtual_target_name(
+            physical_target_name=physical_target_name,
+            virtual_target_name=virtual_target_name,
         )
-        if environment_name is None:
+        if target_name is None:
             return {}, {}, {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=environment_name,
+            virtual_target_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
         model_versions: dict[str, ModelVersionRecord | None] = {
@@ -300,7 +300,7 @@ def _read_bound_state(
             state_connection=state_connection,
             schema=config.schema,
             graph=graph,
-            virtual_environment_name=environment_name,
+            virtual_target_name=target_name,
         )
         model_targets: dict[str, CompiledRelationTarget] = {
             model.name: model.target for model in graph.project.models
@@ -346,9 +346,9 @@ def _read_bound_state(
         backend.close(state_connection)
 
 
-def _resolve_virtual_environment_name(
+def _resolve_virtual_target_name(
     *,
-    physical_environment_name: str | None,
-    virtual_environment_name: str | None,
+    physical_target_name: str | None,
+    virtual_target_name: str | None,
 ) -> str | None:
-    return virtual_environment_name or physical_environment_name
+    return virtual_target_name or physical_target_name

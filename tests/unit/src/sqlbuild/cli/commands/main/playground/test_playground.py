@@ -147,8 +147,9 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             (
                 Path("sqlbuild_project.toml"),
                 (
-                    'environment_mode = "virtual"',
-                    "[environments.dev.state]",
+                    "[settings]",
+                    "virtual_environments = true",
+                    "[targets.dev.state]",
                     'backend = "duckdb"',
                     'unsuffixed_virtual_env = "dev"',
                     'database = "loader_waffle_shop_state.duckdb"',

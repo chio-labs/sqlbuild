@@ -28,7 +28,7 @@ def build_databricks_local_config(*, environment: str = "dev", schema_name: str)
 
     return (
         'adapter = "databricks"\n'
-        f'environment = "{environment}"\n\n'
+        f'target = "{environment}"\n\n'
         "[connection]\n"
         'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
         'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
@@ -45,13 +45,13 @@ def build_databricks_project_toml(*, project_name: str, schema_name: str) -> str
     return (
         f'name = "{project_name}"\n'
         'adapter = "databricks"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
         'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
         'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
         'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
@@ -72,21 +72,22 @@ def build_databricks_virtual_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "databricks"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
         'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
         'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
         'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{schema_name}"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n'
         f"{unsuffixed_line}\n"
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
 
@@ -101,7 +102,7 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
     project_contents: str = (
         'name = "waffle_shop"\n'
         'adapter = "databricks"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
         'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
@@ -112,11 +113,11 @@ def prepare_databricks_waffle_shop(*, tmp_path: Path) -> tuple[Path, str]:
         'default_audit_severity = "warn"\n\n'
         "[defaults]\n"
         'materialized = "table"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{schema_name}"\n'
         'defer_sources_to = "dev"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{schema_name}"\n\n'
         "[path_defaults.staging]\n"
@@ -255,22 +256,22 @@ def prepare_databricks_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
     project_contents: str = (
         'name = "databricks_diff_project"\n'
         'adapter = "databricks"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
         'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
         'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
         'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{dev_schema}"\n\n'
-        "[environments.dev.clone]\n"
+        "[targets.dev.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = true\n\n"
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         f'database = "{catalog_name}"\n'
         f'schema = "{prod_schema}"\n\n'
-        "[environments.prod.clone]\n"
+        "[targets.prod.clone]\n"
         "allow_as_source = true\n"
         "allow_as_target = false\n\n"
         "[defaults]\n"

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 class BuildCompileInputsTestCase:
     description: str
     repo_files: dict[str, str]
-    selected_environment: str | None
+    selected_target: str | None
     cli_vars: dict[str, object] | None
     run_id: str | None
     expected_model_schema_names: tuple[str | None, ...]
@@ -13,7 +13,7 @@ class BuildCompileInputsTestCase:
     expected_model_path_defaults: tuple[str | None, ...]
     expected_seed_names: tuple[str, ...]
     expected_source_names: tuple[str, ...]
-    expected_effective_environment_name: str | None
+    expected_effective_target_name: str | None
     expected_effective_connection: dict[str, object]
     expected_effective_vars: dict[str, object]
     expected_source_expressions: tuple[str | None, ...] | None = None
@@ -80,7 +80,7 @@ class BuildCompileInputsTestCase:
 class BuildCompileInputsErrorTestCase:
     description: str
     repo_files: dict[str, str]
-    selected_environment: str | None
+    selected_target: str | None
     run_id: str | None
     expected_error_fragment: str
     expected_error_type: type[Exception] = ValueError
@@ -90,9 +90,9 @@ class BuildCompileInputsErrorTestCase:
 @dataclass(frozen=True)
 class BuildEffectiveRuntimeConfigTestCase:
     description: str
-    selected_environment: str | None
+    selected_target: str | None
     cli_vars: dict[str, object] | None
-    expected_environment_name: str | None
+    expected_target_name: str | None
     expected_vars: dict[str, object]
 
 
@@ -104,7 +104,7 @@ class SeedRefRegressionTestCase:
 
 
 @dataclass(frozen=True)
-class ResolveEnvironmentConfigTestCase:
+class ResolveTargetConfigTestCase:
     description: str
     expected_connection: dict[str, object]
     expected_vars: dict[str, object]

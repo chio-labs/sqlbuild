@@ -523,7 +523,7 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
         adapter=DuckDbAdapter(),
         project=CompiledProject(
             run_id="test_run",
-            effective_environment_name=None,
+            effective_target_name=None,
             effective_connection={},
             effective_vars={},
         ),
@@ -601,7 +601,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
         adapter=DuckDbAdapter(),
         project=CompiledProject(
             run_id="test_run",
-            effective_environment_name=None,
+            effective_target_name=None,
             effective_connection={},
             effective_vars={},
             functions=(
@@ -706,7 +706,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
         adapter=DuckDbAdapter(),
         project=CompiledProject(
             run_id="test_run",
-            effective_environment_name=None,
+            effective_target_name=None,
             effective_connection={},
             effective_vars={},
             functions=(

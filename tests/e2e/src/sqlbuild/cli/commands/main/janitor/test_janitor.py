@@ -299,7 +299,7 @@ def test_given_virtual_checkpoint_refs_when_running_janitor_then_it_preserves_ph
                 "pr  expired virtual environment",
                 "Deleted 0 objects and 1 state items.",
             ),
-            expected_virtual_environment_names_after=("dev",),
+            expected_virtual_target_names_after=("dev",),
         )
     ],
     ids=["virtual janitor prunes expired non-active VDEs"],
@@ -348,10 +348,10 @@ def test_given_non_active_vde_when_running_janitor_then_it_prunes_expired_enviro
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT virtual_environment_name FROM sqlbuild_state.virtual_environments "
-            "ORDER BY virtual_environment_name"
+            "SELECT virtual_target_name FROM sqlbuild_state.virtual_environments "
+            "ORDER BY virtual_target_name"
         ),
-    ) == [(name,) for name in test_case.expected_virtual_environment_names_after]
+    ) == [(name,) for name in test_case.expected_virtual_target_names_after]
     assert not table_exists(
         db_path=project_dir / "warehouse.duckdb",
         schema="dev__pr",
@@ -504,7 +504,7 @@ def test_given_warehouse_cleanup_failure_when_running_janitor_then_state_cleanup
         db_path=state_db_path,
         sql=(
             "INSERT INTO sqlbuild_state.virtual_environments "
-            "(virtual_environment_name, status, baseline_virtual_environment_name, "
+            "(virtual_target_name, status, baseline_virtual_target_name, "
             "created_at, updated_at, finalized_at) VALUES "
             "('stale', 'finalized', NULL, TIMESTAMP '2000-01-01 00:00:00', "
             "TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 00:00:00')"
@@ -536,7 +536,7 @@ def test_given_warehouse_cleanup_failure_when_running_janitor_then_state_cleanup
         db_path=state_db_path,
         sql=(
             "SELECT COUNT(*) FROM sqlbuild_state.virtual_environments "
-            "WHERE virtual_environment_name = 'stale'"
+            "WHERE virtual_target_name = 'stale'"
         ),
     ) == [(1,)]
     assert query_duckdb(
@@ -597,7 +597,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
             "ON physical_relations.model_name = refs.model_name "
             "AND physical_relations.version_hash = refs.version_hash "
-            "WHERE refs.virtual_environment_name = 'dev' "
+            "WHERE refs.virtual_target_name = 'dev' "
             "AND refs.model_name = 'stg_orders'"
         ),
     )
@@ -621,7 +621,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
             "ON physical_relations.model_name = refs.model_name "
             "AND physical_relations.version_hash = refs.version_hash "
-            "WHERE refs.virtual_environment_name = 'dev' "
+            "WHERE refs.virtual_target_name = 'dev' "
             "AND refs.model_name = 'stg_orders'"
         ),
     )
@@ -690,17 +690,18 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
             "sqlbuild_project.toml": (
                 'name = "virtual_janitor_detached_vde"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n'
                 'unsuffixed_virtual_env = "dev"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n\n'
                 "[janitor]\n"
                 "enabled = true\n"
@@ -796,17 +797,18 @@ def test_given_old_detached_vde_when_running_janitor_then_retention_allows_clean
             "sqlbuild_project.toml": (
                 'name = "virtual_janitor_detached_vde_retention"\n'
                 'adapter = "duckdb"\n'
-                'environment_mode = "virtual"\n'
-                'default_environment = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
-                "[environments.dev]\n"
+                "[targets.dev]\n"
                 'schema = "dev"\n\n'
-                "[environments.dev.state]\n"
+                "[targets.dev.state]\n"
                 'backend = "duckdb"\n'
                 'schema = "sqlbuild_state"\n'
                 'unsuffixed_virtual_env = "dev"\n\n'
-                "[environments.dev.state.connection]\n"
+                "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n\n'
                 "[janitor]\n"
                 "enabled = true\n"
@@ -840,7 +842,7 @@ def test_given_old_detached_vde_when_running_janitor_then_retention_allows_clean
         sql=(
             "UPDATE sqlbuild_state.virtual_environments "
             "SET updated_at = TIMESTAMP '2026-01-01 00:00:00' "
-            "WHERE virtual_environment_name = 'dev'"
+            "WHERE virtual_target_name = 'dev'"
         ),
     )
 

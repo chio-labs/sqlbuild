@@ -126,7 +126,7 @@ def test_given_ready_source_execution_raises_when_worker_runs_then_publishes_fai
         connection_config={},
         connection_pool=connection_pool,
         run_id="run-1",
-        environment=None,
+        target=None,
         vars={},
         is_reload=False,
         start_cursor_ts=None,

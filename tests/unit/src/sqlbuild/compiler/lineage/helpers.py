@@ -25,7 +25,7 @@ def make_compiled_project(
 ) -> CompiledProject:
     return CompiledProject(
         run_id="test-run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(sqlglot=sqlglot_enabled),

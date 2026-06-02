@@ -16,7 +16,7 @@ class LoadProjectConfigTestCase:
     project_file_contents: str
     expected_name: str
     expected_adapter: str
-    expected_default_environment: str
+    expected_default_target: str
     expected_connection: dict[str, str]
     expected_sqlglot: bool
     expected_max_concurrency: int
@@ -26,7 +26,7 @@ class LoadProjectConfigTestCase:
     expected_contract: str | None
     expected_path_defaults: dict[str, dict[str, object]]
     expected_vars: dict[str, str]
-    expected_environments: dict[str, dict[str, object]]
+    expected_targets: dict[str, dict[str, object]]
     expected_janitor_enabled: bool
     expected_retention_days: int
     expected_janitor_max_checkpoints: int
@@ -50,14 +50,14 @@ class LoadProjectConfigTestCase:
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
     expected_auto_load_sources: bool = True
-    expected_environment_mode: str = "direct"
+    expected_virtual_environments: bool = False
 
 
 @dataclass(frozen=True)
 class LoadLocalConfigTestCase:
     description: str
     repo_files: dict[str, str]
-    expected_environment: str | None
+    expected_target: str | None
     expected_adapter: str | None
     expected_connection: dict[str, object]
     expected_sqlglot: bool
@@ -66,7 +66,7 @@ class LoadLocalConfigTestCase:
     expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
     expected_auto_load_sources: bool = True
-    expected_environments: dict[str, dict[str, object]] = field(default_factory=dict)
+    expected_targets: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     expected_snapshot_limits: dict[str, int | None] = field(

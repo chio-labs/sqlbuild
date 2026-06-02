@@ -941,8 +941,8 @@ def _format_virtual_metadata(
 ) -> None:
     """Append a virtual planner metadata section when present."""
 
-    virtual_environment_name: object | None = plan.metadata.get("virtual_environment_name")
-    if not isinstance(virtual_environment_name, str):
+    virtual_target_name: object | None = plan.metadata.get("virtual_target_name")
+    if not isinstance(virtual_target_name, str):
         return
     virtual_environment_status: str = str(
         plan.metadata.get("virtual_environment_status", "unknown")
@@ -969,7 +969,7 @@ def _format_virtual_metadata(
     )
     lines.append("")
     lines.append(section_header_style("Virtual environment"))
-    lines.append(f"  name: {virtual_environment_name}")
+    lines.append(f"  name: {virtual_target_name}")
     lines.append(f"  status: {virtual_environment_status}")
     lines.append(f"  stale roots: {len(stale_root_names)}")
     if stale_root_names:

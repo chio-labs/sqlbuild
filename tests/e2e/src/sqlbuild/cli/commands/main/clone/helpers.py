@@ -16,7 +16,7 @@ def prepare_virtual_clone_project(tmp_path: Path) -> Path:
         project_name="virtual_clone_project",
         repo_files={
             "sqlbuild_project.toml": build_virtual_clone_project_toml(),
-            "sqlbuild_local.toml": 'environment = "dev"\n',
+            "sqlbuild_local.toml": 'target = "dev"\n',
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 7 AS id\n",
             "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
             "models/dim_customers.sql": "MODEL ();\n\nSELECT 1 AS customer_id\n",
@@ -28,31 +28,32 @@ def build_virtual_clone_project_toml() -> str:
     return (
         'name = "virtual_clone_project"\n'
         'adapter = "duckdb"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'database = "dev.duckdb"\n\n'
-        "[environments.prod]\n"
+        "[targets.prod]\n"
         'schema = "prod"\n\n'
-        "[environments.prod.connection]\n"
+        "[targets.prod.connection]\n"
         'database = "prod.duckdb"\n\n'
-        "[environments.prod.clone]\n"
+        "[targets.prod.clone]\n"
         "allow_as_source = true\n\n"
-        "[environments.prod.state]\n"
+        "[targets.prod.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
-        "[environments.prod.state.connection]\n"
+        "[targets.prod.state.connection]\n"
         'database = "prod_state.duckdb"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         'schema = "dev"\n\n'
-        "[environments.dev.connection]\n"
+        "[targets.dev.connection]\n"
         'database = "dev.duckdb"\n\n'
-        "[environments.dev.clone]\n"
+        "[targets.dev.clone]\n"
         "allow_as_target = true\n\n"
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "dev_state.duckdb"\n'
     )
 
@@ -60,7 +61,7 @@ def build_virtual_clone_project_toml() -> str:
 def build_prod_source_versions(project_dir: Path) -> None:
     from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 
-    (project_dir / "sqlbuild_local.toml").write_text('environment = "prod"\n', encoding="utf-8")
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
     init_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("state", "init"), project_dir=project_dir
     )
@@ -74,7 +75,7 @@ def build_prod_source_versions(project_dir: Path) -> None:
 def build_dev_target_versions(project_dir: Path) -> None:
     from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 
-    (project_dir / "sqlbuild_local.toml").write_text('environment = "dev"\n', encoding="utf-8")
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
     init_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("state", "init"), project_dir=project_dir
     )
@@ -88,7 +89,7 @@ def build_dev_target_versions(project_dir: Path) -> None:
 def init_dev_state(project_dir: Path) -> None:
     from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 
-    (project_dir / "sqlbuild_local.toml").write_text('environment = "dev"\n', encoding="utf-8")
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
     init_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("state", "init"), project_dir=project_dir
     )
@@ -101,7 +102,7 @@ def prod_version_hash(project_dir: Path, model_name: str) -> str:
             db_path=project_dir / "prod_state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                f"WHERE virtual_environment_name = 'prod' AND model_name = '{model_name}'"
+                f"WHERE virtual_target_name = 'prod' AND model_name = '{model_name}'"
             ),
         )[0][0]
     )
@@ -113,7 +114,7 @@ def dev_version_hash(project_dir: Path, model_name: str) -> str:
             db_path=project_dir / "dev_state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                f"WHERE virtual_environment_name = 'dev' AND model_name = '{model_name}'"
+                f"WHERE virtual_target_name = 'dev' AND model_name = '{model_name}'"
             ),
         )[0][0]
     )
@@ -124,7 +125,7 @@ def dev_ref_rows(project_dir: Path) -> list[tuple[object, ...]]:
         db_path=project_dir / "dev_state.duckdb",
         sql=(
             "SELECT model_name, version_hash FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
         ),
     )
 

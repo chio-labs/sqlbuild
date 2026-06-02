@@ -53,10 +53,10 @@ def _build_ingestr_loader(*, source_entry: SourceEntry) -> Any:
             adapter_name=ctx.adapter.adapter_name,
             connection_config=ctx.connection_config,
             destination_table=_destination_table(
-                source_entry=source_entry, target_name=ctx.target_name
+                source_entry=source_entry, target_name=ctx.destination_name
             ),
             vars=ctx.vars,
-            environment=ctx.environment,
+            environment=ctx.target,
             run_id=ctx.run_id,
             is_reload=ctx.is_reload,
         )

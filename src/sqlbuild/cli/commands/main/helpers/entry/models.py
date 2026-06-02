@@ -24,9 +24,9 @@ class CliNamespace:
     no_sql_validation: bool = False
     defer_to: str | None = None
     defer_sources_to: str | None = None
-    environment_range: str | None = None
-    from_environment: str | None = None
-    to_environment: str | None = None
+    target_range: str | None = None
+    from_target: str | None = None
+    to_target: str | None = None
     hard_copy: bool = False
     json: bool = False
     json_output: Path | None = None

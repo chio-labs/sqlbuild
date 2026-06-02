@@ -31,16 +31,17 @@ def build_virtual_plan_project_toml() -> str:
     return (
         'name = "virtual_plan_project"\n'
         'adapter = "duckdb"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'database = "warehouse.duckdb"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         'schema = "dev"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
 
@@ -176,17 +177,17 @@ def seed_matching_virtual_refs(
             connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_environment_name="dev",
+                virtual_target_name="dev",
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
         backend.replace_virtual_environment_refs(
             connection,
             schema=config.schema,
-            virtual_environment_name="dev",
+            virtual_target_name="dev",
             refs=tuple(
                 VirtualEnvironmentRefRecord(
-                    virtual_environment_name="dev",
+                    virtual_target_name="dev",
                     model_name=model_name,
                     version_hash=expected_hashes[model_name],
                 )

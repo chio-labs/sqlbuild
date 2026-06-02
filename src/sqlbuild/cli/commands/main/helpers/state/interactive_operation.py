@@ -17,7 +17,7 @@ from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusRepo
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.spec.models.project import EnvironmentConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.types import StateCommand
 
@@ -35,27 +35,23 @@ def run_interactive_state_operation(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    environment_name: str | None = (
-        discovered_inputs.local_config.environment
-        or discovered_inputs.project_config.default_environment
+    target_name: str | None = (
+        discovered_inputs.local_config.target or discovered_inputs.project_config.default_target
     )
-    if environment_name is None:
+    if target_name is None:
         raise CliUserError(
             f"state {state_command.value} requires an active environment",
             code="C255",
         )
-    effective_environment: EnvironmentConfig | None = (
-        discovered_inputs.project_config.environments.get(environment_name)
+    effective_target: TargetConfig | None = discovered_inputs.project_config.targets.get(
+        target_name
     )
-    if (
-        effective_environment is None
-        or effective_environment.state.unsuffixed_virtual_env != environment_name
-    ):
+    if effective_target is None or effective_target.state.unsuffixed_virtual_env != target_name:
         raise CliUserError(
             (
                 f"state {state_command.value} requires "
-                f"[environments.{environment_name}.state] unsuffixed_virtual_env = "
-                f"'{environment_name}'"
+                f"[targets.{target_name}.state] unsuffixed_virtual_env = "
+                f"'{target_name}'"
             ),
             code="C256",
         )
@@ -67,8 +63,8 @@ def run_interactive_state_operation(
             ),
             code="C257",
         )
-    prompt: str = f"Type '{state_command.value} {environment_name}' to confirm: "
-    if input(prompt).strip() != f"{state_command.value} {environment_name}":
+    prompt: str = f"Type '{state_command.value} {target_name}' to confirm: "
+    if input(prompt).strip() != f"{state_command.value} {target_name}":
         raise CliUserError(f"state {state_command.value} cancelled", code="C258")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

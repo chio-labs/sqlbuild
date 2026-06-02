@@ -64,7 +64,7 @@ def build_janitor_plan(
     target_schemas.update((key.database, key.schema) for key in scan_relation_keys)
     if not target_schemas:
         return JanitorPlan(
-            environment_name=project.effective_environment_name,
+            target_name=project.effective_target_name,
             retention_days=retention_days,
             checkpoint_candidates=checkpoint_candidates,
             detached_virtual_environment_candidates=detached_virtual_environment_candidates,
@@ -202,7 +202,7 @@ def build_janitor_plan(
             )
 
     return JanitorPlan(
-        environment_name=project.effective_environment_name,
+        target_name=project.effective_target_name,
         retention_days=retention_days,
         candidates=tuple(candidates),
         checkpoint_candidates=checkpoint_candidates,

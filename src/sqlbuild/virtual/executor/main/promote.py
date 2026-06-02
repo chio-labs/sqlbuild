@@ -15,7 +15,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
@@ -51,8 +51,8 @@ def run_virtual_promote(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    from_virtual_environment_name: str,
-    to_virtual_environment_name: str,
+    from_virtual_target_name: str,
+    to_virtual_target_name: str,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     allow_partial_promotion: bool = False,
@@ -79,17 +79,17 @@ def run_virtual_promote(
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
-    active_environment_name: str | None = resolve_environment_name(
+    active_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    unsuffixed_virtual_environment_name: str | None = None
-    if active_environment_name is not None:
-        unsuffixed_virtual_environment_name = resolve_environment_config(
+    unsuffixed_virtual_target_name: str | None = None
+    if active_target_name is not None:
+        unsuffixed_virtual_target_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=active_environment_name,
+            target_name=active_target_name,
         ).state.unsuffixed_virtual_env
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
@@ -110,70 +110,68 @@ def run_virtual_promote(
             operation_type=StateOperationType.PROMOTE,
             status=StateOperationStatus.RUNNING,
             action="start",
-            virtual_environment_name=to_virtual_environment_name,
-            message=(
-                f"promote from {from_virtual_environment_name} to {to_virtual_environment_name}"
-            ),
+            virtual_target_name=to_virtual_target_name,
+            message=(f"promote from {from_virtual_target_name} to {to_virtual_target_name}"),
         )
         lease = acquire_virtual_environment_lease(
             backend,
             state_connection,
             schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
+            virtual_target_name=to_virtual_target_name,
             owner_id=f"promote:{uuid.uuid4()}",
             ttl=timedelta(minutes=10),
         )
         if lease is None:
             raise PlannerInputError(
-                f"virtual environment '{to_virtual_environment_name}' is locked",
+                f"virtual environment '{to_virtual_target_name}' is locked",
                 code="S014",
             )
         source_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=from_virtual_environment_name,
+            virtual_target_name=from_virtual_target_name,
         )
         target_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
+            virtual_target_name=to_virtual_target_name,
         )
         source_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=from_virtual_environment_name,
+                virtual_target_name=from_virtual_target_name,
             )
         )
         if not source_refs:
             raise PlannerInputError(
-                f"unknown source virtual environment '{from_virtual_environment_name}'",
+                f"unknown source virtual environment '{from_virtual_target_name}'",
                 code="S011",
             )
         source_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=from_virtual_environment_name,
+            virtual_target_name=from_virtual_target_name,
         )
         if (
             source_environment is not None
             and source_environment.status == VirtualEnvironmentStatus.DETACHED
         ):
             raise PlannerInputError(
-                f"source virtual environment '{from_virtual_environment_name}' is detached",
+                f"source virtual environment '{from_virtual_target_name}' is detached",
                 code="S028",
             )
         target_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
+            virtual_target_name=to_virtual_target_name,
         )
         if (
             target_environment is not None
             and target_environment.status == VirtualEnvironmentStatus.DETACHED
         ):
             raise PlannerInputError(
-                f"target virtual environment '{to_virtual_environment_name}' is detached",
+                f"target virtual environment '{to_virtual_target_name}' is detached",
                 code="S028",
             )
         source_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
@@ -279,14 +277,14 @@ def run_virtual_promote(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_environment_name=to_virtual_environment_name,
+                virtual_target_name=to_virtual_target_name,
                 status=status,
-                baseline_virtual_environment_name=from_virtual_environment_name,
+                baseline_virtual_target_name=from_virtual_target_name,
             ),
         )
         refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
             VirtualEnvironmentRefRecord(
-                virtual_environment_name=to_virtual_environment_name,
+                virtual_target_name=to_virtual_target_name,
                 model_name=model_name,
                 version_hash=version_hash,
             )
@@ -295,7 +293,7 @@ def run_virtual_promote(
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
+            virtual_target_name=to_virtual_target_name,
             refs=refs,
         )
         function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = ()
@@ -303,7 +301,7 @@ def run_virtual_promote(
         if not select:
             function_refs = tuple(
                 VirtualEnvironmentFunctionRefRecord(
-                    virtual_environment_name=to_virtual_environment_name,
+                    virtual_target_name=to_virtual_target_name,
                     function_name=ref.function_name,
                     version_hash=ref.version_hash,
                 )
@@ -312,7 +310,7 @@ def run_virtual_promote(
             backend.replace_virtual_environment_function_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=to_virtual_environment_name,
+                virtual_target_name=to_virtual_target_name,
                 refs=function_refs,
             )
             for ref in function_refs:
@@ -329,7 +327,7 @@ def run_virtual_promote(
                 backend,
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=to_virtual_environment_name,
+                virtual_target_name=to_virtual_target_name,
                 refs=refs,
                 function_refs=function_refs,
             )
@@ -346,8 +344,8 @@ def run_virtual_promote(
             project=graph.project,
             adapter=adapter,
             connection_config=connection_config,
-            virtual_environment_name=to_virtual_environment_name,
-            unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            virtual_target_name=to_virtual_target_name,
+            unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
             physical_relations=physical_relations,
             on_connection_start=on_connection_start,
             on_connection_complete=on_connection_complete,
@@ -358,7 +356,7 @@ def run_virtual_promote(
                 adapter=adapter,
                 connection_config=connection_config,
                 graph=graph,
-                virtual_environment_name=to_virtual_environment_name,
+                virtual_target_name=to_virtual_target_name,
                 function_versions=function_versions,
             )
         if on_progress is not None:
@@ -371,7 +369,7 @@ def run_virtual_promote(
             operation_type=None,
             status=StateOperationStatus.SUCCEEDED,
             action="finish",
-            virtual_environment_name=None,
+            virtual_target_name=None,
             message=f"promoted {len(selected_model_names)} models",
         )
         if on_progress is not None:
@@ -385,7 +383,7 @@ def run_virtual_promote(
             operation_type=None,
             status=StateOperationStatus.FAILED,
             action="finish",
-            virtual_environment_name=None,
+            virtual_target_name=None,
             message=str(error),
         )
         raise

@@ -12,7 +12,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
-from sqlbuild.spec.models.environments import resolve_environment_name
+from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_target
 from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_target
 from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
@@ -43,14 +43,14 @@ def adopt_into_virtual_state(
     connection: Any,
     allow_copy: bool,
 ) -> str:
-    active_environment_name: str | None = resolve_environment_name(
+    active_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    if active_environment_name is None:
+    if active_target_name is None:
         raise PlannerInputError("state adopt requires an active environment", code="C259")
-    operation_id: str = f"adopt:{active_environment_name}"
+    operation_id: str = f"adopt:{active_target_name}"
     record_state_operation(
         backend,
         state_connection,
@@ -59,7 +59,7 @@ def adopt_into_virtual_state(
         operation_type=StateOperationType.ADOPT,
         status=StateOperationStatus.RUNNING,
         action="start",
-        virtual_environment_name=active_environment_name,
+        virtual_target_name=active_target_name,
         message="starting adopt",
     )
     try:
@@ -110,8 +110,8 @@ def adopt_into_virtual_state(
             virtual_target: CompiledRelationTarget = build_virtual_logical_target(
                 adapter=adapter,
                 target=model.target,
-                virtual_environment_name=active_environment_name,
-                unsuffixed_virtual_environment_name=active_environment_name,
+                virtual_target_name=active_target_name,
+                unsuffixed_virtual_target_name=active_target_name,
             )
             adapter.create_view_as(
                 connection,
@@ -147,7 +147,7 @@ def adopt_into_virtual_state(
             )
             refs.append(
                 VirtualEnvironmentRefRecord(
-                    virtual_environment_name=active_environment_name,
+                    virtual_target_name=active_target_name,
                     model_name=model.name,
                     version_hash=version_hash,
                 )
@@ -156,14 +156,14 @@ def adopt_into_virtual_state(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_environment_name=active_environment_name,
+                virtual_target_name=active_target_name,
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=active_environment_name,
+            virtual_target_name=active_target_name,
             refs=tuple(refs),
         )
         record_state_operation(
@@ -174,10 +174,10 @@ def adopt_into_virtual_state(
             operation_type=None,
             status=StateOperationStatus.SUCCEEDED,
             action="finish",
-            virtual_environment_name=None,
+            virtual_target_name=None,
             message=f"adopted {len(refs)} models",
         )
-        return f"Adopted {len(refs)} models into virtual environment {active_environment_name}."
+        return f"Adopted {len(refs)} models into virtual environment {active_target_name}."
     except BaseException as error:
         record_state_operation(
             backend,
@@ -187,7 +187,7 @@ def adopt_into_virtual_state(
             operation_type=None,
             status=StateOperationStatus.FAILED,
             action="fail",
-            virtual_environment_name=None,
+            virtual_target_name=None,
             message=str(error),
         )
         raise

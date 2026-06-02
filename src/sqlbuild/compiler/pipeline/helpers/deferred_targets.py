@@ -1,4 +1,4 @@
-"""Compute deferred environment targets and gather deferred relations."""
+"""Compute deferred target targets and gather deferred relations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.constants import PRESERVE_ENVIRONMENT_VALUE
+from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
@@ -18,7 +18,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import TargetConfig
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
 _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
@@ -27,13 +27,13 @@ _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
 def build_deferred_targets(
     *,
     project: CompiledProject,
-    deferred_env: EnvironmentConfig,
+    deferred_env: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
 ) -> dict[str, CompiledRelationTarget]:
-    """Build physical targets for all models and seeds under a deferred environment."""
+    """Build physical targets for all models and seeds under a deferred target."""
 
     targets: dict[str, CompiledRelationTarget] = {}
     model: CompiledModel
@@ -64,14 +64,14 @@ def resolve_deferred_env(
     discovered_inputs: DiscoveredProjectInputs,
     defer_to: str,
     current_env_name: str | None,
-) -> EnvironmentConfig:
-    """Validate and resolve the deferred environment config."""
+) -> TargetConfig:
+    """Validate and resolve the deferred target config."""
 
-    environments: dict[str, EnvironmentConfig] = discovered_inputs.project_config.environments
+    environments: dict[str, TargetConfig] = discovered_inputs.project_config.targets
     if defer_to not in environments:
-        raise PlannerInputError(f"Unknown deferred environment '{defer_to}'")
+        raise PlannerInputError(f"Unknown deferred target '{defer_to}'")
     if defer_to == current_env_name:
-        raise PlannerInputError(f"Cannot defer to the current environment '{defer_to}'")
+        raise PlannerInputError(f"Cannot defer to the current target '{defer_to}'")
     return environments[defer_to]
 
 
@@ -81,7 +81,7 @@ def gather_deferred_relations(
     connection: Any,
     deferred_targets: dict[str, CompiledRelationTarget],
 ) -> dict[str, RelationInfo]:
-    """Gather existing relations from the deferred environment's schemas."""
+    """Gather existing relations from the deferred target's schemas."""
 
     schemas: set[str] = set()
     database: str | None = None
@@ -104,13 +104,13 @@ def gather_deferred_relations(
 def _resolve_deferred_target(
     *,
     target: CompiledRelationTarget,
-    deferred_env: EnvironmentConfig,
+    deferred_env: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
 ) -> CompiledRelationTarget:
-    """Resolve one target under the deferred environment's naming rules."""
+    """Resolve one target under the deferred target's naming rules."""
 
     schema: str | None = _resolve_env_field(
         env_value=deferred_env.schema,
@@ -151,7 +151,7 @@ def _resolve_env_field(
 ) -> str | None:
     """Resolve one environment schema or database field against the logical value."""
 
-    if env_value is None or env_value == PRESERVE_ENVIRONMENT_VALUE:
+    if env_value is None or env_value == PRESERVE_TARGET_VALUE:
         return logical_value
 
     result: str = env_value

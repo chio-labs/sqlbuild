@@ -33,12 +33,12 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
             (
                 'name = "python_nodes_project"',
                 'adapter = "duckdb"',
-                'default_environment = "dev"',
+                'default_target = "dev"',
                 "",
                 "[connection]",
                 'database = "python_nodes.duckdb"',
                 "",
-                "[environments.dev]",
+                "[targets.dev]",
                 'schema = "main"',
             )
         )

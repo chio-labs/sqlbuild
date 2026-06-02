@@ -53,7 +53,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
-    EnvironmentConfig,
+    TargetConfig,
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
 )
@@ -77,14 +77,14 @@ def assemble_compiled_project(
     )
     return CompiledProject(
         run_id=inputs.run_id,
-        effective_environment_name=inputs.effective_environment_name,
+        effective_target_name=inputs.effective_target_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
-        effective_environment_database=inputs.effective_environment.database
-        if inputs.effective_environment is not None
+        effective_target_database=inputs.effective_target.database
+        if inputs.effective_target is not None
         else None,
-        effective_environment_schema=inputs.effective_environment.schema
-        if inputs.effective_environment is not None
+        effective_target_schema=inputs.effective_target.schema
+        if inputs.effective_target is not None
         else None,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
@@ -104,7 +104,7 @@ def assemble_compiled_project(
         sources=tuple(
             _assemble_compiled_source(
                 source_input,
-                environment_config=inputs.effective_environment,
+                target_config=inputs.effective_target,
             )
             for source_input in inputs.source_inputs
         ),
@@ -112,7 +112,7 @@ def assemble_compiled_project(
             _assemble_compiled_seed(
                 seed_input,
                 defaults=inputs.project_config.defaults,
-                environment_config=inputs.effective_environment,
+                target_config=inputs.effective_target,
                 effective_vars=inputs.effective_vars,
             )
             for seed_input in inputs.seed_inputs
@@ -229,11 +229,11 @@ def _declared_column_nullability(
 def _assemble_compiled_source(
     source_input: CompileSourceInput,
     *,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
 ) -> CompiledSource:
     source_entry: SourceEntry = _build_source_relation_entry(
         source_entry=source_input.source_entry,
-        environment_config=environment_config,
+        target_config=target_config,
     )
     return CompiledSource(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=source_entry.name),
@@ -247,20 +247,16 @@ def _assemble_compiled_source(
 def _build_source_relation_entry(
     *,
     source_entry: SourceEntry,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
 ) -> SourceEntry:
-    if source_entry.loader is None or environment_config is None:
+    if source_entry.loader is None or target_config is None:
         return source_entry
     return replace(
         source_entry,
         database=(
-            source_entry.database
-            if source_entry.database is not None
-            else environment_config.database
+            source_entry.database if source_entry.database is not None else target_config.database
         ),
-        schema=source_entry.schema
-        if source_entry.schema is not None
-        else environment_config.schema,
+        schema=source_entry.schema if source_entry.schema is not None else target_config.schema,
     )
 
 
@@ -268,13 +264,13 @@ def _assemble_compiled_seed(
     seed_input: CompileSeedInput,
     *,
     defaults: DefaultsConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> CompiledSeed:
     target: CompiledRelationTarget = _build_seed_relation_target(
         seed_entry=seed_input.schema_entry,
         defaults=defaults,
-        environment_config=environment_config,
+        target_config=target_config,
         effective_vars=effective_vars,
     )
     return CompiledSeed(
@@ -506,7 +502,7 @@ def _build_test_model_query_overrides(
             local_config=inputs.local_config,
         ),
         sqlglot_enabled=inputs.effective_settings.sqlglot,
-        environment_name=inputs.effective_environment_name,
+        target_name=inputs.effective_target_name,
         vars=inputs.effective_vars,
     )
     overrides: dict[str, str] = {}
@@ -583,12 +579,12 @@ def _build_seed_relation_target(
     *,
     seed_entry: SchemaSeedEntry,
     defaults: DefaultsConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> CompiledRelationTarget:
     resolved_namespace: tuple[str | None, str | None] = _resolve_target_namespace(
         defaults=defaults,
-        environment_config=environment_config,
+        target_config=target_config,
         effective_vars=effective_vars,
     )
     database: str | None = resolved_namespace[0]
@@ -622,21 +618,21 @@ def _build_seed_relation_target(
 def _resolve_target_namespace(
     *,
     defaults: DefaultsConfig,
-    environment_config: EnvironmentConfig | None,
+    target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
     database: str | None = defaults.database
     schema: str | None = defaults.schema
-    if environment_config is not None:
-        if environment_config.database is not None:
+    if target_config is not None:
+        if target_config.database is not None:
             database = _expand_seed_environment_value(
-                raw_value=environment_config.database,
+                raw_value=target_config.database,
                 effective_vars=effective_vars,
                 context_label="environment database",
             )
-        if environment_config.schema is not None:
+        if target_config.schema is not None:
             schema = _expand_seed_environment_value(
-                raw_value=environment_config.schema,
+                raw_value=target_config.schema,
                 effective_vars=effective_vars,
                 context_label="environment schema",
             )

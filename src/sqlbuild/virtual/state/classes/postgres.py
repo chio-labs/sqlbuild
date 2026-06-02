@@ -553,23 +553,23 @@ class PostgresStateBackend(StateBackend):
                     cursor,
                     schema=schema,
                     table_name=VIRTUAL_ENVIRONMENT_TABLE,
-                    where_sql="virtual_environment_name = %s",
-                    params=[record.virtual_environment_name],
+                    where_sql="virtual_target_name = %s",
+                    params=[record.virtual_target_name],
                 )
                 cursor.execute(
                     f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [record.virtual_environment_name],
+                    "WHERE virtual_target_name = %s",
+                    [record.virtual_target_name],
                 )
                 cursor.execute(
                     f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                    "(virtual_environment_name, status, baseline_virtual_environment_name, "
+                    "(virtual_target_name, status, baseline_virtual_target_name, "
                     "created_at, updated_at, finalized_at) "
                     "VALUES (%s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, %s)",
                     [
-                        record.virtual_environment_name,
+                        record.virtual_target_name,
                         record.status.value,
-                        record.baseline_virtual_environment_name,
+                        record.baseline_virtual_target_name,
                         existing_created_at,
                         record.finalized_at,
                     ],
@@ -580,23 +580,23 @@ class PostgresStateBackend(StateBackend):
                 raise
 
     def get_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> VirtualEnvironmentRecord | None:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT virtual_environment_name, status, baseline_virtual_environment_name, "
+                "SELECT virtual_target_name, status, baseline_virtual_target_name, "
                 "finalized_at "
                 f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                "WHERE virtual_environment_name = %s",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = %s",
+                [virtual_target_name],
             )
             row: tuple[Any, ...] | None = cursor.fetchone()
         if row is None:
             return None
         return VirtualEnvironmentRecord(
-            virtual_environment_name=row[0],
+            virtual_target_name=row[0],
             status=VirtualEnvironmentStatus(row[1]),
-            baseline_virtual_environment_name=row[2],
+            baseline_virtual_target_name=row[2],
             finalized_at=row[3],
         )
 
@@ -605,14 +605,14 @@ class PostgresStateBackend(StateBackend):
     ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT virtual_environment_name, status, updated_at "
+                "SELECT virtual_target_name, status, updated_at "
                 f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                "ORDER BY updated_at DESC, virtual_environment_name DESC"
+                "ORDER BY updated_at DESC, virtual_target_name DESC"
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return tuple(
             VirtualEnvironmentRetentionRecord(
-                virtual_environment_name=row[0],
+                virtual_target_name=row[0],
                 status=VirtualEnvironmentStatus(row[1]),
                 updated_at=row[2],
             )
@@ -620,7 +620,7 @@ class PostgresStateBackend(StateBackend):
         )
 
     def delete_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> None:
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
@@ -628,20 +628,20 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute(
                     "DELETE FROM "
                     f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
+                    "WHERE virtual_target_name = %s",
+                    [virtual_target_name],
                 )
                 cursor.execute(
                     "DELETE FROM "
                     f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
+                    "WHERE virtual_target_name = %s",
+                    [virtual_target_name],
                 )
                 cursor.execute(
                     "DELETE FROM "
                     f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
+                    "WHERE virtual_target_name = %s",
+                    [virtual_target_name],
                 )
                 cursor.execute("COMMIT")
             except BaseException:
@@ -653,7 +653,7 @@ class PostgresStateBackend(StateBackend):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentRefRecord, ...],
     ) -> None:
         with connection.cursor() as cursor:
@@ -661,16 +661,16 @@ class PostgresStateBackend(StateBackend):
             try:
                 cursor.execute(
                     f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
+                    "WHERE virtual_target_name = %s",
+                    [virtual_target_name],
                 )
                 for ref in refs:
                     cursor.execute(
                         "INSERT INTO "
                         f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                        "(virtual_environment_name, model_name, version_hash, updated_at) "
+                        "(virtual_target_name, model_name, version_hash, updated_at) "
                         "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
-                        [ref.virtual_environment_name, ref.model_name, ref.version_hash],
+                        [ref.virtual_target_name, ref.model_name, ref.version_hash],
                     )
                 cursor.execute("COMMIT")
             except BaseException:
@@ -678,19 +678,19 @@ class PostgresStateBackend(StateBackend):
                 raise
 
     def get_virtual_environment_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"SELECT virtual_environment_name, model_name, version_hash "
+                f"SELECT virtual_target_name, model_name, version_hash "
                 f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY model_name",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = %s ORDER BY model_name",
+                [virtual_target_name],
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return tuple(
             VirtualEnvironmentRefRecord(
-                virtual_environment_name=row[0],
+                virtual_target_name=row[0],
                 model_name=row[1],
                 version_hash=row[2],
             )
@@ -702,7 +702,7 @@ class PostgresStateBackend(StateBackend):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     ) -> None:
         with connection.cursor() as cursor:
@@ -711,16 +711,16 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute(
                     "DELETE FROM "
                     f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
+                    "WHERE virtual_target_name = %s",
+                    [virtual_target_name],
                 )
                 for ref in refs:
                     cursor.execute(
                         "INSERT INTO "
                         f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                        "(virtual_environment_name, function_name, version_hash, updated_at) "
+                        "(virtual_target_name, function_name, version_hash, updated_at) "
                         "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
-                        [ref.virtual_environment_name, ref.function_name, ref.version_hash],
+                        [ref.virtual_target_name, ref.function_name, ref.version_hash],
                     )
                 cursor.execute("COMMIT")
             except BaseException:
@@ -728,19 +728,19 @@ class PostgresStateBackend(StateBackend):
                 raise
 
     def get_virtual_environment_function_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT virtual_environment_name, function_name, version_hash "
+                "SELECT virtual_target_name, function_name, version_hash "
                 f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY function_name",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = %s ORDER BY function_name",
+                [virtual_target_name],
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return tuple(
             VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=row[0],
+                virtual_target_name=row[0],
                 function_name=row[1],
                 version_hash=row[2],
             )
@@ -762,9 +762,9 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute(
                     "INSERT INTO "
                     f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
-                    "(checkpoint_id, virtual_environment_name, created_at) "
+                    "(checkpoint_id, virtual_target_name, created_at) "
                     "VALUES (%s, %s, CURRENT_TIMESTAMP)",
-                    [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
+                    [checkpoint.checkpoint_id, checkpoint.virtual_target_name],
                 )
                 for ref in refs:
                     cursor.execute(
@@ -794,20 +794,20 @@ class PostgresStateBackend(StateBackend):
                 raise
 
     def list_virtual_environment_checkpoints(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT checkpoint_id, virtual_environment_name, created_at "
+                "SELECT checkpoint_id, virtual_target_name, created_at "
                 f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY created_at DESC, checkpoint_id DESC",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = %s ORDER BY created_at DESC, checkpoint_id DESC",
+                [virtual_target_name],
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return tuple(
             VirtualEnvironmentCheckpointRecord(
                 checkpoint_id=row[0],
-                virtual_environment_name=row[1],
+                virtual_target_name=row[1],
                 created_at=row[2],
             )
             for row in rows
@@ -908,14 +908,14 @@ class PostgresStateBackend(StateBackend):
                 )
                 cursor.execute(
                     f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
-                    "(operation_id, operation_type, status, virtual_environment_name, "
+                    "(operation_id, operation_type, status, virtual_target_name, "
                     "created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
                     [
                         record.operation_id,
                         record.operation_type.value,
                         record.status.value,
-                        record.virtual_environment_name,
+                        record.virtual_target_name,
                         existing_created_at,
                     ],
                 )
@@ -929,7 +929,7 @@ class PostgresStateBackend(StateBackend):
     ) -> StateOperationRecord | None:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT operation_id, operation_type, status, virtual_environment_name "
+                "SELECT operation_id, operation_type, status, virtual_target_name "
                 f"FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
                 "WHERE operation_id = %s",
                 [operation_id],
@@ -941,7 +941,7 @@ class PostgresStateBackend(StateBackend):
             operation_id=row[0],
             operation_type=StateOperationType(row[1]),
             status=StateOperationStatus(row[2]),
-            virtual_environment_name=row[3],
+            virtual_target_name=row[3],
         )
 
     def create_state_operation_event(

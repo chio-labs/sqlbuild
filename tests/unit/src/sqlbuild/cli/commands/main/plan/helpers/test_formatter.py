@@ -709,7 +709,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         description="virtual metadata shows roots first and caps stale model list",
         plan_output=build_plan_output(
             metadata={
-                "virtual_environment_name": "dev",
+                "virtual_target_name": "dev",
                 "virtual_environment_status": "working",
                 "virtual_stale_root_names": ("root_a", "root_b"),
                 "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(55)),
@@ -736,7 +736,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         description="virtual metadata shows full stale sets in verbose output",
         plan_output=build_plan_output(
             metadata={
-                "virtual_environment_name": "dev",
+                "virtual_target_name": "dev",
                 "virtual_environment_status": "working",
                 "virtual_stale_root_names": tuple(f"root_{index:02d}" for index in range(3)),
                 "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(3)),
@@ -753,7 +753,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         description="virtual metadata shows remaining stale models after partial selection",
         plan_output=build_plan_output(
             metadata={
-                "virtual_environment_name": "dev",
+                "virtual_target_name": "dev",
                 "virtual_environment_status": "working",
                 "virtual_stale_root_names": ("stg_orders",),
                 "virtual_stale_model_names": ("fact_orders", "orders_rollup", "stg_orders"),

@@ -15,7 +15,6 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.reconcile.main.reconcile import run_virtual_reconcile
 
 
@@ -35,8 +34,8 @@ def run_reconcile(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
-        raise CliUserError("reconcile requires environment_mode = 'virtual'", code="C254")
+    if not discovered_inputs.project_config.settings.virtual_environments:
+        raise CliUserError("reconcile requires virtual_environments = true", code="C254")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -65,7 +64,7 @@ def run_reconcile(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             connection_config=connection_config,
-            virtual_environment_name=virtual_environment,
+            virtual_target_name=virtual_environment,
             command=reconcile_command,
             model_name=model_name,
             physical_relation_name=physical_relation_name,

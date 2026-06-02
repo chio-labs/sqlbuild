@@ -515,23 +515,23 @@ class DuckDbStateBackend(StateBackend):
                 connection,
                 schema=schema,
                 table_name=VIRTUAL_ENVIRONMENT_TABLE,
-                where_sql="virtual_environment_name = ?",
-                params=[record.virtual_environment_name],
+                where_sql="virtual_target_name = ?",
+                params=[record.virtual_target_name],
             )
             connection.execute(
                 f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [record.virtual_environment_name],
+                "WHERE virtual_target_name = ?",
+                [record.virtual_target_name],
             )
             connection.execute(
                 f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                "(virtual_environment_name, status, baseline_virtual_environment_name, "
+                "(virtual_target_name, status, baseline_virtual_target_name, "
                 "created_at, updated_at, finalized_at) "
                 "VALUES (?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, ?)",
                 [
-                    record.virtual_environment_name,
+                    record.virtual_target_name,
                     record.status.value,
-                    record.baseline_virtual_environment_name,
+                    record.baseline_virtual_target_name,
                     existing_created_at,
                     record.finalized_at,
                 ],
@@ -542,21 +542,21 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> VirtualEnvironmentRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
-            "SELECT virtual_environment_name, status, baseline_virtual_environment_name, "
+            "SELECT virtual_target_name, status, baseline_virtual_target_name, "
             "finalized_at "
             f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-            "WHERE virtual_environment_name = ?",
-            [virtual_environment_name],
+            "WHERE virtual_target_name = ?",
+            [virtual_target_name],
         ).fetchone()
         if row is None:
             return None
         return VirtualEnvironmentRecord(
-            virtual_environment_name=row[0],
+            virtual_target_name=row[0],
             status=VirtualEnvironmentStatus(row[1]),
-            baseline_virtual_environment_name=row[2],
+            baseline_virtual_target_name=row[2],
             finalized_at=row[3],
         )
 
@@ -564,13 +564,13 @@ class DuckDbStateBackend(StateBackend):
         self, connection: Any, *, schema: str
     ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            "SELECT virtual_environment_name, status, updated_at "
+            "SELECT virtual_target_name, status, updated_at "
             f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-            "ORDER BY updated_at DESC, virtual_environment_name DESC"
+            "ORDER BY updated_at DESC, virtual_target_name DESC"
         ).fetchall()
         return tuple(
             VirtualEnvironmentRetentionRecord(
-                virtual_environment_name=row[0],
+                virtual_target_name=row[0],
                 status=VirtualEnvironmentStatus(row[1]),
                 updated_at=row[2],
             )
@@ -578,26 +578,26 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def delete_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> None:
         connection.execute("BEGIN")
         try:
             connection.execute(
                 "DELETE FROM "
                 f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = ?",
+                [virtual_target_name],
             )
             connection.execute(
                 "DELETE FROM "
                 f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = ?",
+                [virtual_target_name],
             )
             connection.execute(
                 f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
+                "WHERE virtual_target_name = ?",
+                [virtual_target_name],
             )
             connection.execute("COMMIT")
         except BaseException:
@@ -609,7 +609,7 @@ class DuckDbStateBackend(StateBackend):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentRefRecord, ...],
     ) -> None:
         temp_table_name: str = "__sqlbuild_replace_virtual_environment_refs"
@@ -618,30 +618,30 @@ class DuckDbStateBackend(StateBackend):
             connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
             connection.execute(
                 f"CREATE TEMP TABLE {temp_table_name} ("
-                "virtual_environment_name TEXT NOT NULL, "
+                "virtual_target_name TEXT NOT NULL, "
                 "model_name TEXT NOT NULL, "
                 "version_hash TEXT NOT NULL, "
-                "UNIQUE (virtual_environment_name, model_name))"
+                "UNIQUE (virtual_target_name, model_name))"
             )
             for ref in refs:
                 connection.execute(
                     f"INSERT INTO {temp_table_name} "
-                    "(virtual_environment_name, model_name, version_hash) "
+                    "(virtual_target_name, model_name, version_hash) "
                     "VALUES (?, ?, ?)",
-                    [ref.virtual_environment_name, ref.model_name, ref.version_hash],
+                    [ref.virtual_target_name, ref.model_name, ref.version_hash],
                 )
             connection.execute(
                 f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                "WHERE virtual_environment_name = ? "
+                "WHERE virtual_target_name = ? "
                 f"AND model_name NOT IN (SELECT model_name FROM {temp_table_name})",
-                [virtual_environment_name],
+                [virtual_target_name],
             )
             connection.execute(
                 f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-                "(virtual_environment_name, model_name, version_hash, updated_at) "
-                "SELECT virtual_environment_name, model_name, version_hash, now() "
+                "(virtual_target_name, model_name, version_hash, updated_at) "
+                "SELECT virtual_target_name, model_name, version_hash, now() "
                 f"FROM {temp_table_name} "
-                "ON CONFLICT (virtual_environment_name, model_name) "
+                "ON CONFLICT (virtual_target_name, model_name) "
                 "DO UPDATE SET "
                 "version_hash = excluded.version_hash, "
                 "updated_at = now()"
@@ -653,17 +653,17 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_virtual_environment_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            f"SELECT virtual_environment_name, model_name, version_hash "
+            f"SELECT virtual_target_name, model_name, version_hash "
             f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_REF_TABLE)} "
-            "WHERE virtual_environment_name = ? ORDER BY model_name",
-            [virtual_environment_name],
+            "WHERE virtual_target_name = ? ORDER BY model_name",
+            [virtual_target_name],
         ).fetchall()
         return tuple(
             VirtualEnvironmentRefRecord(
-                virtual_environment_name=row[0],
+                virtual_target_name=row[0],
                 model_name=row[1],
                 version_hash=row[2],
             )
@@ -675,7 +675,7 @@ class DuckDbStateBackend(StateBackend):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     ) -> None:
         temp_table_name: str = "__sqlbuild_replace_virtual_environment_function_refs"
@@ -684,33 +684,33 @@ class DuckDbStateBackend(StateBackend):
             connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
             connection.execute(
                 f"CREATE TEMP TABLE {temp_table_name} ("
-                "virtual_environment_name TEXT NOT NULL, "
+                "virtual_target_name TEXT NOT NULL, "
                 "function_name TEXT NOT NULL, "
                 "version_hash TEXT NOT NULL, "
-                "UNIQUE (virtual_environment_name, function_name))"
+                "UNIQUE (virtual_target_name, function_name))"
             )
             ref: VirtualEnvironmentFunctionRefRecord
             for ref in refs:
                 connection.execute(
                     f"INSERT INTO {temp_table_name} "
-                    "(virtual_environment_name, function_name, version_hash) "
+                    "(virtual_target_name, function_name, version_hash) "
                     "VALUES (?, ?, ?)",
-                    [ref.virtual_environment_name, ref.function_name, ref.version_hash],
+                    [ref.virtual_target_name, ref.function_name, ref.version_hash],
                 )
             connection.execute(
                 "DELETE FROM "
                 f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                "WHERE virtual_environment_name = ? "
+                "WHERE virtual_target_name = ? "
                 f"AND function_name NOT IN (SELECT function_name FROM {temp_table_name})",
-                [virtual_environment_name],
+                [virtual_target_name],
             )
             connection.execute(
                 "INSERT INTO "
                 f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                "(virtual_environment_name, function_name, version_hash, updated_at) "
-                "SELECT virtual_environment_name, function_name, version_hash, now() "
+                "(virtual_target_name, function_name, version_hash, updated_at) "
+                "SELECT virtual_target_name, function_name, version_hash, now() "
                 f"FROM {temp_table_name} "
-                "ON CONFLICT (virtual_environment_name, function_name) "
+                "ON CONFLICT (virtual_target_name, function_name) "
                 "DO UPDATE SET "
                 "version_hash = excluded.version_hash, "
                 "updated_at = now()"
@@ -722,17 +722,17 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_virtual_environment_function_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            "SELECT virtual_environment_name, function_name, version_hash "
+            "SELECT virtual_target_name, function_name, version_hash "
             f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-            "WHERE virtual_environment_name = ? ORDER BY function_name",
-            [virtual_environment_name],
+            "WHERE virtual_target_name = ? ORDER BY function_name",
+            [virtual_target_name],
         ).fetchall()
         return tuple(
             VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=row[0],
+                virtual_target_name=row[0],
                 function_name=row[1],
                 version_hash=row[2],
             )
@@ -752,9 +752,9 @@ class DuckDbStateBackend(StateBackend):
         try:
             connection.execute(
                 f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
-                "(checkpoint_id, virtual_environment_name, created_at) "
+                "(checkpoint_id, virtual_target_name, created_at) "
                 "VALUES (?, ?, CURRENT_TIMESTAMP)",
-                [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
+                [checkpoint.checkpoint_id, checkpoint.virtual_target_name],
             )
             for ref in refs:
                 connection.execute(
@@ -785,18 +785,18 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def list_virtual_environment_checkpoints(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            "SELECT checkpoint_id, virtual_environment_name, created_at "
+            "SELECT checkpoint_id, virtual_target_name, created_at "
             f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
-            "WHERE virtual_environment_name = ? ORDER BY created_at DESC, checkpoint_id DESC",
-            [virtual_environment_name],
+            "WHERE virtual_target_name = ? ORDER BY created_at DESC, checkpoint_id DESC",
+            [virtual_target_name],
         ).fetchall()
         return tuple(
             VirtualEnvironmentCheckpointRecord(
                 checkpoint_id=row[0],
-                virtual_environment_name=row[1],
+                virtual_target_name=row[1],
                 created_at=row[2],
             )
             for row in rows
@@ -890,14 +890,14 @@ class DuckDbStateBackend(StateBackend):
             )
             connection.execute(
                 f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
-                "(operation_id, operation_type, status, virtual_environment_name, "
+                "(operation_id, operation_type, status, virtual_target_name, "
                 "created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
                 [
                     record.operation_id,
                     record.operation_type.value,
                     record.status.value,
-                    record.virtual_environment_name,
+                    record.virtual_target_name,
                     existing_created_at,
                 ],
             )
@@ -910,7 +910,7 @@ class DuckDbStateBackend(StateBackend):
         self, connection: Any, *, schema: str, operation_id: str
     ) -> StateOperationRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
-            "SELECT operation_id, operation_type, status, virtual_environment_name "
+            "SELECT operation_id, operation_type, status, virtual_target_name "
             f"FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
             "WHERE operation_id = ?",
             [operation_id],
@@ -921,7 +921,7 @@ class DuckDbStateBackend(StateBackend):
             operation_id=row[0],
             operation_type=StateOperationType(row[1]),
             status=StateOperationStatus(row[2]),
-            virtual_environment_name=row[3],
+            virtual_target_name=row[3],
         )
 
     def create_state_operation_event(

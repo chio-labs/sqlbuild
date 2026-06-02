@@ -258,7 +258,7 @@ def publish_function_versions(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     graph: ProjectGraph,
-    virtual_environment_name: str,
+    virtual_target_name: str,
     function_versions: dict[str, FunctionVersionRecord],
 ) -> None:
     functions_by_name: dict[str, CompiledFunction] = {
@@ -274,7 +274,7 @@ def publish_function_versions(
             target: CompiledRelationTarget = build_virtual_target(
                 adapter=adapter,
                 target=function.target,
-                virtual_environment_name=virtual_environment_name,
+                virtual_target_name=virtual_target_name,
             )
             adapter.ensure_schema(
                 connection,

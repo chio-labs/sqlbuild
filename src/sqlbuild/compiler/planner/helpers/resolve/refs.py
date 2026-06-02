@@ -284,7 +284,7 @@ def apply_deferred_targets(
     deferred_targets: dict[str, CompiledRelationTarget],
     selected_keys: frozenset[CompiledObjectKey],
 ) -> None:
-    """Replace non-selected model/seed targets with deferred environment targets."""
+    """Replace non-selected model/seed targets with deferred target targets."""
 
     selected_names: frozenset[str] = frozenset(k.name for k in selected_keys)
     name: str

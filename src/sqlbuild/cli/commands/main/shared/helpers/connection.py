@@ -80,7 +80,7 @@ def resolve_environment_connection_config(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
-    environment_name: str,
+    target_name: str,
     cli_vars: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Resolve the effective connection config for one named environment."""
@@ -88,7 +88,7 @@ def resolve_environment_connection_config(
     return resolve_connection_config(
         raw_config=build_effective_connection_config(
             discovered_inputs=discovered_inputs,
-            selected_environment=environment_name,
+            selected_target=target_name,
             cli_vars=cli_vars,
         ),
         project_dir=project_dir,

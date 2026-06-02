@@ -153,7 +153,7 @@ def build_project_from_test_case(
 
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection=test_case.effective_connection,
         effective_vars={},
         settings=SettingsConfig(
@@ -230,7 +230,7 @@ def build_project_from_source_cursor_input_test_case(
     )
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(),
@@ -352,7 +352,7 @@ def build_project_from_format_test_case(
 
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection=test_case.effective_connection,
         effective_vars={},
         models=tuple(models),

@@ -101,7 +101,7 @@ def run_custom_entry(
     model_audits: tuple[AuditPlanEntry, ...] = (),
     model_targets: dict[str, CompiledRelationTarget] | None = None,
     existing_relation: RelationInfo | None = None,
-    environment: str = "test",
+    target: str = "test",
     effective_vars: dict[str, object] | None = None,
 ) -> ModelExecutionResult:
     """Execute a custom materialization lifecycle with full control over parameters."""
@@ -118,7 +118,7 @@ def run_custom_entry(
         materialize_fn=materialize_fn,
         run_id="test_run",
         query_change_tracking=True,
-        environment=environment,
+        target=target,
         effective_vars=effective_vars or {},
         existing_relation=existing_relation,
     )

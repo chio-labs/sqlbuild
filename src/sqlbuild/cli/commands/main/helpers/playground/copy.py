@@ -15,7 +15,7 @@ _LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
 
 _PYTHON_NODES_PROJECT_TOML: str = """name = "python_nodes_demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "python_nodes_demo.duckdb"
@@ -26,7 +26,7 @@ default_audit_severity = "warn"
 [defaults]
 materialized = "table"
 
-[environments.dev]
+[targets.dev]
 schema = "main"
 defer_sources_to = "dev"
 """
@@ -177,29 +177,29 @@ def check_orders_export(ctx):
 
 _VIRTUAL_PROJECT_TOML: str = """name = "loader_waffle_shop_virtual"
 adapter = "duckdb"
-environment_mode = "virtual"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "loader_waffle_shop_virtual.duckdb"
 
 [settings]
+virtual_environments = true
 default_audit_severity = "warn"
 
 [defaults]
 materialized = "table"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "dev"
 
-[environments.dev.state]
+[targets.dev.state]
 backend = "duckdb"
 schema = "sqlbuild_state"
 unsuffixed_virtual_env = "dev"
 allow_reset = true
 
-[environments.dev.state.connection]
+[targets.dev.state.connection]
 database = "loader_waffle_shop_state.duckdb"
 """
 
@@ -334,7 +334,7 @@ chocolate,dessert
 
 _VIRTUAL_README: str = """# SQLBuild Virtual Environments Playground
 
-This project is a local DuckDB playground for SQLBuild virtual environments. It is
+This project is a local DuckDB playground for SQLBuild virtual targets. It is
 self-contained and does not require warehouse credentials.
 
 Virtual environments are an advanced, state-backed workflow. This playground uses a
