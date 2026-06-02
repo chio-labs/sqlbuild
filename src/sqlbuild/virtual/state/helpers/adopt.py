@@ -59,7 +59,7 @@ def adopt_into_virtual_state(
         operation_type=StateOperationType.ADOPT,
         status=StateOperationStatus.RUNNING,
         action="start",
-        virtual_target_name=active_target_name,
+        virtual_environment_name=active_target_name,
         message="starting adopt",
     )
     try:
@@ -114,8 +114,8 @@ def adopt_into_virtual_state(
             virtual_target: CompiledRelationDestination = build_virtual_logical_destination(
                 adapter=adapter,
                 target=model.destination,
-                virtual_target_name=active_target_name,
-                unsuffixed_virtual_target_name=active_target_name,
+                virtual_environment_name=active_target_name,
+                unsuffixed_virtual_environment_name=active_target_name,
             )
             adapter.create_view_as(
                 connection,
@@ -151,7 +151,7 @@ def adopt_into_virtual_state(
             )
             refs.append(
                 VirtualEnvironmentRefRecord(
-                    virtual_target_name=active_target_name,
+                    virtual_environment_name=active_target_name,
                     model_name=model.name,
                     version_hash=version_hash,
                 )
@@ -160,14 +160,14 @@ def adopt_into_virtual_state(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_target_name=active_target_name,
+                virtual_environment_name=active_target_name,
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_target_name=active_target_name,
+            virtual_environment_name=active_target_name,
             refs=tuple(refs),
         )
         record_state_operation(
@@ -178,7 +178,7 @@ def adopt_into_virtual_state(
             operation_type=None,
             status=StateOperationStatus.SUCCEEDED,
             action="finish",
-            virtual_target_name=None,
+            virtual_environment_name=None,
             message=f"adopted {len(refs)} models",
         )
         return f"Adopted {len(refs)} models into virtual environment {active_target_name}."
@@ -191,7 +191,7 @@ def adopt_into_virtual_state(
             operation_type=None,
             status=StateOperationStatus.FAILED,
             action="fail",
-            virtual_target_name=None,
+            virtual_environment_name=None,
             message=str(error),
         )
         raise

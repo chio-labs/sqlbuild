@@ -102,7 +102,7 @@ def prod_version_hash(project_dir: Path, model_name: str) -> str:
             db_path=project_dir / "prod_state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                f"WHERE virtual_target_name = 'prod' AND model_name = '{model_name}'"
+                f"WHERE virtual_environment_name = 'prod' AND model_name = '{model_name}'"
             ),
         )[0][0]
     )
@@ -114,7 +114,7 @@ def dev_version_hash(project_dir: Path, model_name: str) -> str:
             db_path=project_dir / "dev_state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                f"WHERE virtual_target_name = 'dev' AND model_name = '{model_name}'"
+                f"WHERE virtual_environment_name = 'dev' AND model_name = '{model_name}'"
             ),
         )[0][0]
     )
@@ -125,7 +125,7 @@ def dev_ref_rows(project_dir: Path) -> list[tuple[object, ...]]:
         db_path=project_dir / "dev_state.duckdb",
         sql=(
             "SELECT model_name, version_hash FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
 

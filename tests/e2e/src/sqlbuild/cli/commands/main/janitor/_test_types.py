@@ -92,7 +92,7 @@ class JanitorExpiredVirtualEnvironmentE2ETestCase:
     janitor_command: tuple[str, ...]
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
-    expected_virtual_target_names_after: tuple[str, ...]
+    expected_virtual_environment_names_after: tuple[str, ...]
 
 
 @dataclass(frozen=True)

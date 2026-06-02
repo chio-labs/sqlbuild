@@ -51,7 +51,7 @@ def run_virtual_rollback(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_target_name: str,
+    virtual_environment_name: str,
     checkpoint_id: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
@@ -82,9 +82,9 @@ def run_virtual_rollback(
         local_config=discovered_inputs.local_config,
         selected_target=None,
     )
-    unsuffixed_virtual_target_name: str | None = None
+    unsuffixed_virtual_environment_name: str | None = None
     if active_target_name is not None:
-        unsuffixed_virtual_target_name = resolve_target_config(
+        unsuffixed_virtual_environment_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
             target_name=active_target_name,
@@ -106,35 +106,35 @@ def run_virtual_rollback(
             backend,
             state_connection,
             schema=config.schema,
-            virtual_target_name=virtual_target_name,
+            virtual_environment_name=virtual_environment_name,
             owner_id=f"rollback:{uuid.uuid4()}",
             ttl=timedelta(minutes=10),
         )
         if lease is None:
             raise PlannerInputError(
-                f"virtual environment '{virtual_target_name}' is locked",
+                f"virtual environment '{virtual_environment_name}' is locked",
                 code="S019",
             )
         environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
             state_connection,
             schema=config.schema,
-            virtual_target_name=virtual_target_name,
+            virtual_environment_name=virtual_environment_name,
         )
         if environment is not None and environment.status == VirtualEnvironmentStatus.DETACHED:
             raise PlannerInputError(
-                f"virtual environment '{virtual_target_name}' is detached",
+                f"virtual environment '{virtual_environment_name}' is detached",
                 code="S028",
             )
         current_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
             backend.get_virtual_environment_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
             )
         )
         if not current_refs:
             raise PlannerInputError(
-                f"unknown virtual environment '{virtual_target_name}'",
+                f"unknown virtual environment '{virtual_environment_name}'",
                 code="S020",
             )
         current_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in current_refs}
@@ -142,7 +142,7 @@ def run_virtual_rollback(
             backend.list_virtual_environment_checkpoints(
                 state_connection,
                 schema=config.schema,
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
             )
         )
         target_checkpoint, target_checkpoint_refs = resolve_target_checkpoint(
@@ -236,7 +236,7 @@ def run_virtual_rollback(
         )
         target_refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
             VirtualEnvironmentRefRecord(
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
                 model_name=model_name,
                 version_hash=version_hash,
             )
@@ -251,19 +251,19 @@ def run_virtual_rollback(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
                 status=status,
             ),
         )
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_target_name=virtual_target_name,
+            virtual_environment_name=virtual_environment_name,
             refs=target_refs,
         )
         target_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
             VirtualEnvironmentFunctionRefRecord(
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
                 function_name=ref.function_name,
                 version_hash=ref.version_hash,
             )
@@ -279,7 +279,7 @@ def run_virtual_rollback(
             backend.replace_virtual_environment_function_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
                 refs=target_function_refs,
             )
         rolled_back_models: tuple[str, ...] = tuple(
@@ -308,8 +308,8 @@ def run_virtual_rollback(
         project=graph.project,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_target_name=virtual_target_name,
-        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
+        virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         physical_relations=physical_relations,
         on_connection_start=on_connection_start,
         on_connection_complete=on_connection_complete,
@@ -320,7 +320,7 @@ def run_virtual_rollback(
             adapter=adapter,
             connection_config=connection_config,
             graph=graph,
-            virtual_target_name=virtual_target_name,
+            virtual_environment_name=virtual_environment_name,
             function_versions=function_versions,
         )
     if on_progress is not None:

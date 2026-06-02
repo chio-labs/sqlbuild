@@ -43,7 +43,7 @@ def run_virtual_clone(
     to_target: str,
     source_connection_config: dict[str, object],
     target_connection_config: dict[str, object],
-    virtual_target_name: str | None = None,
+    virtual_environment_name: str | None = None,
     skip_locked: bool = False,
     no_sql_validation: bool = False,
     select: tuple[str, ...] = (),
@@ -88,7 +88,7 @@ def run_virtual_clone(
     state_connection: Any = backend.connect(config.connection)
     mode: str
     try:
-        if virtual_target_name is None:
+        if virtual_environment_name is None:
             semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
                 graph=target_graph,
                 bound_refs=(),
@@ -108,11 +108,11 @@ def run_virtual_clone(
             refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
             )
             if not refs:
                 raise PlannerInputError(
-                    f"unknown target virtual environment '{virtual_target_name}'",
+                    f"unknown target virtual environment '{virtual_environment_name}'",
                     code="S019",
                 )
             ref_hashes: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
@@ -243,6 +243,6 @@ def run_virtual_clone(
         mode=mode,
         source_environment=from_target,
         target_environment=to_target,
-        target_virtual_environment=virtual_target_name,
+        target_virtual_environment=virtual_environment_name,
         item_results=tuple(results),
     )

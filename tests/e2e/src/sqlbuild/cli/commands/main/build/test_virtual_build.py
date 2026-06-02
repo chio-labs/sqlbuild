@@ -111,7 +111,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT model_name FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
     assert ref_rows == list(test_case.expected_ref_rows)
@@ -120,7 +120,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         sql=(
             "SELECT model_name, version_hash "
             "FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
 
@@ -152,7 +152,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         sql=(
             "SELECT model_name, version_hash "
             "FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
     assert repeat_ref_hash_rows == ref_hash_rows
@@ -192,9 +192,9 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
             "sqlbuild_project.toml": (
                 'name = "virtual_python_nodes_build"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -317,9 +317,9 @@ def test_given_virtual_read_side_python_failure_when_building_then_prints_python
             "sqlbuild_project.toml": (
                 'name = "virtual_python_read_side_failure"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -384,9 +384,9 @@ def test_given_virtual_read_side_python_skip_when_building_then_prints_python_sk
             "sqlbuild_project.toml": (
                 'name = "virtual_python_read_side_skip"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -450,9 +450,9 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
             "sqlbuild_project.toml": (
                 'name = "virtual_no_python_nodes_build"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -793,15 +793,14 @@ def test_given_waffle_shop_project_when_virtual_building_then_vde_outputs_are_qu
         """
 name = "waffle_shop"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
+default_audit_severity = "warn"
 
 [connection]
 database = "waffle_shop.duckdb"
-
-[settings]
-default_audit_severity = "warn"
 
 [defaults]
 materialized = "table"
@@ -1024,8 +1023,8 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
             "FROM sqlbuild_state.virtual_environment_refs dev "
             "JOIN sqlbuild_state.virtual_environment_refs kevin "
             "ON dev.model_name = kevin.model_name "
-            "WHERE dev.virtual_target_name = 'dev' "
-            "AND kevin.virtual_target_name = 'kevin' "
+            "WHERE dev.virtual_environment_name = 'dev' "
+            "AND kevin.virtual_environment_name = 'kevin' "
             "AND dev.version_hash <> kevin.version_hash "
             "ORDER BY dev.model_name"
         ),
@@ -1186,7 +1185,7 @@ def test_given_checkpoint_physical_relation_missing_when_rolling_back_then_it_bl
             "ON cp.checkpoint_id = cr.checkpoint_id "
             "JOIN sqlbuild_state.physical_relations pr "
             "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
-            "WHERE cp.virtual_target_name = 'dev' AND cr.model_name = 'stg_orders' "
+            "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'stg_orders' "
             "ORDER BY cp.created_at ASC LIMIT 1"
         ),
     )
@@ -1442,14 +1441,14 @@ def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints "
-            "WHERE virtual_target_name = 'dev'"
+            "WHERE virtual_environment_name = 'dev'"
         ),
     )
     assert len(checkpoint_rows) == 2
     operation_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT operation_type, status, virtual_target_name "
+            "SELECT operation_type, status, virtual_environment_name "
             "FROM sqlbuild_state.state_operations ORDER BY created_at DESC LIMIT 1"
         ),
     )
@@ -1549,7 +1548,7 @@ def test_given_function_change_when_promoting_then_it_publishes_target_function_
         sql=(
             "SELECT function_name, version_hash "
             "FROM sqlbuild_state.virtual_environment_function_refs "
-            "WHERE virtual_target_name = 'dev'"
+            "WHERE virtual_environment_name = 'dev'"
         ),
     )
     assert len(function_ref_rows) == 1
@@ -1602,7 +1601,7 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
         sql=(
             "SELECT model_name, version_hash "
             "FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
     (project_dir / "models" / "stg_orders.sql").write_text(
@@ -1659,7 +1658,7 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
         sql=(
             "SELECT model_name, version_hash "
             "FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
     assert rolled_back_ref_rows == initial_ref_rows
@@ -2421,7 +2420,7 @@ def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_fail
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT operation_type, status, virtual_target_name "
+            "SELECT operation_type, status, virtual_environment_name "
             "FROM sqlbuild_state.state_operations WHERE operation_type = 'promote'"
         ),
     ) == [("promote", "failed", "dev")]

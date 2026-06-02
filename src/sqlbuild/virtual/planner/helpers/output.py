@@ -104,7 +104,7 @@ def with_virtual_metadata(
     metadata.update(
         {
             "virtual_mode": True,
-            "virtual_target_name": target_name,
+            "virtual_environment_name": target_name,
             "virtual_environment_status": "finalized" if not stale_model_names else "working",
             "virtual_stale_model_names": stale_model_names,
             "virtual_stale_root_names": stale_root_names,

@@ -19,7 +19,7 @@ def inspect_checkpoint_retention(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    virtual_target_name: str,
+    virtual_environment_name: str,
     max_checkpoints: int,
 ) -> CheckpointRetentionInspection:
     """Inspect checkpoint retention and retained checkpoint physical relations."""
@@ -34,7 +34,7 @@ def inspect_checkpoint_retention(
             backend.list_virtual_environment_checkpoints(
                 connection,
                 schema=config.schema,
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
             )
         )
         retained_checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = checkpoints[

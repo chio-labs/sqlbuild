@@ -47,7 +47,7 @@ def read_previous_function_query_sqls(
     state_connection: Any,
     schema: str,
     graph: ProjectGraph,
-    virtual_target_name: str,
+    virtual_environment_name: str,
 ) -> dict[str, str]:
     """Read persisted virtual function fingerprint SQL by function name."""
 
@@ -56,7 +56,7 @@ def read_previous_function_query_sqls(
         for ref in backend.get_virtual_environment_function_refs(
             state_connection,
             schema=schema,
-            virtual_target_name=virtual_target_name,
+            virtual_environment_name=virtual_environment_name,
         )
     }
     function_versions: dict[str, FunctionVersionRecord | None] = {

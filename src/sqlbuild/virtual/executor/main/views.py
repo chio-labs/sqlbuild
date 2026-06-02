@@ -20,8 +20,8 @@ def refresh_logical_vde_views(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    virtual_target_name: str,
-    unsuffixed_virtual_target_name: str | None = None,
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None = None,
     physical_relations: dict[str, PhysicalRelationRecord],
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
@@ -57,8 +57,8 @@ def refresh_logical_vde_views(
             virtual_target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
                 target=model.destination,
-                virtual_target_name=virtual_target_name,
-                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
                 connection,

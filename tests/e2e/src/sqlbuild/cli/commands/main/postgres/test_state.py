@@ -275,7 +275,7 @@ def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_
             sql=(
                 "SELECT status FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')} "
-                "WHERE virtual_target_name = 'dev'"
+                "WHERE virtual_environment_name = 'dev'"
             ),
             config=postgres_e2e_config,
         ) == ((test_case.expected_detached_status,),)
@@ -543,7 +543,7 @@ def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_mar
             sql=(
                 "SELECT status FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')} "
-                "WHERE virtual_target_name = 'dev'"
+                "WHERE virtual_environment_name = 'dev'"
             ),
             config=postgres_e2e_config,
         ) == (("finalized",),)
@@ -751,7 +751,7 @@ def test_given_postgres_non_finalized_virtual_environment_when_detaching_then_it
             sql=(
                 "INSERT INTO "
                 f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')} "
-                "(virtual_target_name, status, created_at, updated_at) "
+                "(virtual_environment_name, status, created_at, updated_at) "
                 "VALUES ('dev', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
             ),
             config=postgres_e2e_config,
@@ -990,7 +990,7 @@ def test_given_postgres_old_detached_vde_when_running_janitor_then_retention_all
                 "UPDATE "
                 f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')} "
                 "SET updated_at = TIMESTAMP '2026-01-01' "
-                "WHERE virtual_target_name = 'dev'"
+                "WHERE virtual_environment_name = 'dev'"
             ),
             config=postgres_e2e_config,
         )
@@ -1316,7 +1316,7 @@ def test_given_postgres_warehouse_cleanup_failure_when_janitor_then_state_cleanu
             sql=(
                 "SELECT COUNT(*) FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='virtual_environments')} "
-                "WHERE virtual_target_name = 'pr'"
+                "WHERE virtual_environment_name = 'pr'"
             ),
             config=postgres_e2e_config,
         ) == ((test_case.expected_virtual_environment_count_after,),)
@@ -1413,7 +1413,7 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
                     f"{physical_relations_relation} AS physical_relations "
                     "ON physical_relations.model_name = refs.model_name "
                     "AND physical_relations.version_hash = refs.version_hash "
-                    "WHERE refs.virtual_target_name = 'dev' "
+                    "WHERE refs.virtual_environment_name = 'dev' "
                     "AND refs.model_name = 'stg_orders'"
                 ),
                 config=postgres_e2e_config,
@@ -1431,7 +1431,7 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
                     f"{physical_relations_relation} AS physical_relations "
                     "ON physical_relations.model_name = refs.model_name "
                     "AND physical_relations.version_hash = refs.version_hash "
-                    "WHERE refs.virtual_target_name = 'dev' "
+                    "WHERE refs.virtual_environment_name = 'dev' "
                     "AND refs.model_name = 'stg_orders'"
                 ),
                 config=postgres_e2e_config,
@@ -1689,7 +1689,7 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
             sql=(
                 "SELECT model_name, version_hash FROM "
                 f"{refs_table} "
-                "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+                "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
             ),
             config=postgres_e2e_config,
         )
@@ -1745,7 +1745,7 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
                 sql=(
                     "SELECT model_name, version_hash FROM "
                     f"{refs_table} "
-                    "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+                    "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
                 ),
                 config=postgres_e2e_config,
             )
@@ -1847,7 +1847,7 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
                 "ON cp.checkpoint_id = cr.checkpoint_id JOIN "
                 f"{physical_relations_relation} pr "
                 "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
-                "WHERE cp.virtual_target_name = 'dev' AND cr.model_name = 'orders' "
+                "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'orders' "
                 "ORDER BY cp.created_at ASC LIMIT 1"
             ),
             config=postgres_e2e_config,
@@ -2489,7 +2489,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
                 "cause: stg_orders (query changed)",
                 "missing stale required upstream models: stg_orders",
                 "Plan ready (2 selected)",
-                '"virtual_target_name": "dev"',
+                '"virtual_environment_name": "dev"',
                 "status: working",
                 "remaining stale after selection",
                 "Plan ready (0 selected)",
@@ -3019,7 +3019,7 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
                 "AS physical_relations ON physical_relations.model_name = refs.model_name "
                 "AND physical_relations.version_hash = refs.version_hash "
-                "WHERE refs.virtual_target_name = 'pr' AND refs.model_name = 'fact_orders'"
+                "WHERE refs.virtual_environment_name = 'pr' AND refs.model_name = 'fact_orders'"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -3145,7 +3145,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
             fetch_postgres_rows(
                 sql=(
                     f"SELECT version_hash FROM {function_refs_relation} "
-                    "WHERE virtual_target_name = 'dev' "
+                    "WHERE virtual_environment_name = 'dev' "
                     "AND function_name = 'is_large_order'"
                 ),
                 config=postgres_e2e_config,
@@ -3197,7 +3197,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
             fetch_postgres_rows(
                 sql=(
                     f"SELECT version_hash FROM {function_refs_relation} "
-                    "WHERE virtual_target_name = 'pr' "
+                    "WHERE virtual_environment_name = 'pr' "
                     "AND function_name = 'is_large_order'"
                 ),
                 config=postgres_e2e_config,
@@ -3215,7 +3215,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
         assert fetch_postgres_rows(
             sql=(
                 f"SELECT function_name, version_hash FROM {function_refs_relation} "
-                "WHERE virtual_target_name = 'dev'"
+                "WHERE virtual_environment_name = 'dev'"
             ),
             config=postgres_e2e_config,
         ) == (("is_large_order", pr_function_hash),)
@@ -3404,7 +3404,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                             name='virtual_environment_refs',
                         )
                     } "
-                    "WHERE virtual_target_name = 'prod' AND model_name = 'stg_orders'"
+                    "WHERE virtual_environment_name = 'prod' AND model_name = 'stg_orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -3447,7 +3447,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                         name='virtual_environment_refs',
                     )
                 } "
-                "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+                "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
             ),
             config=postgres_e2e_config,
         )
@@ -3490,7 +3490,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                             name='virtual_environment_refs',
                         )
                     } "
-                    "WHERE virtual_target_name = 'dev' ORDER BY model_name"
+                    "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
                 ),
                 config=postgres_e2e_config,
             )
@@ -4077,7 +4077,7 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
                 f"SELECT version_hash FROM {refs_relation} "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
             ),
             config=postgres_e2e_config,
         )
@@ -4116,7 +4116,7 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
             fetch_postgres_rows(
                 sql=(
                     f"SELECT version_hash FROM {refs_relation} "
-                    "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )
@@ -4182,7 +4182,7 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
                 f"SELECT version_hash FROM {refs_relation} "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
             ),
             config=postgres_e2e_config,
         )
@@ -4221,7 +4221,7 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
             fetch_postgres_rows(
                 sql=(
                     f"SELECT version_hash FROM {refs_relation} "
-                    "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )
@@ -4363,7 +4363,7 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
                 f"SELECT version_hash FROM {refs_relation} "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
             ),
             config=postgres_e2e_config,
         )
@@ -4410,7 +4410,7 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
             fetch_postgres_rows(
                 sql=(
                     f"SELECT version_hash FROM {refs_relation} "
-                    "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )
@@ -4569,7 +4569,7 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
                 f"SELECT version_hash FROM {refs_relation} "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
             ),
             config=postgres_e2e_config,
         )
@@ -4618,7 +4618,7 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
             fetch_postgres_rows(
                 sql=(
                     f"SELECT version_hash FROM {refs_relation} "
-                    "WHERE virtual_target_name = 'dev' AND model_name = 'orders'"
+                    "WHERE virtual_environment_name = 'dev' AND model_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )

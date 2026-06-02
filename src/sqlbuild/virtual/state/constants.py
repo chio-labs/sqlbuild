@@ -116,23 +116,23 @@ PHYSICAL_RELATION_ANCESTRY_COLUMNS: dict[str, StateColumnType] = {
 }
 
 VIRTUAL_ENVIRONMENT_COLUMNS: dict[str, StateColumnType] = {
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "status": StateColumnType.TEXT,
-    "baseline_virtual_target_name": StateColumnType.TEXT,
+    "baseline_virtual_environment_name": StateColumnType.TEXT,
     "created_at": StateColumnType.TIMESTAMP,
     "updated_at": StateColumnType.TIMESTAMP,
     "finalized_at": StateColumnType.TIMESTAMP,
 }
 
 VIRTUAL_ENVIRONMENT_REF_COLUMNS: dict[str, StateColumnType] = {
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "model_name": StateColumnType.TEXT,
     "version_hash": StateColumnType.TEXT,
     "updated_at": StateColumnType.TIMESTAMP,
 }
 
 VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS: dict[str, StateColumnType] = {
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "function_name": StateColumnType.TEXT,
     "version_hash": StateColumnType.TEXT,
     "updated_at": StateColumnType.TIMESTAMP,
@@ -140,7 +140,7 @@ VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS: dict[str, StateColumnType] = {
 
 VIRTUAL_ENVIRONMENT_CHECKPOINT_COLUMNS: dict[str, StateColumnType] = {
     "checkpoint_id": StateColumnType.TEXT,
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "created_at": StateColumnType.TIMESTAMP,
 }
 
@@ -168,7 +168,7 @@ STATE_OPERATION_COLUMNS: dict[str, StateColumnType] = {
     "operation_id": StateColumnType.TEXT,
     "operation_type": StateColumnType.TEXT,
     "status": StateColumnType.TEXT,
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "created_at": StateColumnType.TIMESTAMP,
     "updated_at": StateColumnType.TIMESTAMP,
 }
@@ -177,14 +177,14 @@ PLAN_RUN_COLUMNS: dict[str, StateColumnType] = {
     "run_id": StateColumnType.TEXT,
     "command": StateColumnType.TEXT,
     "status": StateColumnType.TEXT,
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "started_at": StateColumnType.TIMESTAMP,
     "completed_at": StateColumnType.TIMESTAMP,
 }
 
 VIRTUAL_ENVIRONMENT_REF_EVENT_COLUMNS: dict[str, StateColumnType] = {
     "event_id": StateColumnType.TEXT,
-    "virtual_target_name": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
     "model_name": StateColumnType.TEXT,
     "previous_version_hash": StateColumnType.TEXT,
     "new_version_hash": StateColumnType.TEXT,
@@ -245,17 +245,17 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
         "idx_sqb_physical_relation_ancestry_identity": ("model_name", "version_hash"),
     },
     VIRTUAL_ENVIRONMENT_TABLE: {
-        "idx_sqb_virtual_environments_identity": ("virtual_target_name",),
+        "idx_sqb_virtual_environments_identity": ("virtual_environment_name",),
     },
     VIRTUAL_ENVIRONMENT_REF_TABLE: {
         "idx_sqb_virtual_environment_refs_identity": (
-            "virtual_target_name",
+            "virtual_environment_name",
             "model_name",
         ),
     },
     VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: {
         "idx_sqb_virtual_environment_function_refs_identity": (
-            "virtual_target_name",
+            "virtual_environment_name",
             "function_name",
         ),
     },

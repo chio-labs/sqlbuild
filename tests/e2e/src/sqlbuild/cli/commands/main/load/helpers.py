@@ -40,7 +40,7 @@ def assert_source_only_ingress_dependency_case(
                     "def raw_events(ctx):\n"
                     "    events = ctx.loader(fetch_events)\n"
                     "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
-                    "SELECT event_id FROM {events.target}')\n"
+                    "SELECT event_id FROM {events.destination}')\n"
                 ),
             ),
             "tasks/prepare.py": (
@@ -213,8 +213,8 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "    prices = ctx.loader(fetch_prices)\n"
             "    cursor = ctx.query(\n"
             "        f'SELECT e.order_id, e.customer_id, e.waffle_type, e.quantity, '\n"
-            "        f'p.price_cents, e.load_seq FROM {events.target} e '\n"
-            "        f'JOIN {prices.target} p ON e.waffle_type = p.waffle_type '\n"
+            "        f'p.price_cents, e.load_seq FROM {events.destination} e '\n"
+            "        f'JOIN {prices.destination} p ON e.waffle_type = p.waffle_type '\n"
             "        f'ORDER BY e.order_id'\n"
             "    )\n"
             "    return [\n"
@@ -232,7 +232,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "def raw_customers(ctx):\n"
             "    customers = ctx.loader(fetch_customers)\n"
             "    cursor = ctx.query(\n"
-            "        f'SELECT customer_id, plan_name, load_seq FROM {customers.target} '\n"
+            "        f'SELECT customer_id, plan_name, load_seq FROM {customers.destination} '\n"
             "        f'ORDER BY customer_id'\n"
             "    )\n"
             "    return [\n"

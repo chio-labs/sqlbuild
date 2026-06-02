@@ -42,7 +42,7 @@ class JanitorCheckpointCandidate:
     """One retained-history checkpoint eligible for pruning."""
 
     checkpoint_id: str
-    virtual_target_name: str
+    virtual_environment_name: str
     created_at: datetime | None
 
 
@@ -50,7 +50,7 @@ class JanitorCheckpointCandidate:
 class JanitorDetachedVirtualEnvironmentCandidate:
     """One detached virtual environment eligible for state cleanup."""
 
-    virtual_target_name: str
+    virtual_environment_name: str
     updated_at: datetime | None
 
 
@@ -58,7 +58,7 @@ class JanitorDetachedVirtualEnvironmentCandidate:
 class JanitorExpiredVirtualEnvironmentCandidate:
     """One non-active virtual environment eligible for TTL cleanup."""
 
-    virtual_target_name: str
+    virtual_environment_name: str
     updated_at: datetime | None
 
 

@@ -34,7 +34,7 @@ class LoaderRelationRef:
     """A loader-visible relation reference with cursor helpers."""
 
     name: str
-    target: str
+    destination: str
     database: str | None
     schema: str | None
     table_name: str
@@ -57,7 +57,7 @@ class LoaderRelationRef:
             name=self.table_name,
         ):
             return None
-        sql: str = f"SELECT MAX({column}) FROM {self.target}"
+        sql: str = f"SELECT MAX({column}) FROM {self.destination}"
         self.statement_recorder.record(sql)
         cursor: Any = self.adapter.execute(self.connection, sql)
         row: object | None = cursor.fetchone()

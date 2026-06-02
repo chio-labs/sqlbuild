@@ -48,18 +48,18 @@ def build_virtual_destination(
     *,
     adapter: BaseAdapter,
     target: CompiledRelationDestination,
-    virtual_target_name: str,
-    unsuffixed_virtual_target_name: str | None = None,
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None = None,
 ) -> CompiledRelationDestination:
     """Build the logical VDE view target for a model."""
 
     virtual_schema: str | None
     if target.schema is None:
         virtual_schema = None
-    elif unsuffixed_virtual_target_name == virtual_target_name:
+    elif unsuffixed_virtual_environment_name == virtual_environment_name:
         virtual_schema = target.schema
     else:
-        virtual_schema = f"{target.schema}__{virtual_target_name}"
+        virtual_schema = f"{target.schema}__{virtual_environment_name}"
     return CompiledRelationDestination(
         database=target.database,
         schema=virtual_schema,
@@ -106,7 +106,7 @@ def rewrite_project_model_targets(
     """Return a compiled project with selected model targets replaced."""
 
     rewritten_models: tuple[CompiledModel, ...] = tuple(
-        replace(model, target=rewritten_targets.get(model.name, model.destination))
+        replace(model, destination=rewritten_targets.get(model.name, model.destination))
         for model in project.models
     )
     return replace(project, models=rewritten_models)
@@ -116,25 +116,25 @@ def rewrite_project_function_targets(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
-    virtual_target_name: str,
-    unsuffixed_virtual_target_name: str | None = None,
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None = None,
 ) -> CompiledProject:
     """Return a compiled project with functions published into the VDE schema."""
 
     rewritten_functions: tuple[CompiledFunction, ...] = tuple(
         replace(
             function,
-            target=build_virtual_destination(
+            destination=build_virtual_destination(
                 adapter=adapter,
                 target=function.destination,
-                virtual_target_name=virtual_target_name,
-                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             ),
-            fingerprint_target=build_virtual_destination(
+            fingerprint_destination=build_virtual_destination(
                 adapter=adapter,
                 target=function.fingerprint_destination,
-                virtual_target_name=virtual_target_name,
-                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             ),
         )
         for function in project.functions

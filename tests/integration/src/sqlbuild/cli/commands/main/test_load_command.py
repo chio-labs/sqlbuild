@@ -258,7 +258,9 @@ def fetch_orders(ctx):
 
 @loader(depends_on=[fetch_orders])
 def raw_orders(ctx):
-    rows = ctx.query(f"SELECT order_id, status FROM {ctx.loader(fetch_orders).target}").fetchall()
+    rows = ctx.query(
+        f"SELECT order_id, status FROM {ctx.loader(fetch_orders).destination}"
+    ).fetchall()
     return [{"order_id": row[0], "status": "loaded-" + row[1]} for row in rows]
 """,
     "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],

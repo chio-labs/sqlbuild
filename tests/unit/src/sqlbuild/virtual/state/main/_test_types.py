@@ -10,7 +10,7 @@ class RecordStateOperationTestCase:
     description: str
     operation_id: str
     operation_type: StateOperationType
-    virtual_target_name: str
+    virtual_environment_name: str
     start_message: str
     finish_message: str
     expected_final_status: StateOperationStatus

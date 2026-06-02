@@ -26,7 +26,7 @@ def run_state_checkpoints(
     project_dir: Path | None,
     command: str | None,
     checkpoint_id: str | None = None,
-    virtual_target_name: str | None = None,
+    virtual_environment_name: str | None = None,
     no_color: bool = False,
 ) -> int:
     """Run state checkpoint inspection commands."""
@@ -37,7 +37,7 @@ def run_state_checkpoints(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    resolved_target_name: str | None = virtual_target_name or resolve_target_name(
+    resolved_target_name: str | None = virtual_environment_name or resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         selected_target=None,
@@ -53,12 +53,12 @@ def run_state_checkpoints(
             list_virtual_environment_checkpoints(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
-                virtual_target_name=resolved_target_name,
+                virtual_environment_name=resolved_target_name,
             )
         )
         print(
             _format_checkpoint_list(
-                virtual_target_name=resolved_target_name,
+                virtual_environment_name=resolved_target_name,
                 checkpoints=checkpoints,
                 style=style,
             )
@@ -99,11 +99,11 @@ def run_state_checkpoints(
         current_refs: tuple[VirtualEnvironmentRefRecord, ...] = get_virtual_environment_refs(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
-            virtual_target_name=resolved_target_name,
+            virtual_environment_name=resolved_target_name,
         )
         print(
             _format_checkpoint_diff(
-                virtual_target_name=resolved_target_name,
+                virtual_environment_name=resolved_target_name,
                 checkpoint_id=checkpoint_id,
                 current_refs=current_refs,
                 checkpoint_refs=checkpoint_refs,
@@ -116,14 +116,14 @@ def run_state_checkpoints(
 
 def _format_checkpoint_list(
     *,
-    virtual_target_name: str,
+    virtual_environment_name: str,
     checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...],
     style: CliStyle,
 ) -> str:
     document: CliDocument = CliDocument(style)
     document.blank()
     document.header(
-        "Virtual environment checkpoints", suffix=style.object_name(virtual_target_name)
+        "Virtual environment checkpoints", suffix=style.object_name(virtual_environment_name)
     )
     document.blank()
     if not checkpoints:
@@ -164,7 +164,7 @@ def _format_checkpoint_show(
 
 def _format_checkpoint_diff(
     *,
-    virtual_target_name: str,
+    virtual_environment_name: str,
     checkpoint_id: str,
     current_refs: tuple[VirtualEnvironmentRefRecord, ...],
     checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
@@ -190,7 +190,7 @@ def _format_checkpoint_diff(
     document: CliDocument = CliDocument(style)
     document.blank()
     document.header(
-        "Virtual environment checkpoint diff", suffix=style.object_name(virtual_target_name)
+        "Virtual environment checkpoint diff", suffix=style.object_name(virtual_environment_name)
     )
     document.blank()
     document.line(f"  {'checkpoint':<16} {style.accent(checkpoint_id)}")

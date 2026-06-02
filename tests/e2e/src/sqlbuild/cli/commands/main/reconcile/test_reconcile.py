@@ -340,7 +340,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+            "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
     (project_dir / "models" / "dim_customers.sql").write_text(
@@ -380,7 +380,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
             db_path=project_dir / "state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
         == original_ref_rows
@@ -415,7 +415,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+            "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
     attach_relation_rows: list[tuple[object, ...]] = query_duckdb(
@@ -450,7 +450,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
             db_path=project_dir / "state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
         == original_ref_rows
@@ -532,7 +532,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+            "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
     (project_dir / "models" / "stg_orders.sql").write_text(
@@ -586,7 +586,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
             db_path=project_dir / "state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
         == original_ref_rows
@@ -684,7 +684,7 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+            "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
     (project_dir / "models" / "stg_orders.sql").write_text(
@@ -738,7 +738,7 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
             db_path=project_dir / "state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
-                "WHERE virtual_target_name = 'dev' AND model_name = 'fact_orders'"
+                "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
         == original_ref_rows

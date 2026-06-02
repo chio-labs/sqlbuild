@@ -48,7 +48,7 @@ class PostgresStateBackendCoreRecordsTestCase:
     sqlbuild_version: str
     expected_model_name: str
     expected_version_hash: str
-    expected_virtual_target_name: str
+    expected_virtual_environment_name: str
     expected_ref_count: int
     expected_ref_count_after_replace: int
     expected_relation_name: str
@@ -67,7 +67,7 @@ class PostgresStateBackendIndexValidationTestCase:
 class PostgresStateBackendTransactionRollbackTestCase:
     description: str
     sqlbuild_version: str
-    virtual_target_name: str
+    virtual_environment_name: str
     model_name: str
     original_version_hash: str
     duplicate_version_hash: str
@@ -100,4 +100,4 @@ class PostgresStateBackendOperationEventTestCase:
     description: str
     sqlbuild_version: str
     expected_operation_id: str
-    expected_virtual_target_name: str
+    expected_virtual_environment_name: str

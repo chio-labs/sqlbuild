@@ -404,8 +404,8 @@ DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[DirectPythonBuildHardeningE2ETe
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
-                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
-                "SELECT event_id FROM {events.target}')\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
+                "SELECT event_id FROM {events.destination}')\n"
             ),
             "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
         },
@@ -515,8 +515,8 @@ def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_so
                     "@loader(depends_on=[fetch_events])\n"
                     "def raw_events(ctx):\n"
                     "    events = ctx.loader(fetch_events)\n"
-                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
-                    "SELECT event_id FROM {events.target}')\n"
+                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
+                    "SELECT event_id FROM {events.destination}')\n"
                 ),
                 "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
             },
@@ -677,7 +677,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"

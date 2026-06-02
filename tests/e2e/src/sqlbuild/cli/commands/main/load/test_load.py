@@ -332,14 +332,14 @@ def test_given_two_terminal_sources_when_sharing_intermediate_then_intermediate_
                 "def raw_orders(ctx):\n"
                 "    orders = ctx.loader(fetch_orders)\n"
                 "    cursor = ctx.query(\n"
-                "        f'SELECT event_id FROM {orders.target} ORDER BY event_id'\n"
+                "        f'SELECT event_id FROM {orders.destination} ORDER BY event_id'\n"
                 "    )\n"
                 "    return [{'event_id': row[0]} for row in cursor.fetchall()]\n\n"
                 "@loader(depends_on=[fetch_orders])\n"
                 "def raw_order_metrics(ctx):\n"
                 "    orders = ctx.loader(fetch_orders)\n"
                 "    cursor = ctx.query(\n"
-                "        f'SELECT event_id FROM {orders.target} ORDER BY event_id'\n"
+                "        f'SELECT event_id FROM {orders.destination} ORDER BY event_id'\n"
                 "    )\n"
                 "    return [{'event_id': row[0]} for row in cursor.fetchall()]\n"
             ),
@@ -417,7 +417,7 @@ def test_given_chained_loader_project_when_loading_source_then_runs_dependencies
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
                 "SELECT event_id, 'loaded' AS status, {events.current_cursor_value} AS max_seq "
-                'FROM {events.target}")\n'
+                'FROM {events.destination}")\n'
             ),
         ),
     )
@@ -483,7 +483,7 @@ def test_given_chained_loader_project_when_building_source_model_then_runs_loade
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                "SELECT event_id, 'loaded' AS status FROM {events.target}\")\n"
+                "SELECT event_id, 'loaded' AS status FROM {events.destination}\")\n"
             ),
         )
         | {
@@ -555,7 +555,7 @@ def test_given_chained_loader_project_when_running_source_model_then_runs_loader
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                "SELECT event_id, 'loaded' AS status FROM {events.target}\")\n"
+                "SELECT event_id, 'loaded' AS status FROM {events.destination}\")\n"
             ),
         )
         | {
@@ -833,8 +833,8 @@ def test_given_source_only_selection_when_skipping_complex_intermediates_then_va
                 "    events = ctx.loader(fetch_events)\n"
                 "    prices = ctx.loader(fetch_prices)\n"
                 "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
-                "SELECT event_id FROM {events.target} UNION ALL "
-                "SELECT price_id FROM {prices.target}')\n\n"
+                "SELECT event_id FROM {events.destination} UNION ALL "
+                "SELECT price_id FROM {prices.destination}')\n\n"
                 "@loader(write_strategy='table', columns=[\n"
                 "    {'name': 'page_id', 'type': 'INTEGER'},\n"
                 "])\n"
@@ -845,12 +845,12 @@ def test_given_source_only_selection_when_skipping_complex_intermediates_then_va
                 "def normalize_pages(ctx):\n"
                 "    pages = ctx.loader(fetch_pages)\n"
                 "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
-                "SELECT page_id FROM {pages.target}')\n\n"
+                "SELECT page_id FROM {pages.destination}')\n\n"
                 "@loader(depends_on=[normalize_pages])\n"
                 "def raw_rollup(ctx):\n"
                 "    pages = ctx.loader(normalize_pages)\n"
                 "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
-                "SELECT page_id FROM {pages.target}')\n"
+                "SELECT page_id FROM {pages.destination}')\n"
             ),
         ),
     )
@@ -899,7 +899,7 @@ def test_given_chained_loader_project_when_selecting_loader_then_expands_expecte
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT event_id FROM {events.target}")\n'
+                'SELECT event_id FROM {events.destination}")\n'
             ),
         ),
     )
@@ -971,7 +971,7 @@ def test_given_chained_loader_project_when_excluding_dependency_then_prunes_depe
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT event_id FROM {events.target}")\n'
+                'SELECT event_id FROM {events.destination}")\n'
             ),
         ),
     )
@@ -1022,7 +1022,8 @@ def test_given_chained_loader_project_when_intermediate_has_custom_target_then_r
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                "SELECT event_id, '{events.table_name}' AS source_table FROM {events.target}\")\n"
+                "SELECT event_id, '{events.table_name}' AS source_table "
+                'FROM {events.destination}")\n'
             ),
         ),
     )
@@ -1061,7 +1062,8 @@ INTERMEDIATE_LOADER_STRATEGY_TEST_CASES: list[IntermediateLoaderStrategyE2ETestC
             "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
+            "        f'SELECT event_id, amount FROM {events.destination} '\n"
+            "        'ORDER BY event_id, amount'\n"
             "    )\n"
             "    rows = cursor.fetchall()\n"
             "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
@@ -1096,7 +1098,8 @@ INTERMEDIATE_LOADER_STRATEGY_TEST_CASES: list[IntermediateLoaderStrategyE2ETestC
             "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
+            "        f'SELECT event_id, amount FROM {events.destination} '\n"
+            "        'ORDER BY event_id, amount'\n"
             "    )\n"
             "    rows = cursor.fetchall()\n"
             "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
@@ -1127,7 +1130,8 @@ INTERMEDIATE_LOADER_STRATEGY_TEST_CASES: list[IntermediateLoaderStrategyE2ETestC
             "def raw_events(ctx):\n"
             "    events = ctx.loader(fetch_events)\n"
             "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.target} ORDER BY event_id, amount'\n"
+            "        f'SELECT event_id, amount FROM {events.destination} '\n"
+            "        'ORDER BY event_id, amount'\n"
             "    )\n"
             "    rows = cursor.fetchall()\n"
             "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
@@ -1236,7 +1240,7 @@ def test_given_loader_dependency_failure_when_loading_then_only_dependents_skip(
                 "def raw_bad(ctx):\n"
                 "    events = ctx.loader(fetch_bad)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT event_id FROM {events.target}")\n\n'
+                'SELECT event_id FROM {events.destination}")\n\n'
                 "@loader\n"
                 "def raw_ok(ctx):\n"
                 "    return [{'event_id': 1}]\n"
@@ -1301,7 +1305,7 @@ def test_given_loader_dependency_failure_when_building_then_only_dependents_skip
                 "def raw_bad(ctx):\n"
                 "    events = ctx.loader(fetch_bad)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT event_id FROM {events.target}")\n\n'
+                'SELECT event_id FROM {events.destination}")\n\n'
                 "@loader\n"
                 "def raw_ok(ctx):\n"
                 "    return [{'event_id': 1}]\n"
@@ -1376,7 +1380,7 @@ def test_given_loader_dependency_failure_when_loading_json_then_reports_skipped_
                 "def raw_bad(ctx):\n"
                 "    events = ctx.loader(fetch_bad)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT event_id FROM {events.target}")\n\n'
+                'SELECT event_id FROM {events.destination}")\n\n'
                 "@loader\n"
                 "def raw_ok(ctx):\n"
                 "    return [{'event_id': 1}]\n"
@@ -1499,7 +1503,7 @@ SOURCE_LOADER_ERROR_TEST_CASES: list[SourceLoaderErrorE2ETestCase] = [
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT event_id FROM {events.target}")\n'
+                'SELECT event_id FROM {events.destination}")\n'
             ),
         ),
     ),
@@ -1518,7 +1522,7 @@ SOURCE_LOADER_ERROR_TEST_CASES: list[SourceLoaderErrorE2ETestCase] = [
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
                 '    ctx.execute_sql(f"CREATE OR REPLACE TABLE {ctx.destination} AS '
-                'SELECT * FROM {events.target}")\n'
+                'SELECT * FROM {events.destination}")\n'
             ),
         ),
     ),
