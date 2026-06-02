@@ -285,7 +285,7 @@ def generated_loaders():
         description="generated task and asset dependency validates",
         repo_files=base_repo_files()
         | {
-            "tasks/generated.py": """
+            "factories/generated.py": """
 from sqlbuild.assets import asset
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
@@ -306,6 +306,26 @@ def generated_nodes():
         },
         expected_task_names=("prepare_orders",),
         expected_asset_names=("orders_export",),
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="single-kind factory validates in factories folder",
+        repo_files=base_repo_files()
+        | {
+            "factories/generated_tasks.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_tasks():
+    @task(name="prepare_orders")
+    def prepare(ctx):
+        return None
+
+    return prepare
+""",
+        },
+        expected_task_names=("prepare_orders",),
     ),
 )
 
@@ -443,6 +463,29 @@ def generated_loaders():
 """,
         },
         expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
+    ),
+    DiscoverFactoryValidationTestCase(
+        description="kind-folder factory returning foreign kind fails validation",
+        repo_files=base_repo_files()
+        | {
+            "assets/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+
+
+@factory
+def gen():
+    @loader(name="raw_orders")
+    def load(ctx):
+        return []
+
+    return load
+""",
+        },
+        expected_error_fragment=(
+            "Factory gen in assets/ returned a loader 'raw_orders'; "
+            "mixed-kind factories must live in factories/."
+        ),
     ),
 )
 

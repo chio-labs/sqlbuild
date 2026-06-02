@@ -18,7 +18,7 @@ TEST_CASES: tuple[DiscoverPythonNodeFactoriesTestCase, ...] = (
     DiscoverPythonNodeFactoriesTestCase(
         description="discovers mixed nodes returned by a factory",
         files={
-            "tasks/generated.py": """
+            "factories/generated.py": """
 from sqlbuild.assets import asset
 from sqlbuild.checks import check
 from sqlbuild.factories import factory
@@ -102,19 +102,13 @@ def generated_loaders():
         description="discovers set node returned by a factory",
         files={
             "checks/generated.py": """
-from sqlbuild.assets import asset
 from sqlbuild.checks import check
 from sqlbuild.factories import factory
 
 
-@asset(name="orders_export")
-def export(ctx):
-    return {}
-
-
 @factory
 def generated_checks():
-    @check(name="orders_export_exists", depends_on=export)
+    @check(name="orders_export_exists", depends_on=())
     def generated_check(ctx):
         return True
     return {generated_check}
@@ -122,10 +116,9 @@ def generated_checks():
         },
         expected_loader_names=(),
         expected_task_names=(),
-        expected_asset_names=("orders_export",),
+        expected_asset_names=(),
         expected_check_names=("orders_export_exists",),
-        expected_asset_dependency_counts=(0,),
-        expected_check_dependency_counts=(1,),
+        expected_check_dependency_counts=(0,),
     ),
     DiscoverPythonNodeFactoriesTestCase(
         description="discovers single node returned by a factory in assets folder",
@@ -368,6 +361,27 @@ def broken_factory():
         expected_asset_names=(),
         expected_check_names=(),
         expected_error_fragment="failed during discovery: boom",
+    ),
+    DiscoverPythonNodeFactoriesTestCase(
+        description="raises when direct node kind does not match folder",
+        files={
+            "checks/generated.py": """
+from sqlbuild.assets import asset
+
+
+@asset(name="orders_export")
+def export(ctx):
+    return {}
+""",
+        },
+        expected_loader_names=(),
+        expected_task_names=(),
+        expected_asset_names=(),
+        expected_check_names=(),
+        expected_error_fragment=(
+            "Python node 'orders_export' in checks/ is an asset; "
+            "assets must live in assets/ or be generated from factories/."
+        ),
     ),
 )
 
