@@ -29,7 +29,7 @@ def apply_target_defaults(
         replace(
             m,
             target=_resolve_target(
-                m.target,
+                m.destination,
                 default_schema,
                 default_database,
                 render_qualified_name,
@@ -41,7 +41,7 @@ def apply_target_defaults(
         replace(
             s,
             target=_resolve_target(
-                s.target,
+                s.destination,
                 default_schema,
                 default_database,
                 render_qualified_name,
@@ -62,7 +62,7 @@ def apply_target_defaults(
                 ),
             ),
             fingerprint_target=_resolve_target(
-                f.fingerprint_target,
+                f.fingerprint_destination,
                 default_schema,
                 default_database,
                 render_qualified_name,
@@ -85,7 +85,7 @@ def _resolve_function_target(
         function.language != FunctionLanguage.PYTHON or python_functions_inherit_default_namespace
     )
     resolved: CompiledRelationDestination = _resolve_target(
-        function.target,
+        function.destination,
         default_schema if apply_defaults else None,
         default_database if apply_defaults else None,
         render_qualified_name,

@@ -22,12 +22,12 @@ def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> 
     _validate_required_target_parts(
         adapter_name=adapter_name,
         resource_kind="model",
-        targets={model.name: model.target for model in project.models},
+        targets={model.name: model.destination for model in project.models},
     )
     _validate_required_target_parts(
         adapter_name=adapter_name,
         resource_kind="seed",
-        targets={seed.name: seed.target for seed in project.seeds},
+        targets={seed.name: seed.destination for seed in project.seeds},
     )
 
 

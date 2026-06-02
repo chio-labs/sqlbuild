@@ -220,7 +220,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.target}
+    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
     audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -284,7 +284,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.target}
+    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
     actual_audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes

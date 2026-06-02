@@ -404,8 +404,8 @@ def test_given_snowflake_local_environment_target_namespace_when_compiling_then_
         no_sql_validation=True,
     )
 
-    assert project.models[0].target.database == test_case.expected_database
-    assert project.models[0].target.schema == test_case.expected_schema
+    assert project.models[0].destination.database == test_case.expected_database
+    assert project.models[0].destination.schema == test_case.expected_schema
 
 
 @pytest.mark.parametrize(

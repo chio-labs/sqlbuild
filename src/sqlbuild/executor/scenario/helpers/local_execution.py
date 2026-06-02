@@ -240,7 +240,7 @@ def _build_local_execution_plan(
         expected_expectations.append(
             replace(
                 expected_expectation,
-                actual_target=relation_plan.model_targets[expected_expectation.model_name],
+                actual_destination=relation_plan.model_targets[expected_expectation.model_name],
                 expected_sql=expected_sql,
             )
         )

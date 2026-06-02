@@ -315,17 +315,17 @@ def run_virtual_build(
                     build_destination_from_physical_relation(
                         adapter=adapter,
                         relation=bound_physical_relations[model.name],
-                        fallback_target=model.target,
+                        fallback_target=model.destination,
                     )
                     if model.name in bound_physical_relations
-                    else model.target
+                    else model.destination
                 )
                 for model in graph.project.models
             },
             function_targets={
-                function.name: function.target for function in graph.project.functions
+                function.name: function.destination for function in graph.project.functions
             },
-            seed_targets={seed.name: seed.target for seed in graph.project.seeds},
+            seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
             source_map={source.name: source.source_entry for source in graph.project.sources},
         )
     plan_output = apply_virtual_plan_output(
@@ -674,16 +674,16 @@ def _prepare_custom_virtual_version(
     recorder: StatementRecorder = StatementRecorder()
     adapter.ensure_schema(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
+    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
     if adapter.relation_exists(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
-        name=entry.target.name,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
     ):
         adapter.drop(connection, target=target, if_exists=True, statement_recorder=recorder)
     source: str = resolve_qualified_name_parts(
@@ -698,9 +698,9 @@ def _prepare_custom_virtual_version(
             connection=connection,
             prior_relation=source,
             target=target,
-            target_database=entry.target.database,
-            target_schema=entry.target.schema,
-            target_name=entry.target.name,
+            target_database=entry.destination.database,
+            target_schema=entry.destination.schema,
+            target_name=entry.destination.name,
             config=dict(entry.custom_config),
             placeholders=dict(entry.custom_placeholders),
             run_id=run_id,
@@ -872,7 +872,9 @@ def _persist_successful_virtual_build(
                         ),
                     ),
                 )
-            target: CompiledRelationDestination | None = entry.target if entry is not None else None
+            target: CompiledRelationDestination | None = (
+                entry.destination if entry is not None else None
+            )
             if target is not None:
                 existing_physical_relation: PhysicalRelationRecord | None = (
                     backend.get_physical_relation(
@@ -1084,7 +1086,7 @@ def _create_logical_vde_views(
     final_version_hashes: dict[str, str],
 ) -> None:
     physical_targets: dict[str, CompiledRelationDestination] = {
-        model.name: plan_output.model_targets.get(model.name, model.target)
+        model.name: plan_output.model_targets.get(model.name, model.destination)
         for model in project.models
     }
     connection: Any = adapter.connect(connection_config)
@@ -1099,7 +1101,7 @@ def _create_logical_vde_views(
                 continue
             virtual_target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 virtual_target_name=target_vde_name,
                 unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
             )

@@ -26,14 +26,14 @@ def execute_scenario_fixture(
     statement_recorder: StatementRecorder = StatementRecorder()
     target_relation: str = resolve_destination_qualified_name(
         adapter=adapter,
-        target=fixture_plan.target,
+        target=fixture_plan.destination,
     )
 
     try:
         adapter.ensure_schema(
             connection,
-            database=fixture_plan.target.database,
-            schema=fixture_plan.target.schema,
+            database=fixture_plan.destination.database,
+            schema=fixture_plan.destination.schema,
             statement_recorder=statement_recorder,
         )
         with diagnostics_context(

@@ -40,16 +40,16 @@ def seed_virtual_physical_version(
 
     adapter.ensure_schema(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
+    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
     if adapter.relation_exists(
         connection,
-        database=entry.target.database,
-        schema=entry.target.schema,
-        name=entry.target.name,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
     ):
         adapter.drop(
             connection,

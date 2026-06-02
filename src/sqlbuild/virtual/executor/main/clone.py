@@ -165,7 +165,7 @@ def run_virtual_clone(
             version_hash: str = version_hashes[model_name]
             source_target: CompiledRelationDestination = build_physical_destination(
                 adapter=adapter,
-                target=source_model.target,
+                target=source_model.destination,
                 model_name=model_name,
                 version_hash=version_hash,
             )
@@ -180,7 +180,7 @@ def run_virtual_clone(
             )
             target_target: CompiledRelationDestination = build_physical_destination(
                 adapter=adapter,
-                target=target_model.target,
+                target=target_model.destination,
                 model_name=model_name,
                 version_hash=version_hash,
             )

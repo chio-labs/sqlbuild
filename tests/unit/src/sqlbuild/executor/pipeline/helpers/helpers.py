@@ -175,7 +175,7 @@ def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,

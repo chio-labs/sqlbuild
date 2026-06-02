@@ -111,10 +111,10 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
     """Write executable SQL function DDL."""
 
     for entry in plan_output.function_entries:
-        if entry.target.qualified_name is None:
+        if entry.destination.qualified_name is None:
             continue
         statements: tuple[str, ...] = adapter.render_create_function(
-            target=entry.target.qualified_name,
+            target=entry.destination.qualified_name,
             arguments=entry.arguments,
             returns=entry.returns,
             body_sql=entry.body_sql,
@@ -138,10 +138,10 @@ def _write_static_functions(
     """Write offline rendered SQL function DDL."""
 
     for function in project.functions:
-        if function.target.qualified_name is None:
+        if function.destination.qualified_name is None:
             continue
         statements: tuple[str, ...] = adapter.render_create_function(
-            target=function.target.qualified_name,
+            target=function.destination.qualified_name,
             arguments=function.arguments,
             returns=function.returns,
             body_sql=function.body_sql,

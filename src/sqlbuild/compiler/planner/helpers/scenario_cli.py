@@ -118,7 +118,7 @@ def _scenario_namespace(
     for model_name in (*graph_plan.target_model_names, *graph_plan.model_names):
         model: CompiledModel | None = models_by_name.get(model_name)
         if model is not None:
-            return model.target.database, model.target.schema
+            return model.destination.database, model.destination.schema
     return None, None
 
 

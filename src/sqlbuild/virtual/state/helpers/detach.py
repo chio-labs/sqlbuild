@@ -100,7 +100,7 @@ def detach_from_virtual_state(
                     adapter=adapter,
                     target=build_virtual_logical_destination(
                         adapter=adapter,
-                        target=model.target,
+                        target=model.destination,
                         virtual_target_name=active_target_name,
                         unsuffixed_virtual_target_name=active_target_name,
                     ),
@@ -113,7 +113,9 @@ def detach_from_virtual_state(
             if model_relation_type == "view":
                 adapter.create_view_as(
                     connection,
-                    target=resolve_destination_qualified_name(adapter=adapter, target=model.target),
+                    target=resolve_destination_qualified_name(
+                        adapter=adapter, target=model.destination
+                    ),
                     sql=model.query_sql,
                     statement_recorder=recorder,
                 )
@@ -128,7 +130,9 @@ def detach_from_virtual_state(
             adapter.move_or_copy_relation(
                 connection,
                 source=resolve_destination_qualified_name(adapter=adapter, target=physical_target),
-                target=resolve_destination_qualified_name(adapter=adapter, target=model.target),
+                target=resolve_destination_qualified_name(
+                    adapter=adapter, target=model.destination
+                ),
                 remove_source=False,
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,

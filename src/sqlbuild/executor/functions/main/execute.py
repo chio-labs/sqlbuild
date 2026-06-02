@@ -36,7 +36,7 @@ def execute_function(
 ) -> FunctionExecutionResult:
     """Create or replace one SQL function."""
 
-    if function_entry.target.qualified_name is None:
+    if function_entry.destination.qualified_name is None:
         return FunctionExecutionResult(
             function_name=function_entry.name,
             status=ExecutionStatus.FAILED,
@@ -60,13 +60,13 @@ def execute_function(
             )
         adapter.ensure_schema(
             connection,
-            database=function_entry.target.database,
-            schema=function_entry.target.schema,
+            database=function_entry.destination.database,
+            schema=function_entry.destination.schema,
             statement_recorder=statement_recorder,
         )
         adapter.create_function(
             connection,
-            target=function_entry.target.qualified_name,
+            target=function_entry.destination.qualified_name,
             arguments=function_entry.arguments,
             returns=function_entry.returns,
             body_sql=function_entry.body_sql,
@@ -117,8 +117,10 @@ def _try_write_function_fingerprint(
 ) -> None:
     if not query_change_tracking:
         return
-    fingerprint_schema: str | None = entry.fingerprint_target.schema
-    target_is_unqualified: bool = entry.target.schema is None and entry.target.database is None
+    fingerprint_schema: str | None = entry.fingerprint_destination.schema
+    target_is_unqualified: bool = (
+        entry.destination.schema is None and entry.destination.database is None
+    )
     if target_is_unqualified and not adapter.supports_unqualified_function_fingerprints():
         fingerprint_schema = None
     if fingerprint_schema is None:
@@ -131,16 +133,16 @@ def _try_write_function_fingerprint(
     try:
         adapter.ensure_schema(
             connection,
-            database=entry.fingerprint_target.database,
+            database=entry.fingerprint_destination.database,
             schema=fingerprint_schema,
             statement_recorder=statement_recorder,
         )
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
             model_name=entry.name,
-            target_database=entry.target.database,
-            target_schema=entry.target.schema,
-            target_name=entry.target.name,
+            target_database=entry.destination.database,
+            target_schema=entry.destination.schema,
+            target_name=entry.destination.name,
             run_id=run_id,
             query_hash=compute_query_hash(entry.fingerprint_query_sql),
             ast_hash=compute_ast_hash(entry.fingerprint_query_sql),
@@ -152,7 +154,7 @@ def _try_write_function_fingerprint(
         write_fingerprint(
             connection=connection,
             execute=adapter.execute,
-            database=entry.fingerprint_target.database,
+            database=entry.fingerprint_destination.database,
             schema=fingerprint_schema,
             fingerprint=fingerprint,
             render_qualified_name=adapter.render_qualified_name,

@@ -106,7 +106,7 @@ def rewrite_project_model_targets(
     """Return a compiled project with selected model targets replaced."""
 
     rewritten_models: tuple[CompiledModel, ...] = tuple(
-        replace(model, target=rewritten_targets.get(model.name, model.target))
+        replace(model, target=rewritten_targets.get(model.name, model.destination))
         for model in project.models
     )
     return replace(project, models=rewritten_models)
@@ -126,13 +126,13 @@ def rewrite_project_function_targets(
             function,
             target=build_virtual_destination(
                 adapter=adapter,
-                target=function.target,
+                target=function.destination,
                 virtual_target_name=virtual_target_name,
                 unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
             ),
             fingerprint_target=build_virtual_destination(
                 adapter=adapter,
-                target=function.fingerprint_target,
+                target=function.fingerprint_destination,
                 virtual_target_name=virtual_target_name,
                 unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
             ),
@@ -171,7 +171,7 @@ def build_rewritten_model_targets(
         if selected_version_hash is not None:
             rewritten_targets[model.name] = build_physical_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 model_name=model.name,
                 version_hash=selected_version_hash,
             )
@@ -181,6 +181,6 @@ def build_rewritten_model_targets(
             rewritten_targets[model.name] = build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=bound_relation,
-                fallback_target=model.target,
+                fallback_target=model.destination,
             )
     return rewritten_targets

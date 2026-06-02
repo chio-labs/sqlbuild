@@ -66,8 +66,8 @@ def format_compile_json(plan: PlanOutput) -> str:
             "resolved_sql": entry.resolved_sql,
             "logical_ddl": entry.logical_ddl,
         }
-        if entry.target.qualified_name is not None:
-            model["qualified_name"] = entry.target.qualified_name
+        if entry.destination.qualified_name is not None:
+            model["qualified_name"] = entry.destination.qualified_name
         models.append(model)
 
     seeds: list[dict[str, object]] = [_serialize_seed_entry(e) for e in plan.seed_entries]
@@ -98,15 +98,15 @@ def format_static_compile_json(graph: ProjectGraph) -> str:
             "relative_path": str(model.relative_path),
             "query_sql": model.query_sql,
         }
-        if model.target.qualified_name is not None:
-            item["qualified_name"] = model.target.qualified_name
+        if model.destination.qualified_name is not None:
+            item["qualified_name"] = model.destination.qualified_name
         models.append(item)
 
     seeds: list[dict[str, object]] = []
     for seed in graph.project.seeds:
         item = {"name": seed.name}
-        if seed.target.qualified_name is not None:
-            item["qualified_name"] = seed.target.qualified_name
+        if seed.destination.qualified_name is not None:
+            item["qualified_name"] = seed.destination.qualified_name
         seeds.append(item)
 
     functions: list[dict[str, object]] = []
@@ -121,8 +121,8 @@ def format_static_compile_json(graph: ProjectGraph) -> str:
                 {"name": column.name, "type": column.type} for column in function.return_columns
             ],
         }
-        if function.target.qualified_name is not None:
-            item["qualified_name"] = function.target.qualified_name
+        if function.destination.qualified_name is not None:
+            item["qualified_name"] = function.destination.qualified_name
         functions.append(item)
 
     result: dict[str, object] = {
@@ -176,8 +176,8 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
     if entry.cascade is not None:
         model["cascade"] = _serialize_cascade(entry.cascade)
 
-    if entry.target.qualified_name is not None:
-        model["qualified_name"] = entry.target.qualified_name
+    if entry.destination.qualified_name is not None:
+        model["qualified_name"] = entry.destination.qualified_name
 
     return model
 
@@ -198,8 +198,8 @@ def _serialize_seed_entry(entry: SeedPlanEntry) -> dict[str, object]:
     """Serialize one SeedPlanEntry."""
 
     seed: dict[str, object] = {"name": entry.name}
-    if entry.target.qualified_name is not None:
-        seed["qualified_name"] = entry.target.qualified_name
+    if entry.destination.qualified_name is not None:
+        seed["qualified_name"] = entry.destination.qualified_name
     return seed
 
 
@@ -208,7 +208,7 @@ def _serialize_source_load_entry(entry: SourceLoadPlanEntry) -> dict[str, object
         "name": entry.name,
         "loader": entry.loader,
         "kind": entry.resource_kind.value,
-        "target": entry.target,
+        "target": entry.destination,
         "is_reload": entry.is_reload,
     }
     if entry.write_strategy is not None:
@@ -233,8 +233,8 @@ def _serialize_function_entry(entry: FunctionPlanEntry) -> dict[str, object]:
             {"name": column.name, "type": column.type} for column in entry.return_columns
         ],
     }
-    if entry.target.qualified_name is not None:
-        function["qualified_name"] = entry.target.qualified_name
+    if entry.destination.qualified_name is not None:
+        function["qualified_name"] = entry.destination.qualified_name
     return function
 
 

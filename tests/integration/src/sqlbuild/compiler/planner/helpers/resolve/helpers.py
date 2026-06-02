@@ -45,7 +45,7 @@ def build_model(
         relative_path=Path(f"models/{name}.sql"),
         query_sql=query_sql,
         config=CompileModelConfig(values=config),
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=schema,
             name=name,

@@ -68,7 +68,7 @@ def plan_test(
 
     if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
         function_targets: dict[str, CompiledRelationDestination] = {
-            function.name: function.target for function in project.functions
+            function.name: function.destination for function in project.functions
         }
         return (
             _plan_direct_logic_test(
@@ -84,7 +84,7 @@ def plan_test(
 
     model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
     function_targets: dict[str, CompiledRelationDestination] = {
-        function.name: function.target for function in project.functions
+        function.name: function.destination for function in project.functions
     }
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)

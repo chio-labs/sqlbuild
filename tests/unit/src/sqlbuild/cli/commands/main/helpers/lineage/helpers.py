@@ -107,7 +107,7 @@ def build_lineage_test_graph() -> ProjectGraph:
                 ),
                 schema_entry=SchemaSeedEntry(name="waffle_types"),
                 schema_file=schema_file,
-                target=_target("waffle_types"),
+                destination=_target("waffle_types"),
             ),
         ),
     )
@@ -235,7 +235,7 @@ def _model(
         relative_path=Path(relative_path),
         query_sql=query_sql,
         config=CompileModelConfig(),
-        target=_target(name),
+        destination=_target(name),
         inferred_columns=tuple(InferredColumn(column) for column in inferred_columns),
     )
 

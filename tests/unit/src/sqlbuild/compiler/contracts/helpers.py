@@ -53,7 +53,7 @@ def make_contract_project(
                 config=CompileModelConfig(
                     values={} if contract is None else {"contract": contract}
                 ),
-                target=CompiledRelationDestination(
+                destination=CompiledRelationDestination(
                     database=None,
                     schema="analytics",
                     name=model_name,

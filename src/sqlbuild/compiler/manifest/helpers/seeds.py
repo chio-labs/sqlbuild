@@ -18,8 +18,8 @@ def build_seed_node(
     relative_path_str: str = str(seed.seed_file.relative_path)
 
     return {
-        "database": seed.target.database,
-        "schema": seed.target.schema,
+        "database": seed.destination.database,
+        "schema": seed.destination.schema,
         "name": seed.name,
         "resource_type": RESOURCE_TYPE_SEED,
         "package_name": project_name,
@@ -30,7 +30,7 @@ def build_seed_node(
             project_name=project_name,
             relative_path=seed.seed_file.relative_path,
         ),
-        "alias": seed.target.name,
+        "alias": seed.destination.name,
         "checksum": {
             "name": CHECKSUM_HASH_NAME,
             "checksum": "",
@@ -38,8 +38,8 @@ def build_seed_node(
         "config": {
             "enabled": True,
             "alias": None,
-            "schema": seed.target.schema,
-            "database": seed.target.database,
+            "schema": seed.destination.schema,
+            "database": seed.destination.database,
             "tags": [],
             "meta": {},
             "group": None,
@@ -72,7 +72,7 @@ def build_seed_node(
         "created_at": 0.0,
         "config_call_dict": {},
         "unrendered_config_call_dict": {},
-        "relation_name": seed.target.qualified_name,
+        "relation_name": seed.destination.qualified_name,
         "raw_code": "",
         "root_path": None,
         "depends_on": {"macros": []},

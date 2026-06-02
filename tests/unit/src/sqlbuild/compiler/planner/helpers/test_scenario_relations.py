@@ -165,7 +165,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
         f"{fixture.kind.value}:{fixture.logical_name}": fixture.sql for fixture in result
     } == test_case.expected_fixture_sql
     assert {
-        f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.destination.qualified_name
         for fixture in result
     } == test_case.expected_fixture_targets
 
@@ -272,7 +272,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         f"{fixture.kind.value}:{fixture.logical_name}": fixture.sql for fixture in result
     } == test_case.expected_fixture_sql
     assert {
-        f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.destination.qualified_name
         for fixture in result
     } == test_case.expected_fixture_targets
 
@@ -324,7 +324,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
                     "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
                 ),
             },
-            expected_expected_actual_targets={
+            expected_expected_actual_destinations={
                 "daily_revenue": "scenario_schema.__sqb_51b385aebe20__model__daily_revenue",
             },
             expected_expected_sql={
@@ -376,28 +376,28 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
     assert warnings == ()
     assert isinstance(result, ScenarioExecutionPlan)
     assert {
-        entry.name: entry.target.qualified_name for entry in result.model_entries
+        entry.name: entry.destination.qualified_name for entry in result.model_entries
     } == test_case.expected_model_entry_targets
     for entry in result.model_entries:
         for expected_fragment in test_case.expected_model_entry_sql_fragments[entry.name]:
             assert expected_fragment in entry.resolved_sql
     assert {
-        f"{fixture.kind.value}:{fixture.logical_name}": fixture.target.qualified_name
+        f"{fixture.kind.value}:{fixture.logical_name}": fixture.destination.qualified_name
         for fixture in result.fixture_plans
     } == test_case.expected_fixture_targets
     assert {
-        entry.name: entry.target.qualified_name for entry in result.seed_entries
+        entry.name: entry.destination.qualified_name for entry in result.seed_entries
     } == test_case.expected_seed_entry_targets
     assert {
-        entry.name: entry.target.qualified_name for entry in result.function_entries
+        entry.name: entry.destination.qualified_name for entry in result.function_entries
     } == test_case.expected_function_entry_targets
     for entry in result.function_entries:
         for expected_fragment in test_case.expected_function_entry_sql_fragments[entry.name]:
             assert expected_fragment in entry.body_sql
     assert {
-        expectation.model_name: expectation.actual_target.qualified_name
+        expectation.model_name: expectation.actual_destination.qualified_name
         for expectation in result.expected_expectations
-    } == test_case.expected_expected_actual_targets
+    } == test_case.expected_expected_actual_destinations
     assert {
         expectation.model_name: expectation.expected_sql
         for expectation in result.expected_expectations
@@ -480,7 +480,7 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
         fixture.logical_name for fixture in result.fixture_plans if fixture.kind.value == "seed"
     } == test_case.expected_seed_fixture_names
     assert {
-        entry.name: entry.target.qualified_name for entry in result.seed_entries
+        entry.name: entry.destination.qualified_name for entry in result.seed_entries
     } == test_case.expected_seed_entry_targets
 
 

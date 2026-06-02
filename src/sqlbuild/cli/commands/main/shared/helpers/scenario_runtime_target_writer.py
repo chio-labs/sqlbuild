@@ -90,7 +90,7 @@ def write_scenario_runtime_target(
         )
         actual_relation: str = resolve_destination_qualified_name(
             adapter=adapter,
-            target=expected_expectation.actual_target,
+            target=expected_expectation.actual_destination,
         )
         _write_sql(
             path=expected_path,
@@ -214,7 +214,8 @@ def _write_local_function_artifacts(
             sql="\n\n".join(
                 _format_statement(statement)
                 for statement in adapter.render_create_function(
-                    target=function_entry.target.qualified_name or function_entry.target.name,
+                    target=function_entry.destination.qualified_name
+                    or function_entry.destination.name,
                     arguments=function_entry.arguments,
                     returns=function_entry.returns,
                     body_sql=function_entry.body_sql,
@@ -245,7 +246,7 @@ def _write_local_expectation_artifacts(
         )
         actual_relation: str = resolve_destination_qualified_name(
             adapter=adapter,
-            target=expected_expectation.actual_target,
+            target=expected_expectation.actual_destination,
         )
         _write_sql(
             path=expected_path,

@@ -352,7 +352,7 @@ def build_orders_project_graph() -> ProjectGraph:
         relative_path=Path("models/orders.sql"),
         query_sql="select * from __source('raw_orders')",
         config=CompileModelConfig(values={"tags": ["daily"]}),
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=None,
             name="orders",

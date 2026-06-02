@@ -67,7 +67,7 @@ def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None,
             schema=schema,
             name=name,

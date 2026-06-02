@@ -46,7 +46,7 @@ def build_custom_plan_entry(
         materialization_type=MaterializationType.CUSTOM,
         action=PlanAction.CUSTOM,
         reason=reason,
-        target=CompiledRelationDestination(
+        destination=CompiledRelationDestination(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql=sql,

@@ -32,7 +32,7 @@ def build_project(*, target: CompiledRelationDestination) -> CompiledProject:
                 relative_path=Path("models/staging/stg_customers.sql"),
                 query_sql="SELECT 1",
                 config=CompileModelConfig(values={}),
-                target=target,
+                destination=target,
             ),
         ),
     )

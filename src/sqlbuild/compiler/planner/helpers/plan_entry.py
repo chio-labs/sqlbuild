@@ -434,7 +434,7 @@ def plan_model_from_change(
         adapter=adapter,
         action=action,
         resolved_sql=resolved_sql,
-        target=model.target,
+        destination=model.destination,
         unique_key=unique_key,
         warehouse_columns=warehouse_columns,
         cursor_column=cursor_column,
@@ -448,7 +448,7 @@ def plan_model_from_change(
         materialization_type=materialization_type,
         action=action,
         reason=reason,
-        target=model.target,
+        destination=model.destination,
         fingerprint_query_sql=model.query_sql,
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
@@ -852,7 +852,7 @@ def _build_logical_ddl_from_adapter(
     adapter: BaseAdapter,
     action: PlanAction,
     resolved_sql: str,
-    target: CompiledRelationDestination,
+    destination: CompiledRelationDestination,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
     cursor_column: str | None = None,
@@ -860,7 +860,7 @@ def _build_logical_ddl_from_adapter(
 ) -> str:
     """Generate logical DDL using adapter render methods."""
 
-    qualified_name: str = target.qualified_name or target.name
+    qualified_name: str = destination.qualified_name or destination.name
 
     if action == PlanAction.CREATE_VIEW:
         return ";\n\n".join(adapter.render_create_view_as(target=qualified_name, sql=resolved_sql))

@@ -72,15 +72,15 @@ def adopt_into_virtual_state(
         for model in graph.project.models:
             if not adapter.relation_exists(
                 connection,
-                database=model.target.database,
-                schema=model.target.schema,
-                name=model.target.name,
+                database=model.destination.database,
+                schema=model.destination.schema,
+                name=model.destination.name,
             ):
                 continue
             version_hash: str = model.name
             physical_target: CompiledRelationDestination = build_virtual_physical_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 model_name=model.name,
                 version_hash=version_hash,
             )
@@ -95,7 +95,9 @@ def adopt_into_virtual_state(
             )
             adapter.move_or_copy_relation(
                 connection,
-                source=resolve_destination_qualified_name(adapter=adapter, target=model.target),
+                source=resolve_destination_qualified_name(
+                    adapter=adapter, target=model.destination
+                ),
                 target=resolve_destination_qualified_name(adapter=adapter, target=physical_target),
                 remove_source=model_relation_type != "view",
                 allow_copy_fallback=allow_copy,
@@ -104,12 +106,14 @@ def adopt_into_virtual_state(
             if model_relation_type == "view":
                 adapter.drop_view(
                     connection,
-                    target=resolve_destination_qualified_name(adapter=adapter, target=model.target),
+                    target=resolve_destination_qualified_name(
+                        adapter=adapter, target=model.destination
+                    ),
                     statement_recorder=recorder,
                 )
             virtual_target: CompiledRelationDestination = build_virtual_logical_destination(
                 adapter=adapter,
-                target=model.target,
+                target=model.destination,
                 virtual_target_name=active_target_name,
                 unsuffixed_virtual_target_name=active_target_name,
             )

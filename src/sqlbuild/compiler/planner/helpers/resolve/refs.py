@@ -258,7 +258,7 @@ def build_model_targets(
 ) -> dict[str, CompiledRelationDestination]:
     """Build a lookup of model name to compiled relation target."""
 
-    return {model.name: model.target for model in models}
+    return {model.name: model.destination for model in models}
 
 
 def build_seed_targets(
@@ -266,7 +266,7 @@ def build_seed_targets(
 ) -> dict[str, CompiledRelationDestination]:
     """Build a lookup of seed name to compiled relation target."""
 
-    return {seed.name: seed.target for seed in seeds}
+    return {seed.name: seed.destination for seed in seeds}
 
 
 def build_function_targets(
@@ -274,7 +274,7 @@ def build_function_targets(
 ) -> dict[str, CompiledRelationDestination]:
     """Build a lookup of function name to compiled relation target."""
 
-    return {function.name: function.target for function in functions}
+    return {function.name: function.destination for function in functions}
 
 
 def apply_deferred_targets(
