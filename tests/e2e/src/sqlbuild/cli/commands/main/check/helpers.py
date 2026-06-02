@@ -143,9 +143,10 @@ def prepare_virtual_python_check_project(*, tmp_path: Path) -> Path:
             "sqlbuild_project.toml": """
 name = "virtual_python_check_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -193,9 +194,10 @@ def prepare_virtual_failing_python_check_project(*, tmp_path: Path) -> Path:
             "sqlbuild_project.toml": """
 name = "virtual_failing_python_check_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"

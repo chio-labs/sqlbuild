@@ -690,9 +690,10 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
             "sqlbuild_project.toml": (
                 'name = "virtual_janitor_detached_vde"\n'
                 'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
                 "[settings]\n"
                 "virtual_environments = true\n"
-                'default_target = "dev"\n\n'
+                "\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -797,9 +798,10 @@ def test_given_old_detached_vde_when_running_janitor_then_retention_allows_clean
             "sqlbuild_project.toml": (
                 'name = "virtual_janitor_detached_vde_retention"\n'
                 'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
                 "[settings]\n"
                 "virtual_environments = true\n"
-                'default_target = "dev"\n\n'
+                "\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
