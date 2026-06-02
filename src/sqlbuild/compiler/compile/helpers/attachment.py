@@ -2905,18 +2905,18 @@ def build_model_context_values(
     if not include_target_values:
         return context_values
 
-    target_database: str | None = logical_database
-    target_schema: str | None = logical_schema
-    target_table: str = logical_alias
-    target_qualified: str | None = None
-    if target_database is not None and target_schema is not None:
-        target_qualified = f"{target_database}.{target_schema}.{target_table}"
-    elif target_schema is not None:
-        target_qualified = f"{target_schema}.{target_table}"
-    context_values[CompileContextKey.TARGET_DATABASE] = target_database
-    context_values[CompileContextKey.TARGET_SCHEMA] = target_schema
-    context_values[CompileContextKey.TARGET_TABLE] = target_table
-    context_values[CompileContextKey.TARGET_QUALIFIED] = target_qualified
+    destination_database: str | None = logical_database
+    destination_schema: str | None = logical_schema
+    destination_table: str = logical_alias
+    destination_qualified: str | None = None
+    if destination_database is not None and destination_schema is not None:
+        destination_qualified = f"{destination_database}.{destination_schema}.{destination_table}"
+    elif destination_schema is not None:
+        destination_qualified = f"{destination_schema}.{destination_table}"
+    context_values[CompileContextKey.DESTINATION_DATABASE] = destination_database
+    context_values[CompileContextKey.DESTINATION_SCHEMA] = destination_schema
+    context_values[CompileContextKey.DESTINATION_TABLE] = destination_table
+    context_values[CompileContextKey.DESTINATION_QUALIFIED] = destination_qualified
     return context_values
 
 

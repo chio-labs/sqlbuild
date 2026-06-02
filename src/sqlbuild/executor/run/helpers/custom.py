@@ -45,10 +45,10 @@ def execute_custom_entry(
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
-    target_database: str | None = entry.destination.database
-    target_schema: str | None = entry.destination.schema
-    target_name: str = entry.destination.name
-    target_qualified: str = resolve_destination_qualified_name(
+    destination_database: str | None = entry.destination.database
+    destination_schema: str | None = entry.destination.schema
+    destination_name: str = entry.destination.name
+    destination_qualified: str = resolve_destination_qualified_name(
         adapter=adapter, target=entry.destination
     )
     warnings: list[str] = []
@@ -57,8 +57,8 @@ def execute_custom_entry(
 
     adapter.ensure_schema(
         connection,
-        database=target_database,
-        schema=target_schema,
+        database=destination_database,
+        schema=destination_schema,
         statement_recorder=statement_recorder,
     )
 
@@ -101,10 +101,10 @@ def execute_custom_entry(
     ctx: MaterializationContext = MaterializationContext(
         adapter=adapter,
         connection=connection,
-        target=target_qualified,
-        target_database=target_database,
-        target_schema=target_schema,
-        target_name=target_name,
+        destination=destination_qualified,
+        destination_database=destination_database,
+        destination_schema=destination_schema,
+        destination_name=destination_name,
         sql=entry.resolved_sql,
         config=config_dict,
         placeholders=placeholders_dict,

@@ -121,7 +121,7 @@ class LoaderContext:
             name=name,
         )
 
-    def qualify_in_target_schema(self, name: str) -> str:
+    def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
         return self.qualify_name(name)

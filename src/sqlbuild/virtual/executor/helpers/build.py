@@ -678,14 +678,14 @@ def _prepare_custom_virtual_version(
         schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
+    destination: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
     if adapter.relation_exists(
         connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         name=entry.destination.name,
     ):
-        adapter.drop(connection, target=target, if_exists=True, statement_recorder=recorder)
+        adapter.drop(connection, target=destination, if_exists=True, statement_recorder=recorder)
     source: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=parent_relation.database_name,
@@ -697,10 +697,10 @@ def _prepare_custom_virtual_version(
             adapter=adapter,
             connection=connection,
             prior_relation=source,
-            target=target,
-            target_database=entry.destination.database,
-            target_schema=entry.destination.schema,
-            target_name=entry.destination.name,
+            destination=destination,
+            destination_database=entry.destination.database,
+            destination_schema=entry.destination.schema,
+            destination_name=entry.destination.name,
             config=dict(entry.custom_config),
             placeholders=dict(entry.custom_placeholders),
             run_id=run_id,

@@ -17,10 +17,10 @@ class CompileContextKey(StrEnum):
     MODEL_DATABASE = "model.database"
     MODEL_SCHEMA = "model.schema"
     MODEL_ALIAS = "model.alias"
-    TARGET_DATABASE = "target.database"
-    TARGET_SCHEMA = "target.schema"
-    TARGET_TABLE = "target.table"
-    TARGET_QUALIFIED = "target.qualified"
+    DESTINATION_DATABASE = "destination.database"
+    DESTINATION_SCHEMA = "destination.schema"
+    DESTINATION_TABLE = "destination.table"
+    DESTINATION_QUALIFIED = "destination.qualified"
 
 
 class TemplateNamespace(StrEnum):
