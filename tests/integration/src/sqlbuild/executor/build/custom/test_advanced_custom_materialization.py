@@ -389,11 +389,11 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
     (mat_dir / "test_custom.py").write_text(
         "def materialize(ctx):\n"
         "    ctx.adapter.create_table_as(\n"
-        "        ctx.connection, target=ctx.target, sql=ctx.sql,\n"
+        "        ctx.connection, target=ctx.destination, sql=ctx.sql,\n"
         "        statement_recorder=ctx.statement_recorder,\n"
         "    )\n"
         "    from sqlbuild.executor.custom.models import MaterializationResult\n"
-        "    return MaterializationResult(relation=ctx.target)\n",
+        "    return MaterializationResult(relation=ctx.destination)\n",
         encoding="utf-8",
     )
 
@@ -401,11 +401,11 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
         augmented_sql: str = f"SELECT *, 'via_custom_fn' AS custom_marker FROM ({ctx.sql}) sub"
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.target,
+            target=ctx.destination,
             sql=augmented_sql,
             statement_recorder=ctx.statement_recorder,
         )
-        return MaterializationResult(relation=ctx.target)
+        return MaterializationResult(relation=ctx.destination)
 
     custom_materializations: dict[
         str, Callable[[MaterializationContext], MaterializationResult]

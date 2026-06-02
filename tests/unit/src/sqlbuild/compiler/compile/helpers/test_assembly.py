@@ -196,8 +196,8 @@ schema = "env_schema"
             "seeds/lookups.yml": """
 seeds:
   - name: country_codes
-    database: "${if(ENV:USE_SEED_DB, 'seed_db', CTX:target.database)}"
-    schema: "${CTX:target.schema}_${seed_schema_suffix}"
+    database: "${if(ENV:USE_SEED_DB, 'seed_db', CTX:destination.database)}"
+    schema: "${CTX:destination.schema}_${seed_schema_suffix}"
     columns:
       - name: code
         type: VARCHAR

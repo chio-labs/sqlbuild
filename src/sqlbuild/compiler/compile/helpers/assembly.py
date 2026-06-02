@@ -677,10 +677,10 @@ def _expand_seed_target_value(
                 "model.database": database,
                 "model.schema": schema,
                 "model.alias": seed_name,
-                "target.database": database,
-                "target.schema": schema,
-                "target.table": seed_name,
-                "target.qualified": _build_seed_target_qualified_context(
+                "destination.database": database,
+                "destination.schema": schema,
+                "destination.table": seed_name,
+                "destination.qualified": _build_seed_destination_qualified_context(
                     database=database,
                     schema=schema,
                     name=seed_name,
@@ -694,7 +694,7 @@ def _expand_seed_target_value(
     )
 
 
-def _build_seed_target_qualified_context(
+def _build_seed_destination_qualified_context(
     *, database: str | None, schema: str | None, name: str
 ) -> str | None:
     if database is not None and schema is not None:

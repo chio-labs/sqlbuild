@@ -363,7 +363,7 @@ CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
         expected_var_key="user",
         expected_var_value="kevin",
         expected_qualified_name="meta.partition_state",
-        expected_target_schema_qualified_name="main.partition_state",
+        expected_destination_schema_qualified_name="main.partition_state",
         expected_preserved_qualified_name="external.partition_state",
     ),
     ContextVerificationTestCase(
@@ -384,7 +384,7 @@ CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
         expected_var_key="schema_prefix",
         expected_var_value="staging",
         expected_qualified_name="meta.partition_state",
-        expected_target_schema_qualified_name="main.partition_state",
+        expected_destination_schema_qualified_name="main.partition_state",
         expected_preserved_qualified_name="external.partition_state",
     ),
 ]
@@ -415,23 +415,25 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         captured["query_changed"] = ctx.query_changed
         captured["config"] = ctx.config
         captured["placeholders"] = ctx.placeholders
-        captured["relation"] = ctx.target
+        captured["relation"] = ctx.destination
         captured["target"] = ctx.build_target
         captured["vars"] = ctx.vars
         captured["qualified_name"] = ctx.qualify_name(
             "partition_state", schema="meta", database=None
         )
-        captured["target_schema_qualified_name"] = ctx.qualify_in_target_schema("partition_state")
-        captured["preserved_qualified_name"] = ctx.qualify_in_target_schema(
+        captured["destination_schema_qualified_name"] = ctx.qualify_in_destination_schema(
+            "partition_state"
+        )
+        captured["preserved_qualified_name"] = ctx.qualify_in_destination_schema(
             "external.partition_state"
         )
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.target,
+            target=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
-        return MaterializationResult(relation=ctx.target)
+        return MaterializationResult(relation=ctx.destination)
 
     run_custom_entry(
         adapter=adapter,
@@ -451,6 +453,7 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
     assert captured["vars"][test_case.expected_var_key] == test_case.expected_var_value
     assert captured["qualified_name"] == test_case.expected_qualified_name
     assert (
-        captured["target_schema_qualified_name"] == test_case.expected_target_schema_qualified_name
+        captured["destination_schema_qualified_name"]
+        == test_case.expected_destination_schema_qualified_name
     )
     assert captured["preserved_qualified_name"] == test_case.expected_preserved_qualified_name

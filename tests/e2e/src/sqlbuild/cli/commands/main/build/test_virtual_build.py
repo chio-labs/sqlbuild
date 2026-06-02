@@ -643,7 +643,7 @@ from sqlbuild.virtual.executor.models import VersionPrepareContext
 
 def prepare_version(ctx: VersionPrepareContext) -> None:
     ctx.execute_sql(
-        f"CREATE TABLE {ctx.target} AS "
+        f"CREATE TABLE {ctx.destination} AS "
         f"SELECT id, amount_cents, 'prepared' AS version_marker FROM {ctx.prior_relation}"
     )
 
@@ -655,19 +655,19 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     )
     exists = ctx.adapter.relation_exists(
         ctx.connection,
-        database=ctx.target_database,
-        schema=ctx.target_schema,
-        name=ctx.target_name,
+        database=ctx.destination_database,
+        schema=ctx.destination_schema,
+        name=ctx.destination_name,
     )
     if not exists:
-        ctx.execute_sql(f"CREATE TABLE {ctx.target} AS {incoming}")
+        ctx.execute_sql(f"CREATE TABLE {ctx.destination} AS {incoming}")
     else:
         ctx.execute_sql(
-            f"DELETE FROM {ctx.target} WHERE id IN "
+            f"DELETE FROM {ctx.destination} WHERE id IN "
             f"(SELECT id FROM ({ctx.sql}) AS model_sql)"
         )
-        ctx.execute_sql(f"INSERT INTO {ctx.target} {incoming}")
-    return MaterializationResult(relation=ctx.target)
+        ctx.execute_sql(f"INSERT INTO {ctx.destination} {incoming}")
+    return MaterializationResult(relation=ctx.destination)
 """,
             "models/orders.sql": """
 MODEL (materialized merge_by_id);

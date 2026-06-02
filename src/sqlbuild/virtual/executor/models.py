@@ -23,10 +23,10 @@ class VersionPrepareContext:
     adapter: BaseAdapter
     connection: Any
     prior_relation: str
-    target: str
-    target_database: str | None
-    target_schema: str | None
-    target_name: str
+    destination: str
+    destination_database: str | None
+    destination_schema: str | None
+    destination_name: str
     config: dict[str, Any]
     placeholders: dict[str, str]
     run_id: str
@@ -58,13 +58,13 @@ class VersionPrepareContext:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,
-            database=self.target_database if database is None else database,
-            schema=self.target_schema if schema is None else schema,
+            database=self.destination_database if database is None else database,
+            schema=self.destination_schema if schema is None else schema,
             name=name,
         )
 
-    def qualify_in_target_schema(self, name: str) -> str:
-        """Return a relation name qualified into the target database/schema."""
+    def qualify_in_destination_schema(self, name: str) -> str:
+        """Return a relation name qualified into the destination database/schema."""
 
         return self.qualify_name(name)
 
