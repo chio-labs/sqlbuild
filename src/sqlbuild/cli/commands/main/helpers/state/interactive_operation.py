@@ -40,7 +40,7 @@ def run_interactive_state_operation(
     )
     if target_name is None:
         raise CliUserError(
-            f"state {state_command.value} requires an active environment",
+            f"state {state_command.value} requires an active target",
             code="C255",
         )
     effective_target: TargetConfig | None = discovered_inputs.project_config.targets.get(

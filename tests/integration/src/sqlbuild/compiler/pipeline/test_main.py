@@ -438,9 +438,9 @@ def test_given_snowflake_local_environment_target_namespace_when_compiling_then_
             },
         ),
     ],
-    ids=["defer-to resolves unselected ref to deferred environment schema"],
+    ids=["defer-to resolves unselected ref to deferred target schema"],
 )
-def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferred_env(
+def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferred_target(
     test_case: DeferToIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],

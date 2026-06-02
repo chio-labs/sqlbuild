@@ -49,7 +49,7 @@ def adopt_into_virtual_state(
         selected_target=None,
     )
     if active_target_name is None:
-        raise PlannerInputError("state adopt requires an active environment", code="C259")
+        raise PlannerInputError("state adopt requires an active target", code="C259")
     operation_id: str = f"adopt:{active_target_name}"
     record_state_operation(
         backend,

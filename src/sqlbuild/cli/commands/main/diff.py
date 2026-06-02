@@ -15,8 +15,8 @@ from sqlbuild.cli.commands.main.helpers.diff.virtual_output import format_virtua
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
-    resolve_environment_connection_config,
     resolve_project_connection_config,
+    resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
@@ -93,9 +93,9 @@ def run_diff(
             allow_partial_diff=allow_partial_diff,
         )
     if from_target not in discovered_inputs.project_config.targets:
-        raise CliUserError(f"unknown diff FROM environment '{from_target}'", code="C205")
+        raise CliUserError(f"unknown diff FROM target '{from_target}'", code="C205")
     if to_target not in discovered_inputs.project_config.targets:
-        raise CliUserError(f"unknown diff TO environment '{to_target}'", code="C206")
+        raise CliUserError(f"unknown diff TO target '{to_target}'", code="C206")
 
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -129,7 +129,7 @@ def run_diff(
     effective_max_row_only_examples: int = (
         max_row_only_examples if max_row_only_examples is not None else (10 if verbose else 3)
     )
-    connection_config: dict[str, object] = resolve_environment_connection_config(
+    connection_config: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         target_name=to_target,

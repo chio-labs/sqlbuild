@@ -70,7 +70,7 @@ def build_source_read_map(
         source_target_name not in project_config.targets
         and source_target_name not in local_config.targets
     ):
-        raise PlannerInputError(f"Unknown source deferral environment '{source_target_name}'")
+        raise PlannerInputError(f"Unknown source deferral target '{source_target_name}'")
     source_environment: TargetConfig = _resolve_target_config(
         project_config=project_config,
         local_config=local_config,
@@ -202,15 +202,15 @@ def _source_entry_for_environment(
         return source_entry
     database: str | None = source_entry.database
     if database is None:
-        database = _resolve_env_field(
-            env_value=target_config.database,
+        database = _resolve_target_field(
+            target_value=target_config.database,
             logical_value=source_entry.database,
             effective_vars=effective_vars,
         )
     schema: str | None = source_entry.schema
     if schema is None:
-        schema = _resolve_env_field(
-            env_value=target_config.schema,
+        schema = _resolve_target_field(
+            target_value=target_config.schema,
             logical_value=source_entry.schema,
             effective_vars=effective_vars,
         )
@@ -221,10 +221,10 @@ def _source_entry_for_environment(
     )
 
 
-def _resolve_env_field(
-    *, env_value: str | None, logical_value: str | None, effective_vars: dict[str, object]
+def _resolve_target_field(
+    *, target_value: str | None, logical_value: str | None, effective_vars: dict[str, object]
 ) -> str | None:
-    if env_value is None:
+    if target_value is None:
         return logical_value
 
     def _replace_ctx(match: re.Match[str]) -> str:
@@ -233,7 +233,7 @@ def _resolve_env_field(
             return logical_value if logical_value is not None else ""
         return match.group(0)
 
-    result: str = _CTX_PATTERN.sub(_replace_ctx, env_value)
+    result: str = _CTX_PATTERN.sub(_replace_ctx, target_value)
 
     def _replace_var(match: re.Match[str]) -> str:
         var_name: str = match.group(1)
@@ -248,18 +248,18 @@ def _resolve_env_field(
 
 
 def _missing_source_deferral_message(target_name: str | None) -> str:
-    active_environment: str = target_name if target_name is not None else "<none>"
-    example_environment: str = target_name if target_name is not None else "dev"
+    active_target: str = target_name if target_name is not None else "<none>"
+    example_target: str = target_name if target_name is not None else "dev"
     return (
-        f"Missing source deferral config for environment '{active_environment}'.\n\n"
+        f"Missing source deferral config for target '{active_target}'.\n\n"
         "This project has sources with loaders. A loader writes data to the active "
-        "environment, but models may need to read source data from another environment. "
+        "target, but models may need to read source data from another target. "
         "SQLBuild will not guess.\n\n"
         "Add one of these:\n\n"
-        f"    [targets.{example_environment}]\n"
+        f"    [targets.{example_target}]\n"
         '    defer_sources_to = "prod"  # example: read production source data in dev\n\n'
         "or:\n\n"
-        f"    [targets.{example_environment}]\n"
-        f'    defer_sources_to = "{example_environment}"   '
-        f"# read source data loaded into {example_environment}"
+        f"    [targets.{example_target}]\n"
+        f'    defer_sources_to = "{example_target}"   '
+        f"# read source data loaded into {example_target}"
     )

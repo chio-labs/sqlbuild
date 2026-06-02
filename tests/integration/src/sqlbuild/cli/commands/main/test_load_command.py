@@ -708,7 +708,7 @@ SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
         expected_loaded_source_rows=((7, "loaded"),),
     ),
     SourceDeferralBuildTestCase(
-        description="build cli override reads managed sources from active environment",
+        description="build cli override reads managed sources from active target",
         command="build",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         defer_sources_to="dev",
@@ -717,7 +717,7 @@ SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
         expected_loaded_source_rows=((7, "loaded"),),
     ),
     SourceDeferralBuildTestCase(
-        description="run cli override reads managed sources from active environment",
+        description="run cli override reads managed sources from active target",
         command="run",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         defer_sources_to="dev",
@@ -981,7 +981,7 @@ SOURCE_DEFERRAL_ERROR_TEST_CASES: list[SourceDeferralErrorTestCase] = [
         description="managed source read with unknown cli deferral environment errors",
         project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
         defer_sources_to="missing_env",
-        expected_error_fragment="Unknown source deferral environment 'missing_env'",
+        expected_error_fragment="Unknown source deferral target 'missing_env'",
     ),
     SourceDeferralErrorTestCase(
         description="selected sql function managed source read without deferral config errors",

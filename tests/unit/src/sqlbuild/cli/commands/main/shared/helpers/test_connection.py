@@ -7,8 +7,8 @@ import pytest
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
     resolve_connection_config,
-    resolve_environment_connection_config,
     resolve_project_connection_config,
+    resolve_target_connection_config,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
@@ -113,9 +113,7 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
     "test_case",
     [
         ResolveEnvironmentConnectionConfigTestCase(
-            description=(
-                "resolves environment connection with expanded env vars and local overrides"
-            ),
+            description="resolves target connection with expanded env vars and local overrides",
             target_name="prod",
             expected_connection={
                 "account": "test-account",
@@ -125,9 +123,9 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
             },
         )
     ],
-    ids=["resolves environment connection with expanded env vars and local overrides"],
+    ids=["resolves target connection with expanded env vars and local overrides"],
 )
-def test_given_environment_connection_when_resolving_then_it_expands_effective_config(
+def test_given_target_connection_when_resolving_then_it_expands_effective_config(
     test_case: ResolveEnvironmentConnectionConfigTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -149,7 +147,7 @@ def test_given_environment_connection_when_resolving_then_it_expands_effective_c
         local_config=LocalConfig(connection={"warehouse": "local_wh"}),
     )
 
-    connection: dict[str, object] = resolve_environment_connection_config(
+    connection: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=tmp_path,
         target_name=test_case.target_name,

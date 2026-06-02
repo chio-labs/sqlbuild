@@ -28,7 +28,7 @@ def apply_target_defaults(
     models: tuple[CompiledModel, ...] = tuple(
         replace(
             m,
-            target=_resolve_target(
+            destination=_resolve_target(
                 m.destination,
                 default_schema,
                 default_database,
@@ -40,7 +40,7 @@ def apply_target_defaults(
     seeds: tuple[CompiledSeed, ...] = tuple(
         replace(
             s,
-            target=_resolve_target(
+            destination=_resolve_target(
                 s.destination,
                 default_schema,
                 default_database,
@@ -52,7 +52,7 @@ def apply_target_defaults(
     functions: tuple[CompiledFunction, ...] = tuple(
         replace(
             f,
-            target=_resolve_function_target(
+            destination=_resolve_function_target(
                 function=f,
                 default_schema=default_schema,
                 default_database=default_database,
@@ -61,7 +61,7 @@ def apply_target_defaults(
                     python_functions_inherit_default_namespace
                 ),
             ),
-            fingerprint_target=_resolve_target(
+            fingerprint_destination=_resolve_target(
                 f.fingerprint_destination,
                 default_schema,
                 default_database,

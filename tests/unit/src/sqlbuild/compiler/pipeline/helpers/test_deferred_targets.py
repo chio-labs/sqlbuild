@@ -128,7 +128,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
     DEFERRED_TARGET_TEST_CASES,
     ids=[case.description for case in DEFERRED_TARGET_TEST_CASES],
 )
-def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
+def test_given_deferred_target_config_when_building_targets_then_resolves_expected_naming(
     test_case: DeferredTargetTestCase,
 ) -> None:
     project: CompiledProject = build_single_model_project(
@@ -137,7 +137,7 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
         physical_schema=test_case.logical_schema or test_case.default_schema,
         physical_database=test_case.logical_database or test_case.default_database,
     )
-    deferred_env: TargetConfig = TargetConfig(
+    deferred_target_config: TargetConfig = TargetConfig(
         schema=test_case.env_schema,
         database=test_case.env_database,
     )
@@ -149,7 +149,7 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
     )
     targets: dict[str, CompiledRelationDestination] = build_deferred_targets(
         project=project,
-        deferred_env=deferred_env,
+        deferred_target_config=deferred_target_config,
         effective_vars=test_case.effective_vars,
         default_schema=test_case.default_schema,
         default_database=test_case.default_database,

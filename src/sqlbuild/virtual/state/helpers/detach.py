@@ -46,7 +46,7 @@ def detach_from_virtual_state(
         selected_target=None,
     )
     if active_target_name is None:
-        raise PlannerInputError("state detach requires an active environment", code="C260")
+        raise PlannerInputError("state detach requires an active target", code="C260")
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
         state_connection,
         schema=config.schema,

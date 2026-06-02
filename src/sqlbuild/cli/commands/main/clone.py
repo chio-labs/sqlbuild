@@ -18,7 +18,7 @@ from sqlbuild.cli.commands.main.helpers.clone.virtual_output import (
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import (
-    resolve_environment_connection_config,
+    resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
@@ -67,13 +67,13 @@ def run_clone(
         effective_adapter_name, project_dir=effective_project_dir
     )
 
-    source_connection_config: dict[str, object] = resolve_environment_connection_config(
+    source_connection_config: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         target_name=from_target,
         cli_vars=cli_vars,
     )
-    target_connection_config: dict[str, object] = resolve_environment_connection_config(
+    target_connection_config: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
         target_name=to_target,
