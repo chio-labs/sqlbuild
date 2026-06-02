@@ -66,6 +66,15 @@ from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.tasks import get_task_definition
 
+_PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
+_PYTHON_NODE_FACTORY_FOLDERS: tuple[str, ...] = (*_PYTHON_NODE_KIND_FOLDERS, "factories")
+_PYTHON_NODE_KIND_BY_FOLDER: dict[str, str] = {
+    "loaders": "loader",
+    "tasks": "task",
+    "assets": "asset",
+    "checks": "check",
+}
+
 
 @dataclass
 class _PythonNodeDiscoveryBucket:
@@ -390,7 +399,7 @@ def discover_python_node_functions(*, project_dir: Path) -> DiscoveredPythonNode
 def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscoveryBucket:
     bucket: _PythonNodeDiscoveryBucket = _PythonNodeDiscoveryBucket()
     node_folder: str
-    for node_folder in ("loaders", "tasks", "assets", "checks"):
+    for node_folder in _PYTHON_NODE_FACTORY_FOLDERS:
         node_root: Path = project_dir / node_folder
         if not node_root.is_dir():
             continue
@@ -412,6 +421,7 @@ def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscover
                 module=module,
                 file_path=file_path,
                 project_dir=project_dir,
+                node_folder=node_folder,
             )
     return bucket
 
@@ -422,16 +432,19 @@ def _append_module_python_nodes(
     module: ModuleType,
     file_path: Path,
     project_dir: Path,
+    node_folder: str,
 ) -> None:
-    for _, value in inspect.getmembers(module, inspect.isfunction):
-        if value.__module__ != module.__name__:
-            continue
-        _append_python_node_function(
-            bucket=bucket,
-            function=value,
-            file_path=file_path,
-            project_dir=project_dir,
-        )
+    if node_folder != "factories":
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            _append_python_node_function(
+                bucket=bucket,
+                function=value,
+                file_path=file_path,
+                project_dir=project_dir,
+                expected_kind=_PYTHON_NODE_KIND_BY_FOLDER.get(node_folder),
+            )
     for _, value in inspect.getmembers(module, inspect.isfunction):
         if value.__module__ != module.__name__:
             continue
@@ -452,6 +465,8 @@ def _append_module_python_nodes(
                 function=generated_function,
                 file_path=file_path,
                 project_dir=project_dir,
+                expected_kind=_PYTHON_NODE_KIND_BY_FOLDER.get(node_folder),
+                factory_definition=factory_definition,
             ):
                 raise PythonNodeDiscoveryError(
                     f"Factory '{factory_definition.name}' in "
@@ -466,9 +481,19 @@ def _append_python_node_function(
     function: Callable[..., object],
     file_path: Path,
     project_dir: Path,
+    expected_kind: str | None = None,
+    factory_definition: FactoryDefinition | None = None,
 ) -> bool:
     loader_definition: LoaderDefinition | None = get_loader_definition(function)
     if loader_definition is not None:
+        _validate_python_node_kind(
+            actual_kind="loader",
+            expected_kind=expected_kind,
+            function_name=loader_definition.name,
+            factory_definition=factory_definition,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
         bucket.loaders.append(
             DiscoveredLoaderFunction(
                 file_path=file_path,
@@ -487,6 +512,14 @@ def _append_python_node_function(
         return True
     task_definition: TaskDefinition | None = get_task_definition(function)
     if task_definition is not None:
+        _validate_python_node_kind(
+            actual_kind="task",
+            expected_kind=expected_kind,
+            function_name=task_definition.name,
+            factory_definition=factory_definition,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
         bucket.tasks.append(
             DiscoveredTaskFunction(
                 file_path=file_path,
@@ -504,6 +537,14 @@ def _append_python_node_function(
         return True
     asset_definition: AssetDefinition | None = get_asset_definition(function)
     if asset_definition is not None:
+        _validate_python_node_kind(
+            actual_kind="asset",
+            expected_kind=expected_kind,
+            function_name=asset_definition.name,
+            factory_definition=factory_definition,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
         bucket.assets.append(
             DiscoveredAssetFunction(
                 file_path=file_path,
@@ -523,6 +564,14 @@ def _append_python_node_function(
         return True
     check_definition: CheckDefinition | None = get_check_definition(function)
     if check_definition is not None:
+        _validate_python_node_kind(
+            actual_kind="check",
+            expected_kind=expected_kind,
+            function_name=check_definition.name,
+            factory_definition=factory_definition,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
         bucket.checks.append(
             DiscoveredCheckFunction(
                 file_path=file_path,
@@ -539,6 +588,31 @@ def _append_python_node_function(
         )
         return True
     return False
+
+
+def _validate_python_node_kind(
+    *,
+    actual_kind: str,
+    expected_kind: str | None,
+    function_name: str,
+    factory_definition: FactoryDefinition | None,
+    file_path: Path,
+    project_dir: Path,
+) -> None:
+    if expected_kind is None or actual_kind == expected_kind:
+        return
+    relative_path: Path = file_path.relative_to(project_dir)
+    folder: str = relative_path.parts[0]
+    if factory_definition is None:
+        article: str = "an" if actual_kind[0] in {"a", "e", "i", "o", "u"} else "a"
+        raise PythonNodeDiscoveryError(
+            f"Python node '{function_name}' in {folder}/ is {article} {actual_kind}; "
+            f"{actual_kind}s must live in {actual_kind}s/ or be generated from factories/."
+        )
+    raise PythonNodeDiscoveryError(
+        f"Factory {factory_definition.name} in {folder}/ returned a {actual_kind} "
+        f"'{function_name}'; mixed-kind factories must live in factories/."
+    )
 
 
 def _call_factory(
