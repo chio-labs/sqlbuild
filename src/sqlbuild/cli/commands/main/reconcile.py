@@ -64,7 +64,7 @@ def run_reconcile(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             connection_config=connection_config,
-            virtual_target_name=virtual_environment,
+            virtual_environment_name=virtual_environment,
             command=reconcile_command,
             model_name=model_name,
             physical_relation_name=physical_relation_name,

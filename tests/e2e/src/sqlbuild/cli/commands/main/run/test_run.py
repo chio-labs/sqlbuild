@@ -268,8 +268,8 @@ def test_given_existing_intermediate_target_when_running_source_only_then_reuses
                 "@loader(depends_on=[fetch_events])\n"
                 "def raw_events(ctx):\n"
                 "    events = ctx.loader(fetch_events)\n"
-                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
-                "SELECT event_id FROM {events.target}')\n"
+                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
+                "SELECT event_id FROM {events.destination}')\n"
             ),
             "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
         },
@@ -1316,7 +1316,7 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
             "loaders/orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='stage_orders',\n"
+                "    destination='stage_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[\n"
                 "        {'name': 'order_id', 'type': 'INTEGER'},\n"
@@ -1390,7 +1390,7 @@ def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_c
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"
@@ -1559,7 +1559,7 @@ def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"
@@ -1645,7 +1645,7 @@ def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"
@@ -1718,7 +1718,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"
@@ -1875,7 +1875,7 @@ def test_given_source_task_loader_chain_when_running_run_then_command_rejects_bo
                 "from tasks.orders import prepare_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='stage_orders',\n"
+                "    destination='stage_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 "    depends_on=(prepare_orders,),\n"
@@ -1945,7 +1945,7 @@ def test_given_model_task_loader_chain_when_running_run_then_command_rejects_bou
                 "from tasks.orders import prepare_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='stage_orders',\n"
+                "    destination='stage_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 "    depends_on=(prepare_orders,),\n"

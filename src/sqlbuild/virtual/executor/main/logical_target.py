@@ -11,14 +11,14 @@ def build_virtual_logical_destination(
     *,
     adapter: BaseAdapter,
     target: CompiledRelationDestination,
-    virtual_target_name: str,
-    unsuffixed_virtual_target_name: str | None = None,
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None = None,
 ) -> CompiledRelationDestination:
     """Build the logical virtual target for a model or function."""
 
     return build_virtual_destination(
         adapter=adapter,
         target=target,
-        virtual_target_name=virtual_target_name,
-        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
+        virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
     )

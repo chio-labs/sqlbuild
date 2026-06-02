@@ -37,16 +37,16 @@ def test_given_checkpoints_when_formatting_list_without_color_then_preserves_out
     test_case: CheckpointOutputTestCase,
 ) -> None:
     rendered: str = _format_checkpoint_list(
-        virtual_target_name="dev",
+        virtual_environment_name="dev",
         checkpoints=(
             VirtualEnvironmentCheckpointRecord(
                 checkpoint_id="cp_1",
-                virtual_target_name="dev",
+                virtual_environment_name="dev",
                 created_at=datetime(2026, 5, 29, 12, 0, 0),
             ),
             VirtualEnvironmentCheckpointRecord(
                 checkpoint_id="cp_2",
-                virtual_target_name="dev",
+                virtual_environment_name="dev",
                 created_at=None,
             ),
         ),
@@ -109,14 +109,14 @@ def test_given_checkpoint_refs_when_formatting_diff_without_color_then_preserves
     test_case: CheckpointOutputTestCase,
 ) -> None:
     rendered: str = _format_checkpoint_diff(
-        virtual_target_name="dev",
+        virtual_environment_name="dev",
         checkpoint_id="cp_1",
         current_refs=(
             VirtualEnvironmentRefRecord(
-                virtual_target_name="dev", model_name="shared", version_hash="current_hash"
+                virtual_environment_name="dev", model_name="shared", version_hash="current_hash"
             ),
             VirtualEnvironmentRefRecord(
-                virtual_target_name="dev",
+                virtual_environment_name="dev",
                 model_name="current_only",
                 version_hash="current_only_hash",
             ),

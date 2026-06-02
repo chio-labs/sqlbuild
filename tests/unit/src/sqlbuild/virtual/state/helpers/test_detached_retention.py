@@ -53,22 +53,22 @@ def test_given_virtual_environments_when_inspecting_detached_retention_then_clas
     inspection: DetachedVirtualEnvironmentInspection = build_detached_environment_inspection(
         environments=(
             VirtualEnvironmentRetentionRecord(
-                virtual_target_name="old_detached",
+                virtual_environment_name="old_detached",
                 status=VirtualEnvironmentStatus.DETACHED,
                 updated_at=NOW - timedelta(days=10),
             ),
             VirtualEnvironmentRetentionRecord(
-                virtual_target_name="new_detached",
+                virtual_environment_name="new_detached",
                 status=VirtualEnvironmentStatus.DETACHED,
                 updated_at=NOW - timedelta(days=2),
             ),
             VirtualEnvironmentRetentionRecord(
-                virtual_target_name="unknown_age",
+                virtual_environment_name="unknown_age",
                 status=VirtualEnvironmentStatus.DETACHED,
                 updated_at=None,
             ),
             VirtualEnvironmentRetentionRecord(
-                virtual_target_name="active",
+                virtual_environment_name="active",
                 status=VirtualEnvironmentStatus.ACTIVE,
                 updated_at=NOW - timedelta(days=20),
             ),
@@ -90,7 +90,7 @@ def test_given_virtual_environments_when_inspecting_detached_retention_then_clas
 
     assert (
         tuple(
-            environment.virtual_target_name
+            environment.virtual_environment_name
             for environment in inspection.cleanup_virtual_environments
         )
         == test_case.expected_cleanup_target_names

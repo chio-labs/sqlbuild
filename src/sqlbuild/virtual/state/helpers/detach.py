@@ -50,7 +50,7 @@ def detach_from_virtual_state(
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
         state_connection,
         schema=config.schema,
-        virtual_target_name=active_target_name,
+        virtual_environment_name=active_target_name,
     )
     if environment is None or environment.status != VirtualEnvironmentStatus.FINALIZED:
         raise PlannerInputError(
@@ -66,7 +66,7 @@ def detach_from_virtual_state(
         operation_type=StateOperationType.DETACH,
         status=StateOperationStatus.RUNNING,
         action="start",
-        virtual_target_name=active_target_name,
+        virtual_environment_name=active_target_name,
         message="starting detach",
     )
     try:
@@ -77,7 +77,7 @@ def detach_from_virtual_state(
         refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_target_name=active_target_name,
+            virtual_environment_name=active_target_name,
         )
         ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
         recorder: StatementRecorder = StatementRecorder()
@@ -101,8 +101,8 @@ def detach_from_virtual_state(
                     target=build_virtual_logical_destination(
                         adapter=adapter,
                         target=model.destination,
-                        virtual_target_name=active_target_name,
-                        unsuffixed_virtual_target_name=active_target_name,
+                        virtual_environment_name=active_target_name,
+                        unsuffixed_virtual_environment_name=active_target_name,
                     ),
                 ),
                 statement_recorder=recorder,
@@ -142,9 +142,9 @@ def detach_from_virtual_state(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_target_name=active_target_name,
+                virtual_environment_name=active_target_name,
                 status=VirtualEnvironmentStatus.DETACHED,
-                baseline_virtual_target_name=environment.baseline_virtual_target_name,
+                baseline_virtual_environment_name=environment.baseline_virtual_environment_name,
                 finalized_at=environment.finalized_at,
             ),
         )
@@ -156,7 +156,7 @@ def detach_from_virtual_state(
             operation_type=None,
             status=StateOperationStatus.SUCCEEDED,
             action="finish",
-            virtual_target_name=None,
+            virtual_environment_name=None,
             message=f"detached {detached_count} models",
         )
         return f"Detached {detached_count} models from virtual environment {active_target_name}."
@@ -169,7 +169,7 @@ def detach_from_virtual_state(
             operation_type=None,
             status=StateOperationStatus.FAILED,
             action="fail",
-            virtual_target_name=None,
+            virtual_environment_name=None,
             message=str(error),
         )
         raise

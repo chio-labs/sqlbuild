@@ -10,10 +10,10 @@ from sqlbuild.virtual.state.constants import STATE_MIGRATION_LOCK_KEY
 from sqlbuild.virtual.state.models import StateLockLease
 
 
-def virtual_environment_lock_key(virtual_target_name: str) -> str:
+def virtual_environment_lock_key(virtual_environment_name: str) -> str:
     """Return the lock key for a virtual environment mutation."""
 
-    return f"virtual_env:{virtual_target_name}"
+    return f"virtual_env:{virtual_environment_name}"
 
 
 def model_version_lock_key(model_name: str, version_hash: str) -> str:
@@ -27,7 +27,7 @@ def acquire_virtual_environment_lock(
     connection: Any,
     *,
     schema: str,
-    virtual_target_name: str,
+    virtual_environment_name: str,
     owner_id: str,
     ttl: timedelta,
     now: datetime | None = None,
@@ -38,7 +38,7 @@ def acquire_virtual_environment_lock(
         backend,
         connection,
         schema=schema,
-        lock_key=virtual_environment_lock_key(virtual_target_name),
+        lock_key=virtual_environment_lock_key(virtual_environment_name),
         owner_id=owner_id,
         ttl=ttl,
         now=now,

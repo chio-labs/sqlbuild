@@ -13,7 +13,7 @@ def delete_virtual_environment(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    virtual_target_name: str,
+    virtual_environment_name: str,
 ) -> None:
     """Delete one virtual environment and its current refs."""
 
@@ -26,7 +26,7 @@ def delete_virtual_environment(
         backend.delete_virtual_environment(
             connection,
             schema=config.schema,
-            virtual_target_name=virtual_target_name,
+            virtual_environment_name=virtual_environment_name,
         )
     finally:
         backend.close(connection)

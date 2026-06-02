@@ -22,7 +22,7 @@ def expired_environment_retention(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    active_virtual_target_name: str | None,
+    active_virtual_environment_name: str | None,
     retention_days: int,
 ) -> ExpiredVirtualEnvironmentInspection | None:
     """Inspect non-active VDE cleanup when janitor runs in virtual mode."""
@@ -32,7 +32,7 @@ def expired_environment_retention(
     return inspect_expired_environment_retention(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
-        active_virtual_target_name=active_virtual_target_name,
+        active_virtual_environment_name=active_virtual_environment_name,
         retention_days=retention_days,
     )
 
@@ -85,7 +85,7 @@ def expired_environment_candidates(
         return ()
     return tuple(
         JanitorExpiredVirtualEnvironmentCandidate(
-            virtual_target_name=environment.virtual_target_name,
+            virtual_environment_name=environment.virtual_environment_name,
             updated_at=environment.updated_at,
         )
         for environment in retention.cleanup_virtual_environments

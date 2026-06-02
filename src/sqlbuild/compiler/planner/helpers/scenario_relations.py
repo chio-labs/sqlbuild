@@ -318,7 +318,7 @@ def build_scenario_execution_plan(
         entry: ModelPlanEntry
         model_warnings: tuple[PlanWarning, ...]
         entry, model_warnings = plan_model(
-            model=replace(model, target=scenario_target, query_sql=scenario_query_sql),
+            model=replace(model, destination=scenario_target, query_sql=scenario_query_sql),
             snapshot=effective_snapshot,
             adapter=adapter,
             model_targets=relation_plan.model_targets,

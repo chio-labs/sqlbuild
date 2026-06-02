@@ -24,7 +24,7 @@ def build_detached_environment_inspection(
     """Classify detached cleanup candidates and retained physical relation refs."""
 
     cleanup_names: set[str] = {
-        environment.virtual_target_name
+        environment.virtual_environment_name
         for environment in environments
         if _eligible_for_cleanup(
             environment=environment,
@@ -37,7 +37,7 @@ def build_detached_environment_inspection(
     environment: VirtualEnvironmentRetentionRecord
     for environment in environments:
         refs: tuple[VirtualEnvironmentRefRecord, ...] = refs_by_environment.get(
-            environment.virtual_target_name,
+            environment.virtual_environment_name,
             (),
         )
         ref: VirtualEnvironmentRefRecord
@@ -52,7 +52,7 @@ def build_detached_environment_inspection(
                 relation.schema_name,
                 relation.relation_name,
             )
-            if environment.virtual_target_name in cleanup_names:
+            if environment.virtual_environment_name in cleanup_names:
                 cleanup_relations[relation_key] = relation
                 continue
             retained_relations[relation_key] = relation
@@ -60,7 +60,7 @@ def build_detached_environment_inspection(
         cleanup_virtual_environments=tuple(
             environment
             for environment in environments
-            if environment.virtual_target_name in cleanup_names
+            if environment.virtual_environment_name in cleanup_names
         ),
         cleanup_physical_relations=tuple(
             cleanup_relations[key]

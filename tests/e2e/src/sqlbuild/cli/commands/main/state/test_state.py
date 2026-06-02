@@ -28,9 +28,10 @@ STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[StateLifecycleErrorE2ETestCase, ...]
         project_toml="""
 name = "versioned_state_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -52,9 +53,10 @@ database = "state.duckdb"
         project_toml="""
 name = "versioned_state_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -76,9 +78,10 @@ database = "state.duckdb"
         project_toml="""
 name = "versioned_state_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -129,9 +132,10 @@ def test_given_duckdb_state_config_when_running_state_lifecycle_then_state_store
             "sqlbuild_project.toml": """
 name = "versioned_state_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -229,9 +233,10 @@ def test_given_deleted_duckdb_state_backup_when_rolling_back_then_it_blocks_clea
             "sqlbuild_project.toml": """
 name = "duckdb_state_deleted_backup"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -297,9 +302,10 @@ def test_given_deleted_latest_duckdb_state_backup_when_rolling_back_then_it_bloc
             "sqlbuild_project.toml": """
 name = "duckdb_state_deleted_latest_backup"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -365,9 +371,10 @@ def test_given_missing_duckdb_state_table_when_migrating_then_cli_blocks_cleanly
             "sqlbuild_project.toml": """
 name = "duckdb_state_missing_table"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -435,9 +442,10 @@ def test_given_corrupt_duckdb_state_schema_when_migrating_then_cli_blocks_cleanl
             "sqlbuild_project.toml": """
 name = "duckdb_state_schema_corruption"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -569,9 +577,10 @@ def test_given_local_state_override_when_running_state_init_then_cli_uses_local_
             "sqlbuild_project.toml": """
 name = "versioned_state_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
@@ -639,9 +648,9 @@ def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_n
             "sqlbuild_project.toml": (
                 'name = "virtual_state_adopt_detach"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -689,20 +698,20 @@ def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_n
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT status FROM sqlbuild_state.virtual_environments "
-            "WHERE virtual_target_name = 'dev'"
+            "WHERE virtual_environment_name = 'dev'"
         ),
     ) == [(test_case.expected_detached_status,)]
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT model_name FROM sqlbuild_state.virtual_environment_refs "
-            "WHERE virtual_target_name = 'dev'"
+            "WHERE virtual_environment_name = 'dev'"
         ),
     ) == [("orders",)]
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT operation_id, operation_type, status, virtual_target_name "
+            "SELECT operation_id, operation_type, status, virtual_environment_name "
             "FROM sqlbuild_state.state_operations ORDER BY operation_id"
         ),
     ) == list(test_case.expected_operation_rows)
@@ -769,9 +778,9 @@ def test_given_missing_unsuffixed_virtual_env_when_adopting_then_it_blocks_with_
             "sqlbuild_project.toml": (
                 'name = "virtual_state_adopt_missing_unsuffixed"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -824,9 +833,9 @@ def test_given_copy_fallback_required_when_adopting_without_allow_copy_then_it_b
             "sqlbuild_project.toml": (
                 'name = "virtual_state_adopt_allow_copy_required"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -880,9 +889,9 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
             "sqlbuild_project.toml": (
                 'name = "virtual_state_detach_failed_operation"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -975,7 +984,7 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT status FROM sqlbuild_state.virtual_environments "
-            "WHERE virtual_target_name = 'dev'"
+            "WHERE virtual_environment_name = 'dev'"
         ),
     ) == [("finalized",)]
 
@@ -1003,9 +1012,9 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
             "sqlbuild_project.toml": (
                 'name = "virtual_state_adopt_failed_operation"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -1123,9 +1132,9 @@ def test_given_view_model_when_detaching_then_stateless_target_remains_a_view(
             "sqlbuild_project.toml": (
                 'name = "virtual_state_detach_view_model"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -1199,9 +1208,9 @@ def test_given_wrong_confirmation_when_adopting_then_it_cancels(
             "sqlbuild_project.toml": (
                 'name = "virtual_state_adopt_cancelled"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -1251,9 +1260,9 @@ def test_given_non_finalized_virtual_environment_when_detaching_then_it_blocks(
             "sqlbuild_project.toml": (
                 'name = "virtual_state_detach_not_finalized"\n'
                 'adapter = "duckdb"\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
                 'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[targets.dev]\n"
@@ -1273,7 +1282,7 @@ def test_given_non_finalized_virtual_environment_when_detaching_then_it_blocks(
         db_path=project_dir / "state.duckdb",
         sql=(
             "INSERT INTO sqlbuild_state.virtual_environments "
-            "(virtual_target_name, status, created_at, updated_at) "
+            "(virtual_environment_name, status, created_at, updated_at) "
             "VALUES ('dev', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
         ),
     )
@@ -1311,9 +1320,10 @@ def test_given_duckdb_state_backup_when_rolling_back_explicit_backup_id_then_res
             "sqlbuild_project.toml": """
 name = "versioned_state_project"
 adapter = "duckdb"
+default_target = "dev"
+
 [settings]
 virtual_environments = true
-default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"

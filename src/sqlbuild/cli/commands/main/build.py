@@ -152,7 +152,7 @@ def run_build(
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
-            virtual_target_name=virtual_env,
+            virtual_environment_name=virtual_env,
             include_stale_upstreams=include_stale_upstreams,
             changes_only=changes_only,
             auto_load_sources=should_load_sources,

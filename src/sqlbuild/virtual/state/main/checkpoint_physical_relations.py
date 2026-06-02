@@ -18,7 +18,7 @@ def list_checkpoint_physical_relations(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    virtual_target_name: str,
+    virtual_environment_name: str,
 ) -> tuple[PhysicalRelationRecord, ...]:
     """List physical relations referenced by retained checkpoints for a VDE."""
 
@@ -32,7 +32,7 @@ def list_checkpoint_physical_relations(
             backend.list_virtual_environment_checkpoints(
                 connection,
                 schema=config.schema,
-                virtual_target_name=virtual_target_name,
+                virtual_environment_name=virtual_environment_name,
             )
         )
         relations: dict[tuple[str | None, str | None, str], PhysicalRelationRecord] = {}

@@ -21,7 +21,7 @@ def inspect_expired_environment_retention(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    active_virtual_target_name: str | None,
+    active_virtual_environment_name: str | None,
     retention_days: int,
 ) -> ExpiredVirtualEnvironmentInspection:
     """Inspect non-active VDE cleanup and retained current-ref physical relations."""
@@ -36,11 +36,11 @@ def inspect_expired_environment_retention(
             backend.list_virtual_environments(connection, schema=config.schema)
         )
         cleanup_names: set[str] = {
-            environment.virtual_target_name
+            environment.virtual_environment_name
             for environment in environments
             if _eligible_for_cleanup(
                 environment=environment,
-                active_virtual_target_name=active_virtual_target_name,
+                active_virtual_environment_name=active_virtual_environment_name,
                 retention_days=retention_days,
                 now=datetime.now(UTC),
             )
@@ -53,7 +53,7 @@ def inspect_expired_environment_retention(
             refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
                 connection,
                 schema=config.schema,
-                virtual_target_name=environment.virtual_target_name,
+                virtual_environment_name=environment.virtual_environment_name,
             )
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
@@ -69,7 +69,7 @@ def inspect_expired_environment_retention(
                     relation.schema_name,
                     relation.relation_name,
                 )
-                if environment.virtual_target_name in cleanup_names:
+                if environment.virtual_environment_name in cleanup_names:
                     cleanup_relations[key] = relation
                 else:
                     retained_relations[key] = relation
@@ -77,7 +77,7 @@ def inspect_expired_environment_retention(
             cleanup_virtual_environments=tuple(
                 environment
                 for environment in environments
-                if environment.virtual_target_name in cleanup_names
+                if environment.virtual_environment_name in cleanup_names
             ),
             cleanup_physical_relations=tuple(
                 cleanup_relations[key]
@@ -99,11 +99,11 @@ def inspect_expired_environment_retention(
 def _eligible_for_cleanup(
     *,
     environment: VirtualEnvironmentRetentionRecord,
-    active_virtual_target_name: str | None,
+    active_virtual_environment_name: str | None,
     retention_days: int,
     now: datetime,
 ) -> bool:
-    if environment.virtual_target_name == active_virtual_target_name:
+    if environment.virtual_environment_name == active_virtual_environment_name:
         return False
     if environment.status == VirtualEnvironmentStatus.DETACHED:
         return False

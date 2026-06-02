@@ -88,7 +88,7 @@ def run_clone(
             to_target=to_target,
             source_connection_config=source_connection_config,
             target_connection_config=target_connection_config,
-            virtual_target_name=virtual_env,
+            virtual_environment_name=virtual_env,
             skip_locked=skip_locked,
             no_sql_validation=no_sql_validation,
             select=select,

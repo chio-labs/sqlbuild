@@ -55,19 +55,21 @@ def build_relation_ref(
     source_entry: SourceEntry,
     statement_recorder: StatementRecorder,
 ) -> LoaderRelationRef:
-    target_name: str = source_entry.table if source_entry.table is not None else source_entry.name
-    target: str = resolve_qualified_name_parts(
+    destination_name: str = (
+        source_entry.table if source_entry.table is not None else source_entry.name
+    )
+    destination: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=source_entry.database,
         schema=source_entry.schema,
-        name=target_name,
+        name=destination_name,
     )
     return LoaderRelationRef(
         name=source_entry.name,
-        target=target,
+        destination=destination,
         database=source_entry.database,
         schema=source_entry.schema,
-        table_name=target_name,
+        table_name=destination_name,
         cursor_column=source_entry.cursor_column,
         adapter=adapter,
         connection=connection,

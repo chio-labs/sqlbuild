@@ -19,7 +19,7 @@ def record_state_operation(
     operation_type: StateOperationType | None,
     status: StateOperationStatus,
     action: str,
-    virtual_target_name: str | None,
+    virtual_environment_name: str | None,
     message: str | None = None,
 ) -> None:
     """Persist the latest state-operation status plus an append-only event."""
@@ -34,10 +34,10 @@ def record_state_operation(
         if operation_type is not None
         else (existing.operation_type if existing else None)
     )
-    effective_virtual_target_name: str | None = (
-        virtual_target_name
-        if virtual_target_name is not None
-        else (existing.virtual_target_name if existing else None)
+    effective_virtual_environment_name: str | None = (
+        virtual_environment_name
+        if virtual_environment_name is not None
+        else (existing.virtual_environment_name if existing else None)
     )
     if effective_type is None:
         return
@@ -48,7 +48,7 @@ def record_state_operation(
             operation_id=operation_id,
             operation_type=effective_type,
             status=status,
-            virtual_target_name=effective_virtual_target_name,
+            virtual_environment_name=effective_virtual_environment_name,
         ),
     )
     backend.create_state_operation_event(

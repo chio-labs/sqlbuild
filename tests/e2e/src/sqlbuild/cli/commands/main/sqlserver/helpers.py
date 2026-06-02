@@ -389,13 +389,13 @@ def prepare_sqlserver_source_loader_strategies(
     )
     loader_path: Path = project_dir / "loaders" / "strategy_sources.py"
     old_sql: str = (
-        'f"CREATE TABLE {ctx.target} AS "\n'
+        'f"CREATE TABLE {ctx.destination} AS "\n'
         "        \"SELECT 1 AS status_id, 'loaded' AS status_name, "
         "'self_managed' AS loaded_by\""
     )
     new_sql: str = (
         "\"SELECT 1 AS status_id, 'loaded' AS status_name, 'self_managed' AS loaded_by \"\n"
-        '        f"INTO {ctx.target}"'
+        '        f"INTO {ctx.destination}"'
     )
     loader_path.write_text(
         loader_path.read_text(encoding="utf-8").replace(old_sql, new_sql),

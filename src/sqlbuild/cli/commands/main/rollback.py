@@ -59,8 +59,8 @@ def run_rollback(
         local_config=discovered_inputs.local_config,
         selected_target=None,
     )
-    virtual_target_name: str | None = virtual_environment or resolved_target_name
-    if virtual_target_name is None:
+    virtual_environment_name: str | None = virtual_environment or resolved_target_name
+    if virtual_environment_name is None:
         raise CliUserError("rollback requires --virtual-env or a default environment", code="C246")
     use_color: bool = not no_color and supports_color()
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
@@ -77,7 +77,7 @@ def run_rollback(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_target_name=virtual_target_name,
+        virtual_environment_name=virtual_environment_name,
         checkpoint_id=checkpoint_id,
         select=select,
         exclude=exclude,
@@ -96,7 +96,7 @@ def run_rollback(
     )
     print(
         format_rollback_output(
-            virtual_environment=virtual_target_name,
+            virtual_environment=virtual_environment_name,
             checkpoint_id=restored_checkpoint_id,
             rolled_back_models=rolled_back_models,
             status=status.value,

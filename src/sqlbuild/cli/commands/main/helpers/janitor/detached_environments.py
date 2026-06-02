@@ -100,7 +100,7 @@ def detached_environment_candidates(
         return ()
     return tuple(
         JanitorDetachedVirtualEnvironmentCandidate(
-            virtual_target_name=environment.virtual_target_name,
+            virtual_environment_name=environment.virtual_environment_name,
             updated_at=environment.updated_at,
         )
         for environment in retention.cleanup_virtual_environments

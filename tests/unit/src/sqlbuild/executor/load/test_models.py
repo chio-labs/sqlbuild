@@ -109,7 +109,7 @@ def test_given_loader_context_when_resolving_relation_refs_then_returns_cursor_v
     statement_recorder: StatementRecorder = StatementRecorder()
     loader_ref: LoaderRelationRef = LoaderRelationRef(
         name="fetch_events",
-        target="target_db.target_schema.fetch_events",
+        destination="target_db.target_schema.fetch_events",
         database="target_db",
         schema="target_schema",
         table_name="fetch_events",
@@ -120,7 +120,7 @@ def test_given_loader_context_when_resolving_relation_refs_then_returns_cursor_v
     )
     source_ref: LoaderRelationRef = LoaderRelationRef(
         name="raw_events",
-        target="target_db.target_schema.raw_events",
+        destination="target_db.target_schema.raw_events",
         database="target_db",
         schema="target_schema",
         table_name="raw_events",

@@ -41,8 +41,8 @@ def run_virtual_diff(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    from_virtual_target_name: str,
-    to_virtual_target_name: str,
+    from_virtual_environment_name: str,
+    to_virtual_environment_name: str,
     no_sql_validation: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
@@ -100,31 +100,31 @@ def run_virtual_diff(
         from_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
             state_connection,
             schema=config.schema,
-            virtual_target_name=from_virtual_target_name,
+            virtual_environment_name=from_virtual_environment_name,
         )
         to_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
             state_connection,
             schema=config.schema,
-            virtual_target_name=to_virtual_target_name,
+            virtual_environment_name=to_virtual_environment_name,
         )
         from_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_target_name=from_virtual_target_name,
+            virtual_environment_name=from_virtual_environment_name,
         )
         to_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_target_name=to_virtual_target_name,
+            virtual_environment_name=to_virtual_environment_name,
         )
         if not from_refs:
             raise PlannerInputError(
-                f"unknown virtual environment '{from_virtual_target_name}'",
+                f"unknown virtual environment '{from_virtual_environment_name}'",
                 code="S011",
             )
         if not to_refs:
             raise PlannerInputError(
-                f"unknown virtual environment '{to_virtual_target_name}'",
+                f"unknown virtual environment '{to_virtual_environment_name}'",
                 code="S011",
             )
         from_model_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
@@ -152,8 +152,8 @@ def run_virtual_diff(
         if not select and not allow_partial_diff:
             non_finalized: tuple[str, ...] = non_finalized_target_names(
                 (
-                    (from_virtual_target_name, from_environment),
-                    (to_virtual_target_name, to_environment),
+                    (from_virtual_environment_name, from_environment),
+                    (to_virtual_environment_name, to_environment),
                 )
             )
             if non_finalized:
