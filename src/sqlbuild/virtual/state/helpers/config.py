@@ -5,12 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.environments import (
-    resolve_environment_config,
-    resolve_environment_name,
+from sqlbuild.spec.models.project import TargetConfig
+from sqlbuild.spec.models.targets import (
+    resolve_target_config,
+    resolve_target_name,
 )
-from sqlbuild.spec.models.project import EnvironmentConfig
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import StateBackendConfig
 from sqlbuild.virtual.state.types import StateBackendName
@@ -23,39 +22,35 @@ def resolve_state_backend_config(
 ) -> StateBackendConfig:
     """Resolve state backend config from the active physical environment."""
 
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
-        raise StateBackendConfigError("State commands require environment_mode = 'virtual'")
+    if not discovered_inputs.project_config.settings.virtual_environments:
+        raise StateBackendConfigError("State commands require virtual_environments = true")
 
-    environment_name: str | None = resolve_environment_name(
+    target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    if environment_name is None:
+    if target_name is None:
         raise StateBackendConfigError(
-            "State commands require an active environment with [environments.<name>.state]"
+            "State commands require an active target with [targets.<name>.state]"
         )
-    environment_config: EnvironmentConfig = resolve_environment_config(
+    target_config: TargetConfig = resolve_target_config(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        environment_name=environment_name,
+        target_name=target_name,
     )
-    backend_name: str | None = environment_config.state.backend
+    backend_name: str | None = target_config.state.backend
     if backend_name is None:
-        raise StateBackendConfigError(
-            f"Environment '{environment_name}' does not configure a state backend"
-        )
-    schema: str | None = environment_config.state.schema
+        raise StateBackendConfigError(f"Target '{target_name}' does not configure a state backend")
+    schema: str | None = target_config.state.schema
     if schema is None:
-        raise StateBackendConfigError(
-            f"Environment '{environment_name}' state config must define schema"
-        )
+        raise StateBackendConfigError(f"Target '{target_name}' state config must define schema")
     try:
         backend: StateBackendName = StateBackendName(backend_name)
     except ValueError as error:
         raise StateBackendConfigError(f"Unsupported state backend: {backend_name}") from error
     connection: dict[str, object] = _resolve_connection_config(
-        raw_config=environment_config.state.connection,
+        raw_config=target_config.state.connection,
         project_dir=project_dir,
         backend=backend,
     )
@@ -63,7 +58,7 @@ def resolve_state_backend_config(
         backend=backend,
         schema=schema,
         connection=connection,
-        allow_reset=environment_config.state.allow_reset,
+        allow_reset=target_config.state.allow_reset,
     )
 
 

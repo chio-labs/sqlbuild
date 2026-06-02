@@ -95,10 +95,10 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
     )
     project: CompiledProject = CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
-        effective_environment_schema="raw",
+        effective_target_schema="raw",
         loader_functions=(
             DiscoveredLoaderFunction(
                 file_path=Path("loaders/orders.py"),

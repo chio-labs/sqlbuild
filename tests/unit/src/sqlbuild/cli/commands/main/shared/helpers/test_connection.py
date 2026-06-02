@@ -11,7 +11,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import EnvironmentConfig, LocalConfig, ProjectConfig
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     ResolveConnectionConfigWarningTestCase,
     ResolveEnvironmentConnectionConfigTestCase,
@@ -50,12 +50,10 @@ def test_given_project_inputs_when_resolving_connection_then_uses_effective_conn
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",
-            default_environment="dev",
+            default_target="dev",
             connection={"database": "project.duckdb", "warehouse": "project_wh"},
-            environments={
-                "dev": EnvironmentConfig(
-                    connection={"database": "dev.duckdb", "warehouse": "dev_wh"}
-                )
+            targets={
+                "dev": TargetConfig(connection={"database": "dev.duckdb", "warehouse": "dev_wh"})
             },
         ),
         local_config=LocalConfig(connection={"database": "local.duckdb", "role": "local_role"}),
@@ -118,7 +116,7 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
             description=(
                 "resolves environment connection with expanded env vars and local overrides"
             ),
-            environment_name="prod",
+            target_name="prod",
             expected_connection={
                 "account": "test-account",
                 "warehouse": "local_wh",
@@ -144,8 +142,8 @@ def test_given_environment_connection_when_resolving_then_it_expands_effective_c
                 "warehouse": "base_wh",
                 "database": "analytics",
             },
-            environments={
-                "prod": EnvironmentConfig(connection={"schema": "prod_schema"}),
+            targets={
+                "prod": TargetConfig(connection={"schema": "prod_schema"}),
             },
         ),
         local_config=LocalConfig(connection={"warehouse": "local_wh"}),
@@ -154,7 +152,7 @@ def test_given_environment_connection_when_resolving_then_it_expands_effective_c
     connection: dict[str, object] = resolve_environment_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=tmp_path,
-        environment_name=test_case.environment_name,
+        target_name=test_case.target_name,
     )
 
     assert connection == test_case.expected_connection

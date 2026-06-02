@@ -19,7 +19,7 @@ def build_project(*, target: CompiledRelationTarget) -> CompiledProject:
 
     return CompiledProject(
         run_id="run_123",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=(

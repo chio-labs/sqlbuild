@@ -40,7 +40,7 @@ def test_given_physical_drop_failure_when_executing_janitor_then_state_cleanup_i
     with pytest.raises(RuntimeError) as exc_info:
         execute_janitor_plan(
             plan=JanitorPlan(
-                environment_name="dev",
+                target_name="dev",
                 retention_days=0,
                 candidates=(
                     JanitorDeleteCandidate(
@@ -58,7 +58,7 @@ def test_given_physical_drop_failure_when_executing_janitor_then_state_cleanup_i
                 ),
                 detached_virtual_environment_candidates=(
                     JanitorDetachedVirtualEnvironmentCandidate(
-                        virtual_environment_name="dev",
+                        virtual_target_name="dev",
                         updated_at=None,
                     ),
                 ),
@@ -66,7 +66,7 @@ def test_given_physical_drop_failure_when_executing_janitor_then_state_cleanup_i
             adapter=adapter,
             connection=object(),
             delete_detached_virtual_environment=lambda candidate: deleted_state_items.append(
-                candidate.virtual_environment_name
+                candidate.virtual_target_name
             ),
         )
 

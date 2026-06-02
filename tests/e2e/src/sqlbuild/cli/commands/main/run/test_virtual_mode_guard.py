@@ -30,7 +30,10 @@ def test_given_virtual_mode_project_when_running_run_then_cli_blocks_cleanly(
         project_name="virtual_run_project",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "virtual_run_project"\nadapter = "duckdb"\nenvironment_mode = "virtual"\n'
+                'name = "virtual_run_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n"
             )
         },
     )
@@ -41,4 +44,4 @@ def test_given_virtual_mode_project_when_running_run_then_cli_blocks_cleanly(
     )
 
     assert result.returncode == test_case.expected_exit_code
-    assert "run is not supported when environment_mode = 'virtual'" in result.stderr
+    assert "run is not supported when virtual_environments = true" in result.stderr

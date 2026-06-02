@@ -32,7 +32,6 @@ from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.executor.main.clone import run_virtual_clone
 from sqlbuild.virtual.executor.models import VirtualCloneResult
 
@@ -41,8 +40,8 @@ def run_clone(
     project_dir: Path | None,
     no_color: bool,
     no_sql_validation: bool,
-    from_environment: str,
-    to_environment: str,
+    from_target: str,
+    to_target: str,
     hard_copy: bool,
     virtual_env: str | None = None,
     skip_locked: bool = False,
@@ -57,8 +56,8 @@ def run_clone(
     )
     validate_clone_request(
         discovered_inputs=discovered_inputs,
-        from_environment=from_environment,
-        to_environment=to_environment,
+        from_target=from_target,
+        to_target=to_target,
     )
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -71,25 +70,25 @@ def run_clone(
     source_connection_config: dict[str, object] = resolve_environment_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        environment_name=from_environment,
+        target_name=from_target,
         cli_vars=cli_vars,
     )
     target_connection_config: dict[str, object] = resolve_environment_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        environment_name=to_environment,
+        target_name=to_target,
         cli_vars=cli_vars,
     )
-    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+    if discovered_inputs.project_config.settings.virtual_environments:
         result: VirtualCloneResult = run_virtual_clone(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
             adapter=adapter,
-            from_environment=from_environment,
-            to_environment=to_environment,
+            from_target=from_target,
+            to_target=to_target,
             source_connection_config=source_connection_config,
             target_connection_config=target_connection_config,
-            virtual_environment_name=virtual_env,
+            virtual_target_name=virtual_env,
             skip_locked=skip_locked,
             no_sql_validation=no_sql_validation,
             select=select,
@@ -113,8 +112,8 @@ def run_clone(
         clone_pipeline: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
-            from_environment=from_environment,
-            to_environment=to_environment,
+            from_target=from_target,
+            to_target=to_target,
             no_sql_validation=no_sql_validation,
             select=select,
             exclude=exclude,
@@ -146,8 +145,8 @@ def run_clone(
 
     render_clone_output(
         result=result,
-        from_environment=from_environment,
-        to_environment=to_environment,
+        from_target=from_target,
+        to_target=to_target,
         use_color=not no_color and supports_color(),
     )
     return 0 if is_clone_success(result) else 1

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.spec.models.types import EnvironmentMode
-
 
 @dataclass(frozen=True)
 class ClonePolicy:
@@ -46,8 +44,8 @@ class LocalStateConfig:
 
 
 @dataclass(frozen=True)
-class EnvironmentConfig:
-    """One named environment configuration."""
+class TargetConfig:
+    """One named target configuration."""
 
     connection: dict[str, object] = field(default_factory=dict)
     vars: dict[str, str] = field(default_factory=dict)
@@ -59,8 +57,8 @@ class EnvironmentConfig:
 
 
 @dataclass(frozen=True)
-class LocalEnvironmentConfig:
-    """Local developer overrides for one named environment."""
+class LocalTargetConfig:
+    """Local developer overrides for one named target."""
 
     connection: dict[str, object] = field(default_factory=dict)
     vars: dict[str, str] = field(default_factory=dict)
@@ -80,6 +78,7 @@ class SettingsConfig:
     sql_validation: bool = True
     concurrency: int = 1
     auto_load_sources: bool = True
+    virtual_environments: bool = False
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
     default_audit_run_scope: str | None = None
@@ -163,14 +162,13 @@ class ProjectConfig:
 
     name: str
     adapter: str
-    environment_mode: EnvironmentMode = EnvironmentMode.DIRECT
-    default_environment: str | None = None
+    default_target: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     path_defaults: dict[str, dict[str, object]] = field(default_factory=dict)
     vars: dict[str, str] = field(default_factory=dict)
-    environments: dict[str, EnvironmentConfig] = field(default_factory=dict)
+    targets: dict[str, TargetConfig] = field(default_factory=dict)
     janitor: JanitorConfig = field(default_factory=JanitorConfig)
     snapshots: SnapshotsConfig = field(default_factory=SnapshotsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
@@ -181,10 +179,10 @@ class ProjectConfig:
 class LocalConfig:
     """Local developer overrides from sqlbuild_local.toml."""
 
-    environment: str | None = None
+    target: str | None = None
     adapter: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
-    environments: dict[str, LocalEnvironmentConfig] = field(default_factory=dict)
+    targets: dict[str, LocalTargetConfig] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     setting_overrides: frozenset[str] = field(default_factory=frozenset)
     vars: dict[str, str] = field(default_factory=dict)

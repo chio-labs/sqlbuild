@@ -44,7 +44,7 @@ def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancell
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan: JanitorPlan = JanitorPlan(
-        environment_name="dev",
+        target_name="dev",
         retention_days=30,
         candidates=(
             JanitorDeleteCandidate(

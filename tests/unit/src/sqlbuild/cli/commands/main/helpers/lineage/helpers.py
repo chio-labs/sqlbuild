@@ -54,7 +54,7 @@ def build_lineage_test_graph() -> ProjectGraph:
     )
     project: CompiledProject = CompiledProject(
         run_id="test-run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(),

@@ -106,9 +106,9 @@ class FunctionVersionRecord:
 class VirtualEnvironmentRecord:
     """Current state row for one virtual data environment."""
 
-    virtual_environment_name: str
+    virtual_target_name: str
     status: VirtualEnvironmentStatus
-    baseline_virtual_environment_name: str | None = None
+    baseline_virtual_target_name: str | None = None
     finalized_at: datetime | None = None
 
 
@@ -116,7 +116,7 @@ class VirtualEnvironmentRecord:
 class VirtualEnvironmentRetentionRecord:
     """Virtual data environment retention metadata."""
 
-    virtual_environment_name: str
+    virtual_target_name: str
     status: VirtualEnvironmentStatus
     updated_at: datetime | None = None
 
@@ -125,7 +125,7 @@ class VirtualEnvironmentRetentionRecord:
 class VirtualEnvironmentRefRecord:
     """Current state row mapping a VDE model ref to a model version."""
 
-    virtual_environment_name: str
+    virtual_target_name: str
     model_name: str
     version_hash: str
 
@@ -134,7 +134,7 @@ class VirtualEnvironmentRefRecord:
 class VirtualEnvironmentFunctionRefRecord:
     """Current state row mapping a VDE function ref to a function version."""
 
-    virtual_environment_name: str
+    virtual_target_name: str
     function_name: str
     version_hash: str
 
@@ -144,7 +144,7 @@ class VirtualEnvironmentCheckpointRecord:
     """Finalized checkpoint for one virtual data environment."""
 
     checkpoint_id: str
-    virtual_environment_name: str
+    virtual_target_name: str
     created_at: datetime | None = None
 
 
@@ -234,7 +234,7 @@ class StateOperationRecord:
     operation_id: str
     operation_type: StateOperationType
     status: StateOperationStatus
-    virtual_environment_name: str | None = None
+    virtual_target_name: str | None = None
 
 
 @dataclass(frozen=True)

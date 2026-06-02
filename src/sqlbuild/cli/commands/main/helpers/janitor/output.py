@@ -116,7 +116,7 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         for checkpoint_candidate in plan.checkpoint_candidates:
             stream.write(
                 f"  {style.object_name(checkpoint_candidate.checkpoint_id)}  "
-                f"{style.muted(checkpoint_candidate.virtual_environment_name)}\n"
+                f"{style.muted(checkpoint_candidate.virtual_target_name)}\n"
             )
 
     if plan.detached_virtual_environment_candidates:
@@ -124,7 +124,7 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         detached_candidate: JanitorDetachedVirtualEnvironmentCandidate
         for detached_candidate in plan.detached_virtual_environment_candidates:
             stream.write(
-                f"  {style.object_name(detached_candidate.virtual_environment_name)}  "
+                f"  {style.object_name(detached_candidate.virtual_target_name)}  "
                 f"{style.muted('detached virtual environment')}\n"
             )
 
@@ -132,9 +132,9 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         stream.write(f"\n{style.success('Eligible expired VDEs')}\n")
         expired_environment_candidate: JanitorExpiredVirtualEnvironmentCandidate
         for expired_environment_candidate in plan.expired_virtual_environment_candidates:
-            environment_name: str = expired_environment_candidate.virtual_environment_name
+            target_name: str = expired_environment_candidate.virtual_target_name
             stream.write(
-                f"  {style.object_name(environment_name)}  "
+                f"  {style.object_name(target_name)}  "
                 f"{style.muted('expired virtual environment')}\n"
             )
 
@@ -186,4 +186,4 @@ def confirmation_text(plan: JanitorPlan) -> str:
 def environment_label(plan: JanitorPlan) -> str:
     """Render the janitor environment label."""
 
-    return plan.environment_name if plan.environment_name is not None else "default"
+    return plan.target_name if plan.target_name is not None else "default"

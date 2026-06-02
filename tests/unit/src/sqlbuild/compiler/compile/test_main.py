@@ -10,16 +10,16 @@ from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_in
 from sqlbuild.compiler.compile.models.core import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.environments import resolve_environment_config
 from sqlbuild.spec.models.exceptions import SpecConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
-    EnvironmentConfig,
     LocalClonePolicy,
     LocalConfig,
-    LocalEnvironmentConfig,
+    LocalTargetConfig,
     ProjectConfig,
+    TargetConfig,
 )
+from sqlbuild.spec.models.targets import resolve_target_config
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
     build_external_sql_reference_resolver,
@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
     BuildCompileInputsTestCase,
-    ResolveEnvironmentConfigTestCase,
+    ResolveTargetConfigTestCase,
     SeedRefRegressionTestCase,
 )
 
@@ -45,7 +45,7 @@ TEST_CASES: list[BuildCompileInputsTestCase] = [
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 path = "base.db"
@@ -70,20 +70,20 @@ schema = "staging"
 [path_defaults."staging/nested"]
 schema = "nested"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.connection]
+[targets.dev.connection]
 warehouse = "dev_wh"
 
-[environments.dev.vars]
+[targets.dev.vars]
 shared = "environment"
 env_only = "present"
 """.strip()
             + "\n",
             "sqlbuild_local.toml": """
-environment = "dev"
+target = "dev"
 
 [connection]
 path = "local.db"
@@ -142,7 +142,7 @@ sources:
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={"shared": "cli", "cli_only": "present"},
         run_id=None,
         expected_model_schema_names=(None, "orders"),
@@ -169,7 +169,7 @@ sources:
         expected_model_path_defaults=("staging/nested", "staging"),
         expected_seed_names=("country_codes",),
         expected_source_names=("raw_orders",),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={"path": "local.db", "warehouse": "dev_wh"},
         expected_effective_vars={
             "shared": "cli",
@@ -187,7 +187,7 @@ sources:
     BuildCompileInputsTestCase(
         description="allows models with no matching schema metadata",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
-        selected_environment=None,
+        selected_target=None,
         cli_vars={},
         run_id=None,
         expected_model_schema_names=(None,),
@@ -196,7 +196,7 @@ sources:
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -225,7 +225,7 @@ SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={},
         run_id=None,
         expected_model_schema_names=("orders",),
@@ -244,7 +244,7 @@ SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_column_metadata=(
@@ -279,7 +279,7 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={},
         run_id=None,
         expected_model_schema_names=("customer_snapshot",),
@@ -298,7 +298,7 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_column_metadata=(
@@ -311,13 +311,13 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
-        description="prefers selected environment over local and project defaults",
+        description="prefers selected target over local and project defaults",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 path = "base.db"
@@ -326,29 +326,29 @@ warehouse = "default_wh"
 [vars]
 shared = "project"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.connection]
+[targets.dev.connection]
 warehouse = "dev_wh"
 
-[environments.dev.vars]
+[targets.dev.vars]
 shared = "dev"
 
-[environments.prod]
+[targets.prod]
 
-[environments.prod.connection]
+[targets.prod.connection]
 warehouse = "prod_wh"
 role = "transformer"
 
-[environments.prod.vars]
+[targets.prod.vars]
 shared = "prod"
 prod_only = "present"
 """.strip()
             + "\n",
             "sqlbuild_local.toml": """
-environment = "dev"
+target = "dev"
 
 [vars]
 shared = "local"
@@ -356,7 +356,7 @@ shared = "local"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment="prod",
+        selected_target="prod",
         cli_vars={},
         run_id=None,
         expected_model_schema_names=(None,),
@@ -365,7 +365,7 @@ shared = "local"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="prod",
+        expected_effective_target_name="prod",
         expected_effective_connection={
             "path": "base.db",
             "warehouse": "prod_wh",
@@ -376,43 +376,43 @@ shared = "local"
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
-        description="prefers local environment over project default when cli is absent",
+        description="prefers local target over project default when cli is absent",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "prod"
+default_target = "prod"
 
 [connection]
 path = "base.db"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.connection]
+[targets.dev.connection]
 warehouse = "dev_wh"
 
-[environments.dev.vars]
+[targets.dev.vars]
 active = "dev"
 
-[environments.prod]
+[targets.prod]
 
-[environments.prod.connection]
+[targets.prod.connection]
 warehouse = "prod_wh"
 
-[environments.prod.vars]
+[targets.prod.vars]
 active = "prod"
 """.strip()
             + "\n",
             "sqlbuild_local.toml": """
-environment = "dev"
+target = "dev"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -421,7 +421,7 @@ environment = "dev"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={"path": "base.db", "warehouse": "dev_wh"},
         expected_effective_vars={"active": "dev"},
         expected_model_references=((),),
@@ -449,7 +449,7 @@ local_only = "present"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={"cli_only": "present"},
         run_id=None,
         expected_model_schema_names=(None,),
@@ -458,7 +458,7 @@ local_only = "present"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={"path": "base.db"},
         expected_effective_vars={
             "project_only": "present",
@@ -475,23 +475,23 @@ local_only = "present"
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 path = "base.db"
 warehouse = "default_wh"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.vars]
+[targets.dev.vars]
 active = "dev"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -500,29 +500,29 @@ active = "dev"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={"path": "base.db", "warehouse": "default_wh"},
         expected_effective_vars={"active": "dev"},
         expected_model_references=((),),
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
-        description="preserves non environment vars when selected environment defines none",
+        description="preserves non environment vars when selected target defines none",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [vars]
 project_only = "present"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.connection]
+[targets.dev.connection]
 warehouse = "dev_wh"
 """.strip()
             + "\n",
@@ -533,7 +533,7 @@ local_only = "present"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={"cli_only": "present"},
         run_id=None,
         expected_model_schema_names=(None,),
@@ -542,7 +542,7 @@ local_only = "present"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={"warehouse": "dev_wh"},
         expected_effective_vars={
             "project_only": "present",
@@ -559,20 +559,20 @@ local_only = "present"
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.connection]
+[targets.dev.connection]
 path = "env.db"
 warehouse = "dev_wh"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -581,7 +581,7 @@ warehouse = "dev_wh"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={"path": "env.db", "warehouse": "dev_wh"},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -594,13 +594,13 @@ warehouse = "dev_wh"
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 
-[environments.dev.vars]
+[targets.dev.vars]
 shared = "env"
 env_only = "present"
 """.strip()
@@ -613,7 +613,7 @@ local_only = "present"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={"shared": "cli", "cli_only": "present"},
         run_id=None,
         expected_model_schema_names=(None,),
@@ -622,7 +622,7 @@ local_only = "present"
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
             "shared": "cli",
@@ -672,7 +672,7 @@ absolute = 0.01
                 "\n);\n\nselect 1\n"
             ),
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -704,7 +704,7 @@ absolute = 0.01
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -731,7 +731,7 @@ append_cursor_inclusive = false
                 "\n);\n\nselect 1\n"
             ),
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -749,7 +749,7 @@ append_cursor_inclusive = false
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -804,7 +804,7 @@ select 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -830,7 +830,7 @@ select 1
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -843,7 +843,7 @@ select 1
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 path = "/tmp/${user}.db"
@@ -859,16 +859,16 @@ schema = "marts"
 query_change_backfill = "${ENV:BACKFILL_POLICY}"
 row_diff_exclude_columns = ["${schema_prefix}_loaded_at"]
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "dev_${CTX:model.database}"
 schema = "dev_${ENV:USER}_${CTX:model.schema}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  alias '${CTX:model.name}_${CTX:run.environment}',
+  alias '${CTX:model.name}_${CTX:run.target}',
   config (
     cluster_by ['${schema_prefix}_day'],
     run_label '${CTX:run.id}',
@@ -884,7 +884,7 @@ select 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="run_123",
         expected_model_schema_names=(None,),
@@ -910,7 +910,7 @@ select 1
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={
             "path": "/tmp/kevin.db",
             "warehouse": "analytics_kevin_wh",
@@ -930,18 +930,18 @@ select 1
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "ci"
+default_target = "ci"
 
-[environments]
+[targets]
 
-[environments.ci]
-database = "db_${CTX:run.environment}"
+[targets.ci]
+database = "db_${CTX:run.target}"
 schema = "schema_${CTX:run.id}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
-  alias 'orders_${CTX:run.environment}',
+  alias 'orders_${CTX:run.target}',
   config (
     run_label '${CTX:run.id}',
     target_qualified '${CTX:target.qualified}',
@@ -952,7 +952,7 @@ select 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="run_123",
         expected_model_schema_names=(None,),
@@ -971,7 +971,7 @@ select 1
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="ci",
+        expected_effective_target_name="ci",
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -1005,7 +1005,7 @@ select 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="run_123",
         expected_model_schema_names=(None,),
@@ -1026,7 +1026,7 @@ select 1
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         environment_variables={"CI": "1", "APPEND_INCLUSIVE": "0"},
@@ -1072,7 +1072,7 @@ select 1 as order_id
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=("orders",),
@@ -1100,7 +1100,7 @@ select 1 as order_id
             "WHERE order_id IS NOT NULL\n"
             "  AND order_id NOT IN ('1')",
         ),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={
             "model_schema": "marts",
@@ -1121,7 +1121,7 @@ select 1 as order_id
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [vars]
 base = "analytics"
@@ -1137,16 +1137,16 @@ schema = "marts"
 [path_defaults.staging]
 alias = "${stage_two}_orders"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "preserve"
 schema = "preserve"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -1161,7 +1161,7 @@ schema = "preserve"
         expected_model_path_defaults=("staging",),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
             "base": "analytics",
@@ -1190,7 +1190,7 @@ def project_columns(ctx) -> str:
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [settings]
 default_audit_severity = "warn"
@@ -1198,9 +1198,9 @@ default_audit_severity = "warn"
 [defaults]
 schema = "marts"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "analytics"
 """.strip()
             + "\n",
@@ -1240,7 +1240,7 @@ sources:
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars={
             "run_label": "cli_macro",
             "grants": {"role": "analyst"},
@@ -1281,7 +1281,7 @@ SELECT 1
             "SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
             "'' AS suffix FROM __source(\"raw_orders\")",
         ),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
             "run_label": "cli_macro",
@@ -1382,7 +1382,7 @@ sources:
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=("orders",),
@@ -1438,7 +1438,7 @@ sources:
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
         expected_sql_function_query_change_backfills=(None,),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={
             "raw_database": "raw_db",
@@ -1467,7 +1467,7 @@ def status_match(column_name: str, status: str) -> str:
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [vars]
 status_type = "VARCHAR"
@@ -1477,9 +1477,9 @@ udf_database = "analytics"
 udf_schema = "udf_dev"
 backfill_days = "30"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "analytics_default"
 schema = "default_schema"
 """.strip()
@@ -1497,7 +1497,7 @@ FUNCTION (
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(),
@@ -1520,7 +1520,7 @@ FUNCTION (
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
         expected_sql_function_query_change_backfills=("bounded-30d",),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
             "status_type": "VARCHAR",
@@ -1561,7 +1561,7 @@ WHERE customer_id = p_customer_id
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -1588,7 +1588,7 @@ WHERE customer_id = p_customer_id
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
         expected_sql_function_query_change_backfills=(None,),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_effective_sql_validation=False,
@@ -1640,7 +1640,7 @@ SELECT @project_columns() FROM raw_customers
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -1649,7 +1649,7 @@ SELECT @project_columns() FROM raw_customers
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_test_sql_bodies=(
@@ -1696,16 +1696,16 @@ SELECT 1
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [vars]
 status_type = "VARCHAR"
 return_type = "BOOLEAN"
 udf_schema = "udf_dev"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 schema = "default_schema"
 """.strip()
             + "\n",
@@ -1724,7 +1724,7 @@ def main(order_status):
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(),
@@ -1750,7 +1750,7 @@ def main(order_status):
         expected_sql_function_entry_points=("main",),
         expected_sql_function_packages=(("faker",),),
         expected_sql_function_query_change_backfills=(None,),
-        expected_effective_environment_name="dev",
+        expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
             "status_type": "VARCHAR",
@@ -1811,7 +1811,7 @@ SELECT @column FROM __source("@source") WHERE @column IS NULL
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=("orders",),
@@ -1827,7 +1827,7 @@ SELECT @column FROM __source("@source") WHERE @column IS NULL
             'SELECT 1 FROM __source("raw_orders")',
             'SELECT order_id FROM __source("raw_orders") WHERE order_id IS NULL',
         ),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -1868,7 +1868,7 @@ sources:
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None, "orders"),
@@ -1896,7 +1896,7 @@ sources:
             "  )",
             'SELECT order_id\nFROM __source("raw_orders")\nWHERE order_id IS NULL',
         ),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((), ()),
@@ -1920,7 +1920,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -1931,7 +1931,7 @@ SELECT 1
         expected_source_names=(),
         expected_test_sql_bodies=(),
         expected_audit_sql_bodies=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -1944,7 +1944,7 @@ SELECT 1
             "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
             "audits/generic/not_null.sql": "AUDIT ();\n\nSELECT 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -1955,7 +1955,7 @@ SELECT 1
         expected_source_names=(),
         expected_test_sql_bodies=(),
         expected_audit_sql_bodies=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -1968,7 +1968,7 @@ SELECT 1
     BuildCompileInputsTestCase(
         description="generates clickstate style run ids when none are provided",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=(None,),
@@ -1977,7 +1977,7 @@ SELECT 1
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -1997,7 +1997,7 @@ sql_validation = false
             + "\n",
             "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="test_run",
         expected_model_schema_names=(None,),
@@ -2006,7 +2006,7 @@ sql_validation = false
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_effective_sql_validation=False,
@@ -2027,7 +2027,7 @@ sqlglot = false
             + "\n",
             "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="test_run",
         expected_model_schema_names=(None,),
@@ -2036,7 +2036,7 @@ sqlglot = false
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_effective_sqlglot=False,
@@ -2049,7 +2049,7 @@ sqlglot = false
         | {
             "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="test_run",
         no_sql_validation=True,
@@ -2059,7 +2059,7 @@ sqlglot = false
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((),),
@@ -2095,7 +2095,7 @@ sqlglot = false
                 'union all select * from __dbt_ref("stripe", "orders")\n'
             ),
         },
-        selected_environment=None,
+        selected_target=None,
         cli_vars=None,
         run_id="test_run",
         expected_model_schema_names=(None,),
@@ -2107,7 +2107,7 @@ sqlglot = false
         expected_model_path_defaults=(None,),
         expected_seed_names=(),
         expected_source_names=(),
-        expected_effective_environment_name=None,
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_references=((("dbt_ref", "stg_orders"), ("dbt_ref", "orders")),),
@@ -2127,17 +2127,17 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    environment_name: str
+    target_name: str
     environment_value: str
-    for environment_name, environment_value in test_case.environment_variables.items():
-        monkeypatch.setenv(environment_name, environment_value)
+    for target_name, environment_value in test_case.environment_variables.items():
+        monkeypatch.setenv(target_name, environment_value)
 
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs,
-        selected_environment=test_case.selected_environment,
+        selected_target=test_case.selected_target,
         cli_vars=test_case.cli_vars,
         run_id=test_case.run_id,
         no_sql_validation=test_case.no_sql_validation,
@@ -2362,9 +2362,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         )
         == test_case.expected_audit_references
     )
-    assert (
-        compile_inputs.effective_environment_name == test_case.expected_effective_environment_name
-    )
+    assert compile_inputs.effective_target_name == test_case.expected_effective_target_name
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
     assert compile_inputs.effective_settings.sqlglot is test_case.expected_effective_sqlglot
     assert (
@@ -2386,8 +2384,8 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 @pytest.mark.parametrize(
     "test_case",
     [
-        ResolveEnvironmentConfigTestCase(
-            description="merges local environment overrides with nullable clone policy",
+        ResolveTargetConfigTestCase(
+            description="merges local target overrides with nullable clone policy",
             expected_connection={"warehouse": "local_wh", "role": "project_role"},
             expected_vars={"shared": "local", "project_only": "present"},
             expected_database="local_db",
@@ -2396,17 +2394,17 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             expected_allow_as_target=True,
         )
     ],
-    ids=["merges local environment overrides with nullable clone policy"],
+    ids=["merges local target overrides with nullable clone policy"],
 )
 def test_given_project_and_local_environment_when_resolving_then_local_values_override_by_field(
-    test_case: ResolveEnvironmentConfigTestCase,
+    test_case: ResolveTargetConfigTestCase,
 ) -> None:
-    environment: EnvironmentConfig = resolve_environment_config(
+    environment: TargetConfig = resolve_target_config(
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",
-            environments={
-                "dev": EnvironmentConfig(
+            targets={
+                "dev": TargetConfig(
                     connection={"warehouse": "project_wh", "role": "project_role"},
                     vars={"shared": "project", "project_only": "present"},
                     database="project_db",
@@ -2416,8 +2414,8 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
             },
         ),
         local_config=LocalConfig(
-            environments={
-                "dev": LocalEnvironmentConfig(
+            targets={
+                "dev": LocalTargetConfig(
                     connection={"warehouse": "local_wh"},
                     vars={"shared": "local"},
                     database="local_db",
@@ -2425,7 +2423,7 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
                 )
             }
         ),
-        environment_name="dev",
+        target_name="dev",
     )
 
     assert environment.connection == test_case.expected_connection
@@ -2465,7 +2463,7 @@ SELECT 1 AS order_id
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="table functions are terminal resources",
     ),
@@ -2480,7 +2478,7 @@ SELECT * FROM __source("missing_source")
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="references unknown source 'missing_source'",
     ),
@@ -2505,7 +2503,7 @@ SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="cursor references column 'event_time' not declared",
     ),
@@ -2530,7 +2528,7 @@ SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="check_columns references column 'status' not declared",
     ),
@@ -2556,7 +2554,7 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
     ),
@@ -2571,7 +2569,7 @@ SELECT * FROM __source("missing_source")
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="references unknown source 'missing_source'",
     ),
@@ -2586,7 +2584,7 @@ SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=(
             r"Model file models/staging/orders\.sql uses __dbt_ref\('stg_orders'\) "
@@ -2606,7 +2604,7 @@ SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=(
             r"SQL function file functions/sql/orders\.sql uses __dbt_ref\('stg_orders'\) "
@@ -2624,7 +2622,7 @@ SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=(
             r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\); "
@@ -2650,7 +2648,7 @@ SELECT 1 FROM __source("@source")
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="must not override implicit source from attached context",
     ),
@@ -2669,7 +2667,7 @@ SELECT 1 AS order_id
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=("column 'order_id' cannot set nullable = true and audit not_null"),
     ),
@@ -2685,7 +2683,7 @@ sources:
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="references unknown generic audit 'missing_definition'",
     ),
@@ -2700,7 +2698,7 @@ SELECT @missing_macro()
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="Unknown macro '@missing_macro'",
     ),
@@ -2716,7 +2714,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="must declare mock CTEs and one __expected__<model>",
     ),
@@ -2744,7 +2742,7 @@ SELECT order_id FROM __expected__orders
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
     ),
@@ -2767,7 +2765,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="mocks unknown source 'missing_source'",
     ),
@@ -2790,7 +2788,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="mocks unknown seed 'missing_seed'",
     ),
@@ -2821,7 +2819,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="mocks unknown macro 'missing_macro'",
     ),
@@ -2848,7 +2846,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="expects unknown model 'missing_model'",
     ),
@@ -2879,7 +2877,7 @@ SELECT 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="uses reserved helper CTE name '__actual'",
     ),
@@ -2894,7 +2892,7 @@ SELECT @missing_macro()
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="Unknown macro '@missing_macro'",
     ),
@@ -2914,7 +2912,7 @@ def project_columns() -> str:
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="Macro name collision for 'project_columns'",
     ),
@@ -2936,48 +2934,48 @@ select 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="model config field 'schema' does not allow macros",
     ),
     BuildCompileInputsErrorTestCase(
-        description="raises when the selected environment does not exist",
+        description="raises when the selected target does not exist",
         repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
-        selected_environment="missing",
+        selected_target="missing",
         run_id=None,
-        expected_error_fragment="Unknown environment 'missing'",
+        expected_error_fragment="Unknown target 'missing'",
         expected_error_type=SpecConfigError,
     ),
     BuildCompileInputsErrorTestCase(
-        description="raises when the local environment does not exist",
+        description="raises when the local target does not exist",
         repo_files=base_repo_files()
         | {
             "sqlbuild_local.toml": """
-environment = "missing"
+target = "missing"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
-        expected_error_fragment="Unknown environment 'missing'",
+        expected_error_fragment="Unknown target 'missing'",
         expected_error_type=SpecConfigError,
     ),
     BuildCompileInputsErrorTestCase(
-        description="raises when the project default environment does not exist",
+        description="raises when the project default target does not exist",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "missing"
+default_target = "missing"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
-        expected_error_fragment="Unknown environment 'missing'",
+        expected_error_fragment="Unknown target 'missing'",
         expected_error_type=SpecConfigError,
     ),
     BuildCompileInputsErrorTestCase(
@@ -2994,7 +2992,7 @@ user = "${missing}"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="effective vars references unknown variable 'missing'",
     ),
@@ -3012,7 +3010,7 @@ path = "${ENV:SQLBUILD_DB_PATH}"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=(
             "effective connection references missing ENV variable 'SQLBUILD_DB_PATH'"
@@ -3036,7 +3034,7 @@ select 1
 """.strip()
             + "\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="model config references unknown CTX key 'this'",
     ),
@@ -3047,20 +3045,20 @@ select 1
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [defaults]
 schema = "marts"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 schema = "dev_${CTX:target.missing}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="environment schema references unknown CTX key 'target.missing'",
     ),
@@ -3071,17 +3069,17 @@ schema = "dev_${CTX:target.missing}"
             "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
-[environments]
+[targets]
 
-[environments.dev]
+[targets.dev]
 database = "dev_${CTX:model.database}"
 """.strip()
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=(
             "environment database references CTX key 'model.database' but no value is available"
@@ -3102,7 +3100,7 @@ second = "${first}"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=(
             "effective vars contain a cyclic reference: first -> second -> first"
@@ -3125,7 +3123,7 @@ schema = "${SQLBUILD:user}"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="model config references unsupported template namespace 'SQLBUILD'",
     ),
@@ -3143,7 +3141,7 @@ path = "${CTX:schema}"
             + "\n",
             "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="effective connection does not allow CTX templates",
     ),
@@ -3153,7 +3151,7 @@ path = "${CTX:schema}"
         | {
             "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="SQL syntax error in model 'broken'",
     ),
@@ -3165,7 +3163,7 @@ path = "${CTX:schema}"
                 "MODEL (pre_hook 'THIS IS NOT VALID SQL');\n\nSELECT 1 AS id\n"
             ),
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="SQL syntax error in pre_hook for model 'broken'",
     ),
@@ -3177,7 +3175,7 @@ path = "${CTX:schema}"
                 "MODEL (post_hook 'THIS IS NOT VALID SQL');\n\nSELECT 1 AS id\n"
             ),
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="SQL syntax error in post_hook for model 'broken'",
     ),
@@ -3190,7 +3188,7 @@ path = "${CTX:schema}"
                 "SELECT 1 AS id\n"
             ),
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment=r"hook SQL .* does not allow \$\{\.\.\.\} templates",
     ),
@@ -3200,7 +3198,7 @@ path = "${CTX:schema}"
         | {
             "models/staging/orders.sql": "MODEL (tags nightly);\n\nSELECT 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="tags must be a list",
     ),
@@ -3210,7 +3208,7 @@ path = "${CTX:schema}"
         | {
             "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="but no dbt manifest was found",
     ),
@@ -3241,7 +3239,7 @@ path = "${CTX:schema}"
             + "\n",
             "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="dbt model 'orders' is ambiguous across packages",
     ),
@@ -3265,7 +3263,7 @@ path = "${CTX:schema}"
             + "\n",
             "models/orders.sql": "MODEL ();\n\nselect 1\n",
         },
-        selected_environment=None,
+        selected_target=None,
         run_id=None,
         expected_error_fragment="dbt and SQLBuild models share names: orders",
     ),
@@ -3283,10 +3281,10 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    environment_name: str
+    target_name: str
     environment_value: str
-    for environment_name, environment_value in test_case.environment_variables.items():
-        monkeypatch.setenv(environment_name, environment_value)
+    for target_name, environment_value in test_case.environment_variables.items():
+        monkeypatch.setenv(target_name, environment_value)
 
     write_repo_files(tmp_path, test_case.repo_files)
 
@@ -3295,7 +3293,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         build_compile_inputs(
             discovered_inputs,
-            selected_environment=test_case.selected_environment,
+            selected_target=test_case.selected_target,
             run_id=test_case.run_id,
             external_sql_reference_resolver=build_external_sql_reference_resolver(
                 project_dir=tmp_path
@@ -3328,7 +3326,7 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
 """.strip()
                 + "\n",
             },
-            selected_environment=None,
+            selected_target=None,
             run_id=None,
             expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
         ),
@@ -3346,7 +3344,7 @@ def test_given_snapshot_contract_schema_change_conflict_when_building_then_error
     with pytest.raises(ValueError, match=test_case.expected_error_fragment) as exc_info:
         build_compile_inputs(
             discovered_inputs,
-            selected_environment=test_case.selected_environment,
+            selected_target=test_case.selected_target,
             run_id=test_case.run_id,
             external_sql_reference_resolver=build_external_sql_reference_resolver(
                 project_dir=tmp_path

@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationTarget,
 )
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
-from sqlbuild.spec.models.project import EnvironmentConfig
+from sqlbuild.spec.models.project import TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
     DeferredTargetTestCase,
 )
@@ -137,7 +137,7 @@ def test_given_deferred_env_when_building_targets_then_resolves_expected_naming(
         physical_schema=test_case.logical_schema or test_case.default_schema,
         physical_database=test_case.logical_database or test_case.default_database,
     )
-    deferred_env: EnvironmentConfig = EnvironmentConfig(
+    deferred_env: TargetConfig = TargetConfig(
         schema=test_case.env_schema,
         database=test_case.env_database,
     )

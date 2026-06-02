@@ -66,7 +66,7 @@ class ContextVerificationTestCase:
     reason: PlanReason
     custom_config: dict[str, object]
     custom_placeholders: dict[str, str]
-    environment: str
+    target: str
     effective_vars: dict[str, object]
     expected_is_first_run: bool
     expected_is_full_refresh: bool
@@ -75,7 +75,7 @@ class ContextVerificationTestCase:
     expected_config_value: object
     expected_placeholder_key: str
     expected_placeholder_value: str
-    expected_environment: str
+    expected_target: str
     expected_var_key: str
     expected_var_value: str
     expected_qualified_name: str

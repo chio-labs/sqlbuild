@@ -1,4 +1,4 @@
-"""Public checkpoint helpers for virtual environments."""
+"""Public checkpoint helpers for virtual targets."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def create_finalized_virtual_environment_checkpoint(
     connection: Any,
     *,
     schema: str,
-    virtual_environment_name: str,
+    virtual_target_name: str,
     refs: tuple[VirtualEnvironmentRefRecord, ...],
     function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (),
 ) -> str:
@@ -34,7 +34,7 @@ def create_finalized_virtual_environment_checkpoint(
         schema=schema,
         checkpoint=VirtualEnvironmentCheckpointRecord(
             checkpoint_id=checkpoint_id,
-            virtual_environment_name=virtual_environment_name,
+            virtual_target_name=virtual_target_name,
         ),
         refs=tuple(
             VirtualEnvironmentCheckpointRefRecord(

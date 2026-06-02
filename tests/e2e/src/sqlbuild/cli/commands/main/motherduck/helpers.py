@@ -20,10 +20,10 @@ def build_motherduck_project_toml(*, project_name: str, schema_name: str) -> str
     return (
         f'name = "{project_name}"\n'
         'adapter = "motherduck"\n'
-        'default_environment = "dev"\n\n'
+        'default_target = "dev"\n\n'
         "[connection]\n"
         'token = "${ENV:SQB_TEST_MOTHERDUCK_TOKEN}"\n\n'
-        "[environments.dev]\n"
+        "[targets.dev]\n"
         f'schema = "{schema_name}"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'

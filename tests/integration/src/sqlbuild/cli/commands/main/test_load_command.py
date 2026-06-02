@@ -111,16 +111,16 @@ _SOURCE_DEFERRAL_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "demo.duckdb"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "prod"
 
-[environments.prod]
+[targets.prod]
 schema = "prod"
 """.strip()
     + "\n",
@@ -134,15 +134,15 @@ _SOURCE_DEFERRAL_MISSING_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "demo.duckdb"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 
-[environments.prod]
+[targets.prod]
 schema = "prod"
 """.strip()
     + "\n",
@@ -153,21 +153,21 @@ _SOURCE_DEFERRAL_LOCAL_OVERRIDE_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "demo.duckdb"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "dev"
 
-[environments.prod]
+[targets.prod]
 schema = "prod"
 """.strip()
     + "\n",
     "sqlbuild_local.toml": """
-[environments.dev]
+[targets.dev]
 defer_sources_to = "prod"
 """.strip()
     + "\n",
@@ -177,12 +177,12 @@ _SOURCE_DEFERRAL_UNMANAGED_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "demo.duckdb"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 """.strip()
     + "\n",
@@ -211,7 +211,7 @@ _SOURCE_DEFERRAL_AUTO_LOAD_FALSE_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "demo.duckdb"
@@ -219,11 +219,11 @@ database = "demo.duckdb"
 [settings]
 auto_load_sources = false
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "prod"
 
-[environments.prod]
+[targets.prod]
 schema = "prod"
 """.strip()
     + "\n",
@@ -324,7 +324,7 @@ _SOURCE_DEFERRAL_TEMPLATED_ENV_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "demo.duckdb"
@@ -332,11 +332,11 @@ database = "demo.duckdb"
 [vars]
 source_prefix = "prod"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 defer_sources_to = "prod"
 
-[environments.prod]
+[targets.prod]
 schema = "${source_prefix}_raw"
 """.strip()
     + "\n",
@@ -1102,13 +1102,13 @@ def raw_events(ctx):
             "sqlbuild_project.toml": (
                 'name = "demo"\n'
                 'adapter = "duckdb"\n'
-                'default_environment = "dev"\n\n'
+                'default_target = "dev"\n\n'
                 "[connection]\n"
                 'database = "demo.duckdb"\n\n'
                 "[vars]\n"
                 'tier = "project"\n'
                 'project_only = "yes"\n\n'
-                "[environments.dev.vars]\n"
+                "[targets.dev.vars]\n"
                 'tier = "dev"\n'
             ),
             "sources/raw.yml": """
@@ -1129,7 +1129,7 @@ from sqlbuild.loaders import loader
 @loader
 def raw_orders(ctx):
     status = ":".join([
-        str(ctx.environment),
+        str(ctx.target),
         str(ctx.vars["tier"]),
         str(ctx.vars["project_only"]),
         str(ctx.run_id != "demo"),
@@ -1933,7 +1933,7 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={"tier": "cli", "project_only": "yes"},
         is_reload=False,
     )
@@ -1979,7 +1979,7 @@ def test_given_source_loader_when_running_pipeline_then_drops_stale_staging_firs
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -2571,7 +2571,7 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -2581,7 +2581,7 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -2629,7 +2629,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -2676,7 +2676,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -2741,7 +2741,7 @@ def test_given_loader_cursor_configuration_when_running_pipeline_then_records_ex
             connection_config={"database": str(tmp_path / "demo.duckdb")},
             adapter=adapter,
             run_id="test_run",
-            environment="dev",
+            target="dev",
             vars={},
             is_reload=False,
         )
@@ -2903,7 +2903,7 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
         max_concurrency=test_case.max_concurrency,
@@ -3003,7 +3003,7 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
         discovered_inputs=discovered_inputs,
         select=("raw_join",),
         exclude=(),
-        environment_config=None,
+        target_config=None,
     )
     assert tuple(source.name for source in plain_selected_sources) == ("raw_join",)
 
@@ -3011,7 +3011,7 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
         discovered_inputs=discovered_inputs,
         select=("raw_join",),
         exclude=(),
-        environment_config=None,
+        target_config=None,
     )
     assert tuple(source.name for source in terminal_loader_selected_sources) == ("raw_join",)
 
@@ -3019,7 +3019,7 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
         discovered_inputs=discovered_inputs,
         select=("+raw_join",),
         exclude=(),
-        environment_config=None,
+        target_config=None,
     )
     results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
         sources=selected_sources,
@@ -3027,7 +3027,7 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
         max_concurrency=test_case.max_concurrency,
@@ -3258,7 +3258,7 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -3471,7 +3471,7 @@ def test_given_batched_loader_variants_when_running_pipeline_then_writes_expecte
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -3959,7 +3959,7 @@ def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )

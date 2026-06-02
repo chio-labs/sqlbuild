@@ -6,7 +6,6 @@ from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.janitor.models import JanitorCheckpointCandidate, JanitorRelationKey
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.state.main.checkpoint_retention import inspect_checkpoint_retention
 from sqlbuild.virtual.state.models import CheckpointRetentionInspection, PhysicalRelationRecord
 
@@ -15,18 +14,18 @@ def checkpoint_retention(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    virtual_environment_name: str | None,
+    virtual_target_name: str | None,
 ) -> CheckpointRetentionInspection | None:
     """Inspect virtual checkpoint retention when janitor runs in virtual mode."""
 
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
+    if not discovered_inputs.project_config.settings.virtual_environments:
         return None
-    if virtual_environment_name is None:
+    if virtual_target_name is None:
         return None
     return inspect_checkpoint_retention(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
-        virtual_environment_name=virtual_environment_name,
+        virtual_target_name=virtual_target_name,
         max_checkpoints=discovered_inputs.project_config.janitor.max_checkpoints,
     )
 
@@ -79,7 +78,7 @@ def checkpoint_candidates(
     return tuple(
         JanitorCheckpointCandidate(
             checkpoint_id=checkpoint.checkpoint_id,
-            virtual_environment_name=checkpoint.virtual_environment_name,
+            virtual_target_name=checkpoint.virtual_target_name,
             created_at=checkpoint.created_at,
         )
         for checkpoint in retention.prune_checkpoints

@@ -640,7 +640,7 @@ def test_given_virtual_plan_include_stale_upstreams_when_running_then_it_expands
             description="virtual plan json includes metadata fields",
             expected_json_fragments=(
                 '"metadata"',
-                '"virtual_environment_name": "dev"',
+                '"virtual_target_name": "dev"',
                 '"virtual_environment_status": "working"',
                 '"virtual_stale_model_names"',
                 '"virtual_stale_root_names"',

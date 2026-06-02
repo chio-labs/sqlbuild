@@ -50,6 +50,6 @@ class StateLockServiceTestCase:
 class DetachedRetentionHelperTestCase:
     description: str
     retention_days: int
-    expected_cleanup_environment_names: tuple[str, ...]
+    expected_cleanup_target_names: tuple[str, ...]
     expected_cleanup_relation_names: tuple[str, ...]
     expected_retained_relation_names: tuple[str, ...]

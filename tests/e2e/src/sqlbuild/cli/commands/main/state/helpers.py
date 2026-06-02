@@ -28,19 +28,20 @@ def build_postgres_state_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
-        'environment_mode = "virtual"\n'
-        'default_environment = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n"
+        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
-        "[environments.dev.state]\n"
+        "[targets.dev.state]\n"
         'backend = "postgres"\n'
         f'schema = "{state_schema}"\n'
         f"allow_reset = {allow_reset_value}\n\n"
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         f'host = "{effective_state_config["host"]}"\n'
         f"port = {effective_state_config['port']}\n"
         f'dbname = "{effective_state_config["dbname"]}"\n'
@@ -51,7 +52,7 @@ def build_postgres_state_project_toml(
 
 def build_postgres_local_state_connection_toml(*, config: dict[str, object]) -> str:
     return (
-        "[environments.dev.state.connection]\n"
+        "[targets.dev.state.connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
         f'dbname = "{config["dbname"]}"\n'

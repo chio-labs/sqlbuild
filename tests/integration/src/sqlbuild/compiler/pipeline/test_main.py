@@ -371,11 +371,11 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "sqlbuild_local.toml": (
                     'adapter = "snowflake"\n'
-                    'environment = "dev"\n\n'
+                    'target = "dev"\n\n'
                     "[connection]\n"
                     'database = "${ENV:TEST_DB}"\n'
                     'schema = "${ENV:TEST_SCHEMA}"\n\n'
-                    "[environments.dev]\n"
+                    "[targets.dev]\n"
                     'database = "${ENV:TEST_DB}"\n'
                     'schema = "${ENV:TEST_SCHEMA}"\n'
                 ),
@@ -417,12 +417,12 @@ def test_given_snowflake_local_environment_target_namespace_when_compiling_then_
                 "sqlbuild_project.toml": (
                     'name = "demo"\n'
                     'adapter = "duckdb"\n'
-                    'default_environment = "dev"\n\n'
+                    'default_target = "dev"\n\n'
                     "[connection]\n"
                     'database = ":memory:"\n\n'
-                    "[environments.dev]\n"
+                    "[targets.dev]\n"
                     'schema = "dev_schema"\n\n'
-                    "[environments.prod]\n"
+                    "[targets.prod]\n"
                     'schema = "prod_schema"\n'
                 ),
                 "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),

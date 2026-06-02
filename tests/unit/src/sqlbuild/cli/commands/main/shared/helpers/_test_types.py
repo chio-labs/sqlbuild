@@ -14,7 +14,7 @@ from sqlbuild.spec.models.project import SnapshotsConfig
 @dataclass(frozen=True)
 class ModeGuardTestCase:
     description: str
-    environment_mode: str
+    virtual_environments: bool
     command_name: str
     expected_error_fragment: str | None
     defer_to: str | None = None
@@ -175,7 +175,7 @@ class ResolveProjectConnectionConfigTestCase:
 @dataclass(frozen=True)
 class ResolveEnvironmentConnectionConfigTestCase:
     description: str
-    environment_name: str
+    target_name: str
     expected_connection: dict[str, object]
 
 

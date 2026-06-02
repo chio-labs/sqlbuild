@@ -42,7 +42,7 @@ class JanitorCheckpointCandidate:
     """One retained-history checkpoint eligible for pruning."""
 
     checkpoint_id: str
-    virtual_environment_name: str
+    virtual_target_name: str
     created_at: datetime | None
 
 
@@ -50,7 +50,7 @@ class JanitorCheckpointCandidate:
 class JanitorDetachedVirtualEnvironmentCandidate:
     """One detached virtual environment eligible for state cleanup."""
 
-    virtual_environment_name: str
+    virtual_target_name: str
     updated_at: datetime | None
 
 
@@ -58,7 +58,7 @@ class JanitorDetachedVirtualEnvironmentCandidate:
 class JanitorExpiredVirtualEnvironmentCandidate:
     """One non-active virtual environment eligible for TTL cleanup."""
 
-    virtual_environment_name: str
+    virtual_target_name: str
     updated_at: datetime | None
 
 
@@ -114,7 +114,7 @@ class JanitorSkippedSchema:
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 
-    environment_name: str | None
+    target_name: str | None
     retention_days: int
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
     checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)

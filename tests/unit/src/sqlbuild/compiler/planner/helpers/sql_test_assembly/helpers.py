@@ -53,7 +53,7 @@ _STUB_TEST_BLOCK: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
 _MACRO_CONTEXT: MacroContext = MacroContext(
     adapter_name="duckdb",
     sqlglot_enabled=True,
-    environment_name=None,
+    target_name=None,
     vars={},
 )
 
@@ -194,7 +194,7 @@ def build_test_and_project(
 
     project: CompiledProject = CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),

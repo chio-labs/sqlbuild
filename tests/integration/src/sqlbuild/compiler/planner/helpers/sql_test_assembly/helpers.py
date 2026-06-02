@@ -123,7 +123,7 @@ def build_test_and_project(
 
     project: CompiledProject = CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),

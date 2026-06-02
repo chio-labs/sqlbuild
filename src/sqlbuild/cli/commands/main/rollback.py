@@ -18,9 +18,8 @@ from sqlbuild.cli.commands.main.shared.helpers.planning_progress import Planning
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.spec.models.environments import resolve_environment_name
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
+from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.rollback import run_virtual_rollback
 
 
@@ -43,8 +42,8 @@ def run_rollback(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
-        raise CliUserError("rollback requires environment_mode = 'virtual'", code="C245")
+    if not discovered_inputs.project_config.settings.virtual_environments:
+        raise CliUserError("rollback requires virtual_environments = true", code="C245")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -55,13 +54,13 @@ def run_rollback(
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
     )
-    resolved_environment_name: str | None = resolve_environment_name(
+    resolved_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    virtual_environment_name: str | None = virtual_environment or resolved_environment_name
-    if virtual_environment_name is None:
+    virtual_target_name: str | None = virtual_environment or resolved_target_name
+    if virtual_target_name is None:
         raise CliUserError("rollback requires --virtual-env or a default environment", code="C246")
     use_color: bool = not no_color and supports_color()
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
@@ -78,7 +77,7 @@ def run_rollback(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
-        virtual_environment_name=virtual_environment_name,
+        virtual_target_name=virtual_target_name,
         checkpoint_id=checkpoint_id,
         select=select,
         exclude=exclude,
@@ -97,7 +96,7 @@ def run_rollback(
     )
     print(
         format_rollback_output(
-            virtual_environment=virtual_environment_name,
+            virtual_environment=virtual_target_name,
             checkpoint_id=restored_checkpoint_id,
             rolled_back_models=rolled_back_models,
             status=status.value,

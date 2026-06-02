@@ -19,10 +19,10 @@ from sqlbuild.shared.helpers.sql_reference_patterns import quoted_reference_call
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     ClonePolicy,
-    EnvironmentConfig,
     LocalConfig,
-    LocalEnvironmentConfig,
+    LocalTargetConfig,
     ProjectConfig,
+    TargetConfig,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -54,31 +54,27 @@ def build_source_read_map(
     )
     if not selected_managed_sources:
         return source_map
-    source_environment_name: str | None = _resolve_source_environment_name(
+    source_target_name: str | None = _resolve_source_target_name(
         project=project,
         project_config=project_config,
         local_config=local_config,
         defer_sources_to=defer_sources_to,
     )
-    if source_environment_name is None and project.effective_environment_name is None:
+    if source_target_name is None and project.effective_target_name is None:
         return source_map
-    if source_environment_name is None:
-        raise PlannerInputError(
-            _missing_source_deferral_message(project.effective_environment_name)
-        )
+    if source_target_name is None:
+        raise PlannerInputError(_missing_source_deferral_message(project.effective_target_name))
     if project_config is None or local_config is None:
-        raise PlannerInputError(
-            _missing_source_deferral_message(project.effective_environment_name)
-        )
+        raise PlannerInputError(_missing_source_deferral_message(project.effective_target_name))
     if (
-        source_environment_name not in project_config.environments
-        and source_environment_name not in local_config.environments
+        source_target_name not in project_config.targets
+        and source_target_name not in local_config.targets
     ):
-        raise PlannerInputError(f"Unknown source deferral environment '{source_environment_name}'")
-    source_environment: EnvironmentConfig = _resolve_environment_config(
+        raise PlannerInputError(f"Unknown source deferral environment '{source_target_name}'")
+    source_environment: TargetConfig = _resolve_target_config(
         project_config=project_config,
         local_config=local_config,
-        environment_name=source_environment_name,
+        target_name=source_target_name,
     )
     result: dict[str, SourceEntry] = dict(source_map)
     source: CompiledSource
@@ -88,7 +84,7 @@ def build_source_read_map(
         raw_source_entry: SourceEntry = _raw_source_entry(source)
         result[source.source_entry.name] = _source_entry_for_environment(
             source_entry=raw_source_entry,
-            environment_config=source_environment,
+            target_config=source_environment,
             effective_vars=project.effective_vars,
         )
     return result
@@ -129,7 +125,7 @@ def _selected_managed_source_refs(
     return tuple(sorted(names))
 
 
-def _resolve_source_environment_name(
+def _resolve_source_target_name(
     *,
     project: CompiledProject,
     project_config: ProjectConfig | None,
@@ -138,28 +134,24 @@ def _resolve_source_environment_name(
 ) -> str | None:
     if defer_sources_to is not None:
         return defer_sources_to
-    if project.effective_environment_name is None or project_config is None or local_config is None:
+    if project.effective_target_name is None or project_config is None or local_config is None:
         return None
-    active_environment: EnvironmentConfig = _resolve_environment_config(
+    active_environment: TargetConfig = _resolve_target_config(
         project_config=project_config,
         local_config=local_config,
-        environment_name=project.effective_environment_name,
+        target_name=project.effective_target_name,
     )
     return active_environment.defer_sources_to
 
 
-def _resolve_environment_config(
-    *, project_config: ProjectConfig, local_config: LocalConfig, environment_name: str
-) -> EnvironmentConfig:
-    project_environment: EnvironmentConfig = project_config.environments.get(
-        environment_name, EnvironmentConfig()
-    )
-    local_environment: LocalEnvironmentConfig | None = local_config.environments.get(
-        environment_name
-    )
+def _resolve_target_config(
+    *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
+) -> TargetConfig:
+    project_environment: TargetConfig = project_config.targets.get(target_name, TargetConfig())
+    local_environment: LocalTargetConfig | None = local_config.targets.get(target_name)
     if local_environment is None:
         return project_environment
-    return EnvironmentConfig(
+    return TargetConfig(
         connection={**project_environment.connection, **local_environment.connection},
         vars={**project_environment.vars, **local_environment.vars},
         database=(
@@ -203,7 +195,7 @@ def _raw_source_entry(source: CompiledSource) -> SourceEntry:
 def _source_entry_for_environment(
     *,
     source_entry: SourceEntry,
-    environment_config: EnvironmentConfig,
+    target_config: TargetConfig,
     effective_vars: dict[str, object],
 ) -> SourceEntry:
     if source_entry.expression is not None:
@@ -211,14 +203,14 @@ def _source_entry_for_environment(
     database: str | None = source_entry.database
     if database is None:
         database = _resolve_env_field(
-            env_value=environment_config.database,
+            env_value=target_config.database,
             logical_value=source_entry.database,
             effective_vars=effective_vars,
         )
     schema: str | None = source_entry.schema
     if schema is None:
         schema = _resolve_env_field(
-            env_value=environment_config.schema,
+            env_value=target_config.schema,
             logical_value=source_entry.schema,
             effective_vars=effective_vars,
         )
@@ -255,19 +247,19 @@ def _resolve_env_field(
     return _VAR_PATTERN.sub(_replace_var, result)
 
 
-def _missing_source_deferral_message(environment_name: str | None) -> str:
-    active_environment: str = environment_name if environment_name is not None else "<none>"
-    example_environment: str = environment_name if environment_name is not None else "dev"
+def _missing_source_deferral_message(target_name: str | None) -> str:
+    active_environment: str = target_name if target_name is not None else "<none>"
+    example_environment: str = target_name if target_name is not None else "dev"
     return (
         f"Missing source deferral config for environment '{active_environment}'.\n\n"
         "This project has sources with loaders. A loader writes data to the active "
         "environment, but models may need to read source data from another environment. "
         "SQLBuild will not guess.\n\n"
         "Add one of these:\n\n"
-        f"    [environments.{example_environment}]\n"
+        f"    [targets.{example_environment}]\n"
         '    defer_sources_to = "prod"  # example: read production source data in dev\n\n'
         "or:\n\n"
-        f"    [environments.{example_environment}]\n"
+        f"    [targets.{example_environment}]\n"
         f'    defer_sources_to = "{example_environment}"   '
         f"# read source data loaded into {example_environment}"
     )

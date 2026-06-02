@@ -34,9 +34,9 @@ TEST_CASES: list[ExpandTemplateDataTestCase] = [
     ),
     ExpandTemplateDataTestCase(
         description="eq compares evaluated references",
-        value="${if(eq(CTX:run.environment, 'prod'), 'warehouse', 'scratch')}",
+        value="${if(eq(CTX:run.target, 'prod'), 'warehouse', 'scratch')}",
         variables={},
-        context_values={"run.environment": "prod"},
+        context_values={"run.target": "prod"},
         context_label="model config",
         allow_context=True,
         preserve_context_tokens=False,
@@ -45,9 +45,9 @@ TEST_CASES: list[ExpandTemplateDataTestCase] = [
     ),
     ExpandTemplateDataTestCase(
         description="ne chooses else branch when values match",
-        value="${if(ne(CTX:run.environment, 'prod'), 'scratch', 'warehouse')}",
+        value="${if(ne(CTX:run.target, 'prod'), 'scratch', 'warehouse')}",
         variables={},
-        context_values={"run.environment": "prod"},
+        context_values={"run.target": "prod"},
         context_label="model config",
         allow_context=True,
         preserve_context_tokens=False,

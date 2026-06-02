@@ -14,7 +14,7 @@ def get_virtual_environment_refs(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    virtual_environment_name: str,
+    virtual_target_name: str,
 ) -> tuple[VirtualEnvironmentRefRecord, ...]:
     """Get refs for a virtual environment."""
 
@@ -27,7 +27,7 @@ def get_virtual_environment_refs(
         return backend.get_virtual_environment_refs(
             connection,
             schema=config.schema,
-            virtual_environment_name=virtual_environment_name,
+            virtual_target_name=virtual_target_name,
         )
     finally:
         backend.close(connection)

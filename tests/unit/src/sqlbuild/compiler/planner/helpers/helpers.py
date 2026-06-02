@@ -120,7 +120,7 @@ def build_source_load_nodes_project() -> CompiledProject:
     )
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         sources=(
@@ -383,7 +383,7 @@ def build_test_project(
 
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=tuple(models),
@@ -652,7 +652,7 @@ def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledP
     )
     return CompiledProject(
         run_id="test_run",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         sources=(source,),

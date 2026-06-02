@@ -7,7 +7,7 @@ import re
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.shared.types import SqlReferenceKind
 
-PRESERVE_ENVIRONMENT_VALUE: str = "preserve"
+PRESERVE_TARGET_VALUE: str = "preserve"
 
 AUDIT_DIRECTORY_NAME: str = "audits"
 GENERIC_AUDIT_DIRECTORY_NAME: str = "generic"

@@ -143,20 +143,21 @@ def prepare_virtual_python_check_project(*, tmp_path: Path) -> Path:
             "sqlbuild_project.toml": """
 name = "virtual_python_check_project"
 adapter = "duckdb"
-environment_mode = "virtual"
-default_environment = "dev"
+[settings]
+virtual_environments = true
+default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 
-[environments.dev.state]
+[targets.dev.state]
 backend = "duckdb"
 schema = "sqlbuild_state"
 
-[environments.dev.state.connection]
+[targets.dev.state.connection]
 database = "state.duckdb"
 """,
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
@@ -192,20 +193,21 @@ def prepare_virtual_failing_python_check_project(*, tmp_path: Path) -> Path:
             "sqlbuild_project.toml": """
 name = "virtual_failing_python_check_project"
 adapter = "duckdb"
-environment_mode = "virtual"
-default_environment = "dev"
+[settings]
+virtual_environments = true
+default_target = "dev"
 
 [connection]
 database = "warehouse.duckdb"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 
-[environments.dev.state]
+[targets.dev.state]
 backend = "duckdb"
 schema = "sqlbuild_state"
 
-[environments.dev.state.connection]
+[targets.dev.state.connection]
 database = "state.duckdb"
 """,
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",

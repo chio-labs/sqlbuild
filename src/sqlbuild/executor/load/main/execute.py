@@ -45,7 +45,7 @@ def execute_source_load(
     connection_config: dict[str, object],
     connection: Any,
     run_id: str,
-    environment: str | None,
+    target: str | None,
     vars: dict[str, object],
     is_reload: bool,
     start_cursor_ts: datetime | None = None,
@@ -59,13 +59,15 @@ def execute_source_load(
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
 
-    target_name: str = source_entry.table if source_entry.table is not None else source_entry.name
-    staging_name: str = f"{target_name}__staging"
-    target: str = resolve_qualified_name_parts(
+    destination_name: str = (
+        source_entry.table if source_entry.table is not None else source_entry.name
+    )
+    staging_name: str = f"{destination_name}__staging"
+    destination_relation: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=source_entry.database,
         schema=source_entry.schema,
-        name=target_name,
+        name=destination_name,
     )
     staging: str = resolve_qualified_name_parts(
         adapter=adapter,
@@ -82,10 +84,10 @@ def execute_source_load(
                 loader_function=loader_function,
                 adapter=adapter,
                 connection_config=connection_config,
-                target=target,
-                target_name=target_name,
+                destination_relation=destination_relation,
+                destination_name=destination_name,
                 run_id=run_id,
-                environment=environment,
+                target=target,
                 vars=vars,
                 is_reload=is_reload,
                 start_cursor_ts=start_cursor_ts,
@@ -125,12 +127,12 @@ def execute_source_load(
             adapter=adapter,
             connection_config=connection_config,
             connection=connection,
-            target=target,
-            target_database=source_entry.database,
-            target_schema=source_entry.schema,
-            target_name=target_name,
+            destination=destination_relation,
+            destination_database=source_entry.database,
+            destination_schema=source_entry.schema,
+            destination_name=destination_name,
             run_id=run_id,
-            environment=environment,
+            target=target,
             vars=vars,
             is_reload=is_reload,
             use_color=use_color,
@@ -138,8 +140,8 @@ def execute_source_load(
                 adapter=adapter,
                 connection=connection,
                 source_entry=source_entry,
-                target=target,
-                target_name=target_name,
+                target=destination_relation,
+                target_name=destination_name,
                 statement_recorder=statement_recorder,
             ),
             logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
@@ -168,7 +170,8 @@ def execute_source_load(
                 loader_function=loader_function,
             ):
                 raise ExecutorInputError(
-                    f"Loader '{loader_function.name}' returned no rows and has no target declared"
+                    f"Loader '{loader_function.name}' returned no rows and has no destination "
+                    "declared"
                 )
             if source_entry.write_strategy is not None:
                 raise ExecutorInputError(
@@ -180,7 +183,7 @@ def execute_source_load(
                 source_name=source_entry.name,
                 loader_name=loader_function.name,
                 status=ExecutionStatus.SUCCESS,
-                target=target,
+                target=destination_relation,
                 resource_kind=resource_kind,
                 staging_relation=None,
                 rows_loaded=rows_loaded,
@@ -204,8 +207,8 @@ def execute_source_load(
             adapter=adapter,
             connection=connection,
             source_entry=source_entry,
-            target=target,
-            target_name=target_name,
+            target=destination_relation,
+            target_name=destination_name,
             staging=staging,
             statement_recorder=statement_recorder,
         )
@@ -229,7 +232,7 @@ def execute_source_load(
             source_name=source_entry.name,
             loader_name=loader_function.name,
             status=ExecutionStatus.FAILED,
-            target=target,
+            target=destination_relation,
             resource_kind=resource_kind,
             staging_relation=staging,
             duration_ms=int((time.monotonic() - start) * 1000),
@@ -240,7 +243,7 @@ def execute_source_load(
         source_name=source_entry.name,
         loader_name=loader_function.name,
         status=ExecutionStatus.SUCCESS,
-        target=target,
+        target=destination_relation,
         resource_kind=resource_kind,
         staging_relation=staging,
         rows_loaded=rows_loaded,

@@ -43,9 +43,9 @@ def inspect_detached_environment_retention(
             refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
                 connection,
                 schema=config.schema,
-                virtual_environment_name=environment.virtual_environment_name,
+                virtual_target_name=environment.virtual_target_name,
             )
-            refs_by_environment[environment.virtual_environment_name] = refs
+            refs_by_environment[environment.virtual_target_name] = refs
             ref: VirtualEnvironmentRefRecord
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(

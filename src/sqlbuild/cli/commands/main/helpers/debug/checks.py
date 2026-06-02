@@ -127,11 +127,11 @@ def _build_runtime_lines() -> list[DebugLine]:
 
 
 def _resolve_environment_label(*, discovered_inputs: DiscoveredProjectInputs) -> str:
-    environment: str | None = discovered_inputs.local_config.environment
+    environment: str | None = discovered_inputs.local_config.target
     if environment is not None:
         return environment
-    if discovered_inputs.project_config.default_environment is not None:
-        return discovered_inputs.project_config.default_environment
+    if discovered_inputs.project_config.default_target is not None:
+        return discovered_inputs.project_config.default_target
     return "default"
 
 

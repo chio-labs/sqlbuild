@@ -144,7 +144,7 @@ class SourceLoadExecutionContextTestCase:
     database: str | None
     schema: str | None
     run_id: str
-    environment: str | None
+    target: str | None
     vars: dict[str, object]
     is_reload: bool
     start_cursor_ts: datetime | None

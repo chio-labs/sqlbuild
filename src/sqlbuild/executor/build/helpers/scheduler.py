@@ -118,7 +118,7 @@ class BuildScheduler:
         end_cursor_ts: datetime | None = None,
         start_cursor_int: int | None = None,
         end_cursor_int: int | None = None,
-        environment: str = "",
+        target: str = "",
         effective_vars: dict[str, object] | None = None,
         warehouse_relations: dict[str, RelationInfo] | None = None,
         on_sub_progress: Callable[[str], None] | None = None,
@@ -164,7 +164,7 @@ class BuildScheduler:
         self._end_cursor_ts: datetime | None = end_cursor_ts
         self._start_cursor_int: int | None = start_cursor_int
         self._end_cursor_int: int | None = end_cursor_int
-        self._environment: str = environment
+        self._target: str = target
         self._effective_vars: dict[str, object] = effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
         self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
@@ -441,7 +441,7 @@ class BuildScheduler:
             connection_config=self._connection_config,
             connection=connection,
             run_id=self._run_id,
-            environment=self._environment,
+            target=self._target,
             effective_vars=self._effective_vars,
             is_reload=self._loader_is_reload,
             start_cursor_ts=self._start_cursor_ts,
@@ -618,7 +618,7 @@ class BuildScheduler:
                     snapshots=self._snapshots,
                     allow_snapshot_schema_change=self._allow_snapshot_schema_change,
                     custom_materializations=self._custom_materializations,
-                    environment=self._environment,
+                    target=self._target,
                     effective_vars=self._effective_vars,
                     warehouse_relations=self._warehouse_relations,
                     on_progress=self._on_sub_progress,
@@ -801,7 +801,7 @@ def _dispatch_model(
     snapshots: SnapshotsConfig,
     allow_snapshot_schema_change: bool,
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
-    environment: str = "",
+    target: str = "",
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_progress: Callable[[str], None] | None = None,
@@ -831,7 +831,7 @@ def _dispatch_model(
             materialize_fn=registry[mat_name],
             run_id=run_id,
             query_change_tracking=query_change_tracking,
-            environment=environment,
+            target=target,
             effective_vars=effective_vars or {},
             existing_relation=existing,
             on_progress=on_progress,

@@ -105,7 +105,7 @@ def rewrite_project_to_physical_relations(
     return rewrite_virtual_project_model_targets(project=project, rewritten_targets=targets)
 
 
-def non_finalized_environment_names(
+def non_finalized_target_names(
     environments: tuple[tuple[str, VirtualEnvironmentRecord | None], ...],
 ) -> tuple[str, ...]:
     return tuple(

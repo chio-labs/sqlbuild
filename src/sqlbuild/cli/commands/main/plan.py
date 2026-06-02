@@ -28,7 +28,6 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.planner.main.plan import run_virtual_plan_pipeline
 
 
@@ -99,7 +98,7 @@ def run_plan(
         discovered_inputs=discovered_inputs,
     )
     pipeline_result: CompilePipelineResult
-    if discovered_inputs.project_config.environment_mode == EnvironmentMode.VIRTUAL:
+    if discovered_inputs.project_config.settings.virtual_environments:
         pipeline_result = run_virtual_plan_pipeline(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
@@ -108,7 +107,7 @@ def run_plan(
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
-            virtual_environment_name=virtual_env,
+            virtual_target_name=virtual_env,
             include_stale_upstreams=include_stale_upstreams,
             changes_only=changes_only,
             auto_load_sources=should_load_sources,

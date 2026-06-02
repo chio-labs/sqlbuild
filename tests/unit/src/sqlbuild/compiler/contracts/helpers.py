@@ -40,7 +40,7 @@ def make_contract_project(
     )
     return CompiledProject(
         run_id="run-1",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=(

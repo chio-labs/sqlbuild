@@ -21,7 +21,6 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.types import EnvironmentMode
 from sqlbuild.virtual.executor.main.promote import run_virtual_promote
 
 
@@ -44,8 +43,8 @@ def run_promote(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    if discovered_inputs.project_config.environment_mode != EnvironmentMode.VIRTUAL:
-        raise CliUserError("promote requires environment_mode = 'virtual'", code="C243")
+    if not discovered_inputs.project_config.settings.virtual_environments:
+        raise CliUserError("promote requires virtual_environments = true", code="C243")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -71,8 +70,8 @@ def run_promote(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
-        from_virtual_environment_name=from_virtual_environment,
-        to_virtual_environment_name=to_virtual_environment,
+        from_virtual_target_name=from_virtual_environment,
+        to_virtual_target_name=to_virtual_environment,
         select=select,
         exclude=exclude,
         allow_partial_promotion=allow_partial_promotion,

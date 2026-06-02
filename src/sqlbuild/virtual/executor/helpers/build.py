@@ -64,8 +64,8 @@ from sqlbuild.shared.helpers.naming import (
 )
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.environments import resolve_environment_config, resolve_environment_name
 from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_rewritten_model_targets,
@@ -115,7 +115,7 @@ def run_virtual_build(
     defer_sources_to: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
-    virtual_environment_name: str | None = None,
+    virtual_target_name: str | None = None,
     include_stale_upstreams: bool = False,
     changes_only: bool = False,
     auto_load_sources: bool = False,
@@ -158,19 +158,19 @@ def run_virtual_build(
     prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]] = (
         load_custom_prepare_version_functions(discovered_inputs.materialization_files)
     )
-    physical_environment_name: str | None = resolve_environment_name(
+    physical_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_environment=None,
+        selected_target=None,
     )
-    unsuffixed_virtual_environment_name: str | None = None
-    if physical_environment_name is not None:
-        unsuffixed_virtual_environment_name = resolve_environment_config(
+    unsuffixed_virtual_target_name: str | None = None
+    if physical_target_name is not None:
+        unsuffixed_virtual_target_name = resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            environment_name=physical_environment_name,
+            target_name=physical_target_name,
         ).state.unsuffixed_virtual_env
-    target_vde_name: str | None = virtual_environment_name or physical_environment_name
+    target_vde_name: str | None = virtual_target_name or physical_target_name
     if target_vde_name is None:
         target_vde_name = "default"
 
@@ -185,13 +185,13 @@ def run_virtual_build(
             state_connection=state_connection,
             config=config,
             target_vde_name=target_vde_name,
-            baseline_vde_name=physical_environment_name,
+            baseline_vde_name=physical_target_name,
         )
         bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=target_vde_name,
+                virtual_target_name=target_vde_name,
             )
         )
         bound_model_versions: dict[str, ModelVersionRecord | None] = _read_bound_model_versions(
@@ -245,8 +245,8 @@ def run_virtual_build(
     rewritten_project = rewrite_project_function_targets(
         project=rewritten_project,
         adapter=adapter,
-        virtual_environment_name=target_vde_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        virtual_target_name=target_vde_name,
+        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
     )
     deferred_relations: dict[str, RelationInfo] = {
         model_name: RelationInfo(
@@ -330,7 +330,7 @@ def run_virtual_build(
         )
     plan_output = apply_virtual_plan_output(
         plan_output=plan_output,
-        environment_name=target_vde_name,
+        target_name=target_vde_name,
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
@@ -382,7 +382,7 @@ def run_virtual_build(
                 connection_config=connection_config,
                 connection=ingress_connection,
                 run_id=rewritten_project.run_id,
-                environment=target_vde_name,
+                target=target_vde_name,
                 vars=rewritten_project.effective_vars,
                 is_reload=reload_sources,
                 default_database=adapter.default_database(),
@@ -461,8 +461,8 @@ def run_virtual_build(
             backend=backend,
             config=config,
             target_vde_name=target_vde_name,
-            unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
-            baseline_vde_name=physical_environment_name,
+            unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
+            baseline_vde_name=physical_target_name,
             bound_version_hashes=semantics.bound_version_hashes,
             bound_function_refs=bound_function_refs,
             plan_output=executor_plan_output,
@@ -602,7 +602,7 @@ def _run_read_side_python_nodes(
             connection_config=connection_config,
             connection=connection,
             run_id=run_id,
-            environment=environment,
+            target=environment,
             vars=vars,
             is_reload=is_reload,
             default_database=default_database,
@@ -735,7 +735,7 @@ def _read_or_initialize_refs(
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
         state_connection,
         schema=config.schema,
-        virtual_environment_name=target_vde_name,
+        virtual_target_name=target_vde_name,
     )
     if environment is not None and environment.status == VirtualEnvironmentStatus.DETACHED:
         raise PlannerInputError(
@@ -746,18 +746,18 @@ def _read_or_initialize_refs(
     refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
         state_connection,
         schema=config.schema,
-        virtual_environment_name=target_vde_name,
+        virtual_target_name=target_vde_name,
     )
     if refs or baseline_vde_name is None or baseline_vde_name == target_vde_name:
         return refs
     baseline_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
         state_connection,
         schema=config.schema,
-        virtual_environment_name=baseline_vde_name,
+        virtual_target_name=baseline_vde_name,
     )
     return tuple(
         VirtualEnvironmentRefRecord(
-            virtual_environment_name=target_vde_name,
+            virtual_target_name=target_vde_name,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
         )
@@ -811,7 +811,7 @@ def _persist_successful_virtual_build(
     backend: Any,
     config: StateBackendConfig,
     target_vde_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    unsuffixed_virtual_target_name: str | None,
     baseline_vde_name: str | None,
     bound_version_hashes: dict[str, str],
     bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
@@ -910,16 +910,16 @@ def _persist_successful_virtual_build(
             state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
-                virtual_environment_name=target_vde_name,
+                virtual_target_name=target_vde_name,
                 status=status,
-                baseline_virtual_environment_name=(
+                baseline_virtual_target_name=(
                     baseline_vde_name if baseline_vde_name != target_vde_name else None
                 ),
             ),
         )
         refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
             VirtualEnvironmentRefRecord(
-                virtual_environment_name=target_vde_name,
+                virtual_target_name=target_vde_name,
                 model_name=model_name,
                 version_hash=version_hash,
             )
@@ -928,12 +928,12 @@ def _persist_successful_virtual_build(
         backend.replace_virtual_environment_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=target_vde_name,
+            virtual_target_name=target_vde_name,
             refs=refs,
         )
         function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
             VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=target_vde_name,
+                virtual_target_name=target_vde_name,
                 function_name=function_name,
                 version_hash=version_hash,
             )
@@ -942,7 +942,7 @@ def _persist_successful_virtual_build(
         backend.replace_virtual_environment_function_refs(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=target_vde_name,
+            virtual_target_name=target_vde_name,
             refs=function_refs,
         )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
@@ -950,7 +950,7 @@ def _persist_successful_virtual_build(
                 backend,
                 state_connection,
                 schema=config.schema,
-                virtual_environment_name=target_vde_name,
+                virtual_target_name=target_vde_name,
                 refs=refs,
                 function_refs=function_refs,
             )
@@ -962,7 +962,7 @@ def _persist_successful_virtual_build(
         adapter=adapter,
         connection_config=connection_config,
         target_vde_name=target_vde_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
         plan_output=plan_output,
         final_version_hashes=final_version_hashes,
     )
@@ -1079,7 +1079,7 @@ def _create_logical_vde_views(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     target_vde_name: str,
-    unsuffixed_virtual_environment_name: str | None,
+    unsuffixed_virtual_target_name: str | None,
     plan_output: PlanOutput,
     final_version_hashes: dict[str, str],
 ) -> None:
@@ -1100,8 +1100,8 @@ def _create_logical_vde_views(
             virtual_target: CompiledRelationTarget = build_virtual_target(
                 adapter=adapter,
                 target=model.target,
-                virtual_environment_name=target_vde_name,
-                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                virtual_target_name=target_vde_name,
+                unsuffixed_virtual_target_name=unsuffixed_virtual_target_name,
             )
             adapter.ensure_schema(
                 connection,

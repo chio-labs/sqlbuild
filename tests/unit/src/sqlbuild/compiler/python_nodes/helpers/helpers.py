@@ -361,7 +361,7 @@ def build_orders_project_graph() -> ProjectGraph:
     )
     project: CompiledProject = CompiledProject(
         run_id="run-id",
-        effective_environment_name=None,
+        effective_target_name=None,
         effective_connection={},
         effective_vars={},
         models=(orders_model,),

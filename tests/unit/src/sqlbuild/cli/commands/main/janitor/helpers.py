@@ -31,7 +31,7 @@ def build_janitor_plan() -> JanitorPlan:
         relation_type="table",
     )
     return JanitorPlan(
-        environment_name="dev",
+        target_name="dev",
         retention_days=30,
         candidates=(
             JanitorDeleteCandidate(
@@ -42,17 +42,17 @@ def build_janitor_plan() -> JanitorPlan:
         ),
         checkpoint_candidates=(
             JanitorCheckpointCandidate(
-                checkpoint_id="cp_1", virtual_environment_name="dev", created_at=None
+                checkpoint_id="cp_1", virtual_target_name="dev", created_at=None
             ),
         ),
         detached_virtual_environment_candidates=(
             JanitorDetachedVirtualEnvironmentCandidate(
-                virtual_environment_name="branch_old", updated_at=None
+                virtual_target_name="branch_old", updated_at=None
             ),
         ),
         expired_virtual_environment_candidates=(
             JanitorExpiredVirtualEnvironmentCandidate(
-                virtual_environment_name="branch_expired", updated_at=None
+                virtual_target_name="branch_expired", updated_at=None
             ),
         ),
         state_backup_candidates=(

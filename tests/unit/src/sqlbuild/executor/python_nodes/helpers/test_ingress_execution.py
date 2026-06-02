@@ -54,7 +54,7 @@ def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_orde
         connection_config={},
         connection=object(),
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )

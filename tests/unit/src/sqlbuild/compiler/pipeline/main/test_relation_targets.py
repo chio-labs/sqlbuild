@@ -41,7 +41,7 @@ def test_given_source_read_map_when_building_python_relation_targets_then_uses_r
     )
     project: CompiledProject = CompiledProject(
         run_id="test_run",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         sources=(

@@ -137,7 +137,7 @@ class StateBackend(ABC):
 
     @abstractmethod
     def get_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> VirtualEnvironmentRecord | None:
         """Return a virtual environment row if it exists."""
         ...
@@ -151,7 +151,7 @@ class StateBackend(ABC):
 
     @abstractmethod
     def delete_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> None:
         """Delete a virtual environment and its current refs."""
         ...
@@ -162,7 +162,7 @@ class StateBackend(ABC):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentRefRecord, ...],
     ) -> None:
         """Replace all refs for a virtual environment."""
@@ -170,7 +170,7 @@ class StateBackend(ABC):
 
     @abstractmethod
     def get_virtual_environment_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
         """Return refs for a virtual environment."""
         ...
@@ -181,7 +181,7 @@ class StateBackend(ABC):
         connection: Any,
         *,
         schema: str,
-        virtual_environment_name: str,
+        virtual_target_name: str,
         refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     ) -> None:
         """Replace all function refs for a virtual environment."""
@@ -189,7 +189,7 @@ class StateBackend(ABC):
 
     @abstractmethod
     def get_virtual_environment_function_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         """Return function refs for a virtual environment."""
         ...
@@ -209,7 +209,7 @@ class StateBackend(ABC):
 
     @abstractmethod
     def list_virtual_environment_checkpoints(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, connection: Any, *, schema: str, virtual_target_name: str
     ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
         """Return checkpoints for a virtual environment, newest first."""
         ...

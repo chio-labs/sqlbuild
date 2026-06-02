@@ -35,7 +35,7 @@ def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
 def _build_project_toml(*, project_name: str) -> str:
     return f'''name = "{project_name}"
 adapter = "duckdb"
-default_environment = "dev"
+default_target = "dev"
 
 [connection]
 database = "{project_name}.duckdb"
@@ -46,9 +46,9 @@ default_audit_severity = "warn"
 [defaults]
 materialized = "table"
 
-[environments.prod]
+[targets.prod]
 schema = "prod"
 
-[environments.dev]
+[targets.dev]
 schema = "dev"
 '''

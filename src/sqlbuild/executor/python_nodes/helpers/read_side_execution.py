@@ -30,7 +30,7 @@ class ReadSidePythonExecutionTracker:
         connection_config: dict[str, object],
         connection: Any,
         run_id: str,
-        environment: str | None,
+        target: str | None,
         vars: dict[str, object],
         is_reload: bool,
         default_database: str | None = None,
@@ -47,7 +47,7 @@ class ReadSidePythonExecutionTracker:
         self._connection_config: dict[str, object] = connection_config
         self._connection: Any = connection
         self._run_id: str = run_id
-        self._environment: str | None = environment
+        self._target: str | None = target
         self._vars: dict[str, object] = vars
         self._is_reload: bool = is_reload
         self._default_database: str | None = default_database
@@ -154,7 +154,7 @@ class ReadSidePythonExecutionTracker:
             connection_config=self._connection_config,
             connection=self._connection,
             run_id=self._run_id,
-            environment=self._environment,
+            target=self._target,
             vars=self._vars,
             is_reload=self._is_reload,
             statement_recorder=StatementRecorder(),

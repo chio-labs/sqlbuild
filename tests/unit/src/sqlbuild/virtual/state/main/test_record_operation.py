@@ -21,7 +21,7 @@ from tests.unit.src.sqlbuild.virtual.state.main.helpers import RecordingStateBac
             description="preserves operation type and VDE across follow-up events",
             operation_id="detach:dev",
             operation_type=StateOperationType.DETACH,
-            virtual_environment_name="dev",
+            virtual_target_name="dev",
             start_message="starting detach",
             finish_message="detached 1 models",
             expected_final_status=StateOperationStatus.SUCCEEDED,
@@ -46,7 +46,7 @@ def test_given_existing_operation_when_recording_follow_up_event_then_transition
         operation_type=test_case.operation_type,
         status=StateOperationStatus.RUNNING,
         action="start",
-        virtual_environment_name=test_case.virtual_environment_name,
+        virtual_target_name=test_case.virtual_target_name,
         message=test_case.start_message,
     )
     record_state_operation(
@@ -57,7 +57,7 @@ def test_given_existing_operation_when_recording_follow_up_event_then_transition
         operation_type=None,
         status=StateOperationStatus.SUCCEEDED,
         action="finish",
-        virtual_environment_name=None,
+        virtual_target_name=None,
         message=test_case.finish_message,
     )
 
@@ -65,7 +65,7 @@ def test_given_existing_operation_when_recording_follow_up_event_then_transition
         operation_id=test_case.operation_id,
         operation_type=test_case.operation_type,
         status=test_case.expected_final_status,
-        virtual_environment_name=test_case.virtual_environment_name,
+        virtual_target_name=test_case.virtual_target_name,
     )
     assert (
         tuple((event.action, event.status, event.message or "") for event in backend.events)

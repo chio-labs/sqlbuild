@@ -71,7 +71,7 @@ class PythonNodeContextHelperTestCase:
     expected_recorded_events: tuple[str, ...]
     expected_logger_name: str
     expected_run_id: str
-    expected_environment: str | None
+    expected_target: str | None
     expected_vars: dict[str, object]
     expected_error_fragment: str = ""
 

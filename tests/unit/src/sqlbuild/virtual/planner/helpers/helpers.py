@@ -116,7 +116,7 @@ def build_virtual_planner_test_project(
     )
     project: CompiledProject = CompiledProject(
         run_id="test_run",
-        effective_environment_name="dev",
+        effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         settings=SettingsConfig(),

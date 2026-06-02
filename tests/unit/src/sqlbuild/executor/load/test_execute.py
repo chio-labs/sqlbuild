@@ -35,7 +35,7 @@ SOURCE_LOAD_NONE_RETURN_TEST_CASES: list[SourceLoadNoneReturnTestCase] = [
         loader_target=None,
         expected_status=ExecutionStatus.FAILED,
         expected_rows_loaded=0,
-        expected_error_fragment="returned no rows and has no target declared",
+        expected_error_fragment="returned no rows and has no destination declared",
     ),
 ]
 
@@ -51,7 +51,7 @@ SOURCE_LOAD_NONE_RETURN_TEST_CASES: list[SourceLoadNoneReturnTestCase] = [
             database="analytics",
             schema="raw",
             run_id="run-123",
-            environment="dev",
+            target="dev",
             vars={"batch": 7},
             is_reload=True,
             start_cursor_ts=datetime(2026, 5, 1, tzinfo=UTC),
@@ -94,7 +94,7 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
         connection_config={"database": "loader.duckdb"},
         connection=object(),
         run_id=test_case.run_id,
-        environment=test_case.environment,
+        target=test_case.target,
         vars=test_case.vars,
         is_reload=test_case.is_reload,
         start_cursor_ts=test_case.start_cursor_ts,
@@ -107,12 +107,12 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
     context: LoaderContext = observed_contexts[0]
     assert result.status == test_case.expected_status
     assert result.rows_loaded == test_case.expected_rows_loaded
-    assert context.target == test_case.expected_target
-    assert context.target_database == test_case.database
-    assert context.target_schema == test_case.schema
-    assert context.target_name == test_case.target_table
+    assert context.destination == test_case.expected_target
+    assert context.destination_database == test_case.database
+    assert context.destination_schema == test_case.schema
+    assert context.destination_name == test_case.target_table
     assert context.run_id == test_case.run_id
-    assert context.environment == test_case.environment
+    assert context.target == test_case.target
     assert context.vars == test_case.vars
     assert context.is_reload is test_case.is_reload
     assert context.start_cursor_ts == test_case.start_cursor_ts
@@ -152,7 +152,7 @@ def test_given_self_managed_intermediate_loader_when_returning_none_then_applies
         connection_config={},
         connection=object(),
         run_id="run-1",
-        environment=None,
+        target=None,
         vars={},
         is_reload=False,
         statement_recorder=StatementRecorder(),

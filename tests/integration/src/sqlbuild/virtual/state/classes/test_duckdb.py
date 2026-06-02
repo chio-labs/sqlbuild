@@ -436,7 +436,7 @@ def test_given_duckdb_state_backend_when_initializing_then_creates_all_state_tab
             sqlbuild_version="0.0.test",
             expected_model_name="fact_orders",
             expected_version_hash="abc123",
-            expected_virtual_environment_name="dev",
+            expected_virtual_target_name="dev",
             expected_ref_count=1,
             expected_ref_count_after_replace=0,
             expected_relation_name="fact_orders__v_abc123",
@@ -478,7 +478,7 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             backend.get_virtual_environment(
                 connection,
                 schema=test_case.schema,
-                virtual_environment_name=test_case.expected_virtual_environment_name,
+                virtual_target_name=test_case.expected_virtual_target_name,
             )
             is None
         )
@@ -527,9 +527,9 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             connection, schema=test_case.schema, record=ancestry_record
         )
         virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
             status=VirtualEnvironmentStatus.FINALIZED,
-            baseline_virtual_environment_name=None,
+            baseline_virtual_target_name=None,
         )
         backend.upsert_virtual_environment(
             connection,
@@ -539,10 +539,10 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
         backend.replace_virtual_environment_refs(
             connection,
             schema=test_case.schema,
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
             refs=(
                 VirtualEnvironmentRefRecord(
-                    virtual_environment_name=test_case.expected_virtual_environment_name,
+                    virtual_target_name=test_case.expected_virtual_target_name,
                     model_name=test_case.expected_model_name,
                     version_hash=test_case.expected_version_hash,
                 ),
@@ -580,14 +580,14 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             backend.get_virtual_environment(
                 connection,
                 schema=test_case.schema,
-                virtual_environment_name=test_case.expected_virtual_environment_name,
+                virtual_target_name=test_case.expected_virtual_target_name,
             )
             == virtual_environment_record
         )
         refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             connection,
             schema=test_case.schema,
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
         )
         assert len(refs) == test_case.expected_ref_count
         assert refs[0].model_name == test_case.expected_model_name
@@ -595,14 +595,14 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
         backend.replace_virtual_environment_refs(
             connection,
             schema=test_case.schema,
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
             refs=(),
         )
         replaced_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
             backend.get_virtual_environment_refs(
                 connection,
                 schema=test_case.schema,
-                virtual_environment_name=test_case.expected_virtual_environment_name,
+                virtual_target_name=test_case.expected_virtual_target_name,
             )
         )
         assert len(replaced_refs) == test_case.expected_ref_count_after_replace
@@ -619,7 +619,7 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             sqlbuild_version="0.0.test",
             expected_model_name="is_large_order",
             expected_version_hash="function123",
-            expected_virtual_environment_name="dev",
+            expected_virtual_target_name="dev",
             expected_ref_count=1,
             expected_ref_count_after_replace=0,
             expected_relation_name="unused",
@@ -679,10 +679,10 @@ def test_given_duckdb_state_backend_when_upserting_function_records_then_round_t
         backend.replace_virtual_environment_function_refs(
             connection,
             schema=test_case.schema,
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
             refs=(
                 VirtualEnvironmentFunctionRefRecord(
-                    virtual_environment_name=test_case.expected_virtual_environment_name,
+                    virtual_target_name=test_case.expected_virtual_target_name,
                     function_name=test_case.expected_model_name,
                     version_hash=test_case.expected_version_hash,
                 ),
@@ -692,14 +692,14 @@ def test_given_duckdb_state_backend_when_upserting_function_records_then_round_t
             backend.get_virtual_environment_function_refs(
                 connection,
                 schema=test_case.schema,
-                virtual_environment_name=test_case.expected_virtual_environment_name,
+                virtual_target_name=test_case.expected_virtual_target_name,
             )
         )
         assert len(function_refs) == test_case.expected_ref_count
         assert function_refs[0].function_name == test_case.expected_model_name
         checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
             checkpoint_id="chk_function",
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
         )
         backend.create_virtual_environment_checkpoint(
             connection,
@@ -872,7 +872,7 @@ def test_given_duckdb_state_backend_when_required_index_is_missing_then_validati
             description="rolls back VDE ref replacement when duplicate rows violate unique index",
             schema="sqlbuild_state",
             sqlbuild_version="0.0.test",
-            virtual_environment_name="dev",
+            virtual_target_name="dev",
             model_name="fact_orders",
             original_version_hash="abc123",
             duplicate_version_hash="def456",
@@ -895,10 +895,10 @@ def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_roll
         backend.replace_virtual_environment_refs(
             connection,
             schema=test_case.schema,
-            virtual_environment_name=test_case.virtual_environment_name,
+            virtual_target_name=test_case.virtual_target_name,
             refs=(
                 VirtualEnvironmentRefRecord(
-                    virtual_environment_name=test_case.virtual_environment_name,
+                    virtual_target_name=test_case.virtual_target_name,
                     model_name=test_case.model_name,
                     version_hash=test_case.original_version_hash,
                 ),
@@ -909,15 +909,15 @@ def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_roll
             backend.replace_virtual_environment_refs(
                 connection,
                 schema=test_case.schema,
-                virtual_environment_name=test_case.virtual_environment_name,
+                virtual_target_name=test_case.virtual_target_name,
                 refs=(
                     VirtualEnvironmentRefRecord(
-                        virtual_environment_name=test_case.virtual_environment_name,
+                        virtual_target_name=test_case.virtual_target_name,
                         model_name=test_case.model_name,
                         version_hash=test_case.original_version_hash,
                     ),
                     VirtualEnvironmentRefRecord(
-                        virtual_environment_name=test_case.virtual_environment_name,
+                        virtual_target_name=test_case.virtual_target_name,
                         model_name=test_case.model_name,
                         version_hash=test_case.duplicate_version_hash,
                     ),
@@ -927,7 +927,7 @@ def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_roll
         refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
             connection,
             schema=test_case.schema,
-            virtual_environment_name=test_case.virtual_environment_name,
+            virtual_target_name=test_case.virtual_target_name,
         )
         assert len(refs) == test_case.expected_ref_count
         assert refs[0].version_hash == test_case.original_version_hash
@@ -944,7 +944,7 @@ def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_roll
             sqlbuild_version="0.0.test",
             expected_model_name="fact_orders",
             expected_version_hash="abc123",
-            expected_virtual_environment_name="dev",
+            expected_virtual_target_name="dev",
             expected_ref_count=1,
             expected_ref_count_after_replace=0,
             expected_relation_name="fact_orders__v_abc123",
@@ -1010,7 +1010,7 @@ def test_given_duckdb_state_backend_when_upserting_same_identity_then_created_at
             sqlbuild_version="0.0.test",
             expected_model_name="fact_orders",
             expected_version_hash="abc123",
-            expected_virtual_environment_name="dev",
+            expected_virtual_target_name="dev",
             expected_ref_count=1,
             expected_ref_count_after_replace=0,
             expected_relation_name="fact_orders__v_abc123",
@@ -1062,9 +1062,9 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
         )[0][0]
 
         virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
             status=VirtualEnvironmentStatus.FINALIZED,
-            baseline_virtual_environment_name=None,
+            baseline_virtual_target_name=None,
         )
         backend.upsert_virtual_environment(
             connection,
@@ -1074,7 +1074,7 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
         virtual_created_at: datetime = fetch_all(
             connection,
             f"SELECT created_at FROM {test_case.schema}.virtual_environments "
-            f"WHERE virtual_environment_name = '{test_case.expected_virtual_environment_name}'",
+            f"WHERE virtual_target_name = '{test_case.expected_virtual_target_name}'",
         )[0][0]
         backend.upsert_virtual_environment(
             connection,
@@ -1084,7 +1084,7 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
         replaced_virtual_created_at: datetime = fetch_all(
             connection,
             f"SELECT created_at FROM {test_case.schema}.virtual_environments "
-            f"WHERE virtual_environment_name = '{test_case.expected_virtual_environment_name}'",
+            f"WHERE virtual_target_name = '{test_case.expected_virtual_target_name}'",
         )[0][0]
 
         assert (
@@ -1100,7 +1100,7 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
             backend.get_virtual_environment(
                 connection,
                 schema=test_case.schema,
-                virtual_environment_name=test_case.expected_virtual_environment_name,
+                virtual_target_name=test_case.expected_virtual_target_name,
             )
             == virtual_environment_record
         )
@@ -1118,7 +1118,7 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
             schema="sqlbuild_state",
             sqlbuild_version="0.0.test",
             expected_operation_id="op-1",
-            expected_virtual_environment_name="dev",
+            expected_virtual_target_name="dev",
         )
     ],
     ids=["records operation and reconcile events"],
@@ -1141,7 +1141,7 @@ def test_given_duckdb_state_backend_when_recording_operation_events_then_they_ro
                 operation_id=test_case.expected_operation_id,
                 operation_type=StateOperationType.PROMOTE,
                 status=StateOperationStatus.RUNNING,
-                virtual_environment_name=test_case.expected_virtual_environment_name,
+                virtual_target_name=test_case.expected_virtual_target_name,
             ),
         )
         backend.create_state_operation_event(
@@ -1174,7 +1174,7 @@ def test_given_duckdb_state_backend_when_recording_operation_events_then_they_ro
             operation_id=test_case.expected_operation_id,
             operation_type=StateOperationType.PROMOTE,
             status=StateOperationStatus.RUNNING,
-            virtual_environment_name=test_case.expected_virtual_environment_name,
+            virtual_target_name=test_case.expected_virtual_target_name,
         )
         assert fetch_all(
             connection,

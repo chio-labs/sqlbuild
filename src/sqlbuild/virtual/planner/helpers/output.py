@@ -93,7 +93,7 @@ def rewrite_virtual_plan_entries(
 def with_virtual_metadata(
     *,
     plan_output: PlanOutput,
-    environment_name: str | None,
+    target_name: str | None,
     stale_model_names: tuple[str, ...],
     stale_root_names: tuple[str, ...],
     remaining_stale_model_names: tuple[str, ...] = (),
@@ -104,7 +104,7 @@ def with_virtual_metadata(
     metadata.update(
         {
             "virtual_mode": True,
-            "virtual_environment_name": environment_name,
+            "virtual_target_name": target_name,
             "virtual_environment_status": "finalized" if not stale_model_names else "working",
             "virtual_stale_model_names": stale_model_names,
             "virtual_stale_root_names": stale_root_names,

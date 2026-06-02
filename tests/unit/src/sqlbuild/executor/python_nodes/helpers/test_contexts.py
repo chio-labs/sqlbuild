@@ -53,7 +53,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
             ),
             expected_logger_name="sqlbuild.task.fetch_orders",
             expected_run_id="test_run",
-            expected_environment="dev",
+            expected_target="dev",
             expected_vars={"batch": "hourly"},
         )
     ],
@@ -90,7 +90,7 @@ def test_given_task_context_when_using_helpers_then_records_and_qualifies_names(
     assert already_qualified_name == "custom.schema.table"
     assert context.logger.name == test_case.expected_logger_name
     assert context.run_id == test_case.expected_run_id
-    assert context.environment == test_case.expected_environment
+    assert context.target == test_case.expected_target
     assert context.vars == test_case.expected_vars
     assert "loading scratch orders" in caplog.messages
     events: tuple[LifeCycleEvent, ...] = statement_recorder.snapshot()
@@ -112,7 +112,7 @@ def test_given_task_context_when_using_helpers_then_records_and_qualifies_names(
             expected_recorded_events=(),
             expected_logger_name="sqlbuild.asset.export_customers",
             expected_run_id="test_run",
-            expected_environment="dev",
+            expected_target="dev",
             expected_vars={"batch": "hourly"},
         )
     ],
@@ -151,7 +151,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
     )
     assert context.qualify_name(test_case.raw_name) == test_case.expected_qualified_name
     assert context.run_id == test_case.expected_run_id
-    assert context.environment == test_case.expected_environment
+    assert context.target == test_case.expected_target
     assert context.vars == test_case.expected_vars
     assert_base_context_fields(context)
 
@@ -170,7 +170,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
             expected_recorded_events=(),
             expected_logger_name="sqlbuild.task.fetch_orders",
             expected_run_id="test_run",
-            expected_environment="dev",
+            expected_target="dev",
             expected_vars={"batch": "hourly"},
             expected_error_fragment="materialized",
         )
@@ -223,7 +223,7 @@ def test_given_task_context_when_inspecting_api_then_loader_only_fields_are_abse
             expected_recorded_events=(),
             expected_logger_name="sqlbuild.task.profile_orders",
             expected_run_id="test_run",
-            expected_environment="dev",
+            expected_target="dev",
             expected_vars={"batch": "hourly"},
             expected_error_fragment="must be declared in depends_on before use",
         )
@@ -240,7 +240,7 @@ def test_given_task_context_when_resolving_sql_relations_then_validates_declared
         connection_config={"warehouse": "dev"},
         connection=object(),
         run_id=test_case.expected_run_id,
-        environment=test_case.expected_environment,
+        target=test_case.expected_target,
         vars=test_case.expected_vars,
         is_reload=False,
         logger=logging.getLogger(test_case.expected_logger_name),

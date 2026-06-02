@@ -49,7 +49,7 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
         connection_config={},
         connection=object(),
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )
@@ -99,7 +99,7 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
         connection_config={},
         connection=object(),
         run_id="test_run",
-        environment="dev",
+        target="dev",
         vars={},
         is_reload=False,
     )

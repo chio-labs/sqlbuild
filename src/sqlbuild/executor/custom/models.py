@@ -29,7 +29,7 @@ class MaterializationContext:
     placeholders: dict[str, str]
     existing_relation: RelationInfo | None
     run_id: str
-    environment: str
+    build_target: str
     vars: dict[str, object]
     unique_key: tuple[str, ...]
     declared_columns: tuple[ColumnInfo, ...]
