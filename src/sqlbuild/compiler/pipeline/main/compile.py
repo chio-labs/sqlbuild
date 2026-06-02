@@ -22,7 +22,7 @@ from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
     build_deferred_targets,
     gather_deferred_relations,
-    resolve_deferred_env,
+    resolve_deferred_target_config,
 )
 from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_all_keys,
@@ -158,14 +158,14 @@ def _build_result(
     deferred_targets: dict[str, CompiledRelationDestination] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:
-        deferred_env: TargetConfig = resolve_deferred_env(
+        deferred_target_config: TargetConfig = resolve_deferred_target_config(
             discovered_inputs=discovered_inputs,
             defer_to=defer_to,
-            current_env_name=project.effective_target_name,
+            current_target_name=project.effective_target_name,
         )
         deferred_targets = build_deferred_targets(
             project=project,
-            deferred_env=deferred_env,
+            deferred_target_config=deferred_target_config,
             effective_vars=project.effective_vars,
             default_schema=adapter.default_schema(),
             default_database=adapter.default_database(),

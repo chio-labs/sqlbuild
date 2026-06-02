@@ -27,7 +27,7 @@ _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
 def build_deferred_targets(
     *,
     project: CompiledProject,
-    deferred_env: TargetConfig,
+    deferred_target_config: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
@@ -40,7 +40,7 @@ def build_deferred_targets(
     for model in project.models:
         targets[model.name] = _resolve_deferred_target(
             target=model.destination,
-            deferred_env=deferred_env,
+            deferred_target_config=deferred_target_config,
             effective_vars=effective_vars,
             default_schema=default_schema,
             default_database=default_database,
@@ -50,7 +50,7 @@ def build_deferred_targets(
     for seed in project.seeds:
         targets[seed.name] = _resolve_deferred_target(
             target=seed.destination,
-            deferred_env=deferred_env,
+            deferred_target_config=deferred_target_config,
             effective_vars=effective_vars,
             default_schema=default_schema,
             default_database=default_database,
@@ -59,20 +59,20 @@ def build_deferred_targets(
     return targets
 
 
-def resolve_deferred_env(
+def resolve_deferred_target_config(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     defer_to: str,
-    current_env_name: str | None,
+    current_target_name: str | None,
 ) -> TargetConfig:
     """Validate and resolve the deferred target config."""
 
-    environments: dict[str, TargetConfig] = discovered_inputs.project_config.targets
-    if defer_to not in environments:
+    targets: dict[str, TargetConfig] = discovered_inputs.project_config.targets
+    if defer_to not in targets:
         raise PlannerInputError(f"Unknown deferred target '{defer_to}'")
-    if defer_to == current_env_name:
+    if defer_to == current_target_name:
         raise PlannerInputError(f"Cannot defer to the current target '{defer_to}'")
-    return environments[defer_to]
+    return targets[defer_to]
 
 
 def gather_deferred_relations(
@@ -104,7 +104,7 @@ def gather_deferred_relations(
 def _resolve_deferred_target(
     *,
     target: CompiledRelationDestination,
-    deferred_env: TargetConfig,
+    deferred_target_config: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
@@ -112,13 +112,13 @@ def _resolve_deferred_target(
 ) -> CompiledRelationDestination:
     """Resolve one target under the deferred target's naming rules."""
 
-    schema: str | None = _resolve_env_field(
-        env_value=deferred_env.schema,
+    schema: str | None = _resolve_target_field(
+        target_value=deferred_target_config.schema,
         logical_value=target.logical_schema,
         effective_vars=effective_vars,
     )
-    database: str | None = _resolve_env_field(
-        env_value=deferred_env.database,
+    database: str | None = _resolve_target_field(
+        target_value=deferred_target_config.database,
         logical_value=target.logical_database,
         effective_vars=effective_vars,
     )
@@ -143,18 +143,18 @@ def _resolve_deferred_target(
     )
 
 
-def _resolve_env_field(
+def _resolve_target_field(
     *,
-    env_value: str | None,
+    target_value: str | None,
     logical_value: str | None,
     effective_vars: dict[str, object],
 ) -> str | None:
-    """Resolve one environment schema or database field against the logical value."""
+    """Resolve one target schema or database field against the logical value."""
 
-    if env_value is None or env_value == PRESERVE_TARGET_VALUE:
+    if target_value is None or target_value == PRESERVE_TARGET_VALUE:
         return logical_value
 
-    result: str = env_value
+    result: str = target_value
 
     def _replace_ctx(match: re.Match[str]) -> str:
         ctx_key: str = match.group(1)

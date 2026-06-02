@@ -956,7 +956,7 @@ class BigQueryAdapter(BaseAdapter):
             raise AdapterUserError(
                 "BigQuery connection requires non-empty 'project'",
                 code="A101",
-                help="set connection.project in sqlbuild_local.toml or the active environment",
+                help="set connection.project in sqlbuild_local.toml or the active target",
             )
 
         try:
