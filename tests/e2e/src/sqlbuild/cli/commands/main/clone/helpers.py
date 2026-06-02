@@ -28,9 +28,9 @@ def build_virtual_clone_project_toml() -> str:
     return (
         'name = "virtual_clone_project"\n'
         'adapter = "duckdb"\n'
-        "[settings]\n"
-        "virtual_environments = true\n"
         'default_target = "dev"\n\n'
+        "[settings]\n"
+        "virtual_environments = true\n\n"
         "[connection]\n"
         'database = "dev.duckdb"\n\n'
         "[targets.prod]\n"

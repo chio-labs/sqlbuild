@@ -71,7 +71,7 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
             "loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
-                "    target='window_orders',\n"
+                "    destination='window_orders',\n"
                 "    write_strategy='table',\n"
                 "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
                 ")\n"
