@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.26.0](https://github.com/chio-labs/sqlbuild/compare/v0.25.1...v0.26.0) (2026-06-02)
+
+
+### Features
+
+* add python node factories ([ba64a5d](https://github.com/chio-labs/sqlbuild/commit/ba64a5dcc221bcf6d106b4dd69bd97d352696476))
+* add python node factories ([7386f73](https://github.com/chio-labs/sqlbuild/commit/7386f7392d98317b1f464044541218409bb0fa82))
+* support explicit loader names ([9af93ea](https://github.com/chio-labs/sqlbuild/commit/9af93ea815c5a8a1f296a290ccc6d2be6332756b))
+
+
+### Bug Fixes
+
+* clarify target rename cleanup ([8c3cd72](https://github.com/chio-labs/sqlbuild/commit/8c3cd720154934fc46805d75d2d75bc84d01c4f0))
+* clean up remaining rename fixtures ([b9c42c4](https://github.com/chio-labs/sqlbuild/commit/b9c42c4545f88946d1b7332037226c0ea60e71d5))
+* clean up target rename fallout ([f3ed2be](https://github.com/chio-labs/sqlbuild/commit/f3ed2be5e1a226c6a2d6bf4acbe7c88ad909ef3e))
+
 ## [0.25.1](https://github.com/chio-labs/sqlbuild/compare/v0.25.0...v0.25.1) (2026-06-01)
 
 
