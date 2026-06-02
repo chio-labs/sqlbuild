@@ -71,7 +71,7 @@ def build_source_read_map(
         and source_target_name not in local_config.targets
     ):
         raise PlannerInputError(f"Unknown source deferral target '{source_target_name}'")
-    source_environment: TargetConfig = _resolve_target_config(
+    source_target: TargetConfig = _resolve_target_config(
         project_config=project_config,
         local_config=local_config,
         target_name=source_target_name,
@@ -84,7 +84,7 @@ def build_source_read_map(
         raw_source_entry: SourceEntry = _raw_source_entry(source)
         result[source.source_entry.name] = _source_entry_for_environment(
             source_entry=raw_source_entry,
-            target_config=source_environment,
+            target_config=source_target,
             effective_vars=project.effective_vars,
         )
     return result
@@ -136,49 +136,49 @@ def _resolve_source_target_name(
         return defer_sources_to
     if project.effective_target_name is None or project_config is None or local_config is None:
         return None
-    active_environment: TargetConfig = _resolve_target_config(
+    active_target: TargetConfig = _resolve_target_config(
         project_config=project_config,
         local_config=local_config,
         target_name=project.effective_target_name,
     )
-    return active_environment.defer_sources_to
+    return active_target.defer_sources_to
 
 
 def _resolve_target_config(
     *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
 ) -> TargetConfig:
-    project_environment: TargetConfig = project_config.targets.get(target_name, TargetConfig())
-    local_environment: LocalTargetConfig | None = local_config.targets.get(target_name)
-    if local_environment is None:
-        return project_environment
+    project_target: TargetConfig = project_config.targets.get(target_name, TargetConfig())
+    local_target: LocalTargetConfig | None = local_config.targets.get(target_name)
+    if local_target is None:
+        return project_target
     return TargetConfig(
-        connection={**project_environment.connection, **local_environment.connection},
-        vars={**project_environment.vars, **local_environment.vars},
+        connection={**project_target.connection, **local_target.connection},
+        vars={**project_target.vars, **local_target.vars},
         database=(
-            local_environment.database
-            if local_environment.database is not None
-            else project_environment.database
+            local_target.database
+            if local_target.database is not None
+            else project_target.database
         ),
         schema=(
-            local_environment.schema
-            if local_environment.schema is not None
-            else project_environment.schema
+            local_target.schema
+            if local_target.schema is not None
+            else project_target.schema
         ),
         defer_sources_to=(
-            local_environment.defer_sources_to
-            if local_environment.defer_sources_to is not None
-            else project_environment.defer_sources_to
+            local_target.defer_sources_to
+            if local_target.defer_sources_to is not None
+            else project_target.defer_sources_to
         ),
         clone=ClonePolicy(
             allow_as_source=(
-                local_environment.clone.allow_as_source
-                if local_environment.clone.allow_as_source is not None
-                else project_environment.clone.allow_as_source
+                local_target.clone.allow_as_source
+                if local_target.clone.allow_as_source is not None
+                else project_target.clone.allow_as_source
             ),
             allow_as_target=(
-                local_environment.clone.allow_as_target
-                if local_environment.clone.allow_as_target is not None
-                else project_environment.clone.allow_as_target
+                local_target.clone.allow_as_target
+                if local_target.clone.allow_as_target is not None
+                else project_target.clone.allow_as_target
             ),
         ),
     )

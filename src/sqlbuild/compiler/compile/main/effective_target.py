@@ -15,7 +15,7 @@ def build_effective_target_config(
     discovered_inputs: DiscoveredProjectInputs,
     selected_target: str | None = None,
 ) -> TargetConfig | None:
-    """Build effective environment config without compiling resources."""
+    """Build effective target config without compiling resources."""
 
     target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
