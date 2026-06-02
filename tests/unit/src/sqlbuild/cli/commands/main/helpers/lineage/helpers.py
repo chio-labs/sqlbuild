@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -240,8 +240,8 @@ def _model(
     )
 
 
-def _target(name: str) -> CompiledRelationTarget:
-    return CompiledRelationTarget(
+def _target(name: str) -> CompiledRelationDestination:
+    return CompiledRelationDestination(
         database=None,
         schema="main",
         name=name,

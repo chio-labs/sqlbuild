@@ -163,5 +163,5 @@ def is_untargeted_self_managed_intermediate(
     return (
         source_entry.meta.get("sqlbuild_loader_node") is True
         and source_entry.write_strategy is None
-        and loader_function.target is None
+        and loader_function.destination is None
     )

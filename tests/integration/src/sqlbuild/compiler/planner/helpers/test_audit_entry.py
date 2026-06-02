@@ -9,7 +9,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -105,8 +105,8 @@ def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
         sql_body=test_case.audit_sql,
     )
 
-    model_targets: dict[str, CompiledRelationTarget] = {
-        name: CompiledRelationTarget(
+    model_targets: dict[str, CompiledRelationDestination] = {
+        name: CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,

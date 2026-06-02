@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -59,8 +59,8 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
 )
 from sqlbuild.shared.helpers.naming import (
+    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
-    resolve_target_qualified_name,
 )
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
@@ -68,9 +68,9 @@ from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
+    build_destination_from_physical_relation,
     build_rewritten_model_targets,
-    build_target_from_physical_relation,
-    build_virtual_target,
+    build_virtual_destination,
     relation_type_for_model,
     rewrite_project_function_targets,
     rewrite_project_model_targets,
@@ -232,7 +232,7 @@ def run_virtual_build(
         for model_name in selected_model_names
         if model_name in semantics.expected_version_hashes
     }
-    rewritten_targets: dict[str, CompiledRelationTarget] = build_rewritten_model_targets(
+    rewritten_targets: dict[str, CompiledRelationDestination] = build_rewritten_model_targets(
         project=graph.project,
         adapter=adapter,
         selected_model_version_hashes=selected_model_version_hashes,
@@ -312,7 +312,7 @@ def run_virtual_build(
             selected_keys=frozenset(),
             model_targets={
                 model.name: (
-                    build_target_from_physical_relation(
+                    build_destination_from_physical_relation(
                         adapter=adapter,
                         relation=bound_physical_relations[model.name],
                         fallback_target=model.target,
@@ -678,7 +678,7 @@ def _prepare_custom_virtual_version(
         schema=entry.target.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
     if adapter.relation_exists(
         connection,
         database=entry.target.database,
@@ -872,7 +872,7 @@ def _persist_successful_virtual_build(
                         ),
                     ),
                 )
-            target: CompiledRelationTarget | None = entry.target if entry is not None else None
+            target: CompiledRelationDestination | None = entry.target if entry is not None else None
             if target is not None:
                 existing_physical_relation: PhysicalRelationRecord | None = (
                     backend.get_physical_relation(
@@ -1083,7 +1083,7 @@ def _create_logical_vde_views(
     plan_output: PlanOutput,
     final_version_hashes: dict[str, str],
 ) -> None:
-    physical_targets: dict[str, CompiledRelationTarget] = {
+    physical_targets: dict[str, CompiledRelationDestination] = {
         model.name: plan_output.model_targets.get(model.name, model.target)
         for model in project.models
     }
@@ -1094,10 +1094,10 @@ def _create_logical_vde_views(
         for model in project.models:
             if model.name not in final_version_hashes:
                 continue
-            physical_target: CompiledRelationTarget | None = physical_targets.get(model.name)
+            physical_target: CompiledRelationDestination | None = physical_targets.get(model.name)
             if physical_target is None:
                 continue
-            virtual_target: CompiledRelationTarget = build_virtual_target(
+            virtual_target: CompiledRelationDestination = build_virtual_destination(
                 adapter=adapter,
                 target=model.target,
                 virtual_target_name=target_vde_name,
@@ -1111,10 +1111,10 @@ def _create_logical_vde_views(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_target_qualified_name(adapter=adapter, target=virtual_target),
+                target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_target_qualified_name(adapter=adapter, target=physical_target)
+                    + resolve_destination_qualified_name(adapter=adapter, target=physical_target)
                 ),
                 statement_recorder=recorder,
             )

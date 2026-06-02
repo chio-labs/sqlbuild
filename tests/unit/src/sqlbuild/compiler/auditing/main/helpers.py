@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -18,11 +18,11 @@ def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
 
 def build_render_model_targets(
     targets: dict[str, str],
-) -> dict[str, CompiledRelationTarget]:
+) -> dict[str, CompiledRelationDestination]:
     """Build model targets from a simple name-to-qualified mapping."""
 
     return {
-        name: CompiledRelationTarget(
+        name: CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,
@@ -34,11 +34,11 @@ def build_render_model_targets(
 
 def build_render_seed_targets(
     targets: dict[str, str],
-) -> dict[str, CompiledRelationTarget]:
+) -> dict[str, CompiledRelationDestination]:
     """Build seed targets from a simple name-to-qualified mapping."""
 
     return {
-        name: CompiledRelationTarget(
+        name: CompiledRelationDestination(
             database=None,
             schema=None,
             name=name,

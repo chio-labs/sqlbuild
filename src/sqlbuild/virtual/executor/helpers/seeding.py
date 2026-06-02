@@ -11,8 +11,8 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.shared.helpers.naming import (
+    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
-    resolve_target_qualified_name,
 )
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
 
@@ -44,7 +44,7 @@ def seed_virtual_physical_version(
         schema=entry.target.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
     if adapter.relation_exists(
         connection,
         database=entry.target.database,

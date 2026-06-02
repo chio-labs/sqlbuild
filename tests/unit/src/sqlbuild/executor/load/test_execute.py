@@ -146,7 +146,7 @@ def test_given_self_managed_intermediate_loader_when_returning_none_then_applies
             relative_path=Path("loaders/raw.py"),
             name=test_case.loader_name,
             function=fetch_orders,
-            target=test_case.loader_target,
+            destination=test_case.loader_target,
         ),
         adapter=LoaderContextTestAdapter(),
         connection_config={},

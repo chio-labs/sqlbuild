@@ -13,15 +13,15 @@ from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.shared.helpers.naming import (
+    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
-    resolve_target_qualified_name,
 )
 from sqlbuild.virtual.executor.helpers.rewrite import relation_type_for_model
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
@@ -70,8 +70,8 @@ def hydrate_relation(
     *,
     adapter: BaseAdapter,
     target_connection: Any,
-    source_target: CompiledRelationTarget,
-    target_target: CompiledRelationTarget,
+    source_target: CompiledRelationDestination,
+    target_target: CompiledRelationDestination,
     source_database_alias: str | None,
 ) -> str:
     if adapter.relation_exists(
@@ -87,7 +87,7 @@ def hydrate_relation(
         schema=target_target.schema or "",
         statement_recorder=StatementRecorder(),
     )
-    clone_source_target: CompiledRelationTarget = (
+    clone_source_target: CompiledRelationDestination = (
         replace_target_database(
             adapter=adapter, target=source_target, database=source_database_alias
         )
@@ -96,8 +96,8 @@ def hydrate_relation(
     )
     adapter.durable_clone(
         target_connection,
-        source=resolve_target_qualified_name(adapter=adapter, target=clone_source_target),
-        target=resolve_target_qualified_name(adapter=adapter, target=target_target),
+        source=resolve_destination_qualified_name(adapter=adapter, target=clone_source_target),
+        target=resolve_destination_qualified_name(adapter=adapter, target=target_target),
         statement_recorder=StatementRecorder(),
     )
     return "hydrated"
@@ -143,7 +143,7 @@ def register_hydrated_relation(
     config_connection: dict[str, object],
     model_version: ModelVersionRecord,
     model: CompiledModel,
-    target: CompiledRelationTarget,
+    target: CompiledRelationDestination,
 ) -> None:
     connection: Any = backend.connect(config_connection)
     try:
@@ -208,9 +208,9 @@ def attach_source_database_for_clone(
 
 
 def replace_target_database(
-    *, adapter: BaseAdapter, target: CompiledRelationTarget, database: str
-) -> CompiledRelationTarget:
-    return CompiledRelationTarget(
+    *, adapter: BaseAdapter, target: CompiledRelationDestination, database: str
+) -> CompiledRelationDestination:
+    return CompiledRelationDestination(
         database=database,
         schema=target.schema,
         name=target.name,

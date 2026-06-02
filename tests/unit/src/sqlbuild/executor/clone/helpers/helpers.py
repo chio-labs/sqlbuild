@@ -6,7 +6,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
@@ -67,7 +67,7 @@ def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        target=CompiledRelationTarget(
+        target=CompiledRelationDestination(
             database=None,
             schema=schema,
             name=name,

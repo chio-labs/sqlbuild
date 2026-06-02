@@ -11,7 +11,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
@@ -24,8 +24,8 @@ def execute_audit(
     audit: AuditPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationTarget],
-    seed_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
     relation_overrides: dict[str, str] | None,
     run_scope_phase: AuditRunScope,

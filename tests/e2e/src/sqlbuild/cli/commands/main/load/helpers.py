@@ -39,7 +39,7 @@ def assert_source_only_ingress_dependency_case(
                     "@loader(depends_on=[fetch_events])\n"
                     "def raw_events(ctx):\n"
                     "    events = ctx.loader(fetch_events)\n"
-                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.target} AS "
+                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
                     "SELECT event_id FROM {events.target}')\n"
                 ),
             ),

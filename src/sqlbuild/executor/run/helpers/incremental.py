@@ -7,7 +7,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationTarget
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main.execute import execute_audit
@@ -27,8 +27,8 @@ from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
+    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
-    resolve_target_qualified_name,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -40,8 +40,8 @@ def execute_incremental_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationTarget],
-    seed_targets: dict[str, CompiledRelationTarget],
+    model_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationDestination],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
@@ -53,7 +53,7 @@ def execute_incremental_entry(
     target_database: str | None = entry.target.database
     target_schema: str | None = entry.target.schema
     target_table: str = entry.target.name
-    target_qualified: str = resolve_target_qualified_name(adapter=adapter, target=entry.target)
+    target_qualified: str = resolve_destination_qualified_name(adapter=adapter, target=entry.target)
     delta_table: str = f"{target_table}__delta"
     delta_qualified: str = resolve_qualified_name_parts(
         adapter=adapter,

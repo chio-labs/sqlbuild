@@ -82,8 +82,8 @@ def raw_customers(ctx: Any) -> list[dict[str, object]]:
 
 @loader
 def raw_loader_status(ctx: Any) -> None:
-    ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.target}")
+    ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.destination}")
     ctx.execute_sql(
-        f"CREATE TABLE {ctx.target} AS "
+        f"CREATE TABLE {ctx.destination} AS "
         "SELECT 1 AS status_id, 'loaded' AS status_name, 'self_managed' AS loaded_by"
     )

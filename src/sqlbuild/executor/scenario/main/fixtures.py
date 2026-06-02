@@ -11,7 +11,7 @@ from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
-from sqlbuild.shared.helpers.naming import resolve_target_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 
 
 def execute_scenario_fixture(
@@ -24,7 +24,7 @@ def execute_scenario_fixture(
     """Materialize one source/ref/seed fixture as a scenario-owned table."""
 
     statement_recorder: StatementRecorder = StatementRecorder()
-    target_relation: str = resolve_target_qualified_name(
+    target_relation: str = resolve_destination_qualified_name(
         adapter=adapter,
         target=fixture_plan.target,
     )

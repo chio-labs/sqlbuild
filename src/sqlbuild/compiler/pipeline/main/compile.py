@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -155,7 +155,7 @@ def _build_result(
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
 
-    deferred_targets: dict[str, CompiledRelationTarget] | None = None
+    deferred_targets: dict[str, CompiledRelationDestination] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:
         deferred_env: TargetConfig = resolve_deferred_env(

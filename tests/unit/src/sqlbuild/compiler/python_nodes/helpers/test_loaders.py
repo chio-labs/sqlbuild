@@ -60,7 +60,7 @@ def test_given_discovered_loader_when_building_python_node_then_preserves_loader
         name=test_case.expected_name,
         function=load_events,
         depends_on=(fetch_events,),
-        target=test_case.expected_target,
+        destination=test_case.expected_target,
         write_strategy=SourceWriteStrategy(test_case.expected_write_strategy or "table"),
         cursor_column=test_case.expected_cursor_column,
         unique_key=test_case.expected_unique_key,
@@ -95,7 +95,7 @@ def test_given_discovered_loader_when_building_python_node_then_preserves_loader
     assert node.group is None
     assert node.description is None
     assert node.loader == DiscoveredPythonLoaderMetadata(
-        target=test_case.expected_target,
+        destination=test_case.expected_target,
         write_strategy=SourceWriteStrategy(test_case.expected_write_strategy or "table"),
         cursor_column=test_case.expected_cursor_column,
         unique_key=test_case.expected_unique_key,

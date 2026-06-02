@@ -170,7 +170,7 @@ class DiscoveredLoaderFunction:
     name: str
     function: Callable[..., object]
     depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = field(default_factory=tuple)
-    target: str | None = None
+    destination: str | None = None
     write_strategy: SourceWriteStrategy | None = None
     cursor_column: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)

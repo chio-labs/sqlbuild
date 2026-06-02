@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationTarget,
+    CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -46,7 +46,7 @@ def build_snapshot_input_specs_test_plan(
         resource_type=CompiledResourceType.SQL_SCENARIO,
         name=scenario_name,
     )
-    model_target: CompiledRelationTarget = _target("model", "daily_revenue")
+    model_target: CompiledRelationDestination = _target("model", "daily_revenue")
 
     return ScenarioExecutionPlan(
         key=scenario_key,
@@ -286,9 +286,9 @@ def assert_capture_steps_error(
         assert test_case.expected_error_fragment in result.error_message
 
 
-def _target(kind: str, logical_name: str) -> CompiledRelationTarget:
+def _target(kind: str, logical_name: str) -> CompiledRelationDestination:
     name: str = f"__sqb_51b385aebe20__{kind}__{logical_name}"
-    return CompiledRelationTarget(
+    return CompiledRelationDestination(
         database=None,
         schema="scenario_schema",
         name=name,

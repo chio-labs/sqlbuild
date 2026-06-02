@@ -173,7 +173,7 @@ def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode
         depends_on=loader.depends_on,
         sql_deps=_sql_deps(loader.depends_on),
         loader=DiscoveredPythonLoaderMetadata(
-            target=loader.target,
+            destination=loader.destination,
             write_strategy=loader.write_strategy,
             cursor_column=loader.cursor_column,
             unique_key=loader.unique_key,
