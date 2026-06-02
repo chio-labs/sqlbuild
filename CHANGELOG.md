@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.1](https://github.com/chio-labs/sqlbuild/compare/v0.26.0...v0.26.1) (2026-06-02)
+
+
+### Bug Fixes
+
+* enforce python node factory folders ([ec2b7ac](https://github.com/chio-labs/sqlbuild/commit/ec2b7acf3e0eea237f209b394f9db1c4994fc602))
+* enforce python node factory folders ([27117d6](https://github.com/chio-labs/sqlbuild/commit/27117d69e83dd5e63e73f796d5f02bf462796fcf))
+
 ## [0.26.0](https://github.com/chio-labs/sqlbuild/compare/v0.25.1...v0.26.0) (2026-06-02)
 
 
