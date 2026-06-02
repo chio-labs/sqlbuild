@@ -81,9 +81,9 @@ SUBSTITUTION_TEST_CASES: list[SubstituteSqlVarsTestCase] = [
     ),
     SubstituteSqlVarsTestCase(
         description="replaces context value when allowed",
-        sql="GRANT SELECT ON @@CTX:target.qualified TO role analytics",
+        sql="GRANT SELECT ON @@CTX:destination.qualified TO role analytics",
         effective_vars={},
-        context_values={"target.qualified": "analytics.marts.orders"},
+        context_values={"destination.qualified": "analytics.marts.orders"},
         expected_sql="GRANT SELECT ON analytics.marts.orders TO role analytics",
     ),
     SubstituteSqlVarsTestCase(
@@ -122,17 +122,19 @@ SUBSTITUTE_SQL_VARS_ERROR_TEST_CASES: list[SubstituteSqlVarsErrorTestCase] = [
     ),
     SubstituteSqlVarsErrorTestCase(
         description="raises on unknown allowed CTX token",
-        sql="SELECT @@CTX:target.qualified",
+        sql="SELECT @@CTX:destination.qualified",
         effective_vars={},
         context_values={"model.name": "orders"},
-        expected_error_fragment="references unknown CTX key 'target.qualified'",
+        expected_error_fragment="references unknown CTX key 'destination.qualified'",
     ),
     SubstituteSqlVarsErrorTestCase(
         description="raises on unavailable allowed CTX token",
-        sql="SELECT @@CTX:target.database",
+        sql="SELECT @@CTX:destination.database",
         effective_vars={},
-        context_values={"target.database": None},
-        expected_error_fragment="references CTX key 'target.database' but no value is available",
+        context_values={"destination.database": None},
+        expected_error_fragment=(
+            "references CTX key 'destination.database' but no value is available"
+        ),
     ),
     SubstituteSqlVarsErrorTestCase(
         description="raises with preview on structured object var interpolation",
