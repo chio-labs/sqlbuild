@@ -18,7 +18,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
 
 RUNTIME_CONFIG_TEST_CASES: list[BuildEffectiveRuntimeConfigTestCase] = [
     BuildEffectiveRuntimeConfigTestCase(
-        description="uses default environment and var precedence",
+        description="uses default target and var precedence",
         selected_target=None,
         cli_vars={"shared": "cli", "cli_only": "cli"},
         expected_target_name="dev",
@@ -32,7 +32,7 @@ RUNTIME_CONFIG_TEST_CASES: list[BuildEffectiveRuntimeConfigTestCase] = [
         },
     ),
     BuildEffectiveRuntimeConfigTestCase(
-        description="selected environment overrides local environment",
+        description="selected target overrides local target",
         selected_target="prod",
         cli_vars=None,
         expected_target_name="prod",
