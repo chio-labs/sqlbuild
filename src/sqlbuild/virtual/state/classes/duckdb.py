@@ -14,6 +14,7 @@ from sqlbuild.virtual.state.constants import (
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     RECONCILE_EVENT_TABLE,
+    SOURCE_FRESHNESS_OBSERVATION_TABLE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_OPERATION_EVENT_TABLE,
     STATE_OPERATION_TABLE,
@@ -41,6 +42,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    SourceFreshnessRecord,
     StateBackupRecord,
     StateLockRecord,
     StateOperationEventRecord,
@@ -595,6 +597,12 @@ class DuckDbStateBackend(StateBackend):
                 [virtual_environment_name],
             )
             connection.execute(
+                "DELETE FROM "
+                f"{self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                "WHERE virtual_environment_name = ?",
+                [virtual_environment_name],
+            )
+            connection.execute(
                 f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
                 "WHERE virtual_environment_name = ?",
                 [virtual_environment_name],
@@ -735,6 +743,100 @@ class DuckDbStateBackend(StateBackend):
                 virtual_environment_name=row[0],
                 function_name=row[1],
                 version_hash=row[2],
+            )
+            for row in rows
+        )
+
+    def replace_virtual_environment_source_freshness(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> None:
+        self._validate_source_freshness_records(
+            virtual_environment_name=virtual_environment_name,
+            records=records,
+        )
+        temp_table_name: str = "__sqlbuild_replace_source_freshness"
+        connection.execute("BEGIN")
+        try:
+            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
+            connection.execute(
+                f"CREATE TEMP TABLE {temp_table_name} ("
+                "virtual_environment_name TEXT NOT NULL, "
+                "source_name TEXT NOT NULL, "
+                "strategy TEXT NOT NULL, "
+                "value_kind TEXT NOT NULL, "
+                "data_version TEXT NOT NULL, "
+                "data_version_hash TEXT NOT NULL, "
+                "observed_at TIMESTAMP NOT NULL, "
+                "UNIQUE (virtual_environment_name, source_name))"
+            )
+            record: SourceFreshnessRecord
+            for record in records:
+                connection.execute(
+                    f"INSERT INTO {temp_table_name} "
+                    "(virtual_environment_name, source_name, strategy, value_kind, "
+                    "data_version, data_version_hash, observed_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        record.virtual_environment_name,
+                        record.source_name,
+                        record.strategy,
+                        record.value_kind,
+                        record.data_version,
+                        record.data_version_hash,
+                        record.observed_at,
+                    ],
+                )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                "WHERE virtual_environment_name = ? "
+                f"AND source_name NOT IN (SELECT source_name FROM {temp_table_name})",
+                [virtual_environment_name],
+            )
+            connection.execute(
+                f"INSERT INTO {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                "(virtual_environment_name, source_name, strategy, value_kind, data_version, "
+                "data_version_hash, observed_at, updated_at) "
+                "SELECT virtual_environment_name, source_name, strategy, value_kind, "
+                f"data_version, data_version_hash, observed_at, now() FROM {temp_table_name} "
+                "ON CONFLICT (virtual_environment_name, source_name) "
+                "DO UPDATE SET "
+                "strategy = excluded.strategy, "
+                "value_kind = excluded.value_kind, "
+                "data_version = excluded.data_version, "
+                "data_version_hash = excluded.data_version_hash, "
+                "observed_at = excluded.observed_at, "
+                "updated_at = now()"
+            )
+            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+
+    def get_virtual_environment_source_freshness(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[SourceFreshnessRecord, ...]:
+        rows: list[tuple[Any, ...]] = connection.execute(
+            "SELECT virtual_environment_name, source_name, strategy, value_kind, "
+            "data_version, data_version_hash, observed_at "
+            f"FROM {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+            "WHERE virtual_environment_name = ? ORDER BY source_name",
+            [virtual_environment_name],
+        ).fetchall()
+        return tuple(
+            SourceFreshnessRecord(
+                virtual_environment_name=row[0],
+                source_name=row[1],
+                strategy=row[2],
+                value_kind=row[3],
+                data_version=row[4],
+                data_version_hash=row[5],
+                observed_at=row[6],
             )
             for row in rows
         )
@@ -1164,6 +1266,26 @@ class DuckDbStateBackend(StateBackend):
 
     def _qualified_name(self, schema: str, table: str) -> str:
         return f"{self._quote_identifier(schema)}.{self._quote_identifier(table)}"
+
+    def _validate_source_freshness_records(
+        self,
+        *,
+        virtual_environment_name: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> None:
+        seen_source_names: set[str] = set()
+        record: SourceFreshnessRecord
+        for record in records:
+            if record.virtual_environment_name != virtual_environment_name:
+                raise StateBackendConfigError(
+                    "Source freshness record virtual_environment_name must match replacement "
+                    "virtual_environment_name"
+                )
+            if record.source_name in seen_source_names:
+                raise StateBackendConfigError(
+                    f"Duplicate source freshness record for source '{record.source_name}'"
+                )
+            seen_source_names.add(record.source_name)
 
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"

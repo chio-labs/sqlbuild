@@ -80,6 +80,16 @@ class DuckDbStateBackendCoreRecordsTestCase:
 
 
 @dataclass(frozen=True)
+class DuckDbStateBackendSourceFreshnessTestCase:
+    description: str
+    schema: str
+    sqlbuild_version: str
+    virtual_environment_name: str
+    expected_source_names: tuple[str, ...]
+    expected_source_names_after_replace: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DuckDbStateBackendIndexValidationTestCase:
     description: str
     schema: str

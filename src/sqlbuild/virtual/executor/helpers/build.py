@@ -76,11 +76,16 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_model_targets,
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
+from sqlbuild.virtual.executor.helpers.source_freshness import (
+    observe_virtual_environment_source_freshness,
+    persist_virtual_environment_source_freshness,
+)
 from sqlbuild.virtual.executor.models import (
     VersionPrepareContext,
     VirtualBuildExecutionHooks,
     VirtualBuildPipelineResult,
 )
+from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
@@ -97,6 +102,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    SourceFreshnessRecord,
     StateBackendConfig,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentRecord,
@@ -469,6 +475,7 @@ def run_virtual_build(
             expected_local_hashes=semantics.expected_local_hashes,
             expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
+            load_results=result.load_results,
         )
         read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
             python_graph=python_graph,
@@ -819,6 +826,7 @@ def _persist_successful_virtual_build(
     expected_local_hashes: dict[str, str],
     expected_metadata_jsons: dict[str, str],
     expected_version_hashes: dict[str, str],
+    load_results: tuple[LoadExecutionResult, ...],
 ) -> None:
     final_version_hashes: dict[str, str] = dict(bound_version_hashes)
     final_function_hashes: dict[str, str] = {
@@ -842,6 +850,36 @@ def _persist_successful_virtual_build(
     )
     state_connection: Any = backend.connect(config.connection)
     try:
+        previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+            backend.get_virtual_environment_source_freshness(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+            )
+        )
+        source_observation_connection: Any = adapter.connect(connection_config)
+        try:
+            source_freshness_result: SourceFreshnessRuntimeResult = (
+                observe_virtual_environment_source_freshness(
+                    adapter=adapter,
+                    connection=source_observation_connection,
+                    sources=tuple(source.source_entry for source in project.sources),
+                    virtual_environment_name=target_vde_name,
+                    observed_at=datetime.now(),
+                    run_id=project.run_id,
+                    load_results=load_results,
+                    previous_records=previous_source_freshness_records,
+                )
+            )
+        finally:
+            adapter.close(source_observation_connection)
+        persist_virtual_environment_source_freshness(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            virtual_environment_name=target_vde_name,
+            result=source_freshness_result,
+        )
         model: CompiledModel
         for model in project.models:
             version_hash: str | None = final_version_hashes.get(model.name)

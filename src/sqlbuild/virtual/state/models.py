@@ -140,6 +140,19 @@ class VirtualEnvironmentFunctionRefRecord:
 
 
 @dataclass(frozen=True)
+class SourceFreshnessRecord:
+    """Latest observed source freshness for one virtual environment."""
+
+    virtual_environment_name: str
+    source_name: str
+    strategy: str
+    value_kind: str
+    data_version: str
+    data_version_hash: str
+    observed_at: datetime
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentCheckpointRecord:
     """Finalized checkpoint for one virtual data environment."""
 

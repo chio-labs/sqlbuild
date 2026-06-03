@@ -14,6 +14,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    SourceFreshnessRecord,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -44,6 +45,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendLockTestCase,
     DuckDbStateBackendOperationEventTestCase,
     DuckDbStateBackendRollbackTestCase,
+    DuckDbStateBackendSourceFreshnessTestCase,
     DuckDbStateBackendTableCreationTestCase,
     DuckDbStateBackendTransactionRollbackTestCase,
     DuckDbStateBackendValidationTestCase,
@@ -120,7 +122,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=19,
+            expected_issue_count=20,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -606,6 +608,217 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             )
         )
         assert len(replaced_refs) == test_case.expected_ref_count_after_replace
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendSourceFreshnessTestCase(
+            description="persists and replaces source freshness observations",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            expected_source_names=("raw.customers", "raw.orders"),
+            expected_source_names_after_replace=("raw.orders",),
+        )
+    ],
+    ids=["persists and replaces source freshness observations"],
+)
+def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_trips_latest_records(
+    test_case: DuckDbStateBackendSourceFreshnessTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        backend.upsert_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            record=VirtualEnvironmentRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                status=VirtualEnvironmentStatus.ACTIVE,
+            ),
+        )
+        first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0)
+        second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0)
+        backend.replace_virtual_environment_source_freshness(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            records=(
+                SourceFreshnessRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    source_name="raw.orders",
+                    strategy="column",
+                    value_kind="integer",
+                    data_version="1",
+                    data_version_hash="hash-1",
+                    observed_at=first_observed_at,
+                ),
+                SourceFreshnessRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    source_name="raw.customers",
+                    strategy="sql",
+                    value_kind="string",
+                    data_version="batch-1",
+                    data_version_hash="hash-2",
+                    observed_at=first_observed_at,
+                ),
+            ),
+        )
+
+        records: tuple[SourceFreshnessRecord, ...] = (
+            backend.get_virtual_environment_source_freshness(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.virtual_environment_name,
+            )
+        )
+        assert tuple(record.source_name for record in records) == test_case.expected_source_names
+
+        backend.replace_virtual_environment_source_freshness(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            records=(
+                SourceFreshnessRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    source_name="raw.orders",
+                    strategy="column",
+                    value_kind="integer",
+                    data_version="2",
+                    data_version_hash="hash-3",
+                    observed_at=second_observed_at,
+                ),
+            ),
+        )
+
+        replaced_records: tuple[SourceFreshnessRecord, ...] = (
+            backend.get_virtual_environment_source_freshness(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.virtual_environment_name,
+            )
+        )
+        assert tuple(record.source_name for record in replaced_records) == (
+            test_case.expected_source_names_after_replace
+        )
+        assert replaced_records[0].data_version == "2"
+        assert replaced_records[0].data_version_hash == "hash-3"
+        assert replaced_records[0].observed_at == second_observed_at
+
+        backend.delete_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+        assert (
+            backend.get_virtual_environment_source_freshness(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.virtual_environment_name,
+            )
+            == ()
+        )
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendErrorTestCase(
+            description="blocks mismatched source freshness virtual environment",
+            schema="sqlbuild_state",
+            expected_error_type=Exception,
+            expected_message_fragment="must match replacement virtual_environment_name",
+        )
+    ],
+    ids=["blocks mismatched source freshness virtual environment"],
+)
+def test_given_mismatched_duckdb_source_freshness_record_when_replacing_then_blocks_cleanly(
+    test_case: DuckDbStateBackendErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(connection, schema=test_case.schema, sqlbuild_version="0.0.test")
+        record: SourceFreshnessRecord = SourceFreshnessRecord(
+            virtual_environment_name="other",
+            source_name="raw.orders",
+            strategy="column",
+            value_kind="integer",
+            data_version="1",
+            data_version_hash="hash-1",
+            observed_at=datetime(2026, 1, 1, 12, 0, 0),
+        )
+        with pytest.raises(test_case.expected_error_type) as exc_info:
+            backend.replace_virtual_environment_source_freshness(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name="dev",
+                records=(record,),
+            )
+
+        assert test_case.expected_message_fragment in str(exc_info.value)
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendErrorTestCase(
+            description="blocks duplicate source freshness records",
+            schema="sqlbuild_state",
+            expected_error_type=Exception,
+            expected_message_fragment="Duplicate source freshness record",
+        )
+    ],
+    ids=["blocks duplicate source freshness records"],
+)
+def test_given_duplicate_duckdb_source_freshness_records_when_replacing_then_blocks_cleanly(
+    test_case: DuckDbStateBackendErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(connection, schema=test_case.schema, sqlbuild_version="0.0.test")
+        records: tuple[SourceFreshnessRecord, ...] = (
+            SourceFreshnessRecord(
+                virtual_environment_name="dev",
+                source_name="raw.orders",
+                strategy="column",
+                value_kind="integer",
+                data_version="1",
+                data_version_hash="hash-1",
+                observed_at=datetime(2026, 1, 1, 12, 0, 0),
+            ),
+            SourceFreshnessRecord(
+                virtual_environment_name="dev",
+                source_name="raw.orders",
+                strategy="sql",
+                value_kind="string",
+                data_version="batch-1",
+                data_version_hash="hash-2",
+                observed_at=datetime(2026, 1, 1, 12, 0, 0),
+            ),
+        )
+        with pytest.raises(test_case.expected_error_type) as exc_info:
+            backend.replace_virtual_environment_source_freshness(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name="dev",
+                records=records,
+            )
+
+        assert test_case.expected_message_fragment in str(exc_info.value)
     finally:
         backend.close(connection)
 
