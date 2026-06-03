@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
@@ -27,6 +30,7 @@ from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeRowDiffTestCase,
     SnowflakeSchemaDiffTestCase,
     SnowflakeSchemaIntrospectionTestCase,
+    SnowflakeTableFreshnessMetadataTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_statement_recorder,
@@ -367,6 +371,63 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     assert all_columns == test_case.expected_all_columns
     assert query_column_names == test_case.expected_query_column_names
     assert described_columns == test_case.expected_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTableFreshnessMetadataTestCase(
+            description="table freshness metadata advances after table DML",
+            expected_value_kind="timestamp",
+            expected_supports_metadata=True,
+            expected_data_version_type=datetime,
+        )
+    ],
+    ids=["table freshness metadata advances after table DML"],
+)
+def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advances(
+    test_case: SnowflakeTableFreshnessMetadataTestCase,
+    adapter: SnowflakeAdapter,
+    connection: Any,
+    snowflake_database: str,
+    snowflake_schema: str,
+) -> None:
+    table_name: str = "freshness_orders"
+    table_target: str = qualified_name(
+        database=snowflake_database,
+        schema=snowflake_schema,
+        name=table_name,
+    )
+    execute_statements(
+        adapter=adapter,
+        connection=connection,
+        statements=(
+            f"CREATE OR REPLACE TABLE {table_target} (id NUMBER)",
+            f"INSERT INTO {table_target} VALUES (1)",
+        ),
+    )
+    initial_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database=snowflake_database,
+        schema=snowflake_schema,
+        name=table_name,
+    )
+    time.sleep(1)
+
+    adapter.execute(connection, f"INSERT INTO {table_target} VALUES (2)")
+    changed_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database=snowflake_database,
+        schema=snowflake_schema,
+        name=table_name,
+    )
+
+    assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
+    assert initial_metadata.value_kind == test_case.expected_value_kind
+    assert changed_metadata.value_kind == test_case.expected_value_kind
+    assert isinstance(initial_metadata.data_version, test_case.expected_data_version_type)
+    assert isinstance(changed_metadata.data_version, test_case.expected_data_version_type)
+    assert changed_metadata.data_version > initial_metadata.data_version
 
 
 @pytest.mark.parametrize(

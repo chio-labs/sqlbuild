@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
@@ -85,6 +86,14 @@ class SnowflakeMergeTestCase:
     source_sql: str
     unique_key: str | tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeTableFreshnessMetadataTestCase:
+    description: str
+    expected_value_kind: str
+    expected_supports_metadata: bool
+    expected_data_version_type: type[datetime]
 
 
 @dataclass(frozen=True)

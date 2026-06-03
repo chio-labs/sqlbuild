@@ -6,10 +6,13 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from tests.unit.src.sqlbuild.adapter.strict._test_types import (
     FirstClassAdapterImplementationContractTestCase,
     StrictAdapterContractTestCase,
+    TableFreshnessMetadataUnsupportedTestCase,
 )
 from tests.unit.src.sqlbuild.adapter.strict.helpers import (
     first_class_adapter_contract_violations,
@@ -57,3 +60,29 @@ def test_given_first_class_adapters_when_checking_contract_then_no_method_comes_
     violations: tuple[str, ...] = first_class_adapter_contract_violations()
 
     assert violations == test_case.expected_violations
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableFreshnessMetadataUnsupportedTestCase(
+            description="duckdb table freshness metadata is unsupported by default",
+            expected_supports_metadata=False,
+            expected_error_fragment="does not support table freshness metadata",
+        )
+    ],
+    ids=["duckdb table freshness metadata is unsupported by default"],
+)
+def test_given_unsupported_adapter_when_getting_table_freshness_metadata_then_raises_clear_error(
+    test_case: TableFreshnessMetadataUnsupportedTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
+    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
+        adapter.get_table_freshness_metadata(
+            None,
+            database=None,
+            schema="main",
+            name="raw_orders",
+        )

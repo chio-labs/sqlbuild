@@ -24,6 +24,7 @@ def build_virtual_planner_test_project(
     *,
     upstream_query_sql: str,
     downstream_query_sql: str,
+    function_body_sql: str = "value + 1",
     downstream_depends_on_dim_customers: bool = False,
     upstream_model_name: str = "stg_orders",
     upstream_schema: str = "staging",
@@ -37,7 +38,7 @@ def build_virtual_planner_test_project(
         relative_path=Path("functions/sql/normalize_order.sql"),
         arguments=(FunctionArgument(name="value", type="INTEGER"),),
         returns="INTEGER",
-        body_sql="value + 1",
+        body_sql=function_body_sql,
         destination=CompiledRelationDestination(
             database=None,
             schema="staging",
