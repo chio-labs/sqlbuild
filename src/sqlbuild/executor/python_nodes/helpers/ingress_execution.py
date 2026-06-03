@@ -18,7 +18,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.helpers.lifecycle_nodes import build_ingress_lifecycle_nodes
@@ -340,7 +340,11 @@ def _record_scheduler_skips(
         if discovered_node.kind == PythonNodeKind.LOADER:
             source_entry: SourceEntry | None = source_by_loader_name.get(result.name)
             if source_entry is not None and result.name not in load_results_by_name:
-                load_results_by_name[result.name] = skipped_load_result(source_entry)
+                load_results_by_name[result.name] = skipped_load_result(
+                    source_entry,
+                    reason=result.skip_reason,
+                    mode=result.skip_mode or SkipMode.HARD,
+                )
             continue
         if result.name not in python_results_by_name:
             python_results_by_name[result.name] = PythonNodeExecutionResult(
@@ -348,6 +352,7 @@ def _record_scheduler_skips(
                 kind=discovered_node.kind,
                 status=PythonNodeStatus.SKIPPED,
                 skip_reason=result.skip_reason,
+                skip_mode=result.skip_mode,
             )
 
 
@@ -389,6 +394,7 @@ def _python_result_to_lifecycle_result(result: PythonNodeExecutionResult) -> Lif
         status=status,
         error_message=result.error_message,
         skip_reason=result.skip_reason,
+        skip_mode=result.skip_mode,
     )
 
 
@@ -400,6 +406,8 @@ def _load_result_to_lifecycle_result(
         kind=PythonNodeKind.LOADER.value,
         status=_execution_status_to_lifecycle_status(result.status),
         error_message=result.error_message,
+        skip_reason=result.skip_reason,
+        skip_mode=result.skip_mode,
     )
 
 

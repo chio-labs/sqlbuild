@@ -315,7 +315,7 @@ class BuildProgressCallbacks:
             status = self._style.status(_execution_status_display(node_result.status))
             duration = _format_duration(node_result.duration_ms)
             source_name: str = _truncate_name(node_result.source_name, self._name_width)
-            detail: str = f"  rows={node_result.rows_loaded:,}"
+            detail: str = _load_result_detail(node_result)
             self._write_top_level_result_line(
                 ctr=ctr,
                 resource_type=node_result.resource_kind.value,
@@ -823,6 +823,17 @@ def _execution_status_display(status: ExecutionStatus) -> str:
     if status == ExecutionStatus.SKIPPED:
         return "SKIP"
     return str(status)
+
+
+def _load_result_detail(result: LoadExecutionResult) -> str:
+    if result.status != ExecutionStatus.SKIPPED:
+        return f"  rows={result.rows_loaded:,}"
+    skip_label: str = "skip"
+    if result.skip_mode is not None:
+        skip_label = f"{result.skip_mode.value} skip"
+    if result.skip_reason:
+        return f"  {skip_label}: {result.skip_reason}"
+    return f"  {skip_label}"
 
 
 def _audit_outcome_display(outcome: AuditOutcome) -> str:

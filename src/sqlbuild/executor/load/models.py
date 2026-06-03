@@ -13,6 +13,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, StatementRecorder
 from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
@@ -67,6 +68,14 @@ class LoaderRelationRef:
 
 
 @dataclass(frozen=True)
+class LoaderSkipResult:
+    """User-facing skip signal returned by a source loader."""
+
+    reason: str
+    mode: SkipMode = SkipMode.SOFT
+
+
+@dataclass(frozen=True)
 class LoaderContext:
     """Runtime context passed to a source loader function."""
 
@@ -102,6 +111,11 @@ class LoaderContext:
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
+
+    def skip(self, reason: str, *, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
+        """Return a skip signal for the current source loader."""
+
+        return LoaderSkipResult(reason=reason, mode=mode)
 
     def qualify_name(
         self,
@@ -158,6 +172,8 @@ class LoadExecutionResult:
     rows_loaded: int = 0
     duration_ms: int | None = None
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+    skip_mode: SkipMode | None = None
+    skip_reason: str | None = None
     error_message: str | None = None
 
 
@@ -182,6 +198,7 @@ class LoadDagState:
     ready: list[str]
     in_flight: set[str]
     failed_or_skipped: set[str]
+    results_by_name: dict[str, LoadExecutionResult]
     source_index_by_name: dict[str, int]
     downstream_names: dict[str, tuple[str, ...]]
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]]

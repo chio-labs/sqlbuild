@@ -21,6 +21,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
@@ -39,6 +40,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     BuildProgressActiveSpinnerTestCase,
     BuildProgressFailureOutputTestCase,
     BuildProgressLoadLogTestCase,
+    BuildProgressLoadSkipOutputTestCase,
     BuildProgressModelOutputTestCase,
     BuildProgressSpinnerLifecycleTestCase,
     BuildProgressSqlTestRowsTestCase,
@@ -755,6 +757,48 @@ def test_given_source_load_logs_when_reporting_progress_then_writes_indented_log
             ),
         )
     )
+    output: str = stream.getvalue()
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_fragments:
+        assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildProgressLoadSkipOutputTestCase(
+            description="skipped loader renders skip mode and reason",
+            node_result=LoadExecutionResult(
+                source_name="raw_orders",
+                loader_name="load_raw_orders",
+                status=ExecutionStatus.SKIPPED,
+                target="raw_orders",
+                resource_kind=ExecutionResourceKind.LOADER,
+                skip_mode=SkipMode.SOFT,
+                skip_reason="no source changes",
+            ),
+            expected_fragments=("SKIP", "soft skip: no source changes"),
+            unexpected_fragments=("rows=0",),
+        )
+    ],
+    ids=["skipped loader renders skip mode and reason"],
+)
+def test_given_skipped_source_load_when_reporting_progress_then_writes_skip_detail(
+    test_case: BuildProgressLoadSkipOutputTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream: StringIO = StringIO()
+    monkeypatch.setattr("sys.stdout", stream)
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(),
+        use_color=test_case.use_color,
+    )
+
+    callbacks.on_node_complete(test_case.node_result)
     output: str = stream.getvalue()
 
     expected_fragment: str

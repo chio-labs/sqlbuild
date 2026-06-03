@@ -223,6 +223,7 @@ def _execute_ready_node(
             node_name=node.name,
             kind=node_kind,
             status=PythonNodeStatus.SKIPPED,
+            skip_mode=decision.skip_mode,
             skip_reason=decision.reason,
         )
     if decision.action == PythonNodeFanInAction.BLOCK:

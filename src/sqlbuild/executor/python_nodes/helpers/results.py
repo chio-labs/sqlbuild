@@ -105,18 +105,20 @@ def evaluate_python_node_fan_in(
     hard_skipped_names: tuple[str, ...] = tuple(
         result.node_name
         for result in upstream_results
-        if result.status == PythonNodeStatus.SKIPPED and result.skip_mode == SkipMode.DOWNSTREAM
+        if result.status == PythonNodeStatus.SKIPPED and result.skip_mode == SkipMode.HARD
     )
     if hard_skipped_names:
         return PythonNodeFanInDecision(
             action=PythonNodeFanInAction.SKIP,
-            reason=f"Upstream Python node skipped downstream: {', '.join(hard_skipped_names)}",
+            reason=f"Upstream Python node hard-skipped: {', '.join(hard_skipped_names)}",
+            skip_mode=SkipMode.HARD,
         )
     if any(result.status == PythonNodeStatus.SUCCESS for result in upstream_results):
         return PythonNodeFanInDecision(action=PythonNodeFanInAction.RUN)
     return PythonNodeFanInDecision(
         action=PythonNodeFanInAction.SKIP,
         reason="All upstream Python nodes were skipped",
+        skip_mode=SkipMode.SOFT,
     )
 
 
