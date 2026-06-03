@@ -81,10 +81,11 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
                 'database = "python_build_ingress_skip_project.duckdb"\n'
             ),
             "tasks/prepare.py": (
+                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    return ctx.skip('no input')\n"
+                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
             ),
             "loaders/raw.py": (
                 "from tasks.prepare import prepare_orders\n"
@@ -177,11 +178,12 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
             "tasks/profile.py": (
+                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def skip_after_fact(ctx):\n"
-                "    return ctx.skip('no profile needed')\n"
+                "    return ctx.skip('no profile needed', mode=SkipMode.HARD)\n"
             ),
         },
         expected_exit_code=0,
@@ -221,7 +223,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def soft_skip_after_fact(ctx):\n"
-                "    return ctx.skip('optional profile skipped', mode=SkipMode.SELF)\n"
+                "    return ctx.skip('optional profile skipped', mode=SkipMode.SOFT)\n"
             ),
         },
         expected_exit_code=0,

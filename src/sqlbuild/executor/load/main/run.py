@@ -12,6 +12,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.helpers.dag_runtime import (
     build_load_dag_state,
     complete_dag_source,
@@ -75,7 +76,7 @@ def run_load_pipeline(
         or indexes.loader_by_name[source.loader].connection_mode == LoaderConnectionMode.SQLBUILD
     )
     preloaded_results: list[LoadExecutionResult] = []
-    failed_or_skipped: set[str] = set()
+    failed_or_hard_skipped: set[str] = set()
     source_by_name: dict[str, SourceEntry] = {source.name: source for source in index_sources}
     external_source: SourceEntry
     for external_source in external_sources:
@@ -83,7 +84,8 @@ def run_load_pipeline(
             source_name=external_source.name,
             source_by_name=source_by_name,
             indexes=indexes,
-            failed_or_skipped=failed_or_skipped,
+            failed_or_hard_skipped=failed_or_hard_skipped,
+            results_by_name={},
             adapter=adapter,
             connection_config=connection_config,
             connection=None,
@@ -98,8 +100,10 @@ def run_load_pipeline(
             use_color=use_color,
         )
         preloaded_results.append(result)
-        if result.status.value != "success":
-            failed_or_skipped.add(external_source.name)
+        if result.status.value == "failed" or (
+            result.status.value == "skipped" and result.skip_mode == SkipMode.HARD
+        ):
+            failed_or_hard_skipped.add(external_source.name)
         if on_load_complete is not None:
             on_load_complete(result)
     if not sqlbuild_sources:
@@ -143,7 +147,7 @@ def run_load_pipeline(
             upstream_names=upstream_names,
             downstream_names=downstream_names,
         )
-        state.failed_or_skipped.update(failed_or_skipped)
+        state.failed_or_skipped.update(failed_or_hard_skipped)
         connection_pool: queue.Queue[Any] = queue.Queue()
         connection: Any
         for connection in connections:
@@ -159,7 +163,8 @@ def run_load_pipeline(
                         source_name=source_name,
                         source_by_name=source_by_name,
                         indexes=indexes,
-                        failed_or_skipped=state.failed_or_skipped,
+                        failed_or_hard_skipped=state.failed_or_skipped,
+                        results_by_name=state.results_by_name,
                         adapter=adapter,
                         connection_config=connection_config,
                         connection=sequential_connection,
@@ -191,6 +196,7 @@ def run_load_pipeline(
                         source_by_name,
                         indexes,
                         state.failed_or_skipped,
+                        state.results_by_name,
                         adapter,
                         connection_config,
                         connection_pool,

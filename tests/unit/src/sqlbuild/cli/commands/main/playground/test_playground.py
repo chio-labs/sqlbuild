@@ -200,7 +200,7 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
         expected_file_fragments=(
             (
                 Path("tasks/orders.py"),
-                ("def prepare_raw_orders", "SkipMode.SELF", "def export_window"),
+                ("def prepare_raw_orders", "SkipMode.SOFT", "def export_window"),
             ),
             (
                 Path("loaders/orders.py"),

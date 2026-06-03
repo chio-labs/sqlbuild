@@ -86,9 +86,7 @@ def test_given_python_check_when_executing_then_returns_expected_result(
         status=test_case.upstream_status,
         payload={"rows": 3},
         metadata={"rows": 3},
-        skip_mode=SkipMode.DOWNSTREAM
-        if test_case.upstream_status == PythonNodeStatus.SKIPPED
-        else None,
+        skip_mode=SkipMode.HARD if test_case.upstream_status == PythonNodeStatus.SKIPPED else None,
         skip_reason=test_case.upstream_skip_reason,
     )
     run_state.record_result(node_function=check_upstream_task, result=upstream_result)

@@ -5,6 +5,7 @@ from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -137,6 +138,15 @@ class BuildProgressSqlTestRowsTestCase:
 @dataclass(frozen=True)
 class BuildProgressLoadLogTestCase:
     description: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    use_color: bool = False
+
+
+@dataclass(frozen=True)
+class BuildProgressLoadSkipOutputTestCase:
+    description: str
+    node_result: LoadExecutionResult
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
     use_color: bool = False

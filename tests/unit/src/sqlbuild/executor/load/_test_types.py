@@ -134,6 +134,17 @@ class ExternalLoadPipelineTestCase:
 
 
 @dataclass(frozen=True)
+class LoadPipelineSkipFanInTestCase:
+    """One loader skip fan-in behavior case."""
+
+    description: str
+    hard_skip: bool
+    expected_statuses: tuple[ExecutionStatus, ...]
+    expected_skip_modes: tuple[str | None, ...]
+    expected_skip_reasons: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
 class SourceLoadExecutionContextTestCase:
     """One source load execution context behavior case."""
 

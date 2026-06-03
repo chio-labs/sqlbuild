@@ -99,7 +99,7 @@ def prepare_raw_orders(ctx):
 def optional_partner_feed(ctx):
     """Soft-skip an optional upstream without blocking sibling fan-in."""
 
-    return ctx.skip("partner feed is not configured", mode=SkipMode.SELF)
+    return ctx.skip("partner feed is not configured", mode=SkipMode.SOFT)
 
 
 @task(tags=["python", "optional"], group="exports")

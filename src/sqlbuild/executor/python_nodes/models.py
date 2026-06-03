@@ -38,7 +38,7 @@ class PythonNodeSkipResult:
     """User-facing skip signal returned by a Python node."""
 
     reason: str
-    mode: SkipMode = SkipMode.DOWNSTREAM
+    mode: SkipMode = SkipMode.SOFT
     metadata: dict[str, object] = field(default_factory=dict)
 
 
@@ -97,6 +97,7 @@ class PythonNodeFanInDecision:
 
     action: PythonNodeFanInAction
     reason: str | None = None
+    skip_mode: SkipMode | None = None
 
 
 @dataclass
@@ -253,7 +254,7 @@ class BasePythonNodeContext:
         self,
         reason: str,
         *,
-        mode: SkipMode = SkipMode.DOWNSTREAM,
+        mode: SkipMode = SkipMode.SOFT,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeSkipResult:
         """Return a skip signal for the current Python node."""

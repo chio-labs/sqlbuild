@@ -369,6 +369,8 @@ def _format_load_assets(
                 "staging_relation": result.staging_relation,
                 "loader": result.loader_name,
                 "rows_loaded": result.rows_loaded,
+                "skip_mode": result.skip_mode.value if result.skip_mode else None,
+                "skip_reason": result.skip_reason,
                 "error_message": result.error_message,
             }
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.models.lifecycle_scheduler import (
     LifecycleExecutionNode,
@@ -50,7 +51,19 @@ def run_lifecycle_scheduler(
                 name=node.name,
                 kind=node.kind,
                 status=LifecycleNodeStatus.SKIPPED,
-                skip_reason=f"Upstream node did not succeed: {dependency_result.name}",
+                skip_reason=_dependency_skip_reason(dependency_result),
+                skip_mode=SkipMode.HARD,
+            )
+        elif _should_soft_skip_due_to_all_skipped_dependencies(
+            upstream_names=upstream_names[node_name],
+            results_by_name=results_by_name,
+        ):
+            result = LifecycleNodeResult(
+                name=node.name,
+                kind=node.kind,
+                status=LifecycleNodeStatus.SKIPPED,
+                skip_reason="All upstream nodes were skipped",
+                skip_mode=SkipMode.SOFT,
             )
         else:
             result = handler(node)
@@ -107,6 +120,28 @@ def _blocking_dependency_result(
     upstream_name: str
     for upstream_name in upstream_names:
         result: LifecycleNodeResult = results_by_name[upstream_name]
-        if result.status != LifecycleNodeStatus.SUCCESS:
+        if result.status == LifecycleNodeStatus.FAILED:
+            return result
+        if result.status == LifecycleNodeStatus.SKIPPED and result.skip_mode == SkipMode.HARD:
             return result
     return None
+
+
+def _should_soft_skip_due_to_all_skipped_dependencies(
+    *,
+    upstream_names: tuple[str, ...],
+    results_by_name: dict[str, LifecycleNodeResult],
+) -> bool:
+    if not upstream_names:
+        return False
+    return all(
+        results_by_name[upstream_name].status == LifecycleNodeStatus.SKIPPED
+        and results_by_name[upstream_name].skip_mode == SkipMode.SOFT
+        for upstream_name in upstream_names
+    )
+
+
+def _dependency_skip_reason(result: LifecycleNodeResult) -> str:
+    if result.status == LifecycleNodeStatus.SKIPPED:
+        return f"Upstream node hard-skipped: {result.name}"
+    return f"Upstream node did not succeed: {result.name}"
