@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.shared.types import LifecycleNodeStatus
 
 
@@ -24,3 +25,12 @@ class LifecycleSchedulerTestCase:
 class LifecycleSchedulerErrorTestCase:
     description: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LifecycleSchedulerFanInTestCase:
+    description: str
+    expected_calls: list[str]
+    expected_statuses: tuple[LifecycleNodeStatus, ...]
+    expected_downstream_skip_reason: str | None
+    expected_downstream_skip_mode: SkipMode | None

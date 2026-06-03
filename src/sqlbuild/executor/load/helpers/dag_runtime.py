@@ -9,11 +9,13 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
-    should_skip_due_to_failed_dependency,
+    should_skip_due_to_hard_dependency,
+    should_soft_skip_due_to_all_skipped_dependencies,
     skipped_load_result,
 )
 from sqlbuild.executor.shared.helpers.python_node_scheduler import (
@@ -52,6 +54,7 @@ def build_load_dag_state(
         ready=ready,
         in_flight=set(),
         failed_or_skipped=set(),
+        results_by_name={},
         source_index_by_name=source_index_by_name,
         downstream_names=downstream_names,
         completion_queue=queue.Queue(),
@@ -69,7 +72,10 @@ def complete_dag_source(
 
     source_index: int = state.source_index_by_name[source_name]
     state.results[source_index] = result
-    if result.status != ExecutionStatus.SUCCESS:
+    state.results_by_name[source_name] = result
+    if result.status == ExecutionStatus.FAILED or (
+        result.status == ExecutionStatus.SKIPPED and result.skip_mode == SkipMode.HARD
+    ):
         state.failed_or_skipped.add(source_name)
     if on_load_complete is not None:
         on_load_complete(result)
@@ -86,7 +92,8 @@ def execute_ready_dag_source(
     source_name: str,
     source_by_name: dict[str, SourceEntry],
     indexes: LoadExecutionIndexes,
-    failed_or_skipped: set[str],
+    failed_or_hard_skipped: set[str],
+    results_by_name: dict[str, LoadExecutionResult] | None = None,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection: Any,
@@ -103,12 +110,22 @@ def execute_ready_dag_source(
     """Execute one ready DAG node or return a skipped result."""
 
     source: SourceEntry = source_by_name[source_name]
-    if should_skip_due_to_failed_dependency(
+    if should_skip_due_to_hard_dependency(
         source=source,
-        failed_or_skipped=failed_or_skipped,
+        failed_or_hard_skipped=failed_or_hard_skipped,
         indexes=indexes,
     ):
-        return skipped_load_result(source)
+        return skipped_load_result(source, reason="Upstream loader hard-skipped")
+    if should_soft_skip_due_to_all_skipped_dependencies(
+        source=source,
+        results_by_name={} if results_by_name is None else results_by_name,
+        indexes=indexes,
+    ):
+        return skipped_load_result(
+            source,
+            reason="All upstream loaders were soft-skipped",
+            mode=SkipMode.SOFT,
+        )
     return execute_source_load(
         source_entry=source,
         loader_function=indexes.loader_by_name[source.loader or ""],
@@ -134,7 +151,8 @@ def load_dag_worker(
     source_name: str,
     source_by_name: dict[str, SourceEntry],
     indexes: LoadExecutionIndexes,
-    failed_or_skipped: set[str],
+    failed_or_hard_skipped: set[str],
+    results_by_name: dict[str, LoadExecutionResult],
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection_pool: queue.Queue[Any],
@@ -156,7 +174,8 @@ def load_dag_worker(
             source_name=source_name,
             source_by_name=source_by_name,
             indexes=indexes,
-            failed_or_skipped=failed_or_skipped,
+            failed_or_hard_skipped=failed_or_hard_skipped,
+            results_by_name=results_by_name,
             adapter=adapter,
             connection_config=connection_config,
             connection=connection,

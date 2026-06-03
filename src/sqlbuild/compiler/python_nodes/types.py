@@ -25,8 +25,8 @@ class PythonNodeStatus(StrEnum):
 class SkipMode(StrEnum):
     """Python-node skip propagation mode."""
 
-    SELF = "self"
-    DOWNSTREAM = "downstream"
+    SOFT = "soft"
+    HARD = "hard"
 
 
 class PythonNodeFanInAction(StrEnum):

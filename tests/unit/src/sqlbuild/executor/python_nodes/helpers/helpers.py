@@ -29,6 +29,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.executor.shared.helpers.python_node_scheduler import unlock_downstream_python_nodes
 from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
@@ -184,8 +185,20 @@ def skip_empty_orders(ctx: TaskContext) -> object:
     return ctx.skip("No new orders")
 
 
+def hard_skip_empty_orders(ctx: TaskContext) -> object:
+    return ctx.skip("No new orders", mode=SkipMode.HARD)
+
+
 def export_after_skip(ctx: AssetContext) -> object:
     return ctx.result(payload={"uri": "should-not-run"}, materialized=True)
+
+
+def successful_sibling(ctx: TaskContext) -> object:
+    return ctx.result(payload={"status": "ready"})
+
+
+def export_after_mixed_skip(ctx: AssetContext) -> object:
+    return ctx.result(payload={"uri": "s3://exports/orders.json"}, materialized=True)
 
 
 def fail_orders(_ctx: TaskContext) -> object:
