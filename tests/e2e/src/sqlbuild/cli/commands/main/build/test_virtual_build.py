@@ -501,6 +501,250 @@ def test_given_virtual_managed_source_freshness_when_unchanged_then_build_skips_
 @pytest.mark.parametrize(
     "test_case",
     [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="managed configured freshness conservatively rebinds after first load",
+            expected_initial_rows=((7,),),
+            expected_updated_rows=((7,),),
+        )
+    ],
+    ids=["managed configured freshness conservatively rebinds after first load"],
+)
+def test_given_virtual_managed_source_configured_freshness_when_building_then_rebinds_safely(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_managed_configured_source_freshness_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml().replace(
+                "[targets.dev]\n", '[targets.dev]\ndefer_sources_to = "dev"\n'
+            ),
+            "loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders(ctx):\n"
+                "    root = Path(__file__).parents[1]\n"
+                "    return [{\n"
+                "        'id': int(root.joinpath('raw_order_id.txt').read_text()),\n"
+                "        'data_version': int(root.joinpath('raw_data_version.txt').read_text()),\n"
+                "    }]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      query: SELECT MAX(data_version) FROM dev.raw_orders\n"
+                "      type: integer\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: INTEGER\n"
+                "      - name: data_version\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    (project_dir / "raw_order_id.txt").write_text("7", encoding="utf-8")
+    (project_dir / "raw_data_version.txt").write_text("1", encoding="utf-8")
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+fact_orders"), project_dir=project_dir
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    first_version_count: int = count_virtual_physical_versions(project_dir=project_dir)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_initial_rows)
+
+    rebind_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert rebind_build_result.returncode == 0, rebind_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 1
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_updated_rows)
+
+    stable_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert stable_build_result.returncode == 0, stable_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="explicit adapter freshness fails clearly on unsupported adapter",
+            expected_initial_rows=(),
+            expected_updated_rows=(),
+            expected_error_fragment="does not support table freshness metadata",
+        )
+    ],
+    ids=["explicit adapter freshness fails clearly on unsupported adapter"],
+)
+def test_given_unsupported_adapter_freshness_when_building_then_it_fails_clearly(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_unsupported_adapter_source_freshness_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: adapter
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_orders (id INTEGER); "
+            "INSERT INTO raw.raw_orders VALUES (7);"
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert build_result.returncode == 1
+    assert test_case.expected_error_fragment is not None
+    assert test_case.expected_error_fragment in (build_result.stdout + build_result.stderr)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="function and source freshness changes independently rerun virtual model",
+            expected_initial_rows=((False,),),
+            expected_updated_rows=((True,),),
+        )
+    ],
+    ids=["function and source freshness changes independently rerun virtual model"],
+)
+def test_given_virtual_source_freshness_and_function_when_each_changes_then_model_reruns(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_function_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: integer
+                """
+            ).strip()
+            + "\n",
+            "functions/sql/is_large_order.sql": (
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+                "query_change_backfill full);\n\n"
+                "amount > 9\n"
+            ),
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT __udf("is_large_order")(id) AS is_large '
+                'FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7, 1);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    first_version_count: int = count_virtual_physical_versions(project_dir=project_dir)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large",
+    ) == list(test_case.expected_initial_rows)
+
+    (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "amount > 5\n",
+        encoding="utf-8",
+    )
+    function_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert function_build_result.returncode == 0, function_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 1
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large",
+    ) == list(test_case.expected_updated_rows)
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 4, data_version = 2",
+    )
+    source_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert source_build_result.returncode == 0, source_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 2
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT is_large FROM dev__dev.fact_orders ORDER BY is_large",
+    ) == list(test_case.expected_initial_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         VirtualPythonBuildE2ETestCase(
             description="runs loader-side and read-side Python nodes",
             project_name="virtual_python_nodes_build",

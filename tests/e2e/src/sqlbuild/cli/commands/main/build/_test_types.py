@@ -128,6 +128,7 @@ class VirtualSourceFreshnessBuildE2ETestCase:
     description: str
     expected_initial_rows: tuple[tuple[object, ...], ...]
     expected_updated_rows: tuple[tuple[object, ...], ...]
+    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)
