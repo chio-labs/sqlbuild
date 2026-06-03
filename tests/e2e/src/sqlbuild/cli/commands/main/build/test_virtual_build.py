@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -15,9 +16,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualPromoteE2ETestCase,
     VirtualPythonBuildE2ETestCase,
     VirtualRollbackE2ETestCase,
+    VirtualSourceFreshnessBuildE2ETestCase,
     VirtualWaffleShopE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    count_virtual_physical_versions,
     initialize_virtual_seeded_project,
     prepare_virtual_seeded_incremental_project,
     rewrite_incremental_orders_model,
@@ -156,6 +159,343 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         ),
     )
     assert repeat_ref_hash_rows == ref_hash_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="unchanged source freshness skips and changed freshness reruns downstream",
+            expected_initial_rows=((7,),),
+            expected_updated_rows=((8,),),
+        )
+    ],
+    ids=["unchanged source freshness skips and changed freshness reruns downstream"],
+)
+def test_given_virtual_source_freshness_when_building_then_skips_until_data_version_changes(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: integer
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7, 1);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    first_version_count: int = count_virtual_physical_versions(project_dir=project_dir)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_initial_rows)
+
+    unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
+
+    unchanged_changes_only_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert unchanged_changes_only_build_result.returncode == 0, (
+        unchanged_changes_only_build_result.stderr
+    )
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
+
+    explicit_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "fact_orders"),
+        project_dir=project_dir,
+    )
+    assert explicit_build_result.returncode == 0, explicit_build_result.stderr
+    assert "fact_orders" in explicit_build_result.stdout
+    assert "OK" in explicit_build_result.stdout
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
+    )
+    changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert changed_build_result.returncode == 0, changed_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 1
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_updated_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="unknown source freshness does not skip virtual builds",
+            expected_initial_rows=((7,),),
+            expected_updated_rows=((8,),),
+        )
+    ],
+    ids=["unknown source freshness does not skip virtual builds"],
+)
+def test_given_virtual_source_without_freshness_when_rebuilding_then_it_does_not_skip(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_unknown_source_freshness_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    first_version_count: int = count_virtual_physical_versions(project_dir=project_dir)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_initial_rows)
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8",
+    )
+    second_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert second_build_result.returncode == 0, second_build_result.stderr
+    assert "fact_orders" in second_build_result.stdout
+    assert "OK" in second_build_result.stdout
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_updated_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="source freshness propagates through views to downstream tables",
+            expected_initial_rows=((7,),),
+            expected_updated_rows=((8,),),
+        )
+    ],
+    ids=["source freshness propagates through views to downstream tables"],
+)
+def test_given_virtual_source_freshness_through_view_when_changed_then_downstream_table_reruns(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_view_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: integer
+                """
+            ).strip()
+            + "\n",
+            "models/stg_orders.sql": (
+                'MODEL (materialized view);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7, 1);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    first_version_count: int = count_virtual_physical_versions(project_dir=project_dir)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_initial_rows)
+
+    unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
+    )
+    changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert changed_build_result.returncode == 0, changed_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 2
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_updated_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
+            description="managed loader freshness does not cause spurious virtual rebuilds",
+            expected_initial_rows=((7,),),
+            expected_updated_rows=((7,),),
+        )
+    ],
+    ids=["managed loader freshness does not cause spurious virtual rebuilds"],
+)
+def test_given_virtual_managed_source_freshness_when_unchanged_then_build_skips_downstream(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_managed_source_freshness_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml().replace(
+                "[targets.dev]\n", '[targets.dev]\ndefer_sources_to = "dev"\n'
+            ),
+            "loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders(ctx):\n"
+                "    marker = Path(__file__).parents[1].joinpath('raw_order_id.txt')\n"
+                "    return [{'id': int(marker.read_text())}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    (project_dir / "raw_order_id.txt").write_text("7", encoding="utf-8")
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+fact_orders"), project_dir=project_dir
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    first_version_count: int = count_virtual_physical_versions(project_dir=project_dir)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_initial_rows)
+
+    (project_dir / "raw_order_id.txt").write_text("8", encoding="utf-8")
+    unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
+    assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_updated_rows)
 
 
 @pytest.mark.parametrize(

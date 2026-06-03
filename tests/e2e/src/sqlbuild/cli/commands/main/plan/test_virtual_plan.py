@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -10,8 +11,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import (
     VirtualPlanE2ETestCase,
     VirtualPlanJsonE2ETestCase,
     VirtualPlanSelectionGuardE2ETestCase,
+    VirtualSourceFreshnessPlanE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
     build_virtual_plan_repo_files,
     seed_matching_virtual_refs,
 )
@@ -87,6 +90,259 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
         assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual plan observes current source freshness before build persistence",
+            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "stale model set: fact_orders",
+                "fact_orders",
+            ),
+        )
+    ],
+    ids=["virtual plan observes current source freshness before build persistence"],
+)
+def test_given_virtual_source_freshness_change_when_planning_then_selects_downstream_model(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_plan",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: integer
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7, 1);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"),
+        project_dir=project_dir,
+    )
+    assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
+
+    unchanged_changes_only_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert unchanged_changes_only_plan_result.returncode == 0, (
+        unchanged_changes_only_plan_result.stderr
+    )
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in unchanged_changes_only_plan_result.stdout, (
+            unchanged_changes_only_plan_result.stdout
+        )
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stderr
+    output: str = plan_result.stdout
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual plan keeps unknown source freshness stale",
+            expected_unchanged_fragments=(
+                "Plan ready (1 selected)",
+                "stale model set: fact_orders",
+            ),
+            expected_fragments=("Plan ready (1 selected)", "fact_orders"),
+        )
+    ],
+    ids=["virtual plan keeps unknown source freshness stale"],
+)
+def test_given_virtual_source_without_freshness_when_planning_then_downstream_stays_stale(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_unknown_source_freshness_plan",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+
+    assert plan_result.returncode == 0, plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual plan propagates source freshness through views",
+            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "stale model set: fact_orders, stg_orders",
+                "stg_orders",
+                "fact_orders",
+            ),
+        )
+    ],
+    ids=["virtual plan propagates source freshness through views"],
+)
+def test_given_virtual_source_freshness_through_view_when_planning_then_selects_downstream_path(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_view_plan",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: integer
+                """
+            ).strip()
+            + "\n",
+            "models/stg_orders.sql": (
+                'MODEL (materialized view);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7, 1);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert build_result.returncode == 0, build_result.stderr
+    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+    assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
+    )
+    changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+
+    assert changed_plan_result.returncode == 0, changed_plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in changed_plan_result.stdout, changed_plan_result.stdout
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,9 @@ from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.virtual.freshness.main.current_records import (
+    build_current_virtual_source_freshness_records,
+)
 from sqlbuild.virtual.planner.helpers.output import (
     rewrite_virtual_plan_entries,
     with_virtual_metadata,
@@ -118,6 +122,7 @@ def run_virtual_plan_pipeline(
             discovered_inputs=discovered_inputs,
             project_dir=project_dir,
             adapter=adapter,
+            source_connection=connection,
             graph=graph,
             virtual_environment_name=virtual_environment_name,
         )
@@ -260,6 +265,7 @@ def _read_bound_state(
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
     adapter: BaseAdapter,
+    source_connection: Any,
     graph: ProjectGraph,
     virtual_environment_name: str | None,
 ) -> tuple[
@@ -301,6 +307,14 @@ def _read_bound_state(
                 schema=config.schema,
                 virtual_environment_name=target_name,
             )
+        )
+        source_freshness_records = build_current_virtual_source_freshness_records(
+            adapter=adapter,
+            connection=source_connection,
+            sources=tuple(source.source_entry for source in graph.project.sources),
+            virtual_environment_name=target_name,
+            observed_at=datetime.now(),
+            previous_records=source_freshness_records,
         )
         model_versions: dict[str, ModelVersionRecord | None] = {
             model_name: backend.get_model_version(
