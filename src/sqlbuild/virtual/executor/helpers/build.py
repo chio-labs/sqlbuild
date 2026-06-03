@@ -206,10 +206,18 @@ def run_virtual_build(
             config=config,
             bound_refs=bound_refs,
         )
+        source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+            backend.get_virtual_environment_source_freshness(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+            )
+        )
         semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
             graph=graph,
             bound_refs=bound_refs,
             bound_model_versions=bound_model_versions,
+            source_freshness_records=source_freshness_records,
         )
         selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
             graph=graph,
