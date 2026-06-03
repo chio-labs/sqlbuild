@@ -88,6 +88,14 @@ class DatabricksMergeTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksTableFreshnessMetadataTestCase:
+    description: str
+    expected_value_kind: str
+    expected_supports_metadata: bool
+    expected_data_version_type: type[int]
+
+
+@dataclass(frozen=True)
 class DatabricksFingerprintTestCase:
     description: str
     query_sql: str
