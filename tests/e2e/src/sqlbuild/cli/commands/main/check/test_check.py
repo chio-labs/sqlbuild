@@ -7,11 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import CheckCommandTestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import (
+    CheckCommandTestCase,
+    ReadSidePythonCheckCommandTestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.check.helpers import (
     assert_expected_file_fragments,
     initialize_state_when_requested,
     prepare_check_project_by_kind,
+    prepare_read_side_python_check_project,
     resolve_check_command,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
@@ -259,3 +263,59 @@ def test_given_python_checks_when_running_check_then_reports_expected_results(
     for fragment in test_case.expected_absent_fragments:
         assert fragment not in combined_output
     assert_expected_file_fragments(project_dir=project_dir, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReadSidePythonCheckCommandTestCase(
+            description="read-side Python check runs after model exists",
+            missing_command=("--no-color", "check", "--select", "+check_orders_export"),
+            build_command=("--no-color", "build", "--select", "fact_orders"),
+            check_command=("--no-color", "check", "--select", "+check_orders_export"),
+            expected_missing_returncode=1,
+            expected_build_returncode=0,
+            expected_check_returncode=0,
+            expected_missing_fragments=(
+                "requires existing SQL relation",
+                "run sqb build first",
+            ),
+            expected_check_fragments=(
+                "check_orders_export",
+                "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+            ),
+        )
+    ],
+    ids=["read-side Python check runs after model exists"],
+)
+def test_given_read_side_python_check_dependency_when_model_exists_then_check_runs(
+    tmp_path: Path,
+    test_case: ReadSidePythonCheckCommandTestCase,
+) -> None:
+    project_dir: Path = prepare_read_side_python_check_project(tmp_path=tmp_path)
+
+    missing_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.missing_command,
+        project_dir=project_dir,
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+    check_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.check_command,
+        project_dir=project_dir,
+    )
+
+    missing_output: str = missing_result.stdout + missing_result.stderr
+    assert missing_result.returncode == test_case.expected_missing_returncode
+    fragment: str
+    for fragment in test_case.expected_missing_fragments:
+        assert fragment in missing_output
+    assert build_result.returncode == test_case.expected_build_returncode, (
+        build_result.stdout + build_result.stderr
+    )
+    check_output: str = check_result.stdout + check_result.stderr
+    assert check_result.returncode == test_case.expected_check_returncode, check_output
+    for fragment in test_case.expected_check_fragments:
+        assert fragment in check_output
