@@ -33,6 +33,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import (
     BuiltinAdapter,
@@ -71,6 +72,21 @@ class SqlServerAdapter(BaseAdapter):
     adapter_name: ClassVar[str] = BuiltinAdapter.SQLSERVER.value
     sqlglot_dialect_name: ClassVar[str | None] = "tsql"
     max_identifier_length: ClassVar[int] = 128
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return False
+
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
 
     def _distinct_condition(self, *, left: str, right: str) -> str:
         return (

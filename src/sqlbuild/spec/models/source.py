@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.spec.models.schema import SchemaAuditInstance
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.models.types import (
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
+    SourceWriteStrategy,
+)
 
 
 @dataclass(frozen=True)
@@ -14,6 +18,16 @@ class IntegrationLoaderConfig:
 
     kind: str
     config: object
+
+
+@dataclass(frozen=True)
+class SourceFreshnessConfig:
+    """Configured source freshness observation for virtual planning."""
+
+    strategy: SourceFreshnessStrategy
+    value_kind: SourceFreshnessValueKind | None = None
+    column: str | None = None
+    query: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +53,7 @@ class SourceEntry:
     loader: str | None = None
     managed: bool = False
     integration_loader: IntegrationLoaderConfig | None = None
+    freshness: SourceFreshnessConfig | None = None
     write_strategy: SourceWriteStrategy | None = None
     load_batch_size: int | None = None
     cursor_column: str | None = None

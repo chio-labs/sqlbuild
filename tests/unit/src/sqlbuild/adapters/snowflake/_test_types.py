@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlbuild.adapter.shared.models import SchemaDiffResult
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -75,3 +76,19 @@ class SnowflakeLoadSeedTestCase:
     description: str
     csv_text: str
     expected_rows: list[tuple[object, ...]]
+
+
+@dataclass(frozen=True)
+class SnowflakeTableFreshnessMetadataTestCase:
+    description: str
+    row: tuple[object, ...]
+    expected_data_version: datetime
+    expected_value_kind: str
+    expected_supports_metadata: bool
+
+
+@dataclass(frozen=True)
+class SnowflakeTableFreshnessMetadataErrorTestCase:
+    description: str
+    row: tuple[object, ...] | None
+    expected_error_fragment: str

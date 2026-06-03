@@ -183,6 +183,84 @@ def test_given_upstream_change_when_building_expected_hashes_then_downstream_has
     "test_case",
     [
         ExpectedVersionHashesTestCase(
+            description="unchanged graph produces stable expected hashes",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT normalize_order(id) FROM stg_orders",
+            expected_hashes_differ=False,
+        )
+    ],
+    ids=["unchanged graph produces stable expected hashes"],
+)
+def test_given_unchanged_graph_when_building_expected_hashes_then_hashes_match(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    first_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+    second_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+
+    first_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=first_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=first_graph),
+    )
+    second_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=second_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=second_graph),
+    )
+
+    assert (
+        first_hashes["fact_orders"] != second_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="function body change updates dependent expected hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT normalize_order(id) FROM stg_orders",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["function body change updates dependent expected hash"],
+)
+def test_given_function_change_when_building_expected_hashes_then_downstream_hash_changes(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        function_body_sql="value + 1",
+    )
+    changed_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        function_body_sql="value + 2",
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    changed_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=changed_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=changed_graph),
+    )
+
+    assert (
+        baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
             description="target schema does not change model version hash",
             upstream_query_sql="SELECT 1 AS id",
             downstream_query_sql="SELECT 1 AS order_id",

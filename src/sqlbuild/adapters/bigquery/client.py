@@ -30,6 +30,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -106,6 +107,21 @@ class BigQueryAdapter(BaseAdapter):
 
     def supports_relation_age_metadata(self) -> bool:
         return False
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return False
+
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
 
     def persists_python_functions(self) -> bool:
         return True
