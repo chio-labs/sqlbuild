@@ -5,6 +5,7 @@ import pytest
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.virtual.planner.helpers.planning import (
     build_default_virtual_selection,
     build_expected_local_hashes,
@@ -617,6 +618,223 @@ def test_given_version_identity_config_key_when_building_expected_hashes_then_ha
     assert (
         table_hashes["stg_orders"] != view_hashes["stg_orders"]
     ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="enforced contract output shape changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["enforced contract output shape changes model version hash"],
+)
+def test_given_enforced_contract_shape_change_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    int_contract_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"contract": "enforced"},
+        upstream_schema_columns=(SchemaColumn(name="id", type="INTEGER", nullable=False),),
+    )
+    string_contract_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"contract": "enforced"},
+        upstream_schema_columns=(SchemaColumn(name="id", type="TEXT", nullable=False),),
+    )
+
+    int_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=int_contract_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=int_contract_graph),
+    )
+    string_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=string_contract_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=string_contract_graph),
+    )
+
+    assert (
+        int_hashes["stg_orders"] != string_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="custom materialization config changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["custom materialization config changes model version hash"],
+)
+def test_given_custom_materialization_config_change_when_building_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    first_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_materialized="partition_tracked",
+        upstream_extra_config={"config": {"partition_column": "order_date"}},
+    )
+    second_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_materialized="partition_tracked",
+        upstream_extra_config={"config": {"partition_column": "created_date"}},
+    )
+
+    first_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=first_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=first_graph),
+    )
+    second_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=second_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=second_graph),
+    )
+
+    assert (
+        first_hashes["stg_orders"] != second_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="custom materialization placeholder changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["custom materialization placeholder changes model version hash"],
+)
+def test_given_custom_placeholder_change_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    first_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_materialized="partition_tracked",
+        upstream_extra_config={"placeholders": {"lower_bound": "2026-01-01"}},
+    )
+    second_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_materialized="partition_tracked",
+        upstream_extra_config={"placeholders": {"lower_bound": "2026-02-01"}},
+    )
+
+    first_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=first_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=first_graph),
+    )
+    second_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=second_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=second_graph),
+    )
+
+    assert (
+        first_hashes["stg_orders"] != second_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="pre and post hooks change model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["pre and post hooks change model version hash"],
+)
+def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    first_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"pre_hook": "SELECT 1", "post_hook": "SELECT 2"},
+    )
+    second_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={"pre_hook": "SELECT 3", "post_hook": "SELECT 4"},
+    )
+
+    first_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=first_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=first_graph),
+    )
+    second_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=second_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=second_graph),
+    )
+
+    assert (
+        first_hashes["stg_orders"] != second_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="validation and backfill metadata does not change model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            expected_hashes_differ=False,
+        )
+    ],
+    ids=["validation and backfill metadata does not change model version hash"],
+)
+def test_given_excluded_metadata_change_when_building_expected_hashes_then_hashes_match(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+    metadata_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config={
+            "audits": ["not_null(id)"],
+            "query_change_backfill": "full",
+            "row_diff_exclude_columns": ["loaded_at"],
+            "row_diff_tolerances": {"amount": {"absolute": 1}},
+            "schema_change_backfill": "bounded-7d",
+            "tags": ["nightly"],
+        },
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    metadata_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=metadata_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=metadata_graph),
+    )
+    metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(graph=metadata_graph)
+
+    assert (
+        baseline_hashes["stg_orders"] != metadata_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+    assert "query_change_backfill" not in metadata_jsons["stg_orders"]
+    assert "schema_change_backfill" not in metadata_jsons["stg_orders"]
+    assert "row_diff" not in metadata_jsons["stg_orders"]
+    assert "tags" not in metadata_jsons["stg_orders"]
 
 
 @pytest.mark.parametrize(

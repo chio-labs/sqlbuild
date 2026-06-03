@@ -106,6 +106,7 @@ def build_model_fingerprint_metadata_jsons(
             model_name=model.name,
             config_values=model.config.values,
             local_function_hashes=local_function_hashes,
+            execution_signature=_model_execution_signature(model),
         )
     return result
 
@@ -298,6 +299,41 @@ def _metadata_function_hashes(metadata_json: str | None) -> dict[str, str]:
     if not isinstance(raw_hashes, dict):
         return {}
     return {str(name): str(value) for name, value in raw_hashes.items()}
+
+
+def _model_execution_signature(model: Any) -> dict[str, object]:
+    signature: dict[str, object] = {}
+    contract_signature: dict[str, object] | None = _contract_output_signature(model)
+    if contract_signature is not None:
+        signature["contract"] = contract_signature
+    if "config" in model.config.values:
+        signature["custom_config"] = model.config.values["config"]
+    if "placeholders" in model.config.values:
+        signature["custom_placeholders"] = model.config.values["placeholders"]
+    if "pre_hook" in model.config.values:
+        signature["pre_hook"] = model.config.values["pre_hook"]
+    if "post_hook" in model.config.values:
+        signature["post_hook"] = model.config.values["post_hook"]
+    return signature
+
+
+def _contract_output_signature(model: Any) -> dict[str, object] | None:
+    if model.config.values.get("contract") != "enforced":
+        return None
+    schema_entry: Any | None = model.schema_entry
+    if schema_entry is None or not schema_entry.columns:
+        return None
+    return {
+        "enforced": True,
+        "columns": [
+            {
+                "name": column.name,
+                "type": column.type,
+                "nullable": column.nullable,
+            }
+            for column in schema_entry.columns
+        ],
+    }
 
 
 def build_stale_root_causes(
