@@ -23,10 +23,11 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
     project_dir: Path = root / "python_nodes_project"
     models_dir: Path = project_dir / "models"
     tasks_dir: Path = project_dir / "tasks"
+    factories_dir: Path = project_dir / "factories"
     assets_dir: Path = project_dir / "assets"
     loaders_dir: Path = project_dir / "loaders"
     checks_dir: Path = project_dir / "checks"
-    for directory in (models_dir, tasks_dir, assets_dir, loaders_dir, checks_dir):
+    for directory in (models_dir, tasks_dir, factories_dir, assets_dir, loaders_dir, checks_dir):
         directory.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
         "\n".join(
@@ -49,7 +50,7 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
         "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
         encoding="utf-8",
     )
-    (tasks_dir / "generated_nodes.py").write_text(
+    (factories_dir / "generated_nodes.py").write_text(
         "\n".join(
             (
                 "from sqlbuild.assets import asset",

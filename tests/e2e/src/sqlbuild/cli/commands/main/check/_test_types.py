@@ -17,3 +17,18 @@ class CheckCommandTestCase:
     project_kind: str = "standard"
     initialize_state: bool = False
     expected_file_fragments: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+
+@dataclass(frozen=True)
+class ReadSidePythonCheckCommandTestCase:
+    """Expected outcome for a read-side Python check lifecycle."""
+
+    description: str
+    missing_command: tuple[str, ...]
+    build_command: tuple[str, ...]
+    check_command: tuple[str, ...]
+    expected_missing_returncode: int
+    expected_build_returncode: int
+    expected_check_returncode: int
+    expected_missing_fragments: tuple[str, ...]
+    expected_check_fragments: tuple[str, ...]

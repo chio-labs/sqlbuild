@@ -118,7 +118,7 @@ def test_given_factory_generated_nodes_when_running_commands_then_lifecycle_succ
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
-            "tasks/generated.py": """
+            "factories/generated.py": """
 from pathlib import Path
 from sqlbuild.assets import asset
 from sqlbuild.checks import check
