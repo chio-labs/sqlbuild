@@ -77,6 +77,20 @@ class PythonNodeContextHelperTestCase:
 
 
 @dataclass(frozen=True)
+class PublicSkipModeExportTestCase:
+    description: str
+    expected_task_export: bool
+    expected_asset_export: bool
+
+
+@dataclass(frozen=True)
+class PythonNodeSkipModeInputTestCase:
+    description: str
+    raw_mode: str
+    expected_mode: SkipMode
+
+
+@dataclass(frozen=True)
 class PythonNodeRunStateTestCase:
     description: str
     expected_payload: object
