@@ -10,6 +10,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    SourceFreshnessRecord,
     StateBackupRecord,
     StateLockRecord,
     StateOperationEventRecord,
@@ -182,6 +183,21 @@ class FakeStateBackend(StateBackend):
     def get_virtual_environment_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentRefRecord, ...]:
+        return ()
+
+    def replace_virtual_environment_source_freshness(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> None:
+        return None
+
+    def get_virtual_environment_source_freshness(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[SourceFreshnessRecord, ...]:
         return ()
 
     def replace_virtual_environment_function_refs(

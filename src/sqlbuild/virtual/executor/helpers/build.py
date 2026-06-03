@@ -76,14 +76,19 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_model_targets,
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
-from sqlbuild.virtual.executor.helpers.source_freshness import (
-    observe_virtual_environment_source_freshness,
-    persist_virtual_environment_source_freshness,
-)
 from sqlbuild.virtual.executor.models import (
     VersionPrepareContext,
     VirtualBuildExecutionHooks,
     VirtualBuildPipelineResult,
+)
+from sqlbuild.virtual.freshness.main.current_records import (
+    build_current_virtual_source_freshness_records,
+)
+from sqlbuild.virtual.freshness.main.runtime_observation import (
+    observe_virtual_environment_source_freshness,
+)
+from sqlbuild.virtual.freshness.main.runtime_persistence import (
+    persist_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
@@ -213,11 +218,26 @@ def run_virtual_build(
                 virtual_environment_name=target_vde_name,
             )
         )
+        prebuild_source_connection: Any = adapter.connect(connection_config)
+        try:
+            current_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+                build_current_virtual_source_freshness_records(
+                    adapter=adapter,
+                    connection=prebuild_source_connection,
+                    sources=tuple(source.source_entry for source in graph.project.sources),
+                    virtual_environment_name=target_vde_name,
+                    observed_at=datetime.now(),
+                    previous_records=source_freshness_records,
+                    run_id=graph.project.run_id,
+                )
+            )
+        finally:
+            adapter.close(prebuild_source_connection)
         semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
             graph=graph,
             bound_refs=bound_refs,
             bound_model_versions=bound_model_versions,
-            source_freshness_records=source_freshness_records,
+            source_freshness_records=current_source_freshness_records,
         )
         selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
             graph=graph,

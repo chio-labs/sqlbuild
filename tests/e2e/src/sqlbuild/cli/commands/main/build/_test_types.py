@@ -122,6 +122,15 @@ class VirtualBuildSelectionGuardE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualSourceFreshnessBuildE2ETestCase:
+    """Test case for virtual source freshness build behavior."""
+
+    description: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_updated_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class VirtualPromoteE2ETestCase:
     """Test case for virtual promotion behavior."""
 
