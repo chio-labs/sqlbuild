@@ -43,6 +43,12 @@ def build_virtual_plan_semantics(
     expected_local_hashes: dict[str, str] = build_expected_local_hashes(graph=graph)
     expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(graph=graph)
     source_version_hashes: dict[str, str] = build_source_version_hashes(source_freshness_records)
+    source_freshness_incomplete_model_names: tuple[str, ...] = (
+        build_source_freshness_incomplete_model_names(
+            graph=graph,
+            source_version_hashes=source_version_hashes,
+        )
+    )
     expected_version_hashes: dict[str, str] = build_expected_version_hashes(
         graph=graph,
         expected_local_hashes=expected_local_hashes,
@@ -58,10 +64,7 @@ def build_virtual_plan_semantics(
         model_names=tuple(model.name for model in graph.project.models),
         expected_version_hashes=expected_version_hashes,
         bound_version_hashes=bound_version_hashes,
-        source_freshness_incomplete_model_names=build_source_freshness_incomplete_model_names(
-            graph=graph,
-            source_version_hashes=source_version_hashes,
-        ),
+        source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
     )
     stale_root_reasons: dict[str, PlanReason] = build_stale_root_reasons(
         stale_model_names=stale_model_names,
@@ -96,6 +99,15 @@ def build_virtual_plan_semantics(
         bound_local_hashes=bound_local_hashes,
         bound_previous_query_sqls=bound_previous_query_sqls,
         bound_metadata_jsons=bound_metadata_jsons,
+        source_freshness_observed_source_names=tuple(sorted(source_version_hashes)),
+        source_freshness_incomplete_source_names=tuple(
+            sorted(
+                source.name
+                for source in graph.project.sources
+                if source.name not in source_version_hashes
+            )
+        ),
+        source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         stale_model_names=stale_model_names,
         default_selection=build_default_virtual_selection(
             stale_model_names=stale_model_names,

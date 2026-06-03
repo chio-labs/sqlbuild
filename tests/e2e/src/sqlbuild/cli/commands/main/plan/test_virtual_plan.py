@@ -100,6 +100,8 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
             expected_unchanged_fragments=("Plan ready (0 selected)",),
             expected_fragments=(
                 "Plan ready (1 selected)",
+                "source freshness observed: 1",
+                "source freshness observed set: raw_orders",
                 "stale model set: fact_orders",
                 "fact_orders",
             ),
@@ -201,6 +203,9 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
             description="virtual plan keeps unknown source freshness stale",
             expected_unchanged_fragments=(
                 "Plan ready (1 selected)",
+                "source freshness incomplete: 1",
+                "source freshness incomplete set: raw_orders",
+                "source freshness incomplete models: fact_orders",
                 "stale model set: fact_orders",
             ),
             expected_fragments=("Plan ready (1 selected)", "fact_orders"),
@@ -268,6 +273,8 @@ def test_given_virtual_source_without_freshness_when_planning_then_downstream_st
             expected_unchanged_fragments=("Plan ready (0 selected)",),
             expected_fragments=(
                 "Plan ready (2 selected)",
+                "source freshness observed: 1",
+                "source freshness observed set: raw_orders",
                 "stale model set: fact_orders, stg_orders",
                 "stg_orders",
                 "fact_orders",
@@ -353,8 +360,11 @@ def test_given_virtual_source_freshness_through_view_when_planning_then_selects_
             expected_json_fragments=(
                 '"virtual_environment_name": "dev"',
                 '"virtual_environment_status": "working"',
+                '"virtual_source_freshness_observed_source_names": [',
+                '"raw_orders"',
+                '"virtual_source_freshness_incomplete_source_names": []',
+                '"virtual_source_freshness_incomplete_model_names": []',
                 '"virtual_stale_model_names": [',
-                '"fact_orders"',
                 '"virtual_stale_root_names": []',
             ),
         )
@@ -415,6 +425,9 @@ def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports
         "virtual_environment_name": "dev",
         "virtual_environment_status": "finalized",
         "virtual_mode": True,
+        "virtual_source_freshness_observed_source_names": ["raw_orders"],
+        "virtual_source_freshness_incomplete_source_names": [],
+        "virtual_source_freshness_incomplete_model_names": [],
         "virtual_stale_model_names": [],
         "virtual_stale_root_names": [],
         "virtual_remaining_stale_model_names": [],

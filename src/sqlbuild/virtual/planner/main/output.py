@@ -34,4 +34,9 @@ def apply_virtual_plan_output(
         remaining_stale_model_names=tuple(
             sorted(set(semantics.stale_model_names) - set(selected_model_names))
         ),
+        source_freshness_observed_source_names=(semantics.source_freshness_observed_source_names),
+        source_freshness_incomplete_source_names=(
+            semantics.source_freshness_incomplete_source_names
+        ),
+        source_freshness_incomplete_model_names=(semantics.source_freshness_incomplete_model_names),
     )

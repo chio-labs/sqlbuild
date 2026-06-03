@@ -967,10 +967,55 @@ def _format_virtual_metadata(
         if isinstance(raw_remaining_stale_model_names, (tuple, list))
         else ()
     )
+    raw_observed_source_names: object | None = plan.metadata.get(
+        "virtual_source_freshness_observed_source_names"
+    )
+    observed_source_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_observed_source_names)
+        if isinstance(raw_observed_source_names, (tuple, list))
+        else ()
+    )
+    raw_incomplete_source_names: object | None = plan.metadata.get(
+        "virtual_source_freshness_incomplete_source_names"
+    )
+    incomplete_source_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_incomplete_source_names)
+        if isinstance(raw_incomplete_source_names, (tuple, list))
+        else ()
+    )
+    raw_incomplete_model_names: object | None = plan.metadata.get(
+        "virtual_source_freshness_incomplete_model_names"
+    )
+    incomplete_model_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_incomplete_model_names)
+        if isinstance(raw_incomplete_model_names, (tuple, list))
+        else ()
+    )
     lines.append("")
     lines.append(section_header_style("Virtual environment"))
     lines.append(f"  name: {virtual_environment_name}")
     lines.append(f"  status: {virtual_environment_status}")
+    if observed_source_names or incomplete_source_names:
+        lines.append(f"  source freshness observed: {len(observed_source_names)}")
+        if observed_source_names:
+            observed_source_set: str = _format_capped_name_list(
+                observed_source_names,
+                display_options=display_options,
+            )
+            lines.append(f"  source freshness observed set: {observed_source_set}")
+        lines.append(f"  source freshness incomplete: {len(incomplete_source_names)}")
+        if incomplete_source_names:
+            incomplete_source_set: str = _format_capped_name_list(
+                incomplete_source_names,
+                display_options=display_options,
+            )
+            lines.append(f"  source freshness incomplete set: {incomplete_source_set}")
+        if incomplete_model_names:
+            incomplete_model_set: str = _format_capped_name_list(
+                incomplete_model_names,
+                display_options=display_options,
+            )
+            lines.append(f"  source freshness incomplete models: {incomplete_model_set}")
     lines.append(f"  stale roots: {len(stale_root_names)}")
     if stale_root_names:
         stale_root_set: str = _format_capped_name_list(

@@ -29,6 +29,15 @@ class SourceFreshnessObservationErrorTestCase:
 
 
 @dataclass(frozen=True)
+class UnsupportedTableFreshnessMetadataGuardTestCase:
+    description: str
+    source_name: str
+    table: str
+    expected_error_fragment: str
+    expected_metadata_requested: bool
+
+
+@dataclass(frozen=True)
 class SourceFreshnessStateTestCase:
     description: str
     source_name: str

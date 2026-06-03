@@ -137,14 +137,17 @@ def run_virtual_plan_pipeline(
         expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
             graph=graph
         )
+        source_freshness_incomplete_model_names: tuple[str, ...] = (
+            build_source_freshness_incomplete_model_names(
+                graph=graph,
+                source_version_hashes=source_version_hashes,
+            )
+        )
         stale_model_names: tuple[str, ...] = build_stale_model_names(
             model_names=tuple(model.name for model in graph.project.models),
             expected_version_hashes=expected_version_hashes,
             bound_version_hashes=bound_version_hashes,
-            source_freshness_incomplete_model_names=build_source_freshness_incomplete_model_names(
-                graph=graph,
-                source_version_hashes=source_version_hashes,
-            ),
+            source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         )
         stale_root_reasons: dict[str, PlanReason] = build_stale_root_reasons(
             stale_model_names=stale_model_names,
@@ -237,6 +240,15 @@ def run_virtual_plan_pipeline(
             remaining_stale_model_names=tuple(
                 sorted(set(stale_model_names) - set(effective_select))
             ),
+            source_freshness_observed_source_names=tuple(sorted(source_version_hashes)),
+            source_freshness_incomplete_source_names=tuple(
+                sorted(
+                    source.name
+                    for source in graph.project.sources
+                    if source.name not in source_version_hashes
+                )
+            ),
+            source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         )
         python_selection: PythonSqlRunSelection = build_virtual_python_run_selection(
             discovered_inputs=discovered_inputs,

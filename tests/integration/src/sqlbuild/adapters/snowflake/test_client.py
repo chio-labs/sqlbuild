@@ -21,6 +21,9 @@ from sqlbuild.adapter.shared.models import (
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
+from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,
     SnowflakeExpressionNullabilityRuleTestCase,
@@ -428,6 +431,38 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
     assert isinstance(initial_metadata.data_version, test_case.expected_data_version_type)
     assert isinstance(changed_metadata.data_version, test_case.expected_data_version_type)
     assert changed_metadata.data_version > initial_metadata.data_version
+    initial_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=initial_metadata.data_version,
+            value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+            observed_at=datetime.now(),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    repeated_initial_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=initial_metadata.data_version,
+            value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+            observed_at=datetime.now(),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    changed_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=changed_metadata.data_version,
+            value_kind=SourceFreshnessValueKind(changed_metadata.value_kind),
+            observed_at=datetime.now(),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    assert repeated_initial_hash == initial_hash
+    assert changed_hash != initial_hash
 
 
 @pytest.mark.parametrize(
