@@ -1,0 +1,215 @@
+"""Virtual-build source freshness observation helpers."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.virtual.freshness.main.data_version_hash import source_freshness_data_version_hash
+from sqlbuild.virtual.freshness.main.observation import observe_configured_source_freshness
+from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
+from sqlbuild.virtual.freshness.models import (
+    SourceFreshnessObservation,
+    SourceFreshnessRuntimeResult,
+)
+from sqlbuild.virtual.state.models import SourceFreshnessRecord
+
+
+def observe_virtual_environment_source_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    sources: tuple[SourceEntry, ...],
+    virtual_environment_name: str,
+    observed_at: datetime,
+    run_id: str | None = None,
+    load_results: tuple[Any, ...] = (),
+    previous_records: tuple[SourceFreshnessRecord, ...] = (),
+) -> SourceFreshnessRuntimeResult:
+    """Observe current source freshness records without using them for skip decisions."""
+
+    records: list[SourceFreshnessRecord] = []
+    unknown_source_names: list[str] = []
+    preserved_source_names: list[str] = []
+    generated_source_names: list[str] = []
+    load_result_by_source: dict[str, Any] = {result.source_name: result for result in load_results}
+    previous_record_by_source: dict[str, SourceFreshnessRecord] = {
+        record.source_name: record for record in previous_records
+    }
+
+    source: SourceEntry
+    for source in sources:
+        load_result: Any | None = load_result_by_source.get(source.name)
+        if _is_soft_skipped_load(load_result):
+            previous_record: SourceFreshnessRecord | None = previous_record_by_source.get(
+                source.name
+            )
+            if previous_record is None:
+                unknown_source_names.append(source.name)
+                continue
+            records.append(previous_record)
+            preserved_source_names.append(source.name)
+            continue
+
+        if source.managed:
+            if load_result is None or str(load_result.status) != "success":
+                unknown_source_names.append(source.name)
+                continue
+            managed_record: SourceFreshnessRecord | None = _managed_loader_freshness_record(
+                adapter=adapter,
+                connection=connection,
+                source=source,
+                virtual_environment_name=virtual_environment_name,
+                observed_at=observed_at,
+                run_id=run_id,
+            )
+            if managed_record is None:
+                unknown_source_names.append(source.name)
+                continue
+            records.append(managed_record)
+            if source.freshness is None:
+                generated_source_names.append(source.name)
+            continue
+
+        observation: SourceFreshnessObservation | None = _observe_unmanaged_source_freshness(
+            adapter=adapter,
+            connection=connection,
+            source=source,
+            observed_at=observed_at,
+        )
+        if observation is None:
+            unknown_source_names.append(source.name)
+            continue
+        records.append(
+            source_freshness_record_from_observation(
+                observation,
+                virtual_environment_name=virtual_environment_name,
+            )
+        )
+
+    return SourceFreshnessRuntimeResult(
+        records=tuple(sorted(records, key=lambda record: record.source_name)),
+        unknown_source_names=tuple(sorted(unknown_source_names)),
+        preserved_source_names=tuple(sorted(preserved_source_names)),
+        generated_source_names=tuple(sorted(generated_source_names)),
+    )
+
+
+def persist_virtual_environment_source_freshness(
+    *,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    virtual_environment_name: str,
+    result: SourceFreshnessRuntimeResult,
+) -> None:
+    """Persist the latest observed freshness records for a virtual environment."""
+
+    backend.replace_virtual_environment_source_freshness(
+        state_connection,
+        schema=schema,
+        virtual_environment_name=virtual_environment_name,
+        records=result.records,
+    )
+
+
+def _observe_unmanaged_source_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    source: SourceEntry,
+    observed_at: datetime,
+) -> SourceFreshnessObservation | None:
+    if source.freshness is not None:
+        return observe_configured_source_freshness(
+            adapter=adapter,
+            connection=connection,
+            source=source,
+            observed_at=observed_at,
+        )
+    if (
+        not source.managed
+        and source.expression is None
+        and source.table is not None
+        and adapter.supports_table_freshness_metadata()
+    ):
+        return observe_configured_source_freshness(
+            adapter=adapter,
+            connection=connection,
+            source=_source_with_adapter_freshness(source),
+            observed_at=observed_at,
+        )
+    return None
+
+
+def _managed_loader_freshness_record(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    source: SourceEntry,
+    virtual_environment_name: str,
+    observed_at: datetime,
+    run_id: str | None,
+) -> SourceFreshnessRecord | None:
+    if source.freshness is not None:
+        observation: SourceFreshnessObservation = observe_configured_source_freshness(
+            adapter=adapter,
+            connection=connection,
+            source=source,
+            observed_at=observed_at,
+        )
+        return source_freshness_record_from_observation(
+            observation,
+            virtual_environment_name=virtual_environment_name,
+        )
+    if run_id is None:
+        return None
+    return SourceFreshnessRecord(
+        virtual_environment_name=virtual_environment_name,
+        source_name=source.name,
+        strategy="loader",
+        value_kind=SourceFreshnessValueKind.STRING.value,
+        data_version=run_id,
+        data_version_hash=source_freshness_data_version_hash(
+            source_name=source.name,
+            strategy="loader",
+            value_kind=SourceFreshnessValueKind.STRING,
+            data_version=run_id,
+        ),
+        observed_at=observed_at,
+    )
+
+
+def _is_soft_skipped_load(load_result: Any | None) -> bool:
+    return (
+        load_result is not None
+        and str(load_result.status) == "skipped"
+        and str(load_result.skip_mode) == "soft"
+    )
+
+
+def _source_with_adapter_freshness(source: SourceEntry) -> SourceEntry:
+    return SourceEntry(
+        name=source.name,
+        database=source.database,
+        schema=source.schema,
+        table=source.table,
+        loader=source.loader,
+        managed=source.managed,
+        integration_loader=source.integration_loader,
+        freshness=SourceFreshnessConfig(strategy=SourceFreshnessStrategy.ADAPTER),
+        write_strategy=source.write_strategy,
+        load_batch_size=source.load_batch_size,
+        cursor_column=source.cursor_column,
+        unique_key=source.unique_key,
+        expression=source.expression,
+        description=source.description,
+        type_enforcement=source.type_enforcement,
+        contract=source.contract,
+        meta=source.meta,
+        columns=source.columns,
+        audits=source.audits,
+    )

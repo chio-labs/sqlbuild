@@ -14,6 +14,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    SourceFreshnessRecord,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -39,6 +40,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendLifecycleTestCase,
     PostgresStateBackendLockTestCase,
     PostgresStateBackendOperationEventTestCase,
+    PostgresStateBackendSourceFreshnessTestCase,
     PostgresStateBackendTableCreationTestCase,
     PostgresStateBackendTransactionRollbackTestCase,
     PostgresStateBackendValidationTestCase,
@@ -146,7 +148,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     [
         PostgresStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
-            expected_issue_count=19,
+            expected_issue_count=20,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -573,6 +575,216 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         )
     )
     assert len(replaced_refs) == test_case.expected_ref_count_after_replace
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendSourceFreshnessTestCase(
+            description="persists and replaces source freshness observations",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            expected_source_names=("raw.customers", "raw.orders"),
+            expected_source_names_after_replace=("raw.orders",),
+        )
+    ],
+    ids=["persists and replaces source freshness observations"],
+)
+def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips_records(
+    test_case: PostgresStateBackendSourceFreshnessTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    postgres_state_backend.upsert_virtual_environment(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=VirtualEnvironmentRecord(
+            virtual_environment_name=test_case.virtual_environment_name,
+            status=VirtualEnvironmentStatus.ACTIVE,
+        ),
+    )
+    first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0)
+    second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0)
+    postgres_state_backend.replace_virtual_environment_source_freshness(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        records=(
+            SourceFreshnessRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                source_name="raw.orders",
+                strategy="column",
+                value_kind="integer",
+                data_version="1",
+                data_version_hash="hash-1",
+                observed_at=first_observed_at,
+            ),
+            SourceFreshnessRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                source_name="raw.customers",
+                strategy="sql",
+                value_kind="string",
+                data_version="batch-1",
+                data_version_hash="hash-2",
+                observed_at=first_observed_at,
+            ),
+        ),
+    )
+
+    records: tuple[SourceFreshnessRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_source_freshness(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+    )
+    assert tuple(record.source_name for record in records) == test_case.expected_source_names
+
+    postgres_state_backend.replace_virtual_environment_source_freshness(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        records=(
+            SourceFreshnessRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                source_name="raw.orders",
+                strategy="column",
+                value_kind="integer",
+                data_version="2",
+                data_version_hash="hash-3",
+                observed_at=second_observed_at,
+            ),
+        ),
+    )
+
+    replaced_records: tuple[SourceFreshnessRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_source_freshness(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+    )
+    assert tuple(record.source_name for record in replaced_records) == (
+        test_case.expected_source_names_after_replace
+    )
+    assert replaced_records[0].data_version == "2"
+    assert replaced_records[0].data_version_hash == "hash-3"
+    assert replaced_records[0].observed_at == second_observed_at
+
+    postgres_state_backend.delete_virtual_environment(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+    )
+    assert (
+        postgres_state_backend.get_virtual_environment_source_freshness(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+        == ()
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendErrorTestCase(
+            description="blocks mismatched source freshness virtual environment",
+            expected_error_type=Exception,
+            expected_message_fragment="must match replacement virtual_environment_name",
+        )
+    ],
+    ids=["blocks mismatched source freshness virtual environment"],
+)
+def test_given_mismatched_postgres_source_freshness_record_when_replacing_then_blocks_cleanly(
+    test_case: PostgresStateBackendErrorTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="0.0.test",
+    )
+    record: SourceFreshnessRecord = SourceFreshnessRecord(
+        virtual_environment_name="other",
+        source_name="raw.orders",
+        strategy="column",
+        value_kind="integer",
+        data_version="1",
+        data_version_hash="hash-1",
+        observed_at=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    with pytest.raises(test_case.expected_error_type) as exc_info:
+        postgres_state_backend.replace_virtual_environment_source_freshness(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+            records=(record,),
+        )
+
+    assert test_case.expected_message_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendErrorTestCase(
+            description="blocks duplicate source freshness records",
+            expected_error_type=Exception,
+            expected_message_fragment="Duplicate source freshness record",
+        )
+    ],
+    ids=["blocks duplicate source freshness records"],
+)
+def test_given_duplicate_postgres_source_freshness_records_when_replacing_then_blocks_cleanly(
+    test_case: PostgresStateBackendErrorTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="0.0.test",
+    )
+    records: tuple[SourceFreshnessRecord, ...] = (
+        SourceFreshnessRecord(
+            virtual_environment_name="dev",
+            source_name="raw.orders",
+            strategy="column",
+            value_kind="integer",
+            data_version="1",
+            data_version_hash="hash-1",
+            observed_at=datetime(2026, 1, 1, 12, 0, 0),
+        ),
+        SourceFreshnessRecord(
+            virtual_environment_name="dev",
+            source_name="raw.orders",
+            strategy="sql",
+            value_kind="string",
+            data_version="batch-1",
+            data_version_hash="hash-2",
+            observed_at=datetime(2026, 1, 1, 12, 0, 0),
+        ),
+    )
+    with pytest.raises(test_case.expected_error_type) as exc_info:
+        postgres_state_backend.replace_virtual_environment_source_freshness(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+            records=records,
+        )
+
+    assert test_case.expected_message_fragment in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
