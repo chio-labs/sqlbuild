@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.2](https://github.com/chio-labs/sqlbuild/compare/v0.26.1...v0.26.2) (2026-06-03)
+
+
+### Bug Fixes
+
+* harden soft and hard skip semantics ([f7459d3](https://github.com/chio-labs/sqlbuild/commit/f7459d3294d164eaf2044dec6eb6e52bd5a9e4c2))
+* harden soft and hard skip semantics ([22db952](https://github.com/chio-labs/sqlbuild/commit/22db952587b41f1f7e2e4933cf02482088458d4f))
+
 ## [0.26.1](https://github.com/chio-labs/sqlbuild/compare/v0.26.0...v0.26.1) (2026-06-02)
 
 
