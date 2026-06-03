@@ -9,6 +9,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
 from sqlbuild.assets import AssetContext
+from sqlbuild.assets import SkipMode as AssetSkipMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
@@ -19,10 +20,13 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.refs import model, source
 from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.tasks import SkipMode as TaskSkipMode
 from sqlbuild.tasks import TaskContext
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
+    PublicSkipModeExportTestCase,
     PythonNodeContextHelperTestCase,
     PythonNodeRunStateTestCase,
+    PythonNodeSkipModeInputTestCase,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     PythonNodeContextTestAdapter,
@@ -154,6 +158,50 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
     assert context.target == test_case.expected_target
     assert context.vars == test_case.expected_vars
     assert_base_context_fields(context)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PublicSkipModeExportTestCase(
+            description="task and asset modules export skip mode",
+            expected_task_export=True,
+            expected_asset_export=True,
+        )
+    ],
+    ids=["task and asset modules export skip mode"],
+)
+def test_given_public_task_and_asset_modules_when_importing_skip_mode_then_export_same_enum(
+    test_case: PublicSkipModeExportTestCase,
+) -> None:
+    assert test_case.description
+    assert (TaskSkipMode is SkipMode) is test_case.expected_task_export
+    assert (AssetSkipMode is SkipMode) is test_case.expected_asset_export
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeSkipModeInputTestCase(
+            description="string skip mode normalizes to skip mode enum",
+            raw_mode="soft",
+            expected_mode=SkipMode.SOFT,
+        )
+    ],
+    ids=["string skip mode normalizes to skip mode enum"],
+)
+def test_given_context_skip_when_mode_is_string_then_normalizes_to_skip_mode(
+    test_case: PythonNodeSkipModeInputTestCase,
+) -> None:
+    context: TaskContext = build_task_context(
+        adapter=PythonNodeContextTestAdapter(),
+        statement_recorder=StatementRecorder(),
+        logger_name="sqlbuild.task.fetch_orders",
+    )
+
+    skip_result: PythonNodeSkipResult = context.skip("optional", mode=test_case.raw_mode)
+
+    assert skip_result.mode is test_case.expected_mode
 
 
 @pytest.mark.parametrize(
