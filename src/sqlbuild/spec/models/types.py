@@ -12,3 +12,15 @@ class SourceWriteStrategy(StrEnum):
     DELETE_INSERT = "delete_insert"
     MERGE = "merge"
     TABLE = "table"
+
+
+class SourceFreshnessStrategy(StrEnum):
+    ADAPTER = "adapter"
+    COLUMN = "column"
+    SQL = "sql"
+
+
+class SourceFreshnessValueKind(StrEnum):
+    TIMESTAMP = "timestamp"
+    INTEGER = "integer"
+    STRING = "string"

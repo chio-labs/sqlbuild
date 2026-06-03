@@ -72,6 +72,15 @@ class RelationInfo:
 
 
 @dataclass(frozen=True)
+class TableFreshnessMetadata:
+    """Adapter-observed freshness metadata for one physical table source."""
+
+    data_version: object
+    value_kind: str
+    observed_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class FunctionInfo:
     """Metadata for one discovered warehouse function or routine."""
 

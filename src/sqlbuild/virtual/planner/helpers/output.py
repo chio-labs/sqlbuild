@@ -97,6 +97,9 @@ def with_virtual_metadata(
     stale_model_names: tuple[str, ...],
     stale_root_names: tuple[str, ...],
     remaining_stale_model_names: tuple[str, ...] = (),
+    source_freshness_observed_source_names: tuple[str, ...] = (),
+    source_freshness_incomplete_source_names: tuple[str, ...] = (),
+    source_freshness_incomplete_model_names: tuple[str, ...] = (),
 ) -> PlanOutput:
     """Attach virtual-specific metadata to a plan output."""
 
@@ -109,6 +112,15 @@ def with_virtual_metadata(
             "virtual_stale_model_names": stale_model_names,
             "virtual_stale_root_names": stale_root_names,
             "virtual_remaining_stale_model_names": remaining_stale_model_names,
+            "virtual_source_freshness_observed_source_names": (
+                source_freshness_observed_source_names
+            ),
+            "virtual_source_freshness_incomplete_source_names": (
+                source_freshness_incomplete_source_names
+            ),
+            "virtual_source_freshness_incomplete_model_names": (
+                source_freshness_incomplete_model_names
+            ),
         }
     )
     return replace(plan_output, metadata=metadata)

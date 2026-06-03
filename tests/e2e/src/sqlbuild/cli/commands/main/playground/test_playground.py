@@ -48,7 +48,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
             ),
             expected_diff_fragments=(
                 "Virtual diff",
-                "No VDE ref differences",
+                "No schema differences",
             ),
             expected_promote_fragments=(
                 "Virtual promotion complete",

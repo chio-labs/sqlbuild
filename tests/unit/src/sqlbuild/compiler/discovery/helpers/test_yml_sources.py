@@ -198,6 +198,42 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_column_audit_names=((),),
     ),
     ParseSourcesYamlTestCase(
+        description="parses source freshness strategies",
+        contents="""
+        sources:
+          - name: raw_orders
+            schema: public
+            table: orders
+            freshness:
+              strategy: adapter
+          - name: raw_events
+            schema: public
+            table: events
+            freshness:
+              strategy: column
+              column: updated_at
+              type: timestamp
+          - name: raw_customers
+            schema: public
+            table: customers
+            freshness:
+              strategy: sql
+              query: SELECT MAX(version) FROM raw.public.customers
+              type: integer
+        """,
+        expected_source_names=("raw_orders", "raw_events", "raw_customers"),
+        expected_column_names=((), (), ()),
+        expected_type_enforcement_values=(None, None, None),
+        expected_contract_values=(None, None, None),
+        expected_expressions=(None, None, None),
+        expected_source_audit_names=((), (), ()),
+        expected_column_audit_names=((), (), ()),
+        expected_freshness_strategies=("adapter", "column", "sql"),
+        expected_freshness_value_kinds=(None, "timestamp", "integer"),
+        expected_freshness_columns=(None, "updated_at", None),
+        expected_freshness_queries=(None, None, "SELECT MAX(version) FROM raw.public.customers"),
+    ),
+    ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
         contents="{}\n",
         expected_source_names=(),
@@ -269,6 +305,30 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     )
     assert actual_unique_keys == expected_or_actual(
         test_case.expected_unique_keys, actual_unique_keys
+    )
+    actual_freshness_strategies: tuple[str | None, ...] = tuple(
+        None if entry.freshness is None else entry.freshness.strategy for entry in source_entries
+    )
+    assert actual_freshness_strategies == expected_or_actual(
+        test_case.expected_freshness_strategies, actual_freshness_strategies
+    )
+    actual_freshness_value_kinds: tuple[str | None, ...] = tuple(
+        None if entry.freshness is None else entry.freshness.value_kind for entry in source_entries
+    )
+    assert actual_freshness_value_kinds == expected_or_actual(
+        test_case.expected_freshness_value_kinds, actual_freshness_value_kinds
+    )
+    actual_freshness_columns: tuple[str | None, ...] = tuple(
+        None if entry.freshness is None else entry.freshness.column for entry in source_entries
+    )
+    assert actual_freshness_columns == expected_or_actual(
+        test_case.expected_freshness_columns, actual_freshness_columns
+    )
+    actual_freshness_queries: tuple[str | None, ...] = tuple(
+        None if entry.freshness is None else entry.freshness.query for entry in source_entries
+    )
+    assert actual_freshness_queries == expected_or_actual(
+        test_case.expected_freshness_queries, actual_freshness_queries
     )
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
@@ -611,6 +671,119 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             unique_key: {}
         """,
         expected_error_fragment="source 'unique_key' must be a string or list",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness is not a mapping",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness: []
+        """,
+        expected_error_fragment="source 'freshness' must be a mapping",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness strategy is unknown",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: latest
+        """,
+        expected_error_fragment="source freshness 'strategy' must be one of",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness type is unknown",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: updated_at
+              type: boolean
+        """,
+        expected_error_fragment="source freshness 'type' must be one of",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when adapter freshness has column",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: adapter
+              column: updated_at
+        """,
+        expected_error_fragment=(
+            "source freshness strategy adapter does not support type, column, or query"
+        ),
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when column freshness has no column",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              type: timestamp
+        """,
+        expected_error_fragment="source freshness strategy column requires column",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when column freshness has expression column",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: MAX(updated_at)
+              type: timestamp
+        """,
+        expected_error_fragment="source freshness column must be a plain column name",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when column freshness has no type",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: updated_at
+        """,
+        expected_error_fragment="source freshness strategy column requires type",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when sql freshness has no query",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              type: string
+        """,
+        expected_error_fragment="source freshness strategy sql requires query",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when sql freshness has no type",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              query: SELECT MAX(version) FROM raw.orders
+        """,
+        expected_error_fragment="source freshness strategy sql requires type",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when sql freshness has column",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              query: SELECT MAX(version) FROM raw.orders
+              column: version
+              type: integer
+        """,
+        expected_error_fragment="source freshness strategy sql does not support column",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source audits is not a list",

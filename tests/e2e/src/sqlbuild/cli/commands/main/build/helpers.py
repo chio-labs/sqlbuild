@@ -10,6 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
 )
 
@@ -89,6 +90,17 @@ def rewrite_incremental_orders_model(
         ),
         encoding="utf-8",
     )
+
+
+def count_virtual_physical_versions(*, project_dir: Path, schema: str = "dev__sqb_physical") -> int:
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            f"WHERE table_schema = '{schema}' AND table_name LIKE '%__v_%'"
+        ),
+    )
+    return int(rows[0][0])
 
 
 def incremental_orders_model_sql(

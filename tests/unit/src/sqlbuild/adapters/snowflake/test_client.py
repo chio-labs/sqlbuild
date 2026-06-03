@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
@@ -29,10 +32,14 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeRenderPythonFunctionTestCase,
     SnowflakeRenderTableFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
+    SnowflakeTableFreshnessMetadataErrorTestCase,
+    SnowflakeTableFreshnessMetadataTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeDescribeConnection,
     FakeSnowflakeDescribeCursor,
+    FakeSnowflakeMetadataConnection,
+    FakeSnowflakeMetadataCursor,
 )
 
 
@@ -126,6 +133,24 @@ SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES: list[SnowflakeRenderIdentifierTestCase] 
     ),
 ]
 
+SNOWFLAKE_TABLE_FRESHNESS_ERROR_TEST_CASES: list[SnowflakeTableFreshnessMetadataErrorTestCase] = [
+    SnowflakeTableFreshnessMetadataErrorTestCase(
+        description="raises when metadata row is missing",
+        row=None,
+        expected_error_fragment="not found",
+    ),
+    SnowflakeTableFreshnessMetadataErrorTestCase(
+        description="raises when relation is a view",
+        row=("VIEW", datetime(2026, 1, 2, 3, 4, 5)),
+        expected_error_fragment="only supports physical tables",
+    ),
+    SnowflakeTableFreshnessMetadataErrorTestCase(
+        description="raises when last altered is missing",
+        row=("BASE TABLE", None),
+        expected_error_fragment="missing LAST_ALTERED",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -213,6 +238,67 @@ def test_given_identifier_when_rendering_then_snowflake_quotes_uppercase_identif
     identifier: str = adapter.render_identifier(test_case.name)
 
     assert identifier == test_case.expected_identifier
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTableFreshnessMetadataTestCase(
+            description="returns last altered for physical table",
+            row=("BASE TABLE", datetime(2026, 1, 2, 3, 4, 5)),
+            expected_data_version=datetime(2026, 1, 2, 3, 4, 5),
+            expected_value_kind="timestamp",
+            expected_supports_metadata=True,
+        )
+    ],
+    ids=["returns last altered for physical table"],
+)
+def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_altered(
+    test_case: SnowflakeTableFreshnessMetadataTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(test_case.row)
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+
+    metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database="ANALYTICS",
+        schema="RAW",
+        name="ORDERS",
+    )
+
+    assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
+    assert metadata.data_version == test_case.expected_data_version
+    assert metadata.value_kind == test_case.expected_value_kind
+    assert metadata.observed_at == test_case.expected_data_version
+    assert cursor.executed_sql is not None
+    assert "information_schema.tables" in cursor.executed_sql
+    assert "last_altered" in cursor.executed_sql
+    assert cursor.executed_params == ("ORDERS", "RAW", "ANALYTICS")
+    assert cursor.closed is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_TABLE_FRESHNESS_ERROR_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_TABLE_FRESHNESS_ERROR_TEST_CASES],
+)
+def test_given_unsupported_relation_when_getting_freshness_metadata_then_raises_clear_error(
+    test_case: SnowflakeTableFreshnessMetadataErrorTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(test_case.row)
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+
+    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
+        adapter.get_table_freshness_metadata(
+            connection,
+            database="ANALYTICS",
+            schema="RAW",
+            name="ORDERS",
+        )
+
+    assert cursor.closed is True
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,11 @@ from sqlbuild.compiler.planner.main.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.types import PlanReason
-from sqlbuild.virtual.state.models import ModelVersionRecord, VirtualEnvironmentRefRecord
+from sqlbuild.virtual.state.models import (
+    ModelVersionRecord,
+    SourceFreshnessRecord,
+    VirtualEnvironmentRefRecord,
+)
 
 
 def build_expected_local_hashes(
@@ -102,6 +106,7 @@ def build_model_fingerprint_metadata_jsons(
             model_name=model.name,
             config_values=model.config.values,
             local_function_hashes=local_function_hashes,
+            execution_signature=_model_execution_signature(model),
         )
     return result
 
@@ -110,9 +115,11 @@ def build_expected_version_hashes(
     *,
     graph: ProjectGraph,
     expected_local_hashes: dict[str, str],
+    source_version_hashes: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Derive expected model version hashes from current code and upstream hashes."""
 
+    source_hashes: dict[str, str] = source_version_hashes or {}
     expected_hashes: dict[str, str] = {
         function.name: expected_local_hashes[function.name] for function in graph.project.functions
     }
@@ -128,6 +135,11 @@ def build_expected_version_hashes(
         upstream_hashes: list[str] = []
         upstream_key: Any
         for upstream_key in model.deps:
+            if upstream_key.resource_type == CompiledResourceType.SOURCE:
+                source_hash: str | None = source_hashes.get(upstream_key.name)
+                if source_hash is not None:
+                    upstream_hashes.append(source_hash)
+                continue
             if upstream_key.resource_type not in (
                 CompiledResourceType.MODEL,
                 CompiledResourceType.FUNCTION,
@@ -147,6 +159,34 @@ def build_expected_version_hashes(
     return expected_hashes
 
 
+def build_source_freshness_incomplete_model_names(
+    *,
+    graph: ProjectGraph,
+    source_version_hashes: dict[str, str],
+) -> tuple[str, ...]:
+    """Return models whose upstream source freshness proof is incomplete."""
+
+    incomplete_source_keys: tuple[Any, ...] = tuple(
+        source.key for source in graph.project.sources if source.name not in source_version_hashes
+    )
+    incomplete_model_names: set[str] = set()
+    source_key: Any
+    for source_key in incomplete_source_keys:
+        stack: list[Any] = list(graph.downstream_deps.get(source_key, ()))
+        visited: set[Any] = set()
+        while stack:
+            current: Any = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            if current.resource_type == CompiledResourceType.MODEL:
+                incomplete_model_names.add(current.name)
+            downstream_key: Any
+            for downstream_key in graph.downstream_deps.get(current, ()):  # pragma: no branch
+                stack.append(downstream_key)
+    return tuple(sorted(incomplete_model_names))
+
+
 def build_bound_version_hashes(
     refs: tuple[VirtualEnvironmentRefRecord, ...],
 ) -> dict[str, str]:
@@ -155,18 +195,29 @@ def build_bound_version_hashes(
     return {ref.model_name: ref.version_hash for ref in refs}
 
 
+def build_source_version_hashes(
+    records: tuple[SourceFreshnessRecord, ...],
+) -> dict[str, str]:
+    """Index source freshness input hashes by source name."""
+
+    return {record.source_name: record.data_version_hash for record in records}
+
+
 def build_stale_model_names(
     *,
     model_names: tuple[str, ...],
     expected_version_hashes: dict[str, str],
     bound_version_hashes: dict[str, str],
+    source_freshness_incomplete_model_names: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Return model names whose bound and expected hashes differ."""
 
+    incomplete: set[str] = set(source_freshness_incomplete_model_names)
     return tuple(
         model_name
         for model_name in model_names
-        if bound_version_hashes.get(model_name) != expected_version_hashes.get(model_name)
+        if model_name in incomplete
+        or bound_version_hashes.get(model_name) != expected_version_hashes.get(model_name)
     )
 
 
@@ -248,6 +299,41 @@ def _metadata_function_hashes(metadata_json: str | None) -> dict[str, str]:
     if not isinstance(raw_hashes, dict):
         return {}
     return {str(name): str(value) for name, value in raw_hashes.items()}
+
+
+def _model_execution_signature(model: Any) -> dict[str, object]:
+    signature: dict[str, object] = {}
+    contract_signature: dict[str, object] | None = _contract_output_signature(model)
+    if contract_signature is not None:
+        signature["contract"] = contract_signature
+    if "config" in model.config.values:
+        signature["custom_config"] = model.config.values["config"]
+    if "placeholders" in model.config.values:
+        signature["custom_placeholders"] = model.config.values["placeholders"]
+    if "pre_hook" in model.config.values:
+        signature["pre_hook"] = model.config.values["pre_hook"]
+    if "post_hook" in model.config.values:
+        signature["post_hook"] = model.config.values["post_hook"]
+    return signature
+
+
+def _contract_output_signature(model: Any) -> dict[str, object] | None:
+    if model.config.values.get("contract") != "enforced":
+        return None
+    schema_entry: Any | None = model.schema_entry
+    if schema_entry is None or not schema_entry.columns:
+        return None
+    return {
+        "enforced": True,
+        "columns": [
+            {
+                "name": column.name,
+                "type": column.type,
+                "nullable": column.nullable,
+            }
+            for column in schema_entry.columns
+        ],
+    }
 
 
 def build_stale_root_causes(

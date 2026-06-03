@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import StatementRecorder, TableFreshnessMetadata
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 
 _ENV_KEYS: tuple[str, ...] = ("SQB_TEST_BIGQUERY_PROJECT",)
@@ -81,3 +83,34 @@ def build_statement_recorder() -> StatementRecorder:
     """Build a statement recorder for adapter mutation operations."""
 
     return StatementRecorder()
+
+
+def wait_for_bigquery_freshness_after(
+    *,
+    adapter: BigQueryAdapter,
+    connection: Any,
+    database: str,
+    schema: str,
+    name: str,
+    previous_data_version: datetime,
+) -> TableFreshnessMetadata:
+    """Poll BigQuery table metadata until modified time advances."""
+
+    metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database=database,
+        schema=schema,
+        name=name,
+    )
+    for _ in range(12):
+        data_version: object = metadata.data_version
+        if isinstance(data_version, datetime) and data_version > previous_data_version:
+            return metadata
+        time.sleep(5)
+        metadata = adapter.get_table_freshness_metadata(
+            connection,
+            database=database,
+            schema=schema,
+            name=name,
+        )
+    return metadata

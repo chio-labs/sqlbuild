@@ -39,3 +39,33 @@ class FakeSnowflakeDescribeConnection:
 
     def cursor(self) -> Any:
         return self._cursor
+
+
+class FakeSnowflakeMetadataCursor:
+    """Cursor double exposing Snowflake-style metadata rows."""
+
+    def __init__(self, row: tuple[object, ...] | None) -> None:
+        self.row: tuple[object, ...] | None = row
+        self.executed_sql: str | None = None
+        self.executed_params: tuple[object, ...] | None = None
+        self.closed: bool = False
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.executed_sql = sql
+        self.executed_params = params
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self.row
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeSnowflakeMetadataConnection:
+    """Connection double returning a preconfigured metadata cursor."""
+
+    def __init__(self, cursor: FakeSnowflakeMetadataCursor) -> None:
+        self._cursor: FakeSnowflakeMetadataCursor = cursor
+
+    def cursor(self) -> FakeSnowflakeMetadataCursor:
+        return self._cursor

@@ -22,6 +22,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import (
     CursorKind,
@@ -55,6 +56,9 @@ class BaseAdapter(StrictAdapter):
     def supports_relation_age_metadata(self) -> bool:
         return False
 
+    def supports_table_freshness_metadata(self) -> bool:
+        return False
+
     def supports_python_functions(self) -> bool:
         return False
 
@@ -85,6 +89,18 @@ class BaseAdapter(StrictAdapter):
 
         cursor: Any = self.execute(connection, f"DESCRIBE {relation}")
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
+
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
 
     def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query without materializing full rows."""

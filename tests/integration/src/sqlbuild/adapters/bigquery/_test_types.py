@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlbuild.adapter.shared.models import (
     ColumnInfo,
@@ -100,6 +101,14 @@ class BigQueryDeleteInsertCursorTestCase:
     columns: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
     expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
+class BigQueryTableFreshnessMetadataTestCase:
+    description: str
+    expected_value_kind: str
+    expected_supports_metadata: bool
+    expected_data_version_type: type[datetime]
 
 
 @dataclass(frozen=True)
