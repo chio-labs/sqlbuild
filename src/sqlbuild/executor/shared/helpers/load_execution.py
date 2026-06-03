@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.models import SqlResourceRef
@@ -119,17 +120,36 @@ def build_source_downstream_names(
     return {name: tuple(dependents) for name, dependents in downstream_names.items()}
 
 
-def should_skip_due_to_failed_dependency(
+def should_skip_due_to_hard_dependency(
     *,
     source: SourceEntry,
-    failed_or_skipped: set[str],
+    failed_or_hard_skipped: set[str],
     indexes: LoadExecutionIndexes,
 ) -> bool:
-    """Return whether a source should skip because an upstream dependency failed."""
+    """Return whether a source should skip because an upstream dependency is blocking."""
 
     return any(
-        dependency in failed_or_skipped
+        dependency in failed_or_hard_skipped
         for dependency in dependency_node_names(source=source, indexes=indexes)
+    )
+
+
+def should_soft_skip_due_to_all_skipped_dependencies(
+    *,
+    source: SourceEntry,
+    results_by_name: dict[str, LoadExecutionResult],
+    indexes: LoadExecutionIndexes,
+) -> bool:
+    """Return whether every upstream dependency completed as a non-blocking skip."""
+
+    dependencies: tuple[str, ...] = dependency_node_names(source=source, indexes=indexes)
+    if not dependencies:
+        return False
+    return all(
+        (result := results_by_name.get(dependency)) is not None
+        and result.status == ExecutionStatus.SKIPPED
+        and result.skip_mode == SkipMode.SOFT
+        for dependency in dependencies
     )
 
 
@@ -143,7 +163,12 @@ def load_resource_kind(source: SourceEntry) -> ExecutionResourceKind:
     )
 
 
-def skipped_load_result(source: SourceEntry) -> LoadExecutionResult:
+def skipped_load_result(
+    source: SourceEntry,
+    *,
+    reason: str | None = None,
+    mode: SkipMode = SkipMode.HARD,
+) -> LoadExecutionResult:
     """Build a skipped result for a loader/source node."""
 
     return LoadExecutionResult(
@@ -152,6 +177,8 @@ def skipped_load_result(source: SourceEntry) -> LoadExecutionResult:
         status=ExecutionStatus.SKIPPED,
         target=source.table or source.name,
         resource_kind=load_resource_kind(source),
+        skip_mode=mode,
+        skip_reason=reason,
     )
 
 

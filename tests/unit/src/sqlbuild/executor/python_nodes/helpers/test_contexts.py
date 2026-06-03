@@ -135,7 +135,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
     )
     skip_result: PythonNodeSkipResult = context.skip(
         test_case.expected_query_result,
-        mode=SkipMode.SELF,
+        mode=SkipMode.SOFT,
         metadata={"cursor": "2026-05-30"},
     )
 
@@ -146,7 +146,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
     )
     assert skip_result == PythonNodeSkipResult(
         reason=test_case.expected_query_result,
-        mode=SkipMode.SELF,
+        mode=SkipMode.SOFT,
         metadata={"cursor": "2026-05-30"},
     )
     assert context.qualify_name(test_case.raw_name) == test_case.expected_qualified_name
@@ -292,7 +292,7 @@ def test_given_context_with_run_state_when_reading_upstream_outputs_then_returns
             node_name="skipped_upstream_task",
             kind=PythonNodeKind.TASK,
             status=PythonNodeStatus.SKIPPED,
-            skip_mode=SkipMode.DOWNSTREAM,
+            skip_mode=SkipMode.HARD,
             skip_reason="No rows",
         ),
     )

@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.load.models import LoaderContext, LoaderSkipResult, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -62,6 +62,20 @@ def execute_external_source_load(
             end_cursor_int=end_cursor_int,
         )
         raw_rows: object = loader_function.function(context)
+        if isinstance(raw_rows, LoaderSkipResult):
+            return LoadExecutionResult(
+                source_name=source_entry.name,
+                loader_name=loader_function.name,
+                status=ExecutionStatus.SKIPPED,
+                target=destination_relation,
+                resource_kind=resource_kind,
+                staging_relation=None,
+                rows_loaded=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                lifecycle_events=statement_recorder.snapshot(),
+                skip_mode=raw_rows.mode,
+                skip_reason=raw_rows.reason,
+            )
         if raw_rows is not None:
             raise ExecutorInputError(
                 f"External loader '{loader_function.name}' returned rows, but external loaders "

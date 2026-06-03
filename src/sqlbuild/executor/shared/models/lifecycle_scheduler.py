@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.shared.types import LifecycleNodeStatus
 
 
@@ -27,6 +28,7 @@ class LifecycleNodeResult:
     status: LifecycleNodeStatus
     error_message: str | None = None
     skip_reason: str | None = None
+    skip_mode: SkipMode | None = None
 
 
 @dataclass(frozen=True)

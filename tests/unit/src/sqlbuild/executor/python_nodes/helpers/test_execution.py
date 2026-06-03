@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -30,11 +31,58 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     PythonNodeContextTestAdapter,
     cursor_window,
     export_after_failure,
+    export_after_mixed_skip,
     export_after_skip,
     export_orders,
     fail_orders,
     fetch_orders,
+    hard_skip_empty_orders,
     skip_empty_orders,
+    successful_sibling,
+)
+
+MIXED_SKIP_EXECUTOR_TEST_CASES: tuple[PythonNodeExecutorTestCase, ...] = (
+    PythonNodeExecutorTestCase(
+        description="runs downstream when soft-skipped branch has successful sibling",
+        expected_names=(
+            "skip_empty_orders",
+            "successful_sibling",
+            "export_after_skip",
+            "export_after_mixed_skip",
+        ),
+        expected_statuses=(
+            PythonNodeStatus.SKIPPED,
+            PythonNodeStatus.SUCCESS,
+            PythonNodeStatus.SKIPPED,
+            PythonNodeStatus.SUCCESS,
+        ),
+        expected_payloads=(
+            None,
+            {"status": "ready"},
+            None,
+            {"uri": "s3://exports/orders.json"},
+        ),
+        expected_materialized=(None, None, None, True),
+        expected_error_fragments=(None, None, None, None),
+    ),
+    PythonNodeExecutorTestCase(
+        description="skips downstream when hard-skipped branch has successful sibling",
+        expected_names=(
+            "skip_empty_orders",
+            "successful_sibling",
+            "export_after_skip",
+            "export_after_mixed_skip",
+        ),
+        expected_statuses=(
+            PythonNodeStatus.SKIPPED,
+            PythonNodeStatus.SUCCESS,
+            PythonNodeStatus.SKIPPED,
+            PythonNodeStatus.SKIPPED,
+        ),
+        expected_payloads=(None, {"status": "ready"}, None, None),
+        expected_materialized=(None, None, None, None),
+        expected_error_fragments=(None, None, None, None),
+    ),
 )
 
 
@@ -261,14 +309,82 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
             file_path=Path("/project/tasks/orders.py"),
             relative_path=Path("tasks/orders.py"),
             name="skip_empty_orders",
-            function=skip_empty_orders,
+            function=hard_skip_empty_orders,
         ),
         DiscoveredAssetFunction(
             file_path=Path("/project/assets/orders.py"),
             relative_path=Path("assets/orders.py"),
             name="export_after_skip",
             function=export_after_skip,
-            depends_on=(skip_empty_orders,),
+            depends_on=(hard_skip_empty_orders,),
+        ),
+    )
+
+    result: PythonNodeExecutorResult = execute_python_nodes(
+        nodes=nodes,
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="test_run",
+        target="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+    )
+
+    assert (
+        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
+    )
+    assert (
+        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
+    )
+    assert (
+        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
+    )
+    assert tuple(node_result.materialized for node_result in result.results) == (
+        test_case.expected_materialized
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    MIXED_SKIP_EXECUTOR_TEST_CASES,
+    ids=[case.description for case in MIXED_SKIP_EXECUTOR_TEST_CASES],
+)
+def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    skip_function: Callable[..., object] = (
+        skip_empty_orders
+        if test_case.expected_statuses[-1] == PythonNodeStatus.SUCCESS
+        else hard_skip_empty_orders
+    )
+    nodes: tuple[DiscoveredTaskFunction | DiscoveredAssetFunction, ...] = (
+        DiscoveredTaskFunction(
+            file_path=Path("/project/tasks/orders.py"),
+            relative_path=Path("tasks/orders.py"),
+            name="skip_empty_orders",
+            function=skip_function,
+        ),
+        DiscoveredTaskFunction(
+            file_path=Path("/project/tasks/sibling.py"),
+            relative_path=Path("tasks/sibling.py"),
+            name="successful_sibling",
+            function=successful_sibling,
+        ),
+        DiscoveredAssetFunction(
+            file_path=Path("/project/assets/intermediate.py"),
+            relative_path=Path("assets/intermediate.py"),
+            name="export_after_skip",
+            function=export_after_skip,
+            depends_on=(skip_function,),
+        ),
+        DiscoveredAssetFunction(
+            file_path=Path("/project/assets/final.py"),
+            relative_path=Path("assets/final.py"),
+            name="export_after_mixed_skip",
+            function=export_after_mixed_skip,
+            depends_on=(export_after_skip, successful_sibling),
         ),
     )
 

@@ -24,7 +24,7 @@ from sqlbuild.executor.load.helpers.relation_refs import (
 )
 from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
-from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.load.models import LoaderContext, LoaderSkipResult, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import (
     is_untargeted_self_managed_intermediate,
@@ -164,6 +164,20 @@ def execute_source_load(
             ),
         )
         raw_rows: object = loader_function.function(context)
+        if isinstance(raw_rows, LoaderSkipResult):
+            return LoadExecutionResult(
+                source_name=source_entry.name,
+                loader_name=loader_function.name,
+                status=ExecutionStatus.SKIPPED,
+                target=destination_relation,
+                resource_kind=resource_kind,
+                staging_relation=None,
+                rows_loaded=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                lifecycle_events=statement_recorder.snapshot(),
+                skip_mode=raw_rows.mode,
+                skip_reason=raw_rows.reason,
+            )
         if raw_rows is None:
             if is_untargeted_self_managed_intermediate(
                 source_entry=source_entry,
