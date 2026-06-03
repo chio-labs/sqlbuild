@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner.helpers.graph import (
     build_upstream_deps,
 )
 from sqlbuild.spec.models.project import SettingsConfig
+from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -34,6 +35,7 @@ def build_virtual_planner_test_project(
     upstream_materialized: str = "table",
     upstream_extra_config: dict[str, object] | None = None,
     upstream_source_name: str = "raw.orders",
+    upstream_schema_columns: tuple[SchemaColumn, ...] = (),
 ) -> ProjectGraph:
     function: CompiledFunction = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
@@ -83,6 +85,11 @@ def build_virtual_planner_test_project(
         relative_path=Path(f"models/{upstream_model_name}.sql"),
         query_sql=upstream_query_sql,
         config=CompileModelConfig(values=upstream_config_values),
+        schema_entry=(
+            SchemaModelEntry(name=upstream_model_name, columns=upstream_schema_columns)
+            if upstream_schema_columns
+            else None
+        ),
         destination=CompiledRelationDestination(
             database=None,
             schema=upstream_schema,
