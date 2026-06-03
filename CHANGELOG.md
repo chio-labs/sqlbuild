@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.27.0](https://github.com/chio-labs/sqlbuild/compare/v0.26.2...v0.27.0) (2026-06-03)
+
+
+### Features
+
+* add bigquery and databricks freshness metadata ([875796d](https://github.com/chio-labs/sqlbuild/commit/875796d1990dda1ec590854a6367d0af4660b85b))
+* add source freshness metadata foundation ([60d9d98](https://github.com/chio-labs/sqlbuild/commit/60d9d98a5ce90024014b7fbf13d06e3bd9fddb41))
+* enforce virtual source freshness skips ([278e753](https://github.com/chio-labs/sqlbuild/commit/278e75351fe3f262b52e66448016f4846ca622ed))
+* harden virtual execution signatures ([75c4dc3](https://github.com/chio-labs/sqlbuild/commit/75c4dc354aa84520009c1f3a7e67db9b0f864d80))
+* include source freshness in virtual hashes ([952a18e](https://github.com/chio-labs/sqlbuild/commit/952a18e9bd3cd8c153232a707e811d59f2e7411f))
+* persist virtual source freshness observations ([9bd6380](https://github.com/chio-labs/sqlbuild/commit/9bd6380f7cb0570da9e2d8045d90889d9a646252))
+
+
+### Bug Fixes
+
+* run read-side check dependencies ([6e4e8f8](https://github.com/chio-labs/sqlbuild/commit/6e4e8f8a2ec92c284ed77709325550420397d219))
+
 ## [0.26.2](https://github.com/chio-labs/sqlbuild/compare/v0.26.1...v0.26.2) (2026-06-03)
 
 
