@@ -11,6 +11,8 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_source_freshness_incomplete_model_names,
+    build_source_version_hashes,
     build_stale_model_names,
     build_stale_root_cause_reasons,
     build_stale_root_causes,
@@ -22,7 +24,11 @@ from sqlbuild.virtual.planner.helpers.state_metadata import (
     decode_model_version_query_sqls,
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.models import ModelVersionRecord, VirtualEnvironmentRefRecord
+from sqlbuild.virtual.state.models import (
+    ModelVersionRecord,
+    SourceFreshnessRecord,
+    VirtualEnvironmentRefRecord,
+)
 
 
 def build_virtual_plan_semantics(
@@ -30,14 +36,23 @@ def build_virtual_plan_semantics(
     graph: ProjectGraph,
     bound_refs: tuple[VirtualEnvironmentRefRecord, ...],
     bound_model_versions: dict[str, ModelVersionRecord | None],
+    source_freshness_records: tuple[SourceFreshnessRecord, ...] = (),
 ) -> VirtualPlanSemantics:
     """Derive expected hashes, bound hashes, stale models, and stale roots."""
 
     expected_local_hashes: dict[str, str] = build_expected_local_hashes(graph=graph)
     expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(graph=graph)
+    source_version_hashes: dict[str, str] = build_source_version_hashes(source_freshness_records)
+    source_freshness_incomplete_model_names: tuple[str, ...] = (
+        build_source_freshness_incomplete_model_names(
+            graph=graph,
+            source_version_hashes=source_version_hashes,
+        )
+    )
     expected_version_hashes: dict[str, str] = build_expected_version_hashes(
         graph=graph,
         expected_local_hashes=expected_local_hashes,
+        source_version_hashes=source_version_hashes,
     )
     bound_version_hashes: dict[str, str] = build_bound_version_hashes(bound_refs)
     bound_local_hashes: dict[str, str] = build_bound_local_hashes(bound_model_versions)
@@ -49,6 +64,7 @@ def build_virtual_plan_semantics(
         model_names=tuple(model.name for model in graph.project.models),
         expected_version_hashes=expected_version_hashes,
         bound_version_hashes=bound_version_hashes,
+        source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
     )
     stale_root_reasons: dict[str, PlanReason] = build_stale_root_reasons(
         stale_model_names=stale_model_names,
@@ -83,6 +99,15 @@ def build_virtual_plan_semantics(
         bound_local_hashes=bound_local_hashes,
         bound_previous_query_sqls=bound_previous_query_sqls,
         bound_metadata_jsons=bound_metadata_jsons,
+        source_freshness_observed_source_names=tuple(sorted(source_version_hashes)),
+        source_freshness_incomplete_source_names=tuple(
+            sorted(
+                source.name
+                for source in graph.project.sources
+                if source.name not in source_version_hashes
+            )
+        ),
+        source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         stale_model_names=stale_model_names,
         default_selection=build_default_virtual_selection(
             stale_model_names=stale_model_names,

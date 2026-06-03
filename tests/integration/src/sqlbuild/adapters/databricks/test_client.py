@@ -15,6 +15,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
@@ -22,6 +23,9 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
+from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from tests.integration.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksBuildFlowTestCase,
     DatabricksExpressionNullabilityRuleTestCase,
@@ -32,6 +36,7 @@ from tests.integration.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksRowDiffTestCase,
     DatabricksSchemaDiffTestCase,
     DatabricksSchemaIntrospectionTestCase,
+    DatabricksTableFreshnessMetadataTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
     build_statement_recorder,
@@ -338,6 +343,96 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     assert all_columns == test_case.expected_all_columns
     assert query_column_names == test_case.expected_query_column_names
     assert described_columns == test_case.expected_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksTableFreshnessMetadataTestCase(
+            description="delta table freshness metadata advances after table DML",
+            expected_value_kind="integer",
+            expected_supports_metadata=True,
+            expected_data_version_type=int,
+        )
+    ],
+    ids=["delta table freshness metadata advances after table DML"],
+)
+def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_advances(
+    test_case: DatabricksTableFreshnessMetadataTestCase,
+    adapter: DatabricksAdapter,
+    connection: Any,
+    databricks_catalog: str,
+    databricks_schema: str,
+) -> None:
+    table_name: str = "freshness_orders"
+    table_target: str = qualified_name(
+        catalog=databricks_catalog,
+        schema=databricks_schema,
+        name=table_name,
+    )
+    execute_statements(
+        adapter=adapter,
+        connection=connection,
+        statements=(
+            f"CREATE OR REPLACE TABLE {table_target} (id INT) USING DELTA",
+            f"INSERT INTO {table_target} VALUES (1)",
+        ),
+    )
+    initial_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database=databricks_catalog,
+        schema=databricks_schema,
+        name=table_name,
+    )
+
+    adapter.execute(connection, f"INSERT INTO {table_target} VALUES (2)")
+    changed_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database=databricks_catalog,
+        schema=databricks_schema,
+        name=table_name,
+    )
+
+    assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
+    assert initial_metadata.value_kind == test_case.expected_value_kind
+    assert changed_metadata.value_kind == test_case.expected_value_kind
+    initial_data_version: object = initial_metadata.data_version
+    changed_data_version: object = changed_metadata.data_version
+    assert isinstance(initial_data_version, test_case.expected_data_version_type)
+    assert isinstance(changed_data_version, test_case.expected_data_version_type)
+    assert changed_data_version > initial_data_version
+    initial_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=initial_data_version,
+            value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+            observed_at=datetime.now(tz=UTC),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    repeated_initial_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=initial_data_version,
+            value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+            observed_at=datetime.now(tz=UTC),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    changed_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=changed_data_version,
+            value_kind=SourceFreshnessValueKind(changed_metadata.value_kind),
+            observed_at=datetime.now(tz=UTC),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    assert repeated_initial_hash == initial_hash
+    assert changed_hash != initial_hash
 
 
 @pytest.mark.parametrize(

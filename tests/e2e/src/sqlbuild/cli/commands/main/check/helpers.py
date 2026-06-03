@@ -133,6 +133,49 @@ def check_raw_orders_loader(ctx):
     )
 
 
+def prepare_read_side_python_check_project(*, tmp_path: Path) -> Path:
+    """Create a project whose check depends on a SQL-reading Python asset."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="read_side_python_check_project",
+        repo_files={
+            "sqlbuild_project.toml": """
+name = "read_side_python_check_project"
+adapter = "duckdb"
+
+[connection]
+database = "read_side_python_check_project.duckdb"
+""",
+            "models/fact_orders.sql": """
+MODEL (materialized table);
+
+SELECT 1 AS order_id
+""",
+            "assets/orders.py": """
+from sqlbuild.assets import asset
+from sqlbuild.refs import model
+
+
+@asset(depends_on=model("fact_orders"))
+def orders_export(ctx):
+    relation = ctx.relation(model("fact_orders"))
+    row = ctx.query(f"SELECT COUNT(*) AS order_count FROM {relation}").fetchone()
+    return ctx.result(payload={"order_count": row[0]}, materialized=False)
+""",
+            "checks/orders.py": """
+from sqlbuild.checks import check
+from assets.orders import orders_export
+
+
+@check(depends_on=orders_export)
+def check_orders_export(ctx):
+    return ctx.payload(orders_export)["order_count"] == 1
+""",
+        },
+    )
+
+
 def prepare_virtual_python_check_project(*, tmp_path: Path) -> Path:
     """Create a virtual-mode project with a task-backed Python check."""
 

@@ -21,11 +21,26 @@ from sqlbuild.compiler.discovery.helpers.yml_primitives import (
     require_non_empty_string,
 )
 from sqlbuild.spec.models.schema import SchemaAuditInstance
-from sqlbuild.spec.models.source import IntegrationLoaderConfig, SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.models.source import (
+    IntegrationLoaderConfig,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceFreshnessConfig,
+)
+from sqlbuild.spec.models.types import (
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
+    SourceWriteStrategy,
+)
 
 _SOURCE_WRITE_STRATEGIES: frozenset[str] = frozenset(
     strategy.value for strategy in SourceWriteStrategy
+)
+_SOURCE_FRESHNESS_STRATEGIES: frozenset[str] = frozenset(
+    strategy.value for strategy in SourceFreshnessStrategy
+)
+_SOURCE_FRESHNESS_VALUE_KINDS: frozenset[str] = frozenset(
+    value_kind.value for value_kind in SourceFreshnessValueKind
 )
 
 
@@ -147,6 +162,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
         managed=managed,
         loader=resolved_loader,
         integration_loader=integration_loader,
+        freshness=_optional_freshness_config(entry=entry, file_path=file_path),
         write_strategy=_optional_write_strategy(entry=entry, file_path=file_path),
         load_batch_size=_optional_positive_int(
             entry=entry,
@@ -312,6 +328,98 @@ def _optional_write_strategy(
         strategies: str = ", ".join(sorted(_SOURCE_WRITE_STRATEGIES))
         raise SourceParseError(f"{file_path} source write_strategy must be one of: {strategies}")
     return SourceWriteStrategy(value)
+
+
+def _optional_freshness_config(
+    *, entry: dict[str, object], file_path: Path
+) -> SourceFreshnessConfig | None:
+    raw_freshness: object | None = entry.get("freshness")
+    if raw_freshness is None:
+        return None
+    if not isinstance(raw_freshness, dict):
+        raise SourceParseError(f"{file_path} source 'freshness' must be a mapping")
+    freshness: dict[str, object] = cast(dict[str, object], raw_freshness)
+    raw_strategy: str = require_non_empty_string(
+        entry=freshness,
+        key="strategy",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
+    if raw_strategy not in _SOURCE_FRESHNESS_STRATEGIES:
+        strategies: str = ", ".join(sorted(_SOURCE_FRESHNESS_STRATEGIES))
+        raise SourceParseError(
+            f"{file_path} source freshness 'strategy' must be one of: {strategies}"
+        )
+    strategy: SourceFreshnessStrategy = SourceFreshnessStrategy(raw_strategy)
+    raw_value_kind: str | None = optional_non_empty_string(
+        entry=freshness,
+        key="type",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
+    value_kind: SourceFreshnessValueKind | None = None
+    if raw_value_kind is not None:
+        if raw_value_kind not in _SOURCE_FRESHNESS_VALUE_KINDS:
+            value_kinds: str = ", ".join(sorted(_SOURCE_FRESHNESS_VALUE_KINDS))
+            raise SourceParseError(
+                f"{file_path} source freshness 'type' must be one of: {value_kinds}"
+            )
+        value_kind = SourceFreshnessValueKind(raw_value_kind)
+    column: str | None = optional_non_empty_string(
+        entry=freshness,
+        key="column",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
+    query: str | None = optional_non_empty_string(
+        entry=freshness,
+        key="query",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
+    config: SourceFreshnessConfig = SourceFreshnessConfig(
+        strategy=strategy,
+        value_kind=value_kind,
+        column=column,
+        query=query,
+    )
+    _validate_freshness_config(config=config, file_path=file_path)
+    return config
+
+
+def _validate_freshness_config(*, config: SourceFreshnessConfig, file_path: Path) -> None:
+    if config.strategy == SourceFreshnessStrategy.ADAPTER:
+        if config.value_kind is not None or config.column is not None or config.query is not None:
+            raise SourceParseError(
+                f"{file_path} source freshness strategy adapter does not support type, "
+                "column, or query"
+            )
+        return
+    if config.strategy == SourceFreshnessStrategy.COLUMN:
+        if config.column is None:
+            raise SourceParseError(f"{file_path} source freshness strategy column requires column")
+        if not config.column.replace("_", "").isalnum() or config.column[0].isdigit():
+            raise SourceParseError(
+                f"{file_path} source freshness column must be a plain column name; "
+                "use strategy sql for expressions"
+            )
+        if config.value_kind is None:
+            raise SourceParseError(f"{file_path} source freshness strategy column requires type")
+        if config.query is not None:
+            raise SourceParseError(
+                f"{file_path} source freshness strategy column does not support query"
+            )
+        return
+    if config.query is None:
+        raise SourceParseError(f"{file_path} source freshness strategy sql requires query")
+    if config.value_kind is None:
+        raise SourceParseError(f"{file_path} source freshness strategy sql requires type")
+    if config.column is not None:
+        raise SourceParseError(f"{file_path} source freshness strategy sql does not support column")
 
 
 def _optional_positive_int(*, entry: dict[str, object], key: str, file_path: Path) -> int | None:

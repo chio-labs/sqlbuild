@@ -11,3 +11,10 @@ class StrictAdapterContractTestCase:
 class FirstClassAdapterImplementationContractTestCase:
     description: str
     expected_violations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TableFreshnessMetadataUnsupportedTestCase:
+    description: str
+    expected_supports_metadata: bool
+    expected_error_fragment: str

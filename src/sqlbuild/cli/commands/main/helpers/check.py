@@ -4,22 +4,31 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import TextIO
+from typing import Any, TextIO
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
 )
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.shared.types import ExecutionResourceKind, SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -99,6 +108,77 @@ def record_python_run_state_results(
             node_function=loader.function,
             result=_load_result_to_python_result(node_name=loader.name, result=load_result),
         )
+
+
+def build_check_relation_targets(
+    *, adapter: BaseAdapter, pipeline_result: CompilePipelineResult
+) -> dict[SqlResourceRef, str]:
+    """Return SQL relation targets available to Python check dependencies."""
+
+    return build_python_relation_targets(
+        adapter=adapter,
+        project=pipeline_result.project,
+        plan_output=pipeline_result.plan_output,
+    )
+
+
+def run_check_read_side_dependencies(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection: Any,
+    pipeline_result: CompilePipelineResult,
+    python_graph: PythonNodeGraph,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    relation_targets: dict[SqlResourceRef, str],
+) -> tuple[PythonNodeExecutionResult, ...]:
+    """Run read-side Python dependencies for checks against existing SQL relations."""
+
+    read_side_names: frozenset[str] = lifecycle_plan.read_side_python_node_names
+    if not read_side_names:
+        return ()
+    tracker: Any = create_read_side_python_execution_tracker(
+        python_graph=python_graph,
+        selected_python_names=read_side_names,
+        adapter=adapter,
+        connection_config=connection_config,
+        connection=connection,
+        run_id=pipeline_result.project.run_id,
+        target=pipeline_result.project.effective_target_name,
+        vars=pipeline_result.project.effective_vars,
+        is_reload=False,
+        default_database=adapter.default_database(),
+        default_schema=adapter.default_schema(),
+        relation_targets=relation_targets,
+    )
+    sql_ref: SqlResourceRef
+    for sql_ref in sorted(
+        _read_side_sql_refs(read_side_names, python_graph), key=_sql_ref_sort_key
+    ):
+        _validate_check_sql_ref_exists(
+            adapter=adapter,
+            connection=connection,
+            pipeline_result=pipeline_result,
+            relation_targets=relation_targets,
+            ref=sql_ref,
+        )
+        if sql_ref.kind == SqlResourceRefKind.MODEL:
+            tracker.record_sql_result(
+                ModelExecutionResult(model_name=sql_ref.name, status=ExecutionStatus.SUCCESS)
+            )
+        elif sql_ref.kind == SqlResourceRefKind.SOURCE:
+            tracker.record_sql_result(
+                LoadExecutionResult(
+                    source_name=sql_ref.name,
+                    loader_name=sql_ref.name,
+                    status=ExecutionStatus.SUCCESS,
+                    target=relation_targets[sql_ref],
+                    resource_kind=ExecutionResourceKind.SOURCE,
+                )
+            )
+    tracker.dispatch_ready_python_nodes()
+    tracker.finalize_unrun_python_nodes()
+    return tracker.results
 
 
 def load_results_by_loader_name(
@@ -258,6 +338,68 @@ def _load_result_to_python_result(
         payload=result,
         error_message=result.error_message,
     )
+
+
+def _read_side_sql_refs(
+    read_side_names: frozenset[str], python_graph: PythonNodeGraph
+) -> frozenset[SqlResourceRef]:
+    refs: set[SqlResourceRef] = set()
+    node_name: str
+    for node_name in read_side_names:
+        refs.update(python_graph.nodes_by_name[node_name].sql_deps)
+    return frozenset(refs)
+
+
+def _validate_check_sql_ref_exists(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    pipeline_result: CompilePipelineResult,
+    relation_targets: dict[SqlResourceRef, str],
+    ref: SqlResourceRef,
+) -> None:
+    if ref.kind == SqlResourceRefKind.MODEL:
+        target: CompiledRelationDestination | None = pipeline_result.plan_output.model_targets.get(
+            ref.name
+        )
+        if target is None:
+            raise CliUserError(
+                f"Python check dependency requires unknown SQL model '{ref.name}'",
+                code="C682",
+            )
+        exists: bool = adapter.relation_exists(
+            connection,
+            database=target.database,
+            schema=target.schema,
+            name=target.name,
+        )
+        relation: str = resolve_destination_qualified_name(adapter=adapter, target=target)
+    elif ref.kind == SqlResourceRefKind.SOURCE:
+        source: SourceEntry | None = (
+            pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map
+        ).get(ref.name)
+        if source is None or source.expression is not None or source.table is None:
+            return
+        exists = adapter.relation_exists(
+            connection,
+            database=source.database,
+            schema=source.schema,
+            name=source.table,
+        )
+        relation = relation_targets[ref]
+    else:
+        return
+    if exists:
+        return
+    raise CliUserError(
+        "Python check dependency requires existing SQL relation "
+        f"'{relation}' for {ref.kind.value} '{ref.name}'; run sqb build first",
+        code="C682",
+    )
+
+
+def _sql_ref_sort_key(ref: SqlResourceRef) -> tuple[str, str]:
+    return (ref.kind.value, ref.name)
 
 
 def _group_check_names(

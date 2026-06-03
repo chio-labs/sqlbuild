@@ -17,6 +17,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerance,
     RowDiffTolerances,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import (
     FrameworkType,
@@ -58,6 +59,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def supports_table_freshness_metadata(self) -> bool:
+        """Return whether physical table metadata can provide source freshness."""
+        ...
+
+    @abstractmethod
     def supports_python_functions(self) -> bool:
         """Return whether the adapter can create Python UDF resources."""
         ...
@@ -95,6 +101,18 @@ class StrictAdapter(
     @abstractmethod
     def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata."""
+        ...
+
+    @abstractmethod
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        """Return comparable freshness metadata for one physical table."""
         ...
 
     @abstractmethod

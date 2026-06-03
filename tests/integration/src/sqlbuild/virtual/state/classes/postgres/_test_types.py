@@ -56,6 +56,15 @@ class PostgresStateBackendCoreRecordsTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresStateBackendSourceFreshnessTestCase:
+    description: str
+    sqlbuild_version: str
+    virtual_environment_name: str
+    expected_source_names: tuple[str, ...]
+    expected_source_names_after_replace: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PostgresStateBackendIndexValidationTestCase:
     description: str
     sqlbuild_version: str

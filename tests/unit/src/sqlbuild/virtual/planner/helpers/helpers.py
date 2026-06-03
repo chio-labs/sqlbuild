@@ -8,27 +8,34 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationDestination,
+    CompiledSource,
     CompileModelConfig,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
     build_upstream_deps,
 )
 from sqlbuild.spec.models.project import SettingsConfig
+from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def build_virtual_planner_test_project(
     *,
     upstream_query_sql: str,
     downstream_query_sql: str,
+    function_body_sql: str = "value + 1",
     downstream_depends_on_dim_customers: bool = False,
     upstream_model_name: str = "stg_orders",
     upstream_schema: str = "staging",
     upstream_materialized: str = "table",
     upstream_extra_config: dict[str, object] | None = None,
+    upstream_source_name: str = "raw.orders",
+    upstream_schema_columns: tuple[SchemaColumn, ...] = (),
 ) -> ProjectGraph:
     function: CompiledFunction = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
@@ -37,7 +44,7 @@ def build_virtual_planner_test_project(
         relative_path=Path("functions/sql/normalize_order.sql"),
         arguments=(FunctionArgument(name="value", type="INTEGER"),),
         returns="INTEGER",
-        body_sql="value + 1",
+        body_sql=function_body_sql,
         destination=CompiledRelationDestination(
             database=None,
             schema="staging",
@@ -58,13 +65,31 @@ def build_virtual_planner_test_project(
     }
     if upstream_extra_config is not None:
         upstream_config_values.update(upstream_extra_config)
+    source_entry: SourceEntry = SourceEntry(name=upstream_source_name, table="raw_orders")
+    upstream_source: CompiledSource = CompiledSource(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=upstream_source_name),
+        deps=(),
+        name=upstream_source_name,
+        source_entry=source_entry,
+        source_file=DiscoveredSourceFile(
+            file_path=Path("sources/raw.yml"),
+            relative_path=Path("sources/raw.yml"),
+            contents="",
+            source_entries=(source_entry,),
+        ),
+    )
     upstream_model: CompiledModel = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=upstream_model_name),
-        deps=(),
+        deps=(upstream_source.key,),
         name=upstream_model_name,
         relative_path=Path(f"models/{upstream_model_name}.sql"),
         query_sql=upstream_query_sql,
         config=CompileModelConfig(values=upstream_config_values),
+        schema_entry=(
+            SchemaModelEntry(name=upstream_model_name, columns=upstream_schema_columns)
+            if upstream_schema_columns
+            else None
+        ),
         destination=CompiledRelationDestination(
             database=None,
             schema=upstream_schema,
@@ -121,6 +146,7 @@ def build_virtual_planner_test_project(
         effective_vars={},
         settings=SettingsConfig(),
         models=(upstream_model, downstream_model, unrelated_model),
+        sources=(upstream_source,),
         functions=(function,),
     )
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
@@ -131,6 +157,7 @@ def build_virtual_planner_test_project(
     )
     all_keys: dict[str, CompiledObjectKey] = {
         upstream_model.name: upstream_model.key,
+        upstream_source.name: upstream_source.key,
         downstream_model.name: downstream_model.key,
         unrelated_model.name: unrelated_model.key,
         function.name: function.key,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,9 @@ from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.virtual.freshness.main.current_records import (
+    build_current_virtual_source_freshness_records,
+)
 from sqlbuild.virtual.planner.helpers.output import (
     rewrite_virtual_plan_entries,
     with_virtual_metadata,
@@ -31,6 +35,8 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_source_freshness_incomplete_model_names,
+    build_source_version_hashes,
     build_stale_model_names,
     build_stale_root_cause_reasons,
     build_stale_root_causes,
@@ -47,7 +53,11 @@ from sqlbuild.virtual.planner.helpers.targets import build_destination_from_phys
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
-from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord
+from sqlbuild.virtual.state.models import (
+    ModelVersionRecord,
+    PhysicalRelationRecord,
+    SourceFreshnessRecord,
+)
 
 
 def run_virtual_plan_pipeline(
@@ -99,19 +109,10 @@ def run_virtual_plan_pipeline(
             cli_vars=cli_vars,
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
-        expected_local_hashes: dict[str, str] = build_expected_local_hashes(
-            graph=graph,
-        )
-        expected_version_hashes: dict[str, str] = build_expected_version_hashes(
-            graph=graph,
-            expected_local_hashes=expected_local_hashes,
-        )
-        expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
-            graph=graph
-        )
         (
             bound_version_hashes,
             bound_local_hashes,
+            source_version_hashes,
             deferred_targets,
             deferred_relations,
             previous_query_sqls,
@@ -121,13 +122,32 @@ def run_virtual_plan_pipeline(
             discovered_inputs=discovered_inputs,
             project_dir=project_dir,
             adapter=adapter,
+            source_connection=connection,
             graph=graph,
             virtual_environment_name=virtual_environment_name,
+        )
+        expected_local_hashes: dict[str, str] = build_expected_local_hashes(
+            graph=graph,
+        )
+        expected_version_hashes: dict[str, str] = build_expected_version_hashes(
+            graph=graph,
+            expected_local_hashes=expected_local_hashes,
+            source_version_hashes=source_version_hashes,
+        )
+        expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
+            graph=graph
+        )
+        source_freshness_incomplete_model_names: tuple[str, ...] = (
+            build_source_freshness_incomplete_model_names(
+                graph=graph,
+                source_version_hashes=source_version_hashes,
+            )
         )
         stale_model_names: tuple[str, ...] = build_stale_model_names(
             model_names=tuple(model.name for model in graph.project.models),
             expected_version_hashes=expected_version_hashes,
             bound_version_hashes=bound_version_hashes,
+            source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         )
         stale_root_reasons: dict[str, PlanReason] = build_stale_root_reasons(
             stale_model_names=stale_model_names,
@@ -220,6 +240,15 @@ def run_virtual_plan_pipeline(
             remaining_stale_model_names=tuple(
                 sorted(set(stale_model_names) - set(effective_select))
             ),
+            source_freshness_observed_source_names=tuple(sorted(source_version_hashes)),
+            source_freshness_incomplete_source_names=tuple(
+                sorted(
+                    source.name
+                    for source in graph.project.sources
+                    if source.name not in source_version_hashes
+                )
+            ),
+            source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         )
         python_selection: PythonSqlRunSelection = build_virtual_python_run_selection(
             discovered_inputs=discovered_inputs,
@@ -248,9 +277,11 @@ def _read_bound_state(
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
     adapter: BaseAdapter,
+    source_connection: Any,
     graph: ProjectGraph,
     virtual_environment_name: str | None,
 ) -> tuple[
+    dict[str, str],
     dict[str, str],
     dict[str, str],
     dict[str, CompiledRelationDestination],
@@ -275,13 +306,28 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if target_name is None:
-            return {}, {}, {}, {}, {}, {}, {}
+            return {}, {}, {}, {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
+        source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+            backend.get_virtual_environment_source_freshness(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_name,
+            )
+        )
+        source_freshness_records = build_current_virtual_source_freshness_records(
+            adapter=adapter,
+            connection=source_connection,
+            sources=tuple(source.source_entry for source in graph.project.sources),
+            virtual_environment_name=target_name,
+            observed_at=datetime.now(),
+            previous_records=source_freshness_records,
+        )
         model_versions: dict[str, ModelVersionRecord | None] = {
             model_name: backend.get_model_version(
                 state_connection,
@@ -336,6 +382,7 @@ def _read_bound_state(
         return (
             bound_version_hashes,
             build_bound_local_hashes(model_versions),
+            build_source_version_hashes(source_freshness_records),
             deferred_targets,
             deferred_relations,
             previous_query_sqls,

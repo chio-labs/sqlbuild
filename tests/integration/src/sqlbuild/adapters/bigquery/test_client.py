@@ -16,6 +16,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
@@ -23,6 +24,9 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
+from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from tests.integration.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryBuildFlowTestCase,
     BigQueryDeleteInsertCursorTestCase,
@@ -34,12 +38,14 @@ from tests.integration.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryRowDiffTestCase,
     BigQuerySchemaDiffTestCase,
     BigQuerySchemaIntrospectionTestCase,
+    BigQueryTableFreshnessMetadataTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_statement_recorder,
     execute_statements,
     fetch_rows,
     qualified_name,
+    wait_for_bigquery_freshness_after,
     write_seed_file,
 )
 
@@ -355,6 +361,98 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     assert all_columns == test_case.expected_all_columns
     assert query_column_names == test_case.expected_query_column_names
     assert described_columns == test_case.expected_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryTableFreshnessMetadataTestCase(
+            description="table freshness metadata advances after table DML",
+            expected_value_kind="timestamp",
+            expected_supports_metadata=True,
+            expected_data_version_type=datetime,
+        )
+    ],
+    ids=["table freshness metadata advances after table DML"],
+)
+def test_given_table_dml_when_getting_freshness_metadata_then_modified_time_advances(
+    test_case: BigQueryTableFreshnessMetadataTestCase,
+    adapter: BigQueryAdapter,
+    connection: Any,
+    bigquery_project: str,
+    bigquery_dataset: str,
+) -> None:
+    table_name: str = "freshness_orders"
+    table_target: str = qualified_name(
+        project=bigquery_project,
+        dataset=bigquery_dataset,
+        name=table_name,
+    )
+    execute_statements(
+        adapter=adapter,
+        connection=connection,
+        statements=(
+            f"CREATE OR REPLACE TABLE {table_target} (id INT64)",
+            f"INSERT INTO {table_target} VALUES (1)",
+        ),
+    )
+    initial_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
+        connection,
+        database=bigquery_project,
+        schema=bigquery_dataset,
+        name=table_name,
+    )
+
+    adapter.execute(connection, f"INSERT INTO {table_target} VALUES (2)")
+    initial_data_version: object = initial_metadata.data_version
+    assert isinstance(initial_data_version, test_case.expected_data_version_type)
+    changed_metadata: TableFreshnessMetadata = wait_for_bigquery_freshness_after(
+        adapter=adapter,
+        connection=connection,
+        database=bigquery_project,
+        schema=bigquery_dataset,
+        name=table_name,
+        previous_data_version=initial_data_version,
+    )
+
+    assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
+    assert initial_metadata.value_kind == test_case.expected_value_kind
+    assert changed_metadata.value_kind == test_case.expected_value_kind
+    changed_data_version: object = changed_metadata.data_version
+    assert isinstance(changed_data_version, test_case.expected_data_version_type)
+    assert changed_data_version > initial_data_version
+    initial_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=initial_data_version,
+            value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+            observed_at=datetime.now(tz=UTC),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    repeated_initial_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=initial_data_version,
+            value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+            observed_at=datetime.now(tz=UTC),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    changed_hash: str = source_freshness_record_from_observation(
+        SourceFreshnessObservation(
+            source_name="raw_orders",
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=changed_data_version,
+            value_kind=SourceFreshnessValueKind(changed_metadata.value_kind),
+            observed_at=datetime.now(tz=UTC),
+        ),
+        virtual_environment_name="dev",
+    ).data_version_hash
+    assert repeated_initial_hash == initial_hash
+    assert changed_hash != initial_hash
 
 
 @pytest.mark.parametrize(

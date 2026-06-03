@@ -29,6 +29,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -70,6 +71,53 @@ class SnowflakeAdapter(BaseAdapter):
 
     def supports_relation_age_metadata(self) -> bool:
         return False
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return True
+
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        clauses: list[str] = ["UPPER(table_name) = UPPER(%s)"]
+        params: list[str] = [name]
+        if schema is not None:
+            clauses.append("UPPER(table_schema) = UPPER(%s)")
+            params.append(schema)
+        if database is not None:
+            clauses.append("UPPER(table_catalog) = UPPER(%s)")
+            params.append(database)
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT table_type, last_altered FROM information_schema.tables WHERE "
+                + " AND ".join(clauses),
+                tuple(params),
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        finally:
+            cursor.close()
+        if row is None:
+            raise AdapterUserError(f"Snowflake table freshness metadata not found for {name}")
+        table_type: str = str(row[0]).upper()
+        if table_type != "BASE TABLE":
+            raise AdapterUserError(
+                "Snowflake table freshness metadata only supports physical tables; "
+                f"found {table_type}"
+            )
+        if row[1] is None:
+            raise AdapterUserError(
+                f"Snowflake table freshness metadata is missing LAST_ALTERED for {name}"
+            )
+        return TableFreshnessMetadata(
+            data_version=row[1],
+            value_kind="timestamp",
+            observed_at=row[1] if isinstance(row[1], datetime) else None,
+        )
 
     def persists_python_functions(self) -> bool:
         return True

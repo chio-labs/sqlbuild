@@ -30,6 +30,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     StatementRecorder,
+    TableFreshnessMetadata,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -106,6 +107,47 @@ class BigQueryAdapter(BaseAdapter):
 
     def supports_relation_age_metadata(self) -> bool:
         return False
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return True
+
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        if schema is None:
+            raise AdapterUserError("BigQuery table freshness metadata requires a dataset")
+        try:
+            table: Any = connection.client.get_table(
+                self._build_table_id(database=database, schema=schema, name=name)
+            )
+        except Exception as error:
+            if self._is_google_not_found(error):
+                raise AdapterUserError(
+                    f"BigQuery table freshness metadata not found for {name}"
+                ) from error
+            raise
+        table_type: str = str(getattr(table, "table_type", "TABLE")).upper()
+        if table_type != "TABLE":
+            raise AdapterUserError(
+                f"BigQuery table freshness metadata only supports native tables; found {table_type}"
+            )
+        data_version: object | None = getattr(table, "modified", None)
+        if data_version is None:
+            data_version = getattr(table, "updated", None)
+        if data_version is None:
+            raise AdapterUserError(
+                f"BigQuery table freshness metadata is missing modified time for {name}"
+            )
+        return TableFreshnessMetadata(
+            data_version=data_version,
+            value_kind="timestamp",
+            observed_at=data_version if isinstance(data_version, datetime) else None,
+        )
 
     def persists_python_functions(self) -> bool:
         return True
