@@ -348,6 +348,98 @@ def test_given_virtual_source_freshness_through_view_when_planning_then_selects_
 @pytest.mark.parametrize(
     "test_case",
     [
+        VirtualPlanJsonE2ETestCase(
+            description="virtual plan json explains source freshness currentness",
+            expected_json_fragments=(
+                '"virtual_environment_name": "dev"',
+                '"virtual_environment_status": "working"',
+                '"virtual_stale_model_names": [',
+                '"fact_orders"',
+                '"virtual_stale_root_names": []',
+            ),
+        )
+    ],
+    ids=["virtual plan json explains source freshness currentness"],
+)
+def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports_currentness(
+    test_case: VirtualPlanJsonE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_plan_json",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: integer
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER);
+            INSERT INTO raw.raw_orders VALUES (7, 1);
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert build_result.returncode == 0, build_result.stderr
+    unchanged_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--changes-only", "--json"), project_dir=project_dir
+    )
+    assert unchanged_result.returncode == 0, unchanged_result.stderr
+    unchanged_payload: dict[str, object] = json.loads(unchanged_result.stdout)
+    assert unchanged_payload["metadata"] == {
+        "virtual_environment_name": "dev",
+        "virtual_environment_status": "finalized",
+        "virtual_mode": True,
+        "virtual_stale_model_names": [],
+        "virtual_stale_root_names": [],
+        "virtual_remaining_stale_model_names": [],
+    }
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
+    )
+    changed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--changes-only", "--json"), project_dir=project_dir
+    )
+
+    assert changed_result.returncode == 0, changed_result.stderr
+    output: str = changed_result.stdout
+    parsed: dict[str, object] = json.loads(output)
+    assert "metadata" in parsed
+    fragment: str
+    for fragment in test_case.expected_json_fragments:
+        assert fragment in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         VirtualPlanE2ETestCase(
             description="virtual plan shows config changed root without query diff",
             seed_matching_refs=True,

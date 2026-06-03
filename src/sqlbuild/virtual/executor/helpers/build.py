@@ -969,11 +969,18 @@ def _persist_successful_virtual_build(
         for function_entry in plan_output.function_entries:
             function_version: FunctionVersionRecord = build_function_version_record(function_entry)
             final_function_hashes[function_entry.name] = function_version.version_hash
-            backend.upsert_function_version(
+            existing_function_version: FunctionVersionRecord | None = backend.get_function_version(
                 state_connection,
                 schema=config.schema,
-                record=function_version,
+                function_name=function_version.function_name,
+                version_hash=function_version.version_hash,
             )
+            if existing_function_version is None:
+                backend.upsert_function_version(
+                    state_connection,
+                    schema=config.schema,
+                    record=function_version,
+                )
         backend.upsert_virtual_environment(
             state_connection,
             schema=config.schema,
