@@ -32,6 +32,7 @@ from tests.unit.src.sqlbuild.virtual.freshness._test_types import (
     SourceFreshnessRuntimeTestCase,
     SourceFreshnessStateErrorTestCase,
     SourceFreshnessStateTestCase,
+    UnsupportedTableFreshnessMetadataGuardTestCase,
 )
 
 
@@ -47,6 +48,31 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
+        return TableFreshnessMetadata(
+            data_version=datetime(2026, 1, 1, 12, 0, 0),
+            value_kind="timestamp",
+        )
+
+
+class UnsupportedFreshnessMetadataDuckDbAdapter(DuckDbAdapter):
+    metadata_requested: bool
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.metadata_requested = False
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return False
+
+    def get_table_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        self.metadata_requested = True
         return TableFreshnessMetadata(
             data_version=datetime(2026, 1, 1, 12, 0, 0),
             value_kind="timestamp",
@@ -201,6 +227,49 @@ def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_
             )
     finally:
         adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnsupportedTableFreshnessMetadataGuardTestCase(
+            description="unsupported adapter guard prevents metadata lookup",
+            source_name="raw_orders",
+            table="raw_orders",
+            expected_error_fragment="does not support table freshness metadata",
+            expected_metadata_requested=False,
+        )
+    ],
+    ids=["unsupported adapter guard prevents metadata lookup"],
+)
+def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_not_requested(
+    test_case: UnsupportedTableFreshnessMetadataGuardTestCase,
+) -> None:
+    adapter: UnsupportedFreshnessMetadataDuckDbAdapter = UnsupportedFreshnessMetadataDuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        source: SourceEntry = SourceEntry(
+            name=test_case.source_name,
+            table=test_case.table,
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.ADAPTER,
+                value_kind=None,
+            ),
+        )
+
+        with pytest.raises(
+            SourceFreshnessObservationError, match=test_case.expected_error_fragment
+        ):
+            observe_configured_source_freshness(
+                adapter=adapter,
+                connection=connection,
+                source=source,
+                observed_at=datetime(2026, 1, 1, 12, 0, 0),
+            )
+    finally:
+        adapter.close(connection)
+
+    assert adapter.metadata_requested is test_case.expected_metadata_requested
 
 
 STATE_TEST_CASES: list[SourceFreshnessStateTestCase] = [
