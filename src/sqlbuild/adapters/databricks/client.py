@@ -73,7 +73,7 @@ class DatabricksAdapter(BaseAdapter):
     max_identifier_length: ClassVar[int] = 255
 
     def supports_table_freshness_metadata(self) -> bool:
-        return False
+        return True
 
     def get_table_freshness_metadata(
         self,
@@ -83,9 +83,66 @@ class DatabricksAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
-        raise AdapterUserError(
-            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        if database is None or schema is None:
+            raise AdapterUserError(
+                "Databricks table freshness metadata requires catalog and schema"
+            )
+        table_type: str = self._get_table_type(
+            connection,
+            database=database,
+            schema=schema,
+            name=name,
         )
+        if self._normalize_relation_type(table_type) != "table":
+            raise AdapterUserError(
+                "Databricks table freshness metadata only supports Delta tables; "
+                f"found {table_type}"
+            )
+        target: str = f"`{database}`.`{schema}`.`{name}`"
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(f"DESCRIBE HISTORY {target} LIMIT 1")
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        except Exception as error:
+            raise AdapterUserError(
+                f"Databricks table freshness metadata requires Delta history for {target}"
+            ) from error
+        finally:
+            cursor.close()
+        if row is None:
+            raise AdapterUserError(f"Databricks Delta history not found for {target}")
+        try:
+            data_version: int = int(row[0])
+        except (TypeError, ValueError) as error:
+            raise AdapterUserError(
+                f"Databricks Delta history returned invalid version for {target}: {row[0]}"
+            ) from error
+        return TableFreshnessMetadata(data_version=data_version, value_kind="integer")
+
+    def _get_table_type(
+        self,
+        connection: Any,
+        *,
+        database: str,
+        schema: str,
+        name: str,
+    ) -> str:
+        query: str = (
+            f"SELECT table_type FROM {self._information_schema(database)}.tables "
+            f"WHERE table_schema = {self._string_literal(schema)} "
+            f"AND table_name = {self._string_literal(name)}"
+        )
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(query)
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        finally:
+            cursor.close()
+        if row is None:
+            raise AdapterUserError(
+                f"Databricks table freshness metadata not found for {database}.{schema}.{name}"
+            )
+        return str(row[0])
 
     def maximum_identifier_length(self) -> int:
         """Return the maximum unqualified identifier length supported by the adapter."""
