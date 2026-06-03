@@ -31,6 +31,8 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_source_freshness_incomplete_model_names,
+    build_source_version_hashes,
     build_stale_model_names,
     build_stale_root_cause_reasons,
     build_stale_root_causes,
@@ -47,7 +49,11 @@ from sqlbuild.virtual.planner.helpers.targets import build_destination_from_phys
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
-from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord
+from sqlbuild.virtual.state.models import (
+    ModelVersionRecord,
+    PhysicalRelationRecord,
+    SourceFreshnessRecord,
+)
 
 
 def run_virtual_plan_pipeline(
@@ -99,19 +105,10 @@ def run_virtual_plan_pipeline(
             cli_vars=cli_vars,
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
-        expected_local_hashes: dict[str, str] = build_expected_local_hashes(
-            graph=graph,
-        )
-        expected_version_hashes: dict[str, str] = build_expected_version_hashes(
-            graph=graph,
-            expected_local_hashes=expected_local_hashes,
-        )
-        expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
-            graph=graph
-        )
         (
             bound_version_hashes,
             bound_local_hashes,
+            source_version_hashes,
             deferred_targets,
             deferred_relations,
             previous_query_sqls,
@@ -124,10 +121,25 @@ def run_virtual_plan_pipeline(
             graph=graph,
             virtual_environment_name=virtual_environment_name,
         )
+        expected_local_hashes: dict[str, str] = build_expected_local_hashes(
+            graph=graph,
+        )
+        expected_version_hashes: dict[str, str] = build_expected_version_hashes(
+            graph=graph,
+            expected_local_hashes=expected_local_hashes,
+            source_version_hashes=source_version_hashes,
+        )
+        expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
+            graph=graph
+        )
         stale_model_names: tuple[str, ...] = build_stale_model_names(
             model_names=tuple(model.name for model in graph.project.models),
             expected_version_hashes=expected_version_hashes,
             bound_version_hashes=bound_version_hashes,
+            source_freshness_incomplete_model_names=build_source_freshness_incomplete_model_names(
+                graph=graph,
+                source_version_hashes=source_version_hashes,
+            ),
         )
         stale_root_reasons: dict[str, PlanReason] = build_stale_root_reasons(
             stale_model_names=stale_model_names,
@@ -253,6 +265,7 @@ def _read_bound_state(
 ) -> tuple[
     dict[str, str],
     dict[str, str],
+    dict[str, str],
     dict[str, CompiledRelationDestination],
     dict[str, RelationInfo],
     dict[str, str],
@@ -275,13 +288,20 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if target_name is None:
-            return {}, {}, {}, {}, {}, {}, {}
+            return {}, {}, {}, {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
+        source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+            backend.get_virtual_environment_source_freshness(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_name,
+            )
+        )
         model_versions: dict[str, ModelVersionRecord | None] = {
             model_name: backend.get_model_version(
                 state_connection,
@@ -336,6 +356,7 @@ def _read_bound_state(
         return (
             bound_version_hashes,
             build_bound_local_hashes(model_versions),
+            build_source_version_hashes(source_freshness_records),
             deferred_targets,
             deferred_relations,
             previous_query_sqls,

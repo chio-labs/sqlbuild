@@ -10,6 +10,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_source_freshness_incomplete_model_names,
     build_stale_model_names,
     build_stale_required_upstream_closure,
     build_stale_root_cause_reasons,
@@ -255,6 +256,154 @@ def test_given_function_change_when_building_expected_hashes_then_downstream_has
     assert (
         baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
     ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="source data version change updates downstream expected hash",
+            upstream_query_sql="SELECT * FROM __source('raw.orders')",
+            downstream_query_sql="SELECT id FROM stg_orders",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["source data version change updates downstream expected hash"],
+)
+def test_given_source_data_version_change_when_building_hashes_then_downstream_hash_changes(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=graph,
+        expected_local_hashes=build_expected_local_hashes(graph=graph),
+        source_version_hashes={"raw.orders": "source-version-1"},
+    )
+    changed_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=graph,
+        expected_local_hashes=build_expected_local_hashes(graph=graph),
+        source_version_hashes={"raw.orders": "source-version-2"},
+    )
+
+    assert (
+        baseline_hashes["stg_orders"] != changed_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+    assert (
+        baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="unchanged source data version keeps downstream expected hash stable",
+            upstream_query_sql="SELECT * FROM __source('raw.orders')",
+            downstream_query_sql="SELECT id FROM stg_orders",
+            expected_hashes_differ=False,
+        )
+    ],
+    ids=["unchanged source data version keeps downstream expected hash stable"],
+)
+def test_given_same_source_data_version_when_building_expected_hashes_then_hashes_match(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    first_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+    second_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+    )
+
+    first_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=first_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=first_graph),
+        source_version_hashes={"raw.orders": "source-version-1"},
+    )
+    second_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=second_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=second_graph),
+        source_version_hashes={"raw.orders": "source-version-1"},
+    )
+
+    assert (
+        first_hashes["fact_orders"] != second_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaleModelNamesTestCase(
+            description="source data version change marks direct and transitive models stale",
+            expected_version_hashes={},
+            bound_version_hashes={},
+            expected_stale_model_names=("stg_orders", "fact_orders"),
+        )
+    ],
+    ids=["source data version change marks direct and transitive models stale"],
+)
+def test_given_source_data_version_change_when_building_stale_models_then_marks_downstream_stale(
+    test_case: StaleModelNamesTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql="SELECT * FROM __source('raw.orders')",
+        downstream_query_sql="SELECT id FROM stg_orders",
+        upstream_materialized="view",
+    )
+    expected_local_hashes: dict[str, str] = build_expected_local_hashes(graph=graph)
+    bound_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=graph,
+        expected_local_hashes=expected_local_hashes,
+        source_version_hashes={"raw.orders": "source-version-1"},
+    )
+    expected_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=graph,
+        expected_local_hashes=expected_local_hashes,
+        source_version_hashes={"raw.orders": "source-version-2"},
+    )
+
+    stale_model_names: tuple[str, ...] = build_stale_model_names(
+        model_names=tuple(model.name for model in graph.project.models),
+        expected_version_hashes=expected_hashes,
+        bound_version_hashes=bound_hashes,
+    )
+
+    assert stale_model_names == test_case.expected_stale_model_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaleRequiredUpstreamClosureTestCase(
+            description="missing source freshness marks direct and downstream models incomplete",
+            selected_model_names=(),
+            stale_model_names=(),
+            expected_stale_upstream_names=("fact_orders", "stg_orders"),
+        )
+    ],
+    ids=["missing source freshness marks direct and downstream models incomplete"],
+)
+def test_given_missing_source_freshness_when_finding_incomplete_models_then_returns_closure(
+    test_case: StaleRequiredUpstreamClosureTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql="SELECT * FROM __source('raw.orders')",
+        downstream_query_sql="SELECT id FROM stg_orders",
+    )
+
+    incomplete_model_names: tuple[str, ...] = build_source_freshness_incomplete_model_names(
+        graph=graph,
+        source_version_hashes={},
+    )
+
+    assert incomplete_model_names == test_case.expected_stale_upstream_names
 
 
 @pytest.mark.parametrize(
