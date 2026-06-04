@@ -32,6 +32,9 @@ from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline.helpers.python_changes_only import (
+    filter_python_node_names_for_selected_sql,
+)
 from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
     build_python_plan_entries,
     build_skipped_task_asset_ingress_warnings,
@@ -66,6 +69,7 @@ def run_compile_pipeline(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
+    changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     connection_config: dict[str, object] | None = None,
@@ -111,6 +115,7 @@ def run_compile_pipeline(
             exclude=exclude,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
+            changes_only=changes_only,
             auto_load_sources=auto_load_sources,
             reload_sources=reload_sources,
             cli_vars=cli_vars,
@@ -135,6 +140,7 @@ def _build_result(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
+    changes_only: bool = False,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     cli_vars: dict[str, object] | None = None,
@@ -201,6 +207,7 @@ def _build_result(
         deferred_relations=deferred_relations,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
+        changes_only=changes_only,
         auto_load_sources=auto_load_sources,
         reload_sources=reload_sources,
         on_progress=on_progress,
@@ -231,6 +238,12 @@ def _build_result(
         python_graph: PythonNodeGraph = build_discovered_python_node_graph(
             discovered_inputs=discovered_inputs
         )
+        if changes_only:
+            selected_python_node_names = filter_python_node_names_for_selected_sql(
+                python_graph=python_graph,
+                python_node_names=selected_python_node_names,
+                selected_sql_keys=plan_output.selected_keys,
+            )
         plan_output = replace(
             plan_output,
             warnings=(
@@ -244,8 +257,8 @@ def _build_result(
         )
         lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
             selection=PythonSqlRunSelection(
-                sql_keys=run_selection.sql_keys,
-                python_node_names=run_selection.python_node_names,
+                sql_keys=plan_output.selected_keys,
+                python_node_names=selected_python_node_names,
             ),
             python_graph=python_graph,
         )

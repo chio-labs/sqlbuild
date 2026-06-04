@@ -60,6 +60,17 @@ class DirectPythonBuildHardeningE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DirectChangesOnlyBuildE2ETestCase:
+    """Test case for direct build changes-only behavior."""
+
+    description: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_query_results: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class VirtualBuildE2ETestCase:
     """Test case for virtual build e2e behavior."""
 

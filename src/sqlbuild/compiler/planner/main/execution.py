@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
+from sqlbuild.compiler.planner.helpers.changes_only import prune_unchanged_scope
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
@@ -43,6 +44,7 @@ def build_execution_plan(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     full_refresh: bool = False,
+    changes_only: bool = False,
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
@@ -106,6 +108,12 @@ def build_execution_plan(
         scope=scope,
         changes=changes,
     )
+    if changes_only and not full_refresh:
+        scope = prune_unchanged_scope(
+            scope=scope,
+            changes=changes,
+            resolved_actions=resolved_actions,
+        )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,

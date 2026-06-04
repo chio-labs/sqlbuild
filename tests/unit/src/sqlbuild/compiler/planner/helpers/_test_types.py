@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
+    PlannerScope,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -144,6 +145,13 @@ class FindPathKeysErrorTestCase:
     start: CompiledObjectKey
     end: CompiledObjectKey
     expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
+class PruneUnchangedScopeTestCase:
+    description: str
+    scope: PlannerScope
+    expected_selected_keys: frozenset[CompiledObjectKey]
 
 
 @dataclass(frozen=True)

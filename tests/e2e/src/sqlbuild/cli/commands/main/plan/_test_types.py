@@ -9,6 +9,14 @@ class DirectPlanE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DirectPlanJsonE2ETestCase:
+    description: str
+    expected_selected_count: int
+    expected_model_count: int
+    expected_function_count: int
+
+
+@dataclass(frozen=True)
 class VirtualPlanE2ETestCase:
     description: str
     seed_matching_refs: bool
