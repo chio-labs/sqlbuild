@@ -8,6 +8,12 @@ import pytest
 from sqlbuild.adapter.shared.models import TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
+from sqlbuild.compiler.source_freshness.main.normalization import (
+    normalize_source_freshness_data_version,
+)
+from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
@@ -15,16 +21,10 @@ from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessV
 from sqlbuild.virtual.executor.helpers.source_freshness import (
     observe_virtual_environment_source_freshness,
 )
-from sqlbuild.virtual.freshness.exceptions import SourceFreshnessObservationError
-from sqlbuild.virtual.freshness.helpers.observation import observe_configured_source_freshness
 from sqlbuild.virtual.freshness.helpers.state import (
-    normalize_source_freshness_data_version,
     source_freshness_record_from_observation,
 )
-from sqlbuild.virtual.freshness.models import (
-    SourceFreshnessObservation,
-    SourceFreshnessRuntimeResult,
-)
+from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.state.models import SourceFreshnessRecord
 from tests.unit.src.sqlbuild.virtual.freshness._test_types import (
     SourceFreshnessObservationErrorTestCase,

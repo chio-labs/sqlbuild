@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.virtual.freshness.helpers.state import (
     source_freshness_record_from_observation as _source_freshness_record_from_observation,
 )
-from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from sqlbuild.virtual.state.models import SourceFreshnessRecord
 
 

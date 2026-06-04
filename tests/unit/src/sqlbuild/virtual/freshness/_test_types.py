@@ -64,3 +64,9 @@ class SourceFreshnessRuntimeTestCase:
     expected_unknown_sources: tuple[str, ...]
     expected_preserved_sources: tuple[str, ...]
     expected_generated_sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VirtualSourceFreshnessCompatibilityTestCase:
+    description: str
+    expected_same_object: bool
