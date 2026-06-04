@@ -1,4 +1,4 @@
-"""Public source freshness observation entrypoint."""
+"""Public shared source freshness observation entrypoint."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
-from sqlbuild.compiler.source_freshness.main.observation import (
+from sqlbuild.compiler.source_freshness.helpers.observation import (
     observe_configured_source_freshness as _observe_configured_source_freshness,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
@@ -20,7 +20,7 @@ def observe_configured_source_freshness(
     source: SourceEntry,
     observed_at: datetime,
 ) -> SourceFreshnessObservation:
-    """Observe one configured source freshness value."""
+    """Observe one source freshness config and return a comparable data version."""
 
     return _observe_configured_source_freshness(
         adapter=adapter,

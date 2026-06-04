@@ -6,15 +6,13 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.main.data_version_hash import source_freshness_data_version_hash
 from sqlbuild.virtual.freshness.main.observation import observe_configured_source_freshness
 from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
-from sqlbuild.virtual.freshness.models import (
-    SourceFreshnessObservation,
-    SourceFreshnessRuntimeResult,
-)
+from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.state.models import SourceFreshnessRecord
 
 
