@@ -61,6 +61,12 @@ class SourceColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class PlannerSourceFreshnessReadMapTestCase:
+    description: str
+    expected_observed_data_version: str
+
+
+@dataclass(frozen=True)
 class SourceLoadNodesTestCase:
     description: str
     expected_map_names: tuple[str, ...]

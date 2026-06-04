@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
     run_sqb,
+    table_exists,
 )
 
 
@@ -596,6 +597,119 @@ def test_given_built_direct_project_when_planning_changes_only_json_then_selecte
     assert payload["selected_count"] == test_case.expected_selected_count
     assert len(payload["models"]) == test_case.expected_model_count
     assert len(payload["functions"]) == test_case.expected_function_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct changes-only plan observes source freshness without writing state",
+            expected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["direct changes-only plan observes source freshness without writing state"],
+)
+def test_given_observable_source_freshness_when_planning_changes_only_then_does_not_write_state(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_source_freshness_plan_read_only",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_source_freshness_plan_read_only"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    assert not table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        table_name="_sqlbuild_source_freshness",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct changes-only plan surfaces explicit source freshness errors",
+            expected_fragments=(
+                "column freshness requires a physical table source",
+                "raw_orders",
+            ),
+        )
+    ],
+    ids=["direct changes-only plan surfaces explicit source freshness errors"],
+)
+def test_given_invalid_explicit_source_freshness_when_planning_changes_only_then_errors(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_source_freshness_plan_error",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_source_freshness_plan_error"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id, 1 AS batch_id\n"
+                "    freshness:\n"
+                "      strategy: column\n"
+                "      type: integer\n"
+                "      column: batch_id\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode != 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout + plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
 
 
 @pytest.mark.parametrize(

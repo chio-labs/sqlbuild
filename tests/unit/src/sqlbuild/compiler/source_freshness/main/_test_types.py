@@ -51,3 +51,45 @@ class SharedSourceFreshnessHashTestCase:
     observed_at: datetime
     later_observed_at: datetime
     expected_hash_changes_with_observed_at: bool
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessPlanningTestCase:
+    description: str
+    previous_data_version: str | None
+    current_query: str
+    expected_changed_count: int
+    expected_unchanged_count: int
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessUnknownTestCase:
+    description: str
+    expected_unknown_source_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessAdapterDefaultTestCase:
+    description: str
+    expected_changed_count: int
+    expected_observed_count: int
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessManagedSkipTestCase:
+    description: str
+    expected_observed_count: int
+    expected_unknown_source_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessMultiSchemaTestCase:
+    description: str
+    expected_previous_count: int
+    expected_unchanged_count: int
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessPlanningErrorTestCase:
+    description: str
+    expected_error_fragment: str

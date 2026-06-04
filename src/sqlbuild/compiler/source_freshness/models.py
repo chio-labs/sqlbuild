@@ -60,3 +60,14 @@ class SourceFreshnessSet:
 
     schema: str
     records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
+
+
+@dataclass(frozen=True)
+class DirectSourceFreshnessPlanningResult:
+    """Direct planning-time source freshness observations and comparisons."""
+
+    observed_records: tuple[SourceFreshnessRecord, ...] = ()
+    previous_records: tuple[SourceFreshnessRecord, ...] = ()
+    changed_identities: frozenset[SourceFreshnessIdentity] = frozenset()
+    unchanged_identities: frozenset[SourceFreshnessIdentity] = frozenset()
+    unknown_source_names: tuple[str, ...] = ()
