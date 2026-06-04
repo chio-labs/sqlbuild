@@ -184,6 +184,7 @@ def run_build(
         select=select,
         exclude=exclude,
         full_refresh=full_refresh,
+        changes_only=changes_only,
         auto_load_sources=should_load_sources,
         reload_sources=reload_sources,
         connection_config=connection_config,
