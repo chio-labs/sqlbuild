@@ -545,6 +545,70 @@ def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_rea
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct changes-only build observes source freshness without writing state",
+            expected_exit_code=0,
+            expected_output_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+        )
+    ],
+    ids=["direct changes-only build observes source freshness without writing state"],
+)
+def test_given_observable_source_freshness_when_building_changes_only_then_does_not_write_state(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_source_freshness_build_read_only",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_source_freshness_build_read_only"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    assert not table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        table_name="_sqlbuild_source_freshness",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES,
     ids=[case.description for case in DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES],
 )

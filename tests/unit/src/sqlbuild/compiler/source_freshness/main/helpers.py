@@ -1,6 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import datetime
 from typing import Any
+
+from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+    source_freshness_data_version_hash,
+)
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 class FakeSourceFreshnessExecute:
@@ -30,3 +41,78 @@ def render_qualified_name(*, database: str | None, schema: str | None, name: str
     if database is not None:
         return f"{database}.{schema}.{name}"
     return f"{schema}.{name}"
+
+
+def write_optional_previous_record(
+    *,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+    data_version: str | None,
+) -> None:
+    if data_version is None:
+        return
+    previous_record: SourceFreshnessRecord = SourceFreshnessRecord(
+        source_name="raw.orders",
+        target_database=None,
+        target_schema=None,
+        target_name=None,
+        run_id="previous",
+        strategy=SourceFreshnessStrategy.SQL.value,
+        value_kind=SourceFreshnessValueKind.INTEGER.value,
+        data_version=data_version,
+        data_version_hash=source_freshness_data_version_hash(
+            source_name="raw.orders",
+            strategy=SourceFreshnessStrategy.SQL,
+            value_kind=SourceFreshnessValueKind.INTEGER,
+            data_version=data_version,
+        ),
+        observed_at=datetime(2026, 1, 15, 10, 0, 0),
+    )
+    write_source_freshness_record(
+        connection=connection,
+        execute=adapter.execute,
+        database=None,
+        schema="state_schema",
+        record=previous_record,
+        render_qualified_name=render_qualified_name,
+        render_framework_type=render_framework_type,
+    )
+
+
+def write_previous_record_to_schema(
+    *,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+    schema: str,
+    source_name: str,
+    data_version: str,
+) -> None:
+    write_source_freshness_record(
+        connection=connection,
+        execute=adapter.execute,
+        database=None,
+        schema=schema,
+        record=SourceFreshnessRecord(
+            source_name=source_name,
+            target_database=None,
+            target_schema=None,
+            target_name=None,
+            run_id="previous",
+            strategy=SourceFreshnessStrategy.SQL.value,
+            value_kind=SourceFreshnessValueKind.INTEGER.value,
+            data_version=data_version,
+            data_version_hash=source_freshness_data_version_hash(
+                source_name=source_name,
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.INTEGER,
+                data_version=data_version,
+            ),
+            observed_at=datetime(2026, 1, 15, 10, 0, 0),
+        ),
+        render_qualified_name=render_qualified_name,
+        render_framework_type=render_framework_type,
+    )

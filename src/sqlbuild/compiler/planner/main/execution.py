@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -22,6 +23,7 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
 )
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
+from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_source_freshness_result
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
@@ -33,6 +35,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -136,6 +139,17 @@ def build_execution_plan(
         model_entry_results=model_entry_results,
         reload_sources=reload_sources,
     )
+    if changes_only:
+        source_freshness: DirectSourceFreshnessPlanningResult = (
+            build_planner_source_freshness_result(
+                project=project,
+                adapter=adapter,
+                connection=connection,
+                scope=scope,
+                relations=relations,
+            )
+        )
+        plan_output = replace(plan_output, source_freshness=source_freshness)
     if on_progress is not None:
         on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
     return plan_output
