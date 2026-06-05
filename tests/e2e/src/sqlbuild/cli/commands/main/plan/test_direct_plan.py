@@ -604,10 +604,18 @@ def test_given_built_direct_project_when_planning_changes_only_json_then_selecte
     [
         DirectPlanE2ETestCase(
             description="direct changes-only plan observes source freshness without writing state",
-            expected_fragments=("Plan ready (0 selected)",),
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "Source freshness",
+                "observed: 1",
+                "changed: 1",
+                "source-stale models: orders",
+                "orders",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["direct changes-only plan observes source freshness without writing state"],
+    ids=["direct changes-only plan conservatively keeps source-stale model without writing state"],
 )
 def test_given_observable_source_freshness_when_planning_changes_only_then_does_not_write_state(
     test_case: DirectPlanE2ETestCase,
@@ -656,6 +664,145 @@ def test_given_observable_source_freshness_when_planning_changes_only_then_does_
         db_path=project_dir / "warehouse.duckdb",
         table_name="_sqlbuild_source_freshness",
     )
+
+    json_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--changes-only", "--json"),
+        project_dir=project_dir,
+    )
+
+    assert json_plan_result.returncode == 0, json_plan_result.stdout + json_plan_result.stderr
+    payload: dict[str, Any] = json.loads(json_plan_result.stdout)
+    source_metadata: dict[str, Any] = payload["metadata"]["direct_source_freshness"]
+    assert source_metadata["observed_source_names"] == ["raw_orders"]
+    assert source_metadata["changed_source_names"] == ["raw_orders"]
+    assert source_metadata["unknown_source_names"] == []
+    assert source_metadata["stale_model_names"] == ["orders"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct source freshness propagates through view downstream",
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "Source freshness",
+                "source-stale models: fact_orders, stg_orders",
+                "stg_orders",
+                "fact_orders",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["direct source freshness propagates through view downstream"],
+)
+def test_given_source_freshness_view_chain_when_planning_changes_only_then_keeps_downstream(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_view_chain_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_view_chain_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct unknown source freshness conservatively keeps downstream",
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "Source freshness",
+                "unknown: 1",
+                "unknown set: raw_orders",
+                "source-stale models: orders",
+                "orders",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["direct unknown source freshness conservatively keeps downstream"],
+)
+def test_given_unknown_source_freshness_when_planning_changes_only_then_keeps_downstream(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_unknown_source_freshness_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_unknown_source_freshness_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS order_id\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
 
 
 @pytest.mark.parametrize(

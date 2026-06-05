@@ -6,11 +6,16 @@ from typing import Any
 
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+)
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -116,3 +121,28 @@ def write_previous_record_to_schema(
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,
     )
+
+
+def source_freshness_identity(source_name: str) -> SourceFreshnessIdentity:
+    return SourceFreshnessIdentity(
+        source_name=source_name,
+        target_database=None,
+        target_schema=None,
+        target_name=None,
+    )
+
+
+def downstream_deps_from_edges(
+    edges: dict[str, tuple[str, ...]],
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
+    return {
+        compiled_key(raw_key): tuple(compiled_key(raw_downstream) for raw_downstream in downstream)
+        for raw_key, downstream in edges.items()
+    }
+
+
+def compiled_key(raw: str) -> CompiledObjectKey:
+    raw_type: str
+    name: str
+    raw_type, name = raw.split(":", 1)
+    return CompiledObjectKey(resource_type=CompiledResourceType(raw_type), name=name)
