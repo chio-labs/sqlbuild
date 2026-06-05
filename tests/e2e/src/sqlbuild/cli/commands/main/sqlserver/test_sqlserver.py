@@ -111,6 +111,68 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
 @pytest.mark.parametrize(
     "test_case",
     [
+        SqlServerBuildE2ETestCase(
+            description="direct changes only build prunes unchanged SQL Server model",
+            expected_table_name="orders",
+            expected_row_count=1,
+            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+        )
+    ],
+    ids=["direct changes only build prunes unchanged SQL Server model"],
+)
+def test_given_built_direct_project_when_building_changes_only_on_sqlserver_then_prunes_model(
+    tmp_path: Path,
+    test_case: SqlServerBuildE2ETestCase,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    schema_name: str = build_unique_schema_name(prefix="sqb_changes_only")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_changes_only",
+        repo_files={
+            "sqlbuild_project.toml": build_sqlserver_project_toml(
+                project_name="sqlserver_changes_only",
+                schema_name=schema_name,
+                config=config,
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+
+    try:
+        initial_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build"),
+            project_dir=project_dir,
+        )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+        changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", "--changes-only"),
+            project_dir=project_dir,
+        )
+
+        assert changes_only_result.returncode == test_case.expected_return_code, (
+            changes_only_result.stdout + changes_only_result.stderr
+        )
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in changes_only_result.stdout, changes_only_result.stdout
+        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            sql=(
+                "SELECT COUNT(*) FROM "
+                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
+            ),
+            config=config,
+        )
+        assert int(str(rows[0][0])) == test_case.expected_row_count
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlServerVirtualSeedE2ETestCase(
             description="virtual seeded incremental build uses copy on sqlserver",
             expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),

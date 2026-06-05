@@ -1200,6 +1200,72 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
 @pytest.mark.parametrize(
     "test_case",
     [
+        DatabricksBuildE2ETestCase(
+            description="direct changes only build prunes unchanged databricks model",
+            expected_table_name="orders",
+            expected_row_count=1,
+            expected_fact_order_rows=(),
+            expected_udf_rows=(),
+            expected_daily_revenue_rows=(),
+            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+        )
+    ],
+    ids=["direct changes only build prunes unchanged databricks model"],
+)
+def test_given_built_direct_project_when_building_changes_only_on_databricks_then_prunes_model(
+    tmp_path: Path,
+    test_case: DatabricksBuildE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_changes_only")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_changes_only",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_project_toml(
+                project_name="databricks_changes_only",
+                schema_name=schema_name,
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+
+    try:
+        with databricks_e2e_timing("prepare changes-only schema"):
+            ensure_databricks_schema_ready(schema_name=schema_name)
+        with databricks_e2e_timing("initial sqb build"):
+            initial_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build"),
+                project_dir=project_dir,
+            )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+        with databricks_e2e_timing("changes-only sqb build"):
+            changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build", "--changes-only"),
+                project_dir=project_dir,
+            )
+
+        assert changes_only_result.returncode == test_case.expected_return_code, (
+            changes_only_result.stdout + changes_only_result.stderr
+        )
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in changes_only_result.stdout, changes_only_result.stdout
+        assert (
+            databricks_relation_row_count(
+                schema_name=schema_name,
+                relation=test_case.expected_table_name,
+            )
+            == test_case.expected_row_count
+        )
+    finally:
+        with databricks_e2e_timing("cleanup changes-only schema"):
+            cleanup_databricks_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DatabricksSourceLoaderStrategiesE2ETestCase(
             description="source loader strategies apply expected rows on databricks",
             command=("--no-color", "load", "--concurrency", "4"),
