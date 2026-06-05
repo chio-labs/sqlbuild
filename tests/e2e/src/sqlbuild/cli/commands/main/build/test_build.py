@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 from pathlib import Path
@@ -470,6 +471,66 @@ def test_given_direct_query_change_when_building_changes_only_then_executes_chan
         sql="SELECT order_id FROM orders",
     )
     assert tuple(rows) == test_case.expected_query_results
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct build persists function hashes in model metadata",
+            expected_exit_code=0,
+            expected_output_fragments=("fact_orders",),
+        )
+    ],
+    ids=["direct build persists function hashes in model metadata"],
+)
+def test_given_direct_function_dependency_when_building_then_persists_function_hash_metadata(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_function_metadata_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_function_metadata_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "functions/sql/is_large_order.sql": (
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+                "query_change_backfill full);\n\namount > 100\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT __udf("is_large_order")(150) AS is_large\n'
+            ),
+        },
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT metadata_json_b64 FROM main._sqlbuild_fingerprints "
+            "WHERE model_name = 'fact_orders' ORDER BY ts DESC LIMIT 1"
+        ),
+    )
+    metadata_json: str = base64.b64decode(str(rows[0][0])).decode("utf-8")
+    metadata_payload: dict[str, Any] = json.loads(metadata_json)
+    local_function_hashes: dict[str, Any] = metadata_payload["local_function_hashes"]
+    assert set(local_function_hashes) == {"is_large_order"}
+    assert local_function_hashes["is_large_order"]
 
 
 @pytest.mark.parametrize(

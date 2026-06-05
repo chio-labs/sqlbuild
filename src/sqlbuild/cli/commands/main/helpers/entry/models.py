@@ -205,6 +205,7 @@ class CliEntrypointHandlers:
             bool,
             dict[str, object],
             bool,
+            bool,
             Path | None,
         ],
         int,

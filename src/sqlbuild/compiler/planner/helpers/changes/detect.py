@@ -29,8 +29,11 @@ from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
 )
-from sqlbuild.compiler.planner.main.version_identity_metadata import (
-    build_version_identity_metadata_json,
+from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
+    build_function_local_hashes,
+)
+from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
+    build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -59,6 +62,9 @@ def detect_changes(
     """Detect selected model and function changes."""
 
     model_changes: dict[str, ChangeDetectionResult] = {}
+    function_local_hashes: dict[str, str] = build_function_local_hashes(
+        functions=project.functions,
+    )
     key: CompiledObjectKey
     for key in scope.execution_order:
         if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
@@ -72,6 +78,7 @@ def detect_changes(
             sqlglot_enabled=project.settings.sqlglot,
             query_change_tracking=project.settings.query_change_tracking,
             full_refresh=full_refresh,
+            function_local_hashes=function_local_hashes,
         )
 
     function_changes: dict[str, FunctionChangeResult] = {}
@@ -108,13 +115,14 @@ def detect_model_changes(
     sqlglot_enabled: bool,
     query_change_tracking: bool,
     full_refresh: bool,
+    function_local_hashes: dict[str, str] | None = None,
 ) -> ChangeDetectionResult:
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
-    metadata_json: str = build_version_identity_metadata_json(
-        model_name=model.name,
-        config_values=model.config.values,
+    metadata_json: str = build_model_version_identity_metadata_json(
+        model=model,
+        function_local_hashes=function_local_hashes,
     )
 
     if full_refresh:

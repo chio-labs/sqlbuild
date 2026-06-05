@@ -84,6 +84,287 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
     "test_case",
     [
         RunE2ETestCase(
+            description="run changes-only prunes unchanged selected model",
+            expected_exit_code=0,
+            expected_table_names=("orders",),
+            expected_view_names=(),
+        )
+    ],
+    ids=["run changes-only prunes unchanged selected model"],
+)
+def test_given_built_direct_project_when_running_changes_only_then_prunes_unchanged_model(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_run",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_run"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+    initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"),
+        project_dir=project_dir,
+    )
+    assert initial_run_result.returncode == test_case.expected_exit_code, (
+        initial_run_result.stdout + initial_run_result.stderr
+    )
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert run_result.returncode == test_case.expected_exit_code, (
+        run_result.stdout + run_result.stderr
+    )
+    assert "Plan ready (0 selected)" in run_result.stdout
+    assert "TOTAL=0" in run_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
+            description="run changes-only appends source freshness after success",
+            expected_exit_code=0,
+            expected_table_names=("orders",),
+            expected_view_names=(),
+        )
+    ],
+    ids=["run changes-only appends source freshness after success"],
+)
+def test_given_source_freshness_when_running_changes_only_then_writes_state_after_success(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_changes_only_run",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_changes_only_run"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"),
+        project_dir=project_dir,
+    )
+    assert initial_run_result.returncode == test_case.expected_exit_code, (
+        initial_run_result.stdout + initial_run_result.stderr
+    )
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert run_result.returncode == test_case.expected_exit_code, (
+        run_result.stdout + run_result.stderr
+    )
+    assert "Plan ready (1 selected)" in run_result.stdout
+    assert table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        table_name="_sqlbuild_source_freshness",
+    )
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
+    )
+    assert rows == [("raw_orders", "1")]
+
+    steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert steady_state_result.returncode == test_case.expected_exit_code, (
+        steady_state_result.stdout + steady_state_result.stderr
+    )
+    assert "Plan ready (0 selected)" in steady_state_result.stdout
+    assert "TOTAL=0" in steady_state_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
+            description="run changes-only source freshness does not append after model failure",
+            expected_exit_code=1,
+            expected_table_names=("orders",),
+            expected_view_names=(),
+        )
+    ],
+    ids=["run changes-only source freshness does not append after model failure"],
+)
+def test_given_source_freshness_failure_when_running_changes_only_then_does_not_append(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_failed_changes_only_run",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_failed_changes_only_run"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"),
+        project_dir=project_dir,
+    )
+    assert initial_run_result.returncode == 0, initial_run_result.stdout + initial_run_result.stderr
+    first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert first_changes_only_result.returncode == 0, (
+        first_changes_only_result.stdout + first_changes_only_result.stderr
+    )
+    (project_dir / "sources" / "raw.yml").write_text(
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: integer\n"
+        "      query: SELECT 2 AS data_version\n",
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT CAST('bad' AS INTEGER) AS order_id\n",
+        encoding="utf-8",
+    )
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert run_result.returncode == test_case.expected_exit_code, (
+        run_result.stdout + run_result.stderr
+    )
+    assert "orders" in run_result.stdout
+    assert "FAIL" in run_result.stdout
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
+            "ORDER BY observed_at"
+        ),
+    )
+    assert rows == [("raw_orders", "1")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
+            description="run changes-only source freshness propagates through view downstream",
+            expected_exit_code=0,
+            expected_table_names=("fact_orders",),
+            expected_view_names=("stg_orders",),
+        )
+    ],
+    ids=["run changes-only source freshness propagates through view downstream"],
+)
+def test_given_source_freshness_view_chain_when_running_changes_only_then_executes_downstream(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_view_chain_run",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_view_chain_run"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+    initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"),
+        project_dir=project_dir,
+    )
+    assert initial_run_result.returncode == test_case.expected_exit_code, (
+        initial_run_result.stdout + initial_run_result.stderr
+    )
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert run_result.returncode == test_case.expected_exit_code, (
+        run_result.stdout + run_result.stderr
+    )
+    assert "Plan ready (2 selected)" in run_result.stdout
+    assert "stg_orders" in run_result.stdout
+    assert "fact_orders" in run_result.stdout
+    assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name="stg_orders")
+    assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name="fact_orders")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
             description="generated factory nodes participate in run build and check lifecycle",
             expected_exit_code=0,
             expected_table_names=("fact_orders",),

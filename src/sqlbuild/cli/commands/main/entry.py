@@ -130,6 +130,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser.add_argument("--defer-to", default=None)
     run_parser.add_argument("--defer-sources-to", default=None)
     run_parser.add_argument("--json", action="store_true", default=False)
+    run_parser.add_argument("--changes-only", action="store_true", default=False)
     run_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True
     )
@@ -638,6 +639,7 @@ def _main_with_dependencies(
                 args.verbose,
                 args.debug,
                 args.vars,
+                args.changes_only,
                 args.json,
                 args.json_output,
             )
