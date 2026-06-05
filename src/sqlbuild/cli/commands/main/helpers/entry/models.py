@@ -76,6 +76,7 @@ class CliNamespace:
     lineage_depth: str = "all"
     lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     no_connection: bool = False
+    fail_on_error: bool = False
     full: bool = False
     schema_only: bool = False
     allow_partial_diff: bool = False
@@ -207,6 +208,20 @@ class CliEntrypointHandlers:
             bool,
             bool,
             Path | None,
+        ],
+        int,
+    ]
+    run_freshness: Callable[
+        [
+            Path | None,
+            bool,
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+            Path | None,
+            bool,
         ],
         int,
     ]

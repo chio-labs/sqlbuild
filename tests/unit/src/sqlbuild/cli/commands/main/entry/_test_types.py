@@ -26,6 +26,7 @@ class MainTestCase:
     expected_debug: bool = False
     expected_json: bool = False
     expected_json_output_path: Path | None = None
+    expected_fail_on_error: bool = False
     expected_manifest: bool = False
     expected_dag: str | None = None
     expected_compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST

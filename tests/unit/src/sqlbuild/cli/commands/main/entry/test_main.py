@@ -148,6 +148,21 @@ EXECUTION_JSON_TEST_CASES: list[MainTestCase] = [
     ),
 ]
 
+FRESHNESS_JSON_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="passes freshness json flag",
+        argv=["freshness", "--json"],
+        expected_exit_code=8,
+        expected_json=True,
+    ),
+    MainTestCase(
+        description="passes freshness json output path",
+        argv=["freshness", "--json-output", "target/freshness.json"],
+        expected_exit_code=8,
+        expected_json_output_path=Path("target/freshness.json"),
+    ),
+]
+
 COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="returns parser error for command local debug",
@@ -1034,6 +1049,111 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
             run_load=record_json_handler,
             run_scenario=record_json_handler,
         ),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(test_case.expected_json, test_case.expected_json_output_path)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes freshness flags to handler",
+            argv=[
+                "freshness",
+                "--no-sql-validation",
+                "--select",
+                "raw_orders",
+                "raw_payments",
+                "--exclude",
+                "raw_events",
+                "--vars",
+                '{"tenant":"acme"}',
+                "--fail-on-error",
+            ],
+            expected_exit_code=8,
+            expected_no_sql_validation=True,
+            expected_select=("raw_orders", "raw_payments"),
+            expected_vars={"tenant": "acme"},
+            expected_fail_on_error=True,
+        )
+    ],
+    ids=["passes freshness flags to handler"],
+)
+def test_given_freshness_arguments_when_running_then_dispatches_expected_arguments(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            bool,
+            tuple[str, ...],
+            tuple[str, ...],
+            dict[str, object],
+            bool,
+        ]
+    ] = []
+
+    def run_freshness(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        cli_vars: dict[str, object],
+        json_output: bool,
+        json_output_path: Path | None,
+        fail_on_error: bool,
+    ) -> int:
+        del project_dir, no_color, json_output, json_output_path
+        received_args.append((no_sql_validation, select, exclude, cli_vars, fail_on_error))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_freshness=run_freshness),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_no_sql_validation,
+            test_case.expected_select,
+            ("raw_events",),
+            test_case.expected_vars,
+            test_case.expected_fail_on_error,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    FRESHNESS_JSON_TEST_CASES,
+    ids=[case.description for case in FRESHNESS_JSON_TEST_CASES],
+)
+def test_given_freshness_json_arguments_when_running_then_dispatches_expected_arguments(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[bool, Path | None]] = []
+
+    def run_freshness(
+        project_dir: Path | None,
+        no_sql_validation: bool,
+        no_color: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        cli_vars: dict[str, object],
+        json_output: bool,
+        json_output_path: Path | None,
+        fail_on_error: bool,
+    ) -> int:
+        del project_dir, no_sql_validation, no_color, select, exclude, cli_vars, fail_on_error
+        received_args.append((json_output, json_output_path))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_freshness=run_freshness),
     )
 
     assert exit_code == test_case.expected_exit_code
