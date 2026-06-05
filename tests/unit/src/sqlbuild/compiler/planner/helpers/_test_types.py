@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
+    PlannerScope,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -57,6 +58,12 @@ class SourceColumnsTestCase:
     adapter_column_names: tuple[str, ...]
     expected_queried_sql: tuple[str, ...]
     expected_source_column_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlannerSourceFreshnessReadMapTestCase:
+    description: str
+    expected_observed_data_version: str
 
 
 @dataclass(frozen=True)
@@ -144,6 +151,13 @@ class FindPathKeysErrorTestCase:
     start: CompiledObjectKey
     end: CompiledObjectKey
     expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
+class PruneUnchangedScopeTestCase:
+    description: str
+    scope: PlannerScope
+    expected_selected_keys: frozenset[CompiledObjectKey]
 
 
 @dataclass(frozen=True)

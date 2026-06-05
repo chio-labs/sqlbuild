@@ -7,20 +7,25 @@ from pathlib import Path
 
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models.core import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationDestination,
     CompileModelConfig,
+    FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
-from sqlbuild.compiler.planner.models import WarehouseSnapshot
+from sqlbuild.compiler.planner.models import PlannerScope, WarehouseSnapshot
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import (
     DetectModelChangesTestCase,
+    DetectModelMetadataTestCase,
 )
 
 _STUB_TS: datetime = datetime(2026, 1, 15, 12, 0, 0)
@@ -41,6 +46,129 @@ def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> Compile
             database=None, schema="staging", name=test_case.model_name, qualified_name=None
         ),
         schema_entry=schema_entry,
+    )
+
+
+def build_model_from_metadata_test_case(
+    test_case: DetectModelMetadataTestCase,
+) -> CompiledModel:
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+        deps=tuple(
+            CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=dep_name)
+            for dep_name in test_case.deps
+        ),
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        query_sql="SELECT 1 AS order_id",
+        config=CompileModelConfig(values=test_case.config_values),
+        destination=CompiledRelationDestination(
+            database=None, schema="staging", name="orders", qualified_name=None
+        ),
+        schema_entry=SchemaModelEntry(
+            name="orders",
+            columns=tuple(
+                SchemaColumn(name=column[0], type=column[1], nullable=column[2])
+                for column in test_case.schema_columns
+            ),
+        )
+        if test_case.schema_columns
+        else None,
+    )
+
+
+def build_snapshot_for_metadata_test_case(
+    test_case: DetectModelMetadataTestCase,
+) -> WarehouseSnapshot:
+    return WarehouseSnapshot(
+        existing_relations={
+            "orders": RelationInfo(
+                database=None,
+                schema="staging",
+                name="orders",
+                relation_type="BASE TABLE",
+            )
+        },
+        existing_columns={},
+        fingerprints={
+            "orders": Fingerprint(
+                model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_001",
+                query_hash=compute_query_hash("SELECT 1 AS order_id"),
+                ast_hash=None,
+                schema_fingerprint="schema_a",
+                query_sql="SELECT 1 AS order_id",
+                metadata_json=test_case.previous_metadata_json,
+                ts=_STUB_TS,
+            )
+        },
+    )
+
+
+def build_project_for_function_metadata_detection() -> CompiledProject:
+    function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.FUNCTION,
+        name="is_large_order",
+    )
+    model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+        deps=(function_key,),
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        query_sql="SELECT is_large_order(amount) AS large_order FROM orders",
+        config=CompileModelConfig(values={}),
+        destination=CompiledRelationDestination(
+            database=None, schema="staging", name="orders", qualified_name=None
+        ),
+    )
+    function_destination: CompiledRelationDestination = CompiledRelationDestination(
+        database=None,
+        schema="staging",
+        name="is_large_order",
+        qualified_name=None,
+    )
+    function: CompiledFunction = CompiledFunction(
+        key=function_key,
+        deps=(),
+        name="is_large_order",
+        relative_path=Path("functions/is_large_order.sql"),
+        arguments=(FunctionArgument(name="amount", type="INTEGER"),),
+        returns="BOOLEAN",
+        body_sql="amount > 100",
+        destination=function_destination,
+        fingerprint_destination=function_destination,
+        language=FunctionLanguage.SQL,
+    )
+    return CompiledProject(
+        run_id="run_001",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=(model,),
+        functions=(function,),
+    )
+
+
+def build_scope_for_function_metadata_detection() -> PlannerScope:
+    model_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="orders",
+    )
+    function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.FUNCTION,
+        name="is_large_order",
+    )
+    project: CompiledProject = build_project_for_function_metadata_detection()
+    return PlannerScope(
+        upstream_deps={model_key: (function_key,), function_key: ()},
+        downstream_deps={function_key: (model_key,), model_key: ()},
+        all_keys={"orders": model_key, "is_large_order": function_key},
+        models_by_name={"orders": project.models[0]},
+        selected_keys=frozenset({model_key}),
+        execution_order=(function_key, model_key),
     )
 
 

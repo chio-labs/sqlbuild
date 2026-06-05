@@ -7,6 +7,7 @@ import json
 import re
 from collections import Counter
 from collections.abc import Callable, Sequence
+from typing import cast
 
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
@@ -101,6 +102,12 @@ def format_plan(
         lines.append(style.success_strong(header))
 
     _format_virtual_metadata(
+        lines,
+        plan,
+        section_header_style=resolved_section_header_style,
+        display_options=resolved_display_options,
+    )
+    _format_direct_source_freshness_metadata(
         lines,
         plan,
         section_header_style=resolved_section_header_style,
@@ -978,6 +985,14 @@ def _format_virtual_metadata(
     raw_incomplete_source_names: object | None = plan.metadata.get(
         "virtual_source_freshness_incomplete_source_names"
     )
+    raw_unchanged_source_names: object | None = plan.metadata.get(
+        "virtual_source_freshness_unchanged_source_names"
+    )
+    unchanged_source_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_unchanged_source_names)
+        if isinstance(raw_unchanged_source_names, (tuple, list))
+        else ()
+    )
     incomplete_source_names: tuple[str, ...] = (
         tuple(str(item) for item in raw_incomplete_source_names)
         if isinstance(raw_incomplete_source_names, (tuple, list))
@@ -1003,6 +1018,13 @@ def _format_virtual_metadata(
                 display_options=display_options,
             )
             lines.append(f"  source freshness observed set: {observed_source_set}")
+        lines.append(f"  source freshness unchanged: {len(unchanged_source_names)}")
+        if unchanged_source_names:
+            unchanged_source_set: str = _format_capped_name_list(
+                unchanged_source_names,
+                display_options=display_options,
+            )
+            lines.append(f"  source freshness unchanged set: {unchanged_source_set}")
         lines.append(f"  source freshness incomplete: {len(incomplete_source_names)}")
         if incomplete_source_names:
             incomplete_source_set: str = _format_capped_name_list(
@@ -1036,6 +1058,71 @@ def _format_virtual_metadata(
             display_options=display_options,
         )
         lines.append(f"  remaining stale after selection: {remaining_stale_set}")
+
+
+def _format_direct_source_freshness_metadata(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    section_header_style: Callable[[str], str],
+    display_options: DisplayOptions,
+) -> None:
+    raw_metadata: object | None = plan.metadata.get("direct_source_freshness")
+    if not isinstance(raw_metadata, dict):
+        return
+    source_freshness_metadata: dict[str, object] = cast(dict[str, object], raw_metadata)
+    observed_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("observed_source_names")
+    )
+    changed_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("changed_source_names")
+    )
+    unchanged_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("unchanged_source_names")
+    )
+    unknown_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("unknown_source_names")
+    )
+    stale_model_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("stale_model_names")
+    )
+    if not observed_source_names and not unknown_source_names:
+        return
+    lines.append("")
+    lines.append(section_header_style("Source freshness"))
+    lines.append(f"  observed: {len(observed_source_names)}")
+    if observed_source_names:
+        lines.append(
+            "  observed set: "
+            + _format_capped_name_list(observed_source_names, display_options=display_options)
+        )
+    lines.append(f"  changed: {len(changed_source_names)}")
+    if changed_source_names:
+        lines.append(
+            "  changed set: "
+            + _format_capped_name_list(changed_source_names, display_options=display_options)
+        )
+    lines.append(f"  unchanged: {len(unchanged_source_names)}")
+    if unchanged_source_names:
+        lines.append(
+            "  unchanged set: "
+            + _format_capped_name_list(unchanged_source_names, display_options=display_options)
+        )
+    lines.append(f"  unknown: {len(unknown_source_names)}")
+    if unknown_source_names:
+        lines.append(
+            "  unknown set: "
+            + _format_capped_name_list(unknown_source_names, display_options=display_options)
+        )
+    if stale_model_names:
+        lines.append(
+            "  source-stale models: "
+            + _format_capped_name_list(stale_model_names, display_options=display_options)
+        )
+
+
+def _metadata_string_tuple(raw_value: object | None) -> tuple[str, ...]:
+    return tuple(str(item) for item in raw_value) if isinstance(raw_value, (tuple, list)) else ()
 
 
 def _format_capped_name_list(names: tuple[str, ...], *, display_options: DisplayOptions) -> str:

@@ -381,17 +381,27 @@ def _optional_freshness_config(
         label="source freshness",
         error_class=SourceParseError,
     )
+    lag_tolerance: str | None = optional_non_empty_string(
+        entry=freshness,
+        key="lag_tolerance",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
     config: SourceFreshnessConfig = SourceFreshnessConfig(
         strategy=strategy,
         value_kind=value_kind,
         column=column,
         query=query,
+        lag_tolerance=lag_tolerance,
     )
     _validate_freshness_config(config=config, file_path=file_path)
     return config
 
 
 def _validate_freshness_config(*, config: SourceFreshnessConfig, file_path: Path) -> None:
+    if config.lag_tolerance is not None:
+        _validate_source_freshness_lag_tolerance(config=config, file_path=file_path)
     if config.strategy == SourceFreshnessStrategy.ADAPTER:
         if config.value_kind is not None or config.column is not None or config.query is not None:
             raise SourceParseError(
@@ -420,6 +430,29 @@ def _validate_freshness_config(*, config: SourceFreshnessConfig, file_path: Path
         raise SourceParseError(f"{file_path} source freshness strategy sql requires type")
     if config.column is not None:
         raise SourceParseError(f"{file_path} source freshness strategy sql does not support column")
+
+
+def _validate_source_freshness_lag_tolerance(
+    *, config: SourceFreshnessConfig, file_path: Path
+) -> None:
+    if config.value_kind is not SourceFreshnessValueKind.TIMESTAMP:
+        raise SourceParseError(
+            f"{file_path} source freshness lag_tolerance requires type timestamp"
+        )
+    raw: str = config.lag_tolerance or ""
+    if not _is_valid_source_freshness_duration(raw):
+        raise SourceParseError(
+            f"{file_path} source freshness lag_tolerance must be a positive duration like "
+            "15m, 2h, or 1d"
+        )
+
+
+def _is_valid_source_freshness_duration(value: str) -> bool:
+    if len(value) < 2:
+        return False
+    unit: str = value[-1]
+    amount: str = value[:-1]
+    return unit in {"m", "h", "d"} and amount.isdigit() and int(amount) > 0
 
 
 def _optional_positive_int(*, entry: dict[str, object], key: str, file_path: Path) -> int | None:

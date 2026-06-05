@@ -37,6 +37,7 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
@@ -600,4 +601,5 @@ class PlanOutput:
     function_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
+    source_freshness: DirectSourceFreshnessPlanningResult | None = None
     metadata: dict[str, object] = field(default_factory=dict)

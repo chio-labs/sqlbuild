@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.spec.models.schema import SchemaColumn
+from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.virtual.freshness.helpers.runtime import (
+    build_current_virtual_source_freshness_records,
+)
 from sqlbuild.virtual.planner.helpers.planning import (
     build_default_virtual_selection,
     build_expected_local_hashes,
@@ -20,6 +28,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_source_causes,
     resolve_virtual_model_selection,
 )
+from sqlbuild.virtual.state.models import SourceFreshnessRecord
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     DefaultVirtualSelectionTestCase,
     ExpectedVersionHashesTestCase,
@@ -30,6 +39,7 @@ from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     StaleRootReasonsTestCase,
     StaleRootSourceCausesTestCase,
     VirtualModelSelectionTestCase,
+    VirtualSourceFreshnessLagToleranceTestCase,
 )
 from tests.unit.src.sqlbuild.virtual.planner.helpers.helpers import (
     build_virtual_planner_test_project,
@@ -296,6 +306,75 @@ def test_given_source_data_version_change_when_building_hashes_then_downstream_h
     assert (
         baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
     ) is test_case.expected_hashes_differ
+
+
+VIRTUAL_LAG_TOLERANCE_TEST_CASES: tuple[VirtualSourceFreshnessLagToleranceTestCase, ...] = (
+    VirtualSourceFreshnessLagToleranceTestCase(
+        description="virtual preserves previous within tolerance",
+        current_data_version="2026-01-15T12:05:00",
+        expected_record_data_version="2026-01-15T12:00:00",
+    ),
+    VirtualSourceFreshnessLagToleranceTestCase(
+        description="virtual preserves previous at tolerance boundary",
+        current_data_version="2026-01-15T12:10:00",
+        expected_record_data_version="2026-01-15T12:00:00",
+    ),
+    VirtualSourceFreshnessLagToleranceTestCase(
+        description="virtual uses current beyond tolerance",
+        current_data_version="2026-01-15T12:11:00",
+        expected_record_data_version="2026-01-15T12:11:00",
+    ),
+    VirtualSourceFreshnessLagToleranceTestCase(
+        description="virtual uses current for backwards timestamp movement",
+        current_data_version="2026-01-15T11:59:00",
+        expected_record_data_version="2026-01-15T11:59:00",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VIRTUAL_LAG_TOLERANCE_TEST_CASES,
+    ids=[case.description for case in VIRTUAL_LAG_TOLERANCE_TEST_CASES],
+)
+def test_given_virtual_lag_tolerance_when_building_current_records_then_preserves_baseline(
+    test_case: VirtualSourceFreshnessLagToleranceTestCase,
+) -> None:
+    previous_data_version: str = "2026-01-15T12:00:00"
+    previous_record: SourceFreshnessRecord = SourceFreshnessRecord(
+        virtual_environment_name="dev",
+        source_name="raw.orders",
+        strategy=SourceFreshnessStrategy.SQL.value,
+        value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
+        data_version=previous_data_version,
+        data_version_hash="previous-hash",
+        observed_at=datetime(2026, 1, 15, 12, 0, 0),
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: object = adapter.connect({"database": ":memory:"})
+    try:
+        records: tuple[SourceFreshnessRecord, ...] = build_current_virtual_source_freshness_records(
+            adapter=adapter,
+            connection=connection,
+            sources=(
+                SourceEntry(
+                    name="raw.orders",
+                    freshness=SourceFreshnessConfig(
+                        strategy=SourceFreshnessStrategy.SQL,
+                        value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                        query=f"SELECT CAST('{test_case.current_data_version}' AS TIMESTAMP)",
+                        lag_tolerance="10m",
+                    ),
+                ),
+            ),
+            virtual_environment_name="dev",
+            observed_at=datetime(2026, 1, 15, 12, 30, 0),
+            previous_records=(previous_record,),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert records[0].data_version == test_case.expected_record_data_version
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,12 @@ import pytest
 from sqlbuild.adapter.shared.models import TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
+from sqlbuild.compiler.source_freshness.main.normalization import (
+    normalize_source_freshness_data_version,
+)
+from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
@@ -15,20 +21,15 @@ from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessV
 from sqlbuild.virtual.executor.helpers.source_freshness import (
     observe_virtual_environment_source_freshness,
 )
-from sqlbuild.virtual.freshness.exceptions import SourceFreshnessObservationError
-from sqlbuild.virtual.freshness.helpers.observation import observe_configured_source_freshness
 from sqlbuild.virtual.freshness.helpers.state import (
-    normalize_source_freshness_data_version,
     source_freshness_record_from_observation,
 )
-from sqlbuild.virtual.freshness.models import (
-    SourceFreshnessObservation,
-    SourceFreshnessRuntimeResult,
-)
+from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.state.models import SourceFreshnessRecord
 from tests.unit.src.sqlbuild.virtual.freshness._test_types import (
     SourceFreshnessObservationErrorTestCase,
     SourceFreshnessObservationTestCase,
+    SourceFreshnessRuntimeLagToleranceTestCase,
     SourceFreshnessRuntimeTestCase,
     SourceFreshnessStateErrorTestCase,
     SourceFreshnessStateTestCase,
@@ -522,3 +523,71 @@ def test_given_managed_loader_results_when_observing_freshness_then_applies_load
     assert records_by_source["raw.orders"] == previous_record
     assert records_by_source["raw.inventory"].strategy == "loader"
     assert records_by_source["raw.inventory"].data_version == "run-123"
+
+
+RUNTIME_LAG_TOLERANCE_TEST_CASES: tuple[SourceFreshnessRuntimeLagToleranceTestCase, ...] = (
+    SourceFreshnessRuntimeLagToleranceTestCase(
+        description="preserves previous within lag tolerance",
+        current_data_version="2026-01-01T12:05:00",
+        expected_record_data_version="2026-01-01T12:00:00",
+    ),
+    SourceFreshnessRuntimeLagToleranceTestCase(
+        description="preserves previous at lag tolerance boundary",
+        current_data_version="2026-01-01T12:10:00",
+        expected_record_data_version="2026-01-01T12:00:00",
+    ),
+    SourceFreshnessRuntimeLagToleranceTestCase(
+        description="advances beyond lag tolerance",
+        current_data_version="2026-01-01T12:11:00",
+        expected_record_data_version="2026-01-01T12:11:00",
+    ),
+    SourceFreshnessRuntimeLagToleranceTestCase(
+        description="advances on backwards timestamp movement",
+        current_data_version="2026-01-01T11:59:00",
+        expected_record_data_version="2026-01-01T11:59:00",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RUNTIME_LAG_TOLERANCE_TEST_CASES,
+    ids=[case.description for case in RUNTIME_LAG_TOLERANCE_TEST_CASES],
+)
+def test_given_virtual_runtime_lag_tolerance_when_observing_then_preserves_baseline(
+    test_case: SourceFreshnessRuntimeLagToleranceTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    previous_record: SourceFreshnessRecord = SourceFreshnessRecord(
+        virtual_environment_name="dev",
+        source_name="raw.orders",
+        strategy=SourceFreshnessStrategy.SQL.value,
+        value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
+        data_version="2026-01-01T12:00:00",
+        data_version_hash="previous-hash",
+        observed_at=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    try:
+        result: SourceFreshnessRuntimeResult = observe_virtual_environment_source_freshness(
+            adapter=adapter,
+            connection=connection,
+            sources=(
+                SourceEntry(
+                    name="raw.orders",
+                    freshness=SourceFreshnessConfig(
+                        strategy=SourceFreshnessStrategy.SQL,
+                        value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                        query=f"SELECT CAST('{test_case.current_data_version}' AS TIMESTAMP)",
+                        lag_tolerance="10m",
+                    ),
+                ),
+            ),
+            virtual_environment_name="dev",
+            observed_at=datetime(2026, 1, 1, 12, 30, 0),
+            previous_records=(previous_record,),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert result.records[0].data_version == test_case.expected_record_data_version

@@ -12,6 +12,13 @@ class ExpectedVersionHashesTestCase:
 
 
 @dataclass(frozen=True)
+class VirtualSourceFreshnessLagToleranceTestCase:
+    description: str
+    current_data_version: str
+    expected_record_data_version: str
+
+
+@dataclass(frozen=True)
 class DefaultVirtualSelectionTestCase:
     description: str
     stale_model_names: tuple[str, ...]

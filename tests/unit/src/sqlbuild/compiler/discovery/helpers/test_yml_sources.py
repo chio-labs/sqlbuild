@@ -213,6 +213,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               strategy: column
               column: updated_at
               type: timestamp
+              lag_tolerance: 15m
           - name: raw_customers
             schema: public
             table: customers
@@ -232,6 +233,7 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
         expected_freshness_value_kinds=(None, "timestamp", "integer"),
         expected_freshness_columns=(None, "updated_at", None),
         expected_freshness_queries=(None, None, "SELECT MAX(version) FROM raw.public.customers"),
+        expected_freshness_lag_tolerances=(None, "15m", None),
     ),
     ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
@@ -329,6 +331,13 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     )
     assert actual_freshness_queries == expected_or_actual(
         test_case.expected_freshness_queries, actual_freshness_queries
+    )
+    actual_freshness_lag_tolerances: tuple[str | None, ...] = tuple(
+        None if entry.freshness is None else entry.freshness.lag_tolerance
+        for entry in source_entries
+    )
+    assert actual_freshness_lag_tolerances == expected_or_actual(
+        test_case.expected_freshness_lag_tolerances, actual_freshness_lag_tolerances
     )
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
@@ -784,6 +793,45 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               type: integer
         """,
         expected_error_fragment="source freshness strategy sql does not support column",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness lag tolerance has non-timestamp type",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              query: SELECT MAX(version) FROM raw.orders
+              type: integer
+              lag_tolerance: 10m
+        """,
+        expected_error_fragment="source freshness lag_tolerance requires type timestamp",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness lag tolerance is invalid",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              query: SELECT MAX(updated_at) FROM raw.orders
+              type: timestamp
+              lag_tolerance: soon
+        """,
+        expected_error_fragment="source freshness lag_tolerance must be a positive duration",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness lag tolerance uses seconds",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              query: SELECT MAX(updated_at) FROM raw.orders
+              type: timestamp
+              lag_tolerance: 30s
+        """,
+        expected_error_fragment="source freshness lag_tolerance must be a positive duration",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source audits is not a list",
