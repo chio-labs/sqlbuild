@@ -63,6 +63,14 @@ class DirectSourceFreshnessPlanningTestCase:
 
 
 @dataclass(frozen=True)
+class DirectSourceFreshnessLagToleranceTestCase:
+    description: str
+    current_query: str
+    expected_changed_count: int
+    expected_unchanged_count: int
+
+
+@dataclass(frozen=True)
 class DirectSourceFreshnessUnknownTestCase:
     description: str
     expected_unknown_source_names: tuple[str, ...]

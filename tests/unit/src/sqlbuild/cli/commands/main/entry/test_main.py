@@ -2005,6 +2005,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
+        changes_only: bool = False,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
@@ -2021,6 +2022,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del verbose
         del debug
         del cli_vars
+        del changes_only
         del json_output
         del json_output_path
         del include_python

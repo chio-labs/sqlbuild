@@ -690,6 +690,90 @@ def test_given_source_freshness_when_building_changes_only_then_writes_state_aft
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
+            description="direct timestamp source freshness respects lag tolerance",
+            expected_exit_code=0,
+            expected_output_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+        )
+    ],
+    ids=["direct timestamp source freshness respects lag tolerance"],
+)
+def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_within_tolerance(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    source_yml: str = (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: timestamp\n"
+        "      lag_tolerance: 10m\n"
+        "      query: SELECT CAST('{data_version}' AS TIMESTAMP) AS data_version\n"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_source_freshness_lag_tolerance",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_source_freshness_lag_tolerance"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": source_yml.format(data_version="2026-01-01T12:00:00"),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    baseline_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert baseline_result.returncode == 0, baseline_result.stdout + baseline_result.stderr
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
+    )
+    within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert within_tolerance_result.returncode == test_case.expected_exit_code, (
+        within_tolerance_result.stdout + within_tolerance_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in within_tolerance_result.stdout, within_tolerance_result.stdout
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
+    )
+    beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert beyond_tolerance_result.returncode == 0, (
+        beyond_tolerance_result.stdout + beyond_tolerance_result.stderr
+    )
+    assert "Plan ready (1 selected)" in beyond_tolerance_result.stdout
+    assert "orders" in beyond_tolerance_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
             description="direct source freshness appends independent successful branch only",
             expected_exit_code=1,
             expected_output_fragments=("orders", "payments", "FAIL"),

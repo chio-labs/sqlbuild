@@ -10,14 +10,22 @@ from sqlbuild.adapter.shared.models import TableFreshnessMetadata
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
+from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+    source_freshness_data_version_hash,
+)
 from sqlbuild.compiler.source_freshness.main.planning import (
     build_direct_source_freshness_planning_result,
 )
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+    SourceFreshnessRecord,
+)
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     DirectSourceFreshnessAdapterDefaultTestCase,
+    DirectSourceFreshnessLagToleranceTestCase,
     DirectSourceFreshnessManagedSkipTestCase,
     DirectSourceFreshnessMultiSchemaTestCase,
     DirectSourceFreshnessPlanningErrorTestCase,
@@ -121,6 +129,100 @@ def test_given_direct_source_freshness_state_when_planning_then_classifies_hash_
     assert len(result.changed_identities) == test_case.expected_changed_count
     assert len(result.unchanged_identities) == test_case.expected_unchanged_count
     assert len(result.observed_records) == 1
+
+
+LAG_TOLERANCE_TEST_CASES: tuple[DirectSourceFreshnessLagToleranceTestCase, ...] = (
+    DirectSourceFreshnessLagToleranceTestCase(
+        description="within timestamp lag tolerance",
+        current_query="SELECT CAST('2026-01-15 12:05:00' AS TIMESTAMP) AS data_version",
+        expected_changed_count=0,
+        expected_unchanged_count=1,
+    ),
+    DirectSourceFreshnessLagToleranceTestCase(
+        description="exactly at timestamp lag tolerance boundary",
+        current_query="SELECT CAST('2026-01-15 12:10:00' AS TIMESTAMP) AS data_version",
+        expected_changed_count=0,
+        expected_unchanged_count=1,
+    ),
+    DirectSourceFreshnessLagToleranceTestCase(
+        description="beyond timestamp lag tolerance",
+        current_query="SELECT CAST('2026-01-15 12:11:00' AS TIMESTAMP) AS data_version",
+        expected_changed_count=1,
+        expected_unchanged_count=0,
+    ),
+    DirectSourceFreshnessLagToleranceTestCase(
+        description="backwards timestamp movement is conservative",
+        current_query="SELECT CAST('2026-01-15 11:59:00' AS TIMESTAMP) AS data_version",
+        expected_changed_count=1,
+        expected_unchanged_count=0,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LAG_TOLERANCE_TEST_CASES,
+    ids=[case.description for case in LAG_TOLERANCE_TEST_CASES],
+)
+def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_movement(
+    test_case: DirectSourceFreshnessLagToleranceTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    previous_data_version: str = "2026-01-15T12:00:00"
+    try:
+        connection.execute("CREATE SCHEMA state_schema")
+        write_source_freshness_record(
+            connection=connection,
+            execute=adapter.execute,
+            database=None,
+            schema="state_schema",
+            record=SourceFreshnessRecord(
+                source_name="raw.orders",
+                target_database=None,
+                target_schema=None,
+                target_name=None,
+                run_id="previous",
+                strategy=SourceFreshnessStrategy.SQL.value,
+                value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
+                data_version=previous_data_version,
+                data_version_hash=source_freshness_data_version_hash(
+                    source_name="raw.orders",
+                    strategy=SourceFreshnessStrategy.SQL,
+                    value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                    data_version=previous_data_version,
+                ),
+                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+        )
+
+        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
+            adapter=adapter,
+            connection=connection,
+            sources=(
+                SourceEntry(
+                    name="raw.orders",
+                    freshness=SourceFreshnessConfig(
+                        strategy=SourceFreshnessStrategy.SQL,
+                        value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                        query=test_case.current_query,
+                        lag_tolerance="10m",
+                    ),
+                ),
+            ),
+            state_database=None,
+            state_schemas=("state_schema",),
+            observed_at=datetime(2026, 1, 15, 12, 30, 0),
+            run_id="planning",
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert len(result.changed_identities) == test_case.expected_changed_count
+    assert len(result.unchanged_identities) == test_case.expected_unchanged_count
 
 
 @pytest.mark.parametrize(
