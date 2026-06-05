@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessComparableRecord
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -59,3 +60,65 @@ def source_freshness_data_version_hash(
     }
     encoded: bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def source_freshness_records_equivalent(
+    *,
+    previous_record: SourceFreshnessComparableRecord,
+    current_record: SourceFreshnessComparableRecord,
+    lag_tolerance: str | None = None,
+) -> bool:
+    """Return whether two source freshness records are equivalent for skip decisions."""
+
+    if previous_record.data_version_hash == current_record.data_version_hash:
+        return True
+    if lag_tolerance is None:
+        return False
+    if previous_record.value_kind != SourceFreshnessValueKind.TIMESTAMP.value:
+        return False
+    if current_record.value_kind != SourceFreshnessValueKind.TIMESTAMP.value:
+        return False
+    if previous_record.data_version is None or current_record.data_version is None:
+        return False
+    previous_timestamp: datetime = _parse_timestamp_data_version(previous_record.data_version)
+    current_timestamp: datetime = _parse_timestamp_data_version(current_record.data_version)
+    if current_timestamp < previous_timestamp:
+        return False
+    return current_timestamp - previous_timestamp <= _parse_lag_tolerance(lag_tolerance)
+
+
+def _parse_timestamp_data_version(value: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise SourceFreshnessObservationError(
+            f"Timestamp source freshness state value is not valid ISO datetime: {value}"
+        ) from exc
+
+
+def _parse_lag_tolerance(value: str) -> timedelta:
+    if len(value) < 2:
+        raise SourceFreshnessObservationError(
+            "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
+        )
+    unit: str = value[-1]
+    amount_text: str = value[:-1]
+    if unit not in {"m", "h", "d"} or not amount_text.isdigit():
+        raise SourceFreshnessObservationError(
+            "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
+        )
+    amount: int = int(amount_text)
+    if amount <= 0:
+        raise SourceFreshnessObservationError(
+            "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
+        )
+    match unit:
+        case "m":
+            return timedelta(minutes=amount)
+        case "h":
+            return timedelta(hours=amount)
+        case "d":
+            return timedelta(days=amount)
+    raise SourceFreshnessObservationError(
+        "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
+    )

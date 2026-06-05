@@ -985,6 +985,14 @@ def _format_virtual_metadata(
     raw_incomplete_source_names: object | None = plan.metadata.get(
         "virtual_source_freshness_incomplete_source_names"
     )
+    raw_unchanged_source_names: object | None = plan.metadata.get(
+        "virtual_source_freshness_unchanged_source_names"
+    )
+    unchanged_source_names: tuple[str, ...] = (
+        tuple(str(item) for item in raw_unchanged_source_names)
+        if isinstance(raw_unchanged_source_names, (tuple, list))
+        else ()
+    )
     incomplete_source_names: tuple[str, ...] = (
         tuple(str(item) for item in raw_incomplete_source_names)
         if isinstance(raw_incomplete_source_names, (tuple, list))
@@ -1010,6 +1018,13 @@ def _format_virtual_metadata(
                 display_options=display_options,
             )
             lines.append(f"  source freshness observed set: {observed_source_set}")
+        lines.append(f"  source freshness unchanged: {len(unchanged_source_names)}")
+        if unchanged_source_names:
+            unchanged_source_set: str = _format_capped_name_list(
+                unchanged_source_names,
+                display_options=display_options,
+            )
+            lines.append(f"  source freshness unchanged set: {unchanged_source_set}")
         lines.append(f"  source freshness incomplete: {len(incomplete_source_names)}")
         if incomplete_source_names:
             incomplete_source_set: str = _format_capped_name_list(
@@ -1062,6 +1077,9 @@ def _format_direct_source_freshness_metadata(
     changed_source_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("changed_source_names")
     )
+    unchanged_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("unchanged_source_names")
+    )
     unknown_source_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("unknown_source_names")
     )
@@ -1083,6 +1101,12 @@ def _format_direct_source_freshness_metadata(
         lines.append(
             "  changed set: "
             + _format_capped_name_list(changed_source_names, display_options=display_options)
+        )
+    lines.append(f"  unchanged: {len(unchanged_source_names)}")
+    if unchanged_source_names:
+        lines.append(
+            "  unchanged set: "
+            + _format_capped_name_list(unchanged_source_names, display_options=display_options)
         )
     lines.append(f"  unknown: {len(unknown_source_names)}")
     if unknown_source_names:

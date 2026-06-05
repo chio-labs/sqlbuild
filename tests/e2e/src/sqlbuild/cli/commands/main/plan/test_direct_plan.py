@@ -683,6 +683,105 @@ def test_given_observable_source_freshness_when_planning_changes_only_then_does_
     "test_case",
     [
         DirectPlanE2ETestCase(
+            description=(
+                "direct changes-only plan respects timestamp source freshness lag tolerance"
+            ),
+            expected_fragments=(
+                "Plan ready (0 selected)",
+                "Source freshness",
+                "changed: 0",
+                "unchanged: 1",
+                "unchanged set: raw_orders",
+            ),
+        )
+    ],
+    ids=["direct changes-only plan respects timestamp source freshness lag tolerance"],
+)
+def test_given_timestamp_lag_tolerance_when_planning_changes_only_then_skips_within_tolerance(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    source_yml: str = (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: timestamp\n"
+        "      lag_tolerance: 10m\n"
+        "      query: SELECT CAST('{data_version}' AS TIMESTAMP) AS data_version\n"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_plan_source_freshness_lag_tolerance",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_plan_source_freshness_lag_tolerance"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": source_yml.format(data_version="2026-01-01T12:00:00"),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    baseline_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert baseline_result.returncode == 0, baseline_result.stdout + baseline_result.stderr
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
+    )
+    within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+
+    assert within_tolerance_result.returncode == 0, (
+        within_tolerance_result.stdout + within_tolerance_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in within_tolerance_result.stdout, within_tolerance_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in within_tolerance_result.stdout, within_tolerance_result.stdout
+
+    json_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--changes-only", "--json"), project_dir=project_dir
+    )
+    assert json_plan_result.returncode == 0, json_plan_result.stdout + json_plan_result.stderr
+    payload: dict[str, Any] = json.loads(json_plan_result.stdout)
+    source_metadata: dict[str, Any] = payload["metadata"]["direct_source_freshness"]
+    assert source_metadata["changed_source_names"] == []
+    assert source_metadata["unchanged_source_names"] == ["raw_orders"]
+    assert source_metadata["stale_model_names"] == []
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
+    )
+    beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+
+    assert beyond_tolerance_result.returncode == 0, (
+        beyond_tolerance_result.stdout + beyond_tolerance_result.stderr
+    )
+    assert "Plan ready (1 selected)" in beyond_tolerance_result.stdout
+    assert "orders" in beyond_tolerance_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
             description="direct source freshness propagates through view downstream",
             expected_fragments=(
                 "Plan ready (2 selected)",

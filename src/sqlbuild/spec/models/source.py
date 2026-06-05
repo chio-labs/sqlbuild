@@ -28,6 +28,7 @@ class SourceFreshnessConfig:
     value_kind: SourceFreshnessValueKind | None = None
     column: str | None = None
     query: str | None = None
+    lag_tolerance: str | None = None
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,9 @@ from sqlbuild.compiler.source_freshness.main.normalization import (
 )
 from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
+from sqlbuild.compiler.source_freshness.main.record_equivalence import (
+    source_freshness_records_equivalent,
+)
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
@@ -81,7 +84,13 @@ def build_direct_source_freshness_planning_result(
         if previous_record is None:
             changed_identities.add(observed_record.identity)
             continue
-        if previous_record.data_version_hash == observed_record.data_version_hash:
+        if source_freshness_records_equivalent(
+            previous_record=previous_record,
+            current_record=observed_record,
+            lag_tolerance=observation_source.freshness.lag_tolerance
+            if observation_source.freshness is not None
+            else None,
+        ):
             unchanged_identities.add(observed_record.identity)
         else:
             changed_identities.add(observed_record.identity)

@@ -67,6 +67,13 @@ class SourceFreshnessRuntimeTestCase:
 
 
 @dataclass(frozen=True)
+class SourceFreshnessRuntimeLagToleranceTestCase:
+    description: str
+    current_data_version: str
+    expected_record_data_version: str
+
+
+@dataclass(frozen=True)
 class VirtualSourceFreshnessCompatibilityTestCase:
     description: str
     expected_same_object: bool

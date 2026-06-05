@@ -6,6 +6,9 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness.main.record_equivalence import (
+    source_freshness_records_equivalent,
+)
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
@@ -67,7 +70,13 @@ def observe_virtual_environment_source_freshness(
             if managed_record is None:
                 unknown_source_names.append(source.name)
                 continue
-            records.append(managed_record)
+            records.append(
+                _record_with_lag_tolerance_applied(
+                    source=source,
+                    current_record=managed_record,
+                    previous_record=previous_record_by_source.get(source.name),
+                )
+            )
             if source.freshness is None:
                 generated_source_names.append(source.name)
             continue
@@ -81,10 +90,15 @@ def observe_virtual_environment_source_freshness(
         if observation is None:
             unknown_source_names.append(source.name)
             continue
+        current_record: SourceFreshnessRecord = source_freshness_record_from_observation(
+            observation,
+            virtual_environment_name=virtual_environment_name,
+        )
         records.append(
-            source_freshness_record_from_observation(
-                observation,
-                virtual_environment_name=virtual_environment_name,
+            _record_with_lag_tolerance_applied(
+                source=source,
+                current_record=current_record,
+                previous_record=previous_record_by_source.get(source.name),
             )
         )
 
@@ -140,6 +154,10 @@ def build_current_virtual_source_freshness_records(
     )
     managed_sources: tuple[SourceEntry, ...] = tuple(source for source in sources if source.managed)
     managed_source_names: frozenset[str] = frozenset(source.name for source in managed_sources)
+    sources_by_name: dict[str, SourceEntry] = {source.name: source for source in unmanaged_sources}
+    previous_records_by_source: dict[str, SourceFreshnessRecord] = {
+        record.source_name: record for record in previous_records
+    }
     previous_managed_records: tuple[SourceFreshnessRecord, ...] = tuple(
         record for record in previous_records if record.source_name in managed_source_names
     )
@@ -158,16 +176,37 @@ def build_current_virtual_source_freshness_records(
             for source in managed_sources
             if source.freshness is None and source.name not in previous_managed_source_names
         )
+    current_unmanaged_records: tuple[SourceFreshnessRecord, ...] = tuple(
+        _record_with_lag_tolerance_applied(
+            source=sources_by_name[record.source_name],
+            current_record=record,
+            previous_record=previous_records_by_source.get(record.source_name),
+        )
+        for record in current_unmanaged_result.records
+    )
     return tuple(
         sorted(
-            (
-                *previous_managed_records,
-                *generated_managed_records,
-                *current_unmanaged_result.records,
-            ),
+            (*previous_managed_records, *generated_managed_records, *current_unmanaged_records),
             key=lambda record: record.source_name,
         )
     )
+
+
+def _record_with_lag_tolerance_applied(
+    *,
+    source: SourceEntry,
+    current_record: SourceFreshnessRecord,
+    previous_record: SourceFreshnessRecord | None,
+) -> SourceFreshnessRecord:
+    if previous_record is None or source.freshness is None:
+        return current_record
+    if source_freshness_records_equivalent(
+        previous_record=previous_record,
+        current_record=current_record,
+        lag_tolerance=source.freshness.lag_tolerance,
+    ):
+        return previous_record
+    return current_record
 
 
 def _generated_managed_loader_record(

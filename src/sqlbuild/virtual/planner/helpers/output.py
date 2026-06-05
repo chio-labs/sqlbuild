@@ -98,6 +98,7 @@ def with_virtual_metadata(
     stale_root_names: tuple[str, ...],
     remaining_stale_model_names: tuple[str, ...] = (),
     source_freshness_observed_source_names: tuple[str, ...] = (),
+    source_freshness_unchanged_source_names: tuple[str, ...] = (),
     source_freshness_incomplete_source_names: tuple[str, ...] = (),
     source_freshness_incomplete_model_names: tuple[str, ...] = (),
 ) -> PlanOutput:
@@ -114,6 +115,9 @@ def with_virtual_metadata(
             "virtual_remaining_stale_model_names": remaining_stale_model_names,
             "virtual_source_freshness_observed_source_names": (
                 source_freshness_observed_source_names
+            ),
+            "virtual_source_freshness_unchanged_source_names": (
+                source_freshness_unchanged_source_names
             ),
             "virtual_source_freshness_incomplete_source_names": (
                 source_freshness_incomplete_source_names

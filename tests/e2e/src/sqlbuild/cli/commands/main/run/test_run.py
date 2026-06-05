@@ -212,6 +212,88 @@ def test_given_source_freshness_when_running_changes_only_then_writes_state_afte
     "test_case",
     [
         RunE2ETestCase(
+            description="run changes-only respects timestamp source freshness lag tolerance",
+            expected_exit_code=0,
+            expected_table_names=("orders",),
+            expected_view_names=(),
+        )
+    ],
+    ids=["run changes-only respects timestamp source freshness lag tolerance"],
+)
+def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_within_tolerance(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    source_yml: str = (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: timestamp\n"
+        "      lag_tolerance: 10m\n"
+        "      query: SELECT CAST('{data_version}' AS TIMESTAMP) AS data_version\n"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_source_freshness_lag_tolerance",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_source_freshness_lag_tolerance"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": source_yml.format(data_version="2026-01-01T12:00:00"),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"), project_dir=project_dir
+    )
+    assert initial_run_result.returncode == test_case.expected_exit_code, (
+        initial_run_result.stdout + initial_run_result.stderr
+    )
+    baseline_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"), project_dir=project_dir
+    )
+    assert baseline_result.returncode == test_case.expected_exit_code, (
+        baseline_result.stdout + baseline_result.stderr
+    )
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
+    )
+    within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"), project_dir=project_dir
+    )
+
+    assert within_tolerance_result.returncode == test_case.expected_exit_code, (
+        within_tolerance_result.stdout + within_tolerance_result.stderr
+    )
+    assert "Plan ready (0 selected)" in within_tolerance_result.stdout
+    assert "TOTAL=0" in within_tolerance_result.stdout
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
+    )
+    beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"), project_dir=project_dir
+    )
+
+    assert beyond_tolerance_result.returncode == test_case.expected_exit_code, (
+        beyond_tolerance_result.stdout + beyond_tolerance_result.stderr
+    )
+    assert "Plan ready (1 selected)" in beyond_tolerance_result.stdout
+    assert "orders" in beyond_tolerance_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
             description="run changes-only source freshness does not append after model failure",
             expected_exit_code=1,
             expected_table_names=("orders",),

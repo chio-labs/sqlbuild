@@ -180,6 +180,26 @@ def build_source_version_hashes(
     return {record.source_name: record.data_version_hash for record in records}
 
 
+def build_source_freshness_unchanged_source_names(
+    *,
+    previous_records: tuple[SourceFreshnessRecord, ...],
+    current_records: tuple[SourceFreshnessRecord, ...],
+) -> tuple[str, ...]:
+    """Return source names whose current freshness record matches previous state."""
+
+    previous_by_source: dict[str, SourceFreshnessRecord] = {
+        record.source_name: record for record in previous_records
+    }
+    return tuple(
+        sorted(
+            record.source_name
+            for record in current_records
+            if previous_by_source.get(record.source_name) is not None
+            and previous_by_source[record.source_name].data_version_hash == record.data_version_hash
+        )
+    )
+
+
 def build_stale_model_names(
     *,
     model_names: tuple[str, ...],
