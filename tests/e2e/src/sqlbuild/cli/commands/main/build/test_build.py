@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     BuildE2ETestCase,
+    DirectChangesOnlyBuildE2ETestCase,
     DirectPythonBuildHardeningE2ETestCase,
     PythonBuildE2ETestCase,
 )
@@ -342,6 +344,637 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         expected_markers=(("source_profile.txt", "5"),),
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct changes-only build prunes unchanged selected model",
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "Plan ready (0 selected)",
+                "Execution  sqb build",
+                "Completed successfully.",
+                "TOTAL=0",
+            ),
+            unexpected_output_fragments=("1/1", "orders"),
+        )
+    ],
+    ids=["direct changes-only build prunes unchanged selected model"],
+)
+def test_given_built_direct_project_when_building_changes_only_then_prunes_unchanged_model(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    output: str = build_result.stdout
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_output_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct changes-only build executes changed selected model",
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "Plan ready (1 selected)",
+                "Query changed (1)",
+                "1/1",
+                "orders",
+                "TOTAL=1",
+            ),
+            unexpected_output_fragments=("Plan ready (0 selected)",),
+            expected_query_results=((2,),),
+        )
+    ],
+    ids=["direct changes-only build executes changed selected model"],
+)
+def test_given_direct_query_change_when_building_changes_only_then_executes_changed_model(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changed_changes_only_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changed_changes_only_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 2 AS order_id\n",
+        encoding="utf-8",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    output: str = build_result.stdout
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_output_fragments:
+        assert fragment not in output, output
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id FROM orders",
+    )
+    assert tuple(rows) == test_case.expected_query_results
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct build persists function hashes in model metadata",
+            expected_exit_code=0,
+            expected_output_fragments=("fact_orders",),
+        )
+    ],
+    ids=["direct build persists function hashes in model metadata"],
+)
+def test_given_direct_function_dependency_when_building_then_persists_function_hash_metadata(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_function_metadata_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_function_metadata_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "functions/sql/is_large_order.sql": (
+                "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+                "query_change_backfill full);\n\namount > 100\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT __udf("is_large_order")(150) AS is_large\n'
+            ),
+        },
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT metadata_json_b64 FROM main._sqlbuild_fingerprints "
+            "WHERE model_name = 'fact_orders' ORDER BY ts DESC LIMIT 1"
+        ),
+    )
+    metadata_json: str = base64.b64decode(str(rows[0][0])).decode("utf-8")
+    metadata_payload: dict[str, Any] = json.loads(metadata_json)
+    local_function_hashes: dict[str, Any] = metadata_payload["local_function_hashes"]
+    assert set(local_function_hashes) == {"is_large_order"}
+    assert local_function_hashes["is_large_order"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct changes-only build prunes read-side Python for unchanged SQL",
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "Plan ready (0 selected)",
+                "Completed successfully.",
+                "TOTAL=0",
+            ),
+            unexpected_output_fragments=("profile_orders", "Python read-side"),
+        )
+    ],
+    ids=["direct changes-only build prunes read-side Python for unchanged SQL"],
+)
+def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_read_side_python(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_python_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_python_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+            "tasks/profile.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def profile_orders(ctx):\n"
+                "    output = Path(__file__).parents[1].joinpath('profile.txt')\n"
+                "    output.write_text('ran')\n"
+                "    return ctx.result(metadata={'profiled': True})\n"
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "orders profile_orders"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    marker_path: Path = project_dir / "profile.txt"
+    assert marker_path.read_text(encoding="utf-8") == "ran"
+    marker_path.unlink()
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only", "--select", "orders profile_orders"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    output: str = build_result.stdout
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_output_fragments:
+        assert fragment not in output, output
+    assert not marker_path.exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct changes-only build appends source freshness after success",
+            expected_exit_code=0,
+            expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
+            unexpected_output_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["direct changes-only build appends source freshness after success"],
+)
+def test_given_source_freshness_when_building_changes_only_then_writes_state_after_success(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_source_freshness_build_read_only",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_source_freshness_build_read_only"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    assert table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        table_name="_sqlbuild_source_freshness",
+    )
+
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
+    )
+    assert rows == [("raw_orders", "1")]
+
+    steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert steady_state_result.returncode == 0, (
+        steady_state_result.stdout + steady_state_result.stderr
+    )
+    assert "Plan ready (0 selected)" in steady_state_result.stdout
+    assert "TOTAL=0" in steady_state_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct timestamp source freshness respects lag tolerance",
+            expected_exit_code=0,
+            expected_output_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+        )
+    ],
+    ids=["direct timestamp source freshness respects lag tolerance"],
+)
+def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_within_tolerance(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    source_yml: str = (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: timestamp\n"
+        "      lag_tolerance: 10m\n"
+        "      query: SELECT CAST('{data_version}' AS TIMESTAMP) AS data_version\n"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_source_freshness_lag_tolerance",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_source_freshness_lag_tolerance"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": source_yml.format(data_version="2026-01-01T12:00:00"),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    baseline_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert baseline_result.returncode == 0, baseline_result.stdout + baseline_result.stderr
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
+    )
+    within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert within_tolerance_result.returncode == test_case.expected_exit_code, (
+        within_tolerance_result.stdout + within_tolerance_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in within_tolerance_result.stdout, within_tolerance_result.stdout
+
+    (project_dir / "sources" / "raw.yml").write_text(
+        source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
+    )
+    beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert beyond_tolerance_result.returncode == 0, (
+        beyond_tolerance_result.stdout + beyond_tolerance_result.stderr
+    )
+    assert "Plan ready (1 selected)" in beyond_tolerance_result.stdout
+    assert "orders" in beyond_tolerance_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct source freshness appends independent successful branch only",
+            expected_exit_code=1,
+            expected_output_fragments=("orders", "payments", "FAIL"),
+        )
+    ],
+    ids=["direct source freshness appends independent successful branch only"],
+)
+def test_given_independent_source_branch_failure_when_building_then_appends_successful_source_only(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_independent_branch_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_independent_branch_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+                "  - name: raw_payments\n"
+                "    expression: SELECT 1 AS payment_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "models/payments.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_payments")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert first_changes_only_result.returncode == 0, (
+        first_changes_only_result.stdout + first_changes_only_result.stderr
+    )
+    (project_dir / "sources" / "raw.yml").write_text(
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: integer\n"
+        "      query: SELECT 2 AS data_version\n"
+        "  - name: raw_payments\n"
+        "    expression: SELECT 1 AS payment_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: integer\n"
+        "      query: SELECT 2 AS data_version\n",
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "payments.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT CAST('bad' AS INTEGER) AS payment_id\n",
+        encoding="utf-8",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout + build_result.stderr
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT source_name, COUNT(*) FROM main._sqlbuild_source_freshness "
+            "GROUP BY source_name ORDER BY source_name"
+        ),
+    )
+    assert rows == [("raw_orders", 2), ("raw_payments", 1)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct source freshness shared downstream failure blocks all sources",
+            expected_exit_code=1,
+            expected_output_fragments=("fact_orders", "FAIL"),
+        )
+    ],
+    ids=["direct source freshness shared downstream failure blocks all sources"],
+)
+def test_given_shared_downstream_failure_when_building_then_blocks_all_source_appends(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_shared_failure_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_shared_failure_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+                "  - name: raw_payments\n"
+                "    expression: SELECT 1 AS payment_id, 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT 1 AS data_version\n"
+            ),
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT o.order_id, p.payment_id FROM __source("raw_orders") o '
+                'JOIN __source("raw_payments") p USING (order_id)\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert first_changes_only_result.returncode == 0, (
+        first_changes_only_result.stdout + first_changes_only_result.stderr
+    )
+    (project_dir / "sources" / "raw.yml").write_text(
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    expression: SELECT 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: integer\n"
+        "      query: SELECT 2 AS data_version\n"
+        "  - name: raw_payments\n"
+        "    expression: SELECT 1 AS payment_id, 1 AS order_id\n"
+        "    freshness:\n"
+        "      strategy: sql\n"
+        "      type: integer\n"
+        "      query: SELECT 2 AS data_version\n",
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "fact_orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT CAST('bad' AS INTEGER) AS order_id\n",
+        encoding="utf-8",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout + build_result.stderr
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT source_name, COUNT(*) FROM main._sqlbuild_source_freshness "
+            "GROUP BY source_name ORDER BY source_name"
+        ),
+    )
+    assert rows == [("raw_orders", 1), ("raw_payments", 1)]
 
 
 @pytest.mark.parametrize(

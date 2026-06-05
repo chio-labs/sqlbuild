@@ -36,6 +36,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
     build_source_freshness_incomplete_model_names,
+    build_source_freshness_unchanged_source_names,
     build_source_version_hashes,
     build_stale_model_names,
     build_stale_root_cause_reasons,
@@ -113,6 +114,7 @@ def run_virtual_plan_pipeline(
             bound_version_hashes,
             bound_local_hashes,
             source_version_hashes,
+            source_freshness_unchanged_source_names,
             deferred_targets,
             deferred_relations,
             previous_query_sqls,
@@ -241,6 +243,7 @@ def run_virtual_plan_pipeline(
                 sorted(set(stale_model_names) - set(effective_select))
             ),
             source_freshness_observed_source_names=tuple(sorted(source_version_hashes)),
+            source_freshness_unchanged_source_names=source_freshness_unchanged_source_names,
             source_freshness_incomplete_source_names=tuple(
                 sorted(
                     source.name
@@ -284,6 +287,7 @@ def _read_bound_state(
     dict[str, str],
     dict[str, str],
     dict[str, str],
+    tuple[str, ...],
     dict[str, CompiledRelationDestination],
     dict[str, RelationInfo],
     dict[str, str],
@@ -306,27 +310,35 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if target_name is None:
-            return {}, {}, {}, {}, {}, {}, {}, {}
+            return {}, {}, {}, (), {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
-        source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+        previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
             backend.get_virtual_environment_source_freshness(
                 state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_name,
             )
         )
-        source_freshness_records = build_current_virtual_source_freshness_records(
-            adapter=adapter,
-            connection=source_connection,
-            sources=tuple(source.source_entry for source in graph.project.sources),
-            virtual_environment_name=target_name,
-            observed_at=datetime.now(),
-            previous_records=source_freshness_records,
+        source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+            build_current_virtual_source_freshness_records(
+                adapter=adapter,
+                connection=source_connection,
+                sources=tuple(source.source_entry for source in graph.project.sources),
+                virtual_environment_name=target_name,
+                observed_at=datetime.now(),
+                previous_records=previous_source_freshness_records,
+            )
+        )
+        source_freshness_unchanged_source_names: tuple[str, ...] = (
+            build_source_freshness_unchanged_source_names(
+                previous_records=previous_source_freshness_records,
+                current_records=source_freshness_records,
+            )
         )
         model_versions: dict[str, ModelVersionRecord | None] = {
             model_name: backend.get_model_version(
@@ -383,6 +395,7 @@ def _read_bound_state(
             bound_version_hashes,
             build_bound_local_hashes(model_versions),
             build_source_version_hashes(source_freshness_records),
+            source_freshness_unchanged_source_names,
             deferred_targets,
             deferred_relations,
             previous_query_sqls,

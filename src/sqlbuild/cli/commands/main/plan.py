@@ -131,6 +131,7 @@ def run_plan(
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
+            changes_only=changes_only,
             auto_load_sources=should_load_sources,
             select=select,
             exclude=exclude,

@@ -11,8 +11,11 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
-from sqlbuild.compiler.planner.main.version_identity_metadata import (
-    build_version_identity_metadata_json,
+from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
+    build_function_local_hashes as build_shared_function_local_hashes,
+)
+from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
+    build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.virtual.state.models import (
@@ -56,23 +59,7 @@ def build_expected_local_hashes(
 def build_function_local_hashes(*, graph: ProjectGraph) -> dict[str, str]:
     """Derive local-only semantic hashes for functions."""
 
-    return {
-        function.name: _stable_hash(
-            json.dumps(
-                {
-                    "arguments": [
-                        (argument.name, argument.type) for argument in function.arguments
-                    ],
-                    "returns": function.returns,
-                    "body_sql": function.body_sql,
-                    "language": function.language.value,
-                },
-                sort_keys=True,
-                default=str,
-            )
-        )
-        for function in graph.project.functions
-    }
+    return build_shared_function_local_hashes(functions=graph.project.functions)
 
 
 def build_model_fingerprint_metadata_jsons(
@@ -94,19 +81,9 @@ def build_model_fingerprint_metadata_jsons(
         model: Any | None = models_by_name.get(key.name)
         if model is None:
             continue
-        local_function_hashes: dict[str, str] = {}
-        upstream_key: Any
-        for upstream_key in model.deps:
-            if upstream_key.resource_type != CompiledResourceType.FUNCTION:
-                continue
-            upstream_hash: str | None = function_hashes.get(upstream_key.name)
-            if upstream_hash is not None:
-                local_function_hashes[upstream_key.name] = upstream_hash
-        result[model.name] = build_version_identity_metadata_json(
-            model_name=model.name,
-            config_values=model.config.values,
-            local_function_hashes=local_function_hashes,
-            execution_signature=_model_execution_signature(model),
+        result[model.name] = build_model_version_identity_metadata_json(
+            model=model,
+            function_local_hashes=function_hashes,
         )
     return result
 
@@ -201,6 +178,26 @@ def build_source_version_hashes(
     """Index source freshness input hashes by source name."""
 
     return {record.source_name: record.data_version_hash for record in records}
+
+
+def build_source_freshness_unchanged_source_names(
+    *,
+    previous_records: tuple[SourceFreshnessRecord, ...],
+    current_records: tuple[SourceFreshnessRecord, ...],
+) -> tuple[str, ...]:
+    """Return source names whose current freshness record matches previous state."""
+
+    previous_by_source: dict[str, SourceFreshnessRecord] = {
+        record.source_name: record for record in previous_records
+    }
+    return tuple(
+        sorted(
+            record.source_name
+            for record in current_records
+            if previous_by_source.get(record.source_name) is not None
+            and previous_by_source[record.source_name].data_version_hash == record.data_version_hash
+        )
+    )
 
 
 def build_stale_model_names(
@@ -299,41 +296,6 @@ def _metadata_function_hashes(metadata_json: str | None) -> dict[str, str]:
     if not isinstance(raw_hashes, dict):
         return {}
     return {str(name): str(value) for name, value in raw_hashes.items()}
-
-
-def _model_execution_signature(model: Any) -> dict[str, object]:
-    signature: dict[str, object] = {}
-    contract_signature: dict[str, object] | None = _contract_output_signature(model)
-    if contract_signature is not None:
-        signature["contract"] = contract_signature
-    if "config" in model.config.values:
-        signature["custom_config"] = model.config.values["config"]
-    if "placeholders" in model.config.values:
-        signature["custom_placeholders"] = model.config.values["placeholders"]
-    if "pre_hook" in model.config.values:
-        signature["pre_hook"] = model.config.values["pre_hook"]
-    if "post_hook" in model.config.values:
-        signature["post_hook"] = model.config.values["post_hook"]
-    return signature
-
-
-def _contract_output_signature(model: Any) -> dict[str, object] | None:
-    if model.config.values.get("contract") != "enforced":
-        return None
-    schema_entry: Any | None = model.schema_entry
-    if schema_entry is None or not schema_entry.columns:
-        return None
-    return {
-        "enforced": True,
-        "columns": [
-            {
-                "name": column.name,
-                "type": column.type,
-                "nullable": column.nullable,
-            }
-            for column in schema_entry.columns
-        ],
-    }
 
 
 def build_stale_root_causes(

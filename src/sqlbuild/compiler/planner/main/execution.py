@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -15,12 +16,14 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
+from sqlbuild.compiler.planner.helpers.changes_only import prune_unchanged_scope
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
 )
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
+from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_source_freshness_result
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
@@ -32,6 +35,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -43,6 +47,7 @@ def build_execution_plan(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     full_refresh: bool = False,
+    changes_only: bool = False,
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
@@ -106,6 +111,22 @@ def build_execution_plan(
         scope=scope,
         changes=changes,
     )
+    source_freshness: DirectSourceFreshnessPlanningResult | None = None
+    if changes_only:
+        source_freshness = build_planner_source_freshness_result(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            scope=scope,
+            relations=relations,
+        )
+    if changes_only and not full_refresh:
+        scope = prune_unchanged_scope(
+            scope=scope,
+            changes=changes,
+            resolved_actions=resolved_actions,
+            source_freshness=source_freshness,
+        )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
@@ -128,6 +149,42 @@ def build_execution_plan(
         model_entry_results=model_entry_results,
         reload_sources=reload_sources,
     )
+    if source_freshness is not None:
+        plan_output = replace(
+            plan_output,
+            source_freshness=source_freshness,
+            metadata={
+                **plan_output.metadata,
+                "direct_source_freshness": _serialize_direct_source_freshness_metadata(
+                    source_freshness
+                ),
+            },
+        )
     if on_progress is not None:
         on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
     return plan_output
+
+
+def _serialize_direct_source_freshness_metadata(
+    source_freshness: DirectSourceFreshnessPlanningResult,
+) -> dict[str, object]:
+    changed_source_names: tuple[str, ...] = tuple(
+        sorted(identity.source_name for identity in source_freshness.changed_identities)
+    )
+    unchanged_source_names: tuple[str, ...] = tuple(
+        sorted(identity.source_name for identity in source_freshness.unchanged_identities)
+    )
+    stale_model_names: tuple[str, ...] = (
+        tuple(sorted(source_freshness.propagation.stale_model_names))
+        if source_freshness.propagation is not None
+        else ()
+    )
+    return {
+        "observed_source_names": tuple(
+            sorted(record.source_name for record in source_freshness.observed_records)
+        ),
+        "changed_source_names": changed_source_names,
+        "unchanged_source_names": unchanged_source_names,
+        "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
+        "stale_model_names": stale_model_names,
+    }

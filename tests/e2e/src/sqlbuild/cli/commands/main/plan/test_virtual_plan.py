@@ -200,6 +200,94 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
     "test_case",
     [
         VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual plan respects timestamp source freshness lag tolerance",
+            expected_unchanged_fragments=(
+                "Plan ready (0 selected)",
+                "source freshness unchanged: 1",
+                "source freshness unchanged set: raw_orders",
+            ),
+            expected_fragments=("Plan ready (1 selected)", "fact_orders"),
+        )
+    ],
+    ids=["virtual plan respects timestamp source freshness lag tolerance"],
+)
+def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_tolerance(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_freshness_plan_lag_tolerance",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: data_version
+                      type: timestamp
+                      lag_tolerance: 10m
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, data_version TIMESTAMP);
+            INSERT INTO raw.raw_orders VALUES (7, '2026-01-01 12:00:00');
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 8, data_version = '2026-01-01 12:05:00'",
+    )
+    within_tolerance_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+
+    assert within_tolerance_plan_result.returncode == 0, within_tolerance_plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in within_tolerance_plan_result.stdout, within_tolerance_plan_result.stdout
+
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE raw.raw_orders SET id = 9, data_version = '2026-01-01 12:11:00'",
+    )
+    beyond_tolerance_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+    )
+
+    assert beyond_tolerance_plan_result.returncode == 0, beyond_tolerance_plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in beyond_tolerance_plan_result.stdout, beyond_tolerance_plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan keeps unknown source freshness stale",
             expected_unchanged_fragments=(
                 "Plan ready (1 selected)",

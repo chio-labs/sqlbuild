@@ -15,6 +15,9 @@ from sqlbuild.cli.commands.main.helpers.check import (
     write_check_results,
 )
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
+from sqlbuild.cli.commands.main.helpers.source_freshness import (
+    append_eligible_direct_source_freshness_records,
+)
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
@@ -184,6 +187,7 @@ def run_build(
         select=select,
         exclude=exclude,
         full_refresh=full_refresh,
+        changes_only=changes_only,
         auto_load_sources=should_load_sources,
         reload_sources=reload_sources,
         connection_config=connection_config,
@@ -298,6 +302,14 @@ def run_build(
         on_connection_error=execution_connection_progress.on_connection_error,
         use_color=use_color,
     )
+    if changes_only:
+        append_eligible_direct_source_freshness_records(
+            plan=plan_output,
+            result=result,
+            adapter=adapter,
+            connection_config=connection_config,
+            run_id=pipeline_result.project.run_id,
+        )
     python_lifecycle.finalize()
     python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
     check_results: tuple[PythonCheckExecutionResult, ...] = ()

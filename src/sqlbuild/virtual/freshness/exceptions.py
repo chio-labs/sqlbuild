@@ -1,7 +1,7 @@
-"""Source freshness observation exceptions."""
+"""Compatibility import for shared source freshness observation exceptions."""
 
 from __future__ import annotations
 
+from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 
-class SourceFreshnessObservationError(ValueError):
-    """Raised when source freshness cannot be observed safely."""
+__all__ = ["SourceFreshnessObservationError"]

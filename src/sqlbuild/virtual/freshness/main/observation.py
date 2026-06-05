@@ -6,11 +6,11 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.virtual.freshness.helpers.observation import (
+from sqlbuild.compiler.source_freshness.main.observation import (
     observe_configured_source_freshness as _observe_configured_source_freshness,
 )
-from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def observe_configured_source_freshness(
