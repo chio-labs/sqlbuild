@@ -15,6 +15,10 @@ from sqlbuild.compiler.planner.models import (
     ResolvedModelAction,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+    DirectSourceFreshnessPropagationResult,
+)
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     PruneUnchangedScopeTestCase,
 )
@@ -128,6 +132,59 @@ def test_given_mixed_change_results_when_pruning_unchanged_scope_then_keeps_only
                     backfill=BackfillResult(action=BackfillAction.FULL),
                 ),
             }
+        ),
+    )
+
+    assert result.selected_keys == test_case.expected_selected_keys
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PruneUnchangedScopeTestCase(
+            description="keeps unchanged model marked stale by source freshness",
+            scope=PlannerScope(
+                upstream_deps={},
+                downstream_deps={},
+                all_keys={},
+                models_by_name={},
+                selected_keys=frozenset({MODEL_UNCHANGED}),
+                execution_order=(),
+            ),
+            expected_selected_keys=frozenset({MODEL_UNCHANGED}),
+        )
+    ],
+    ids=["keeps unchanged model marked stale by source freshness"],
+)
+def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
+    test_case: PruneUnchangedScopeTestCase,
+) -> None:
+    result: PlannerScope = prune_unchanged_scope(
+        scope=test_case.scope,
+        changes=PlannerChangeResults(
+            models={
+                "unchanged_model": ChangeDetectionResult(
+                    model_name="unchanged_model",
+                    change_kind=ChangeKind.NO_CHANGE,
+                ),
+            },
+            functions={},
+        ),
+        resolved_actions=PlannerResolvedActions(
+            models={
+                "unchanged_model": ResolvedModelAction(
+                    change=ChangeDetectionResult(
+                        model_name="unchanged_model",
+                        change_kind=ChangeKind.NO_CHANGE,
+                    ),
+                    backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+                ),
+            }
+        ),
+        source_freshness=DirectSourceFreshnessPlanningResult(
+            propagation=DirectSourceFreshnessPropagationResult(
+                stale_model_names=frozenset({"unchanged_model"}),
+            ),
         ),
     )
 

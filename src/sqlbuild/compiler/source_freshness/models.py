@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
@@ -63,6 +63,17 @@ class SourceFreshnessSet:
 
 
 @dataclass(frozen=True)
+class DirectSourceFreshnessPropagationResult:
+    """Downstream model impact derived from direct source freshness roots."""
+
+    changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = field(
+        default_factory=dict
+    )
+    unknown_source_model_names: dict[str, frozenset[str]] = field(default_factory=dict)
+    stale_model_names: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class DirectSourceFreshnessPlanningResult:
     """Direct planning-time source freshness observations and comparisons."""
 
@@ -71,3 +82,4 @@ class DirectSourceFreshnessPlanningResult:
     changed_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unchanged_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unknown_source_names: tuple[str, ...] = ()
+    propagation: DirectSourceFreshnessPropagationResult | None = None

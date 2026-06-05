@@ -90,6 +90,17 @@ class DirectSourceFreshnessMultiSchemaTestCase:
 
 
 @dataclass(frozen=True)
+class DirectSourceFreshnessPropagationTestCase:
+    description: str
+    changed_source_names: tuple[str, ...]
+    unknown_source_names: tuple[str, ...]
+    downstream_edges: dict[str, tuple[str, ...]]
+    expected_stale_model_names: frozenset[str]
+    expected_changed_source_model_names: dict[str, frozenset[str]]
+    expected_unknown_source_model_names: dict[str, frozenset[str]]
+
+
+@dataclass(frozen=True)
 class DirectSourceFreshnessPlanningErrorTestCase:
     description: str
     expected_error_fragment: str

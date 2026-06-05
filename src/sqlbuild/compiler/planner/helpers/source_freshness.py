@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,6 +17,9 @@ from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerSco
 from sqlbuild.compiler.source_freshness.main.planning import (
     build_direct_source_freshness_planning_result,
 )
+from sqlbuild.compiler.source_freshness.main.propagation import (
+    build_direct_source_freshness_propagation_result,
+)
 from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 
 
@@ -29,15 +33,24 @@ def build_planner_source_freshness_result(
 ) -> DirectSourceFreshnessPlanningResult:
     """Build direct source freshness comparison data for planner output."""
 
-    return build_direct_source_freshness_planning_result(
-        adapter=adapter,
-        connection=connection,
-        sources=tuple(relations.source_read_map.values()),
-        state_database=_resolve_state_database(project),
-        state_schemas=_collect_state_schemas(project=project, scope=scope),
-        observed_at=datetime.now(UTC),
-        run_id="planning",
-        render_qualified_name=adapter.render_qualified_name,
+    source_freshness: DirectSourceFreshnessPlanningResult = (
+        build_direct_source_freshness_planning_result(
+            adapter=adapter,
+            connection=connection,
+            sources=tuple(relations.source_read_map.values()),
+            state_database=_resolve_state_database(project),
+            state_schemas=_collect_state_schemas(project=project, scope=scope),
+            observed_at=datetime.now(UTC),
+            run_id="planning",
+            render_qualified_name=adapter.render_qualified_name,
+        )
+    )
+    return replace(
+        source_freshness,
+        propagation=build_direct_source_freshness_propagation_result(
+            source_freshness=source_freshness,
+            scope=scope,
+        ),
     )
 
 

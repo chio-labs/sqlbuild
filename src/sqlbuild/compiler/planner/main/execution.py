@@ -111,11 +111,21 @@ def build_execution_plan(
         scope=scope,
         changes=changes,
     )
+    source_freshness: DirectSourceFreshnessPlanningResult | None = None
+    if changes_only:
+        source_freshness = build_planner_source_freshness_result(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            scope=scope,
+            relations=relations,
+        )
     if changes_only and not full_refresh:
         scope = prune_unchanged_scope(
             scope=scope,
             changes=changes,
             resolved_actions=resolved_actions,
+            source_freshness=source_freshness,
         )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
@@ -139,17 +149,42 @@ def build_execution_plan(
         model_entry_results=model_entry_results,
         reload_sources=reload_sources,
     )
-    if changes_only:
-        source_freshness: DirectSourceFreshnessPlanningResult = (
-            build_planner_source_freshness_result(
-                project=project,
-                adapter=adapter,
-                connection=connection,
-                scope=scope,
-                relations=relations,
-            )
+    if source_freshness is not None:
+        plan_output = replace(
+            plan_output,
+            source_freshness=source_freshness,
+            metadata={
+                **plan_output.metadata,
+                "direct_source_freshness": _serialize_direct_source_freshness_metadata(
+                    source_freshness
+                ),
+            },
         )
-        plan_output = replace(plan_output, source_freshness=source_freshness)
     if on_progress is not None:
         on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
     return plan_output
+
+
+def _serialize_direct_source_freshness_metadata(
+    source_freshness: DirectSourceFreshnessPlanningResult,
+) -> dict[str, object]:
+    changed_source_names: tuple[str, ...] = tuple(
+        sorted(identity.source_name for identity in source_freshness.changed_identities)
+    )
+    unchanged_source_names: tuple[str, ...] = tuple(
+        sorted(identity.source_name for identity in source_freshness.unchanged_identities)
+    )
+    stale_model_names: tuple[str, ...] = (
+        tuple(sorted(source_freshness.propagation.stale_model_names))
+        if source_freshness.propagation is not None
+        else ()
+    )
+    return {
+        "observed_source_names": tuple(
+            sorted(record.source_name for record in source_freshness.observed_records)
+        ),
+        "changed_source_names": changed_source_names,
+        "unchanged_source_names": unchanged_source_names,
+        "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
+        "stale_model_names": stale_model_names,
+    }
