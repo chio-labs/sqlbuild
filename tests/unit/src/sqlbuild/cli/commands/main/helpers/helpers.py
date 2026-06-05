@@ -20,6 +20,7 @@ from sqlbuild.compiler.source_freshness.models import (
 class RecordingAdapter:
     def __init__(self) -> None:
         self.insert_count: int = 0
+        self.executed_sql: list[str] = []
 
     def connect(self, _config: dict[str, object]) -> object:
         return object()
@@ -28,6 +29,7 @@ class RecordingAdapter:
         return None
 
     def execute(self, _connection: object, sql: str) -> None:
+        self.executed_sql.append(sql)
         if sql.strip().upper().startswith("INSERT"):
             self.insert_count += 1
 

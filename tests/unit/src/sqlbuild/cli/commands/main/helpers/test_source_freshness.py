@@ -76,3 +76,47 @@ def test_given_source_freshness_observation_when_appending_then_requires_success
     )
 
     assert adapter.insert_count == test_case.expected_insert_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceFreshnessAppendEligibilityTestCase(
+            description="uses adapter-rendered source freshness state relation",
+            model_statuses={"orders": ExecutionStatus.SUCCESS},
+            expected_insert_count=1,
+        )
+    ],
+    ids=["uses adapter-rendered source freshness state relation"],
+)
+def test_given_eligible_source_freshness_when_appending_then_uses_adapter_rendered_state_relation(
+    test_case: SourceFreshnessAppendEligibilityTestCase,
+) -> None:
+    adapter: RecordingAdapter = RecordingAdapter()
+
+    append_eligible_direct_source_freshness_records(
+        plan=PlanOutput(
+            model_entries=(model_entry("orders"),),
+            source_freshness=DirectSourceFreshnessPlanningResult(
+                observed_records=(source_freshness_record(),),
+                changed_identities=frozenset({source_freshness_identity()}),
+                propagation=DirectSourceFreshnessPropagationResult(
+                    changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
+                    stale_model_names=frozenset({"orders"}),
+                ),
+            ),
+        ),
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=tuple(
+                ModelExecutionResult(model_name=model_name, status=status)
+                for model_name, status in test_case.model_statuses.items()
+            ),
+        ),
+        adapter=cast(BaseAdapter, adapter),
+        connection_config={},
+        run_id="run-1",
+    )
+
+    assert adapter.insert_count == test_case.expected_insert_count
+    assert any("main._sqlbuild_source_freshness" in sql for sql in adapter.executed_sql)

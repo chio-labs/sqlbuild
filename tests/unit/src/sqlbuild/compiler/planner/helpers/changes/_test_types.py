@@ -26,6 +26,18 @@ class DetectModelChangesTestCase:
 
 
 @dataclass(frozen=True)
+class DetectModelMetadataTestCase:
+    description: str
+    config_values: dict[str, object]
+    schema_columns: tuple[tuple[str, str | None, bool | None], ...]
+    deps: tuple[str, ...]
+    function_local_hashes: dict[str, str]
+    previous_metadata_json: str
+    expected_change_kind: ChangeKind
+    expected_metadata_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class DetectQueryChangeTestCase:
     description: str
     compiled_query_hash: str
