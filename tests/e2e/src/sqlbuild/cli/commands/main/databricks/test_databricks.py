@@ -64,7 +64,73 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.adapters.databricks.helpers import build_unique_schema_name
+from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
+    build_databricks_connection_config,
+    build_unique_schema_name,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksCliTestCase(
+            description="source freshness uses databricks table metadata",
+            command=("--no-color", "freshness", "--select", "raw_orders"),
+            expected_stdout_fragments=(
+                "Observed (1)",
+                "raw_orders  integer",
+                "adapter",
+                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+            ),
+        )
+    ],
+    ids=["source freshness uses databricks table metadata"],
+)
+def test_given_physical_source_without_freshness_when_running_on_databricks_then_uses_metadata(
+    tmp_path: Path,
+    test_case: DatabricksCliTestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_freshness_meta")
+    catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_freshness_metadata",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_project_toml(
+                project_name="databricks_freshness_metadata",
+                schema_name=schema_name,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    database: {catalog_name}\n"
+                f"    schema: {schema_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        raw_orders_relation: str = relation_name(schema_name=schema_name, name="raw_orders")
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=f"CREATE OR REPLACE TABLE {raw_orders_relation} AS SELECT 1 AS id",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout, result.stdout
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
 
 
 @pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
