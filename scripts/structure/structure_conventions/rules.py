@@ -161,7 +161,9 @@ def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> l
         "models.py",
         "types.py",
         "constants.py",
+        "exceptions.py",
         "helpers.py",
+        "providers.py",
     }:
         return []
 
@@ -176,6 +178,54 @@ def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> l
             ),
         )
     ]
+
+
+def check_public_provider_module_shape(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Keep the public sqlbuild.providers module intentionally tiny."""
+
+    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if relative_parts != ("src", "sqlbuild", "providers.py"):
+        return []
+
+    violations: list[Violation] = []
+    public_class_names: list[str] = []
+    for node in _non_docstring_body(module):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        if isinstance(node, ast.ClassDef):
+            if node.name == "Provider":
+                public_class_names.append(node.name)
+                continue
+            violations.append(
+                Violation(
+                    code="SC042",
+                    path=file_path,
+                    line=node.lineno,
+                    message="src/sqlbuild/providers.py may only define the public Provider class",
+                )
+            )
+            continue
+        violations.append(
+            Violation(
+                code="SC042",
+                path=file_path,
+                line=getattr(node, "lineno", 1),
+                message="src/sqlbuild/providers.py may contain only imports and class Provider",
+            )
+        )
+
+    if public_class_names != ["Provider"]:
+        violations.append(
+            Violation(
+                code="SC042",
+                path=file_path,
+                line=1,
+                message="src/sqlbuild/providers.py must define exactly one public Provider class",
+            )
+        )
+    return violations
 
 
 def check_nested_runtime_package_direct_modules(
