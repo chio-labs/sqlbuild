@@ -66,9 +66,10 @@ def build_bigquery_virtual_seed_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "bigquery"\n'
+        'default_target = "dev"\n\n'
         "[settings]\n"
         "virtual_environments = true\n"
-        'default_target = "dev"\n\n'
+        "\n"
         "[connection]\n"
         'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
         f'location = "{location}"\n\n'
