@@ -16,7 +16,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
@@ -48,6 +48,7 @@ def execute_view_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
 
     try:
@@ -67,6 +68,7 @@ def execute_view_entry(
                 environment=effective_target_name,
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -76,6 +78,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
@@ -100,6 +103,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     audit_error: bool = False
@@ -131,6 +135,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
@@ -150,6 +155,7 @@ def execute_view_entry(
                 environment=effective_target_name,
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -160,6 +166,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try_write_fingerprint(
@@ -178,4 +185,5 @@ def execute_view_entry(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
     )

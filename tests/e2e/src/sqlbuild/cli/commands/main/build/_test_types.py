@@ -67,6 +67,7 @@ class PythonHooksBuildE2ETestCase:
     expected_exit_code: int
     expected_orders_rows: tuple[tuple[object, ...], ...]
     expected_hook_log_rows: tuple[tuple[object, ...], ...]
+    expected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,17 @@ class PythonHookFailureBuildE2ETestCase:
     expected_output_fragments: tuple[str, ...]
     expected_present_tables: tuple[str, ...]
     expected_absent_tables: tuple[str, ...]
+    model_sql: str | None = None
+
+
+@dataclass(frozen=True)
+class LongPythonHookNameBuildE2ETestCase:
+    """Test case for CLI display of long Python hook names."""
+
+    description: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

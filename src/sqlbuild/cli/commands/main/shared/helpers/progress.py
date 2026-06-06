@@ -27,7 +27,8 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.cli_style import CliStyle
@@ -44,6 +45,10 @@ _MAX_NAME_WIDTH: int = 60
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
 _SUB_INDENT: int = 2
+_HOOK_PHASE_WIDTH: int = 10
+_HOOK_TYPE_WIDTH: int = 8
+_HOOK_MIN_LABEL_WIDTH: int = 24
+_HOOK_MAX_LABEL_WIDTH: int = 56
 _SPINNER_TICK_SECONDS: float = 0.1
 _MAX_ERROR_LINES: int = 4
 _MAX_ERROR_LINE_LENGTH: int = 160
@@ -367,13 +372,6 @@ class BuildProgressCallbacks:
             duration=duration,
             detail=detail,
         )
-        if model_result.status == ExecutionStatus.FAILED and model_result.error_message:
-            self._write_error_detail(
-                error_code=model_result.error_code,
-                error_message=model_result.error_message,
-                error_help=model_result.error_help,
-            )
-
         if self._verbose:
             event: LifeCycleEvent
             for event in _resolve_verbose_events(
@@ -387,6 +385,14 @@ class BuildProgressCallbacks:
 
         sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
         sub_nw: int = self._name_width - _SUB_INDENT
+        hook_label_width: int = _hook_label_width(model_result.hook_results)
+
+        self._write_hook_results(
+            hook_results=model_result.hook_results,
+            phase=HookPhase.PRE_HOOKS,
+            sub_pad=sub_pad,
+            label_width=hook_label_width,
+        )
 
         test_result: SqlTestExecutionResult | None = self._test_results_by_model.get(
             model_result.model_name
@@ -434,7 +440,42 @@ class BuildProgressCallbacks:
             if self._verbose and entry.executed_sql is not None:
                 self._write_sql_block(entry.executed_sql)
 
+        self._write_hook_results(
+            hook_results=model_result.hook_results,
+            phase=HookPhase.POST_HOOKS,
+            sub_pad=sub_pad,
+            label_width=hook_label_width,
+        )
+
+        if model_result.status == ExecutionStatus.FAILED and model_result.error_message:
+            self._write_error_detail(
+                error_code=model_result.error_code,
+                error_message=model_result.error_message,
+                error_help=model_result.error_help,
+            )
+
         self._stream.flush()
+
+    def _write_hook_results(
+        self,
+        *,
+        hook_results: tuple[HookExecutionResult, ...],
+        phase: HookPhase,
+        sub_pad: str,
+        label_width: int,
+    ) -> None:
+        hook_result: HookExecutionResult
+        for hook_result in hook_results:
+            if hook_result.phase != phase:
+                continue
+            hook_status: str = self._style.status(_execution_status_display(hook_result.status))
+            hook_name: str = _truncate_name(hook_result.label, label_width)
+            label: str = "pre_hook" if phase == HookPhase.PRE_HOOKS else "post_hook"
+            self._stream.write(
+                f"{sub_pad}{label:<{_HOOK_PHASE_WIDTH}}"
+                f"{hook_result.hook_type:<{_HOOK_TYPE_WIDTH}}"
+                f"{hook_name:<{label_width}} {hook_status}\n"
+            )
 
     def _write_top_level_result_line(
         self,
@@ -924,6 +965,13 @@ def _resolve_verbose_events(
     if plan_entry is not None:
         return (LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=plan_entry.logical_ddl),)
     return ()
+
+
+def _hook_label_width(hook_results: tuple[HookExecutionResult, ...]) -> int:
+    if not hook_results:
+        return _HOOK_MIN_LABEL_WIDTH
+    longest_label: int = max(len(result.label) for result in hook_results)
+    return max(_HOOK_MIN_LABEL_WIDTH, min(longest_label, _HOOK_MAX_LABEL_WIDTH))
 
 
 def _format_display_sql(sql: str) -> str:
