@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
-from sqlbuild.shared.models import SqlHookEntry
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     ExtraAuditDefinition,
+    create_python_hook_data,
     run_failure_test,
     run_success_test,
     verify_failure_warehouse_state,
@@ -228,6 +231,28 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
             ),
         ],
         expected_row_count=1,
+    ),
+    TableSuccessTestCase(
+        description="python pre_hook runs before table materialization",
+        setup_sql=(),
+        model_sql="SELECT * FROM staging.python_hook_data",
+        target_schema="staging",
+        target_name="orders",
+        promotion_mode=TablePromotionMode.STAGED,
+        pre_hook=[PythonHookEntry(name="create_data", kwargs={"value": 42})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/table.py"),
+                name="create_data",
+                function=create_python_hook_data,
+            ),
+        ),
+        expected_row_count=1,
+        expected_lifecycle_event_fragments=(
+            "CREATE TABLE staging.python_hook_data AS SELECT 42 AS val",
+            "python pre-hook created data for orders",
+        ),
     ),
 ]
 

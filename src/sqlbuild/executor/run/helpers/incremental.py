@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.executor.auditing.main.execute import execute_audit
@@ -23,6 +25,7 @@ from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
@@ -47,6 +50,9 @@ def execute_incremental_entry(
     declared_columns: tuple[ColumnInfo, ...],
     run_id: str,
     query_change_tracking: bool,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    effective_target_name: str | None = None,
+    effective_vars: Mapping[str, object] | None = None,
 ) -> ModelExecutionResult:
     """Execute one incremental model through its delta/DML lifecycle."""
 
@@ -71,13 +77,22 @@ def execute_incremental_entry(
     resolved_sql: str = entry.resolved_sql
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.pre_hooks, phase_label="pre_hooks"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
+        )
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.pre_hooks,
-                phase_label="pre_hooks",
+                phase=HookPhase.PRE_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -320,14 +335,21 @@ def execute_incremental_entry(
 
     try:
         statement_recorder.record_many(
-            render_hooks(hooks=entry.post_hooks, phase_label="post_hooks")
+            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
         )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.post_hooks,
-                phase_label="post_hooks",
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
             )
     except Exception as exc:
         return build_failed_result(

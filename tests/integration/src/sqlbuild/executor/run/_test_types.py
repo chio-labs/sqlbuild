@@ -27,6 +27,8 @@ class TableSuccessTestCase:
     expected_column_names: tuple[str, ...] = field(default_factory=tuple)
     expected_column_types: tuple[str, ...] = field(default_factory=tuple)
     expected_warning_fragment: str | None = None
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
+    expected_lifecycle_event_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

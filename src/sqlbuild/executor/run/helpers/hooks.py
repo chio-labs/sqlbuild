@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.executor.run.models import HookContext, HookRelation
+from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 
@@ -14,7 +22,14 @@ def execute_hooks(
     connection: Any,
     adapter: BaseAdapter,
     hooks: object,
-    phase_label: str,
+    phase: HookPhase,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    model_name: str | None = None,
+    destination: CompiledRelationDestination | None = None,
+    run_id: str = "",
+    environment: str | None = None,
+    effective_vars: Mapping[str, object] | None = None,
+    statement_recorder: StatementRecorder | None = None,
 ) -> None:
     """Execute pre/post lifecycle hook entries."""
 
@@ -27,10 +42,21 @@ def execute_hooks(
         adapter.execute(connection, hooks.statement)
         return
     if isinstance(hooks, PythonHookEntry):
-        raise ExecutorInputError(
-            f'{phase_label} python("{hooks.name}") is valid at compile time, '
-            "but Python hook execution is not implemented yet"
+        invoke_python_hook(
+            connection=connection,
+            adapter=adapter,
+            hook_entry=hooks,
+            hook_functions=hook_functions,
+            hook_index=0,
+            phase=phase,
+            model_name=model_name,
+            destination=destination,
+            run_id=run_id,
+            environment=environment,
+            effective_vars=effective_vars,
+            statement_recorder=statement_recorder,
         )
+        return
     if isinstance(hooks, list | tuple):
         hook_index: int
         hook: object
@@ -40,23 +66,137 @@ def execute_hooks(
             elif isinstance(hook, SqlHookEntry):
                 adapter.execute(connection, hook.statement)
             elif isinstance(hook, PythonHookEntry):
-                raise ExecutorInputError(
-                    f'{phase_label}[{hook_index}] python("{hook.name}") is valid at compile time, '
-                    "but Python hook execution is not implemented yet"
+                invoke_python_hook(
+                    connection=connection,
+                    adapter=adapter,
+                    hook_entry=hook,
+                    hook_functions=hook_functions,
+                    hook_index=hook_index,
+                    phase=phase,
+                    model_name=model_name,
+                    destination=destination,
+                    run_id=run_id,
+                    environment=environment,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
                 )
             else:
                 raise ExecutorInputError(
-                    f'{phase_label}[{hook_index}] must be sql("...") or python("..."), '
+                    f'{phase.value}[{hook_index}] must be sql("...") or python("..."), '
                     f"got {type(hook).__name__}"
                 )
         return
     raise ExecutorInputError(
-        f'{phase_label} must be a sql("...")/python("...") hook entry or list of hook entries, '
+        f'{phase.value} must be a sql("...")/python("...") hook entry or list of hook entries, '
         f"got {type(hooks).__name__}"
     )
 
 
-def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
+def invoke_python_hook(
+    *,
+    connection: Any,
+    adapter: BaseAdapter,
+    hook_entry: PythonHookEntry,
+    hook_functions: tuple[DiscoveredHookFunction, ...],
+    hook_index: int,
+    phase: HookPhase,
+    model_name: str | None,
+    destination: CompiledRelationDestination | None,
+    run_id: str,
+    environment: str | None,
+    effective_vars: Mapping[str, object] | None,
+    statement_recorder: StatementRecorder | None,
+) -> None:
+    hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
+    hook_function: Callable[..., object] | None = _find_hook_function(
+        name=hook_entry.name,
+        hook_functions=hook_functions,
+    )
+    if hook_function is None:
+        raise ExecutorInputError(f"{hook_label} was not found in the runtime hook registry")
+    if model_name is None or destination is None:
+        raise ExecutorInputError(f"{hook_label} is missing runtime model context")
+
+    context: HookContext = build_hook_context(
+        connection=connection,
+        adapter=adapter,
+        hook_entry=hook_entry,
+        hook_index=hook_index,
+        phase=phase,
+        model_name=model_name,
+        destination=destination,
+        run_id=run_id,
+        environment=environment,
+        effective_vars=effective_vars or {},
+        statement_recorder=statement_recorder or StatementRecorder(),
+    )
+    kwargs: dict[str, object] = dict(hook_entry.kwargs)
+    context_parameter_name: str | None = _context_parameter_name(hook_function)
+    if context_parameter_name is not None:
+        kwargs[context_parameter_name] = context
+    try:
+        hook_function(**kwargs)
+    except Exception as exc:
+        raise ExecutorInputError(f"{hook_label} failed: {exc}") from exc
+
+
+def build_hook_context(
+    *,
+    connection: Any,
+    adapter: BaseAdapter,
+    hook_entry: PythonHookEntry,
+    hook_index: int,
+    phase: HookPhase,
+    model_name: str,
+    destination: CompiledRelationDestination,
+    run_id: str,
+    environment: str | None,
+    effective_vars: Mapping[str, object],
+    statement_recorder: StatementRecorder,
+) -> HookContext:
+    relation: HookRelation = HookRelation(
+        name=destination.name,
+        schema=destination.schema,
+        database=destination.database,
+        qualified=resolve_destination_qualified_name(adapter=adapter, target=destination),
+    )
+    return HookContext(
+        model_name=model_name,
+        phase=phase,
+        hook_name=hook_entry.name,
+        hook_index=hook_index,
+        run_id=run_id,
+        environment=environment,
+        vars=effective_vars,
+        target=relation,
+        destination=relation,
+        adapter_name=adapter.adapter_name,
+        adapter=adapter,
+        connection=connection,
+        statement_recorder=statement_recorder,
+    )
+
+
+def _find_hook_function(
+    *, name: str, hook_functions: tuple[DiscoveredHookFunction, ...]
+) -> Callable[..., object] | None:
+    hook_function: DiscoveredHookFunction
+    for hook_function in hook_functions:
+        if hook_function.name == name:
+            return hook_function.function
+    return None
+
+
+def _context_parameter_name(hook_function: Callable[..., object]) -> str | None:
+    parameters: Mapping[str, inspect.Parameter] = inspect.signature(hook_function).parameters
+    context_parameter_name: str
+    for context_parameter_name in ("ctx", "context", "hook_context"):
+        if context_parameter_name in parameters:
+            return context_parameter_name
+    return None
+
+
+def render_hooks(*, hooks: object, phase: HookPhase) -> tuple[str, ...]:
     if hooks is None:
         return ()
     if isinstance(hooks, str):
@@ -78,11 +218,11 @@ def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
                 continue
             else:
                 raise ExecutorInputError(
-                    f'{phase_label}[{hook_index}] must be sql("...") or python("..."), '
+                    f'{phase.value}[{hook_index}] must be sql("...") or python("..."), '
                     f"got {type(hook).__name__}"
                 )
         return tuple(statements)
     raise ExecutorInputError(
-        f'{phase_label} must be a sql("...")/python("...") hook entry or list of hook entries, '
+        f'{phase.value} must be a sql("...")/python("...") hook entry or list of hook entries, '
         f"got {type(hooks).__name__}"
     )

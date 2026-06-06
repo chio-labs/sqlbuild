@@ -369,6 +369,7 @@ def build_scenario_execution_plan(
             seed_entries=seed_entries,
             function_entries=function_entries,
             model_entries=tuple(model_entries),
+            hook_functions=project.hook_functions,
             expected_expectations=expected_expectations,
             assertion_expectations=assertion_expectations,
         ),
