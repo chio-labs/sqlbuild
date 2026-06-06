@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.helpers.scenario_relations import (
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
@@ -339,6 +341,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
                     "WHERE revenue < 0"
                 ),
             },
+            expected_hook_names=("notify",),
         )
     ],
     ids=["builds dry run scenario execution plan with scenario targets"],
@@ -347,6 +350,10 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
     test_case: ScenarioExecutionPlanTestCase,
 ) -> None:
     base_project: CompiledProject = build_scenario_relation_test_project()
+
+    def notify() -> None:
+        return None
+
     project: CompiledProject = replace(
         base_project,
         functions=(
@@ -355,6 +362,14 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
                     'EXISTS (SELECT 1 FROM __source("raw__orders")) '
                     'AND EXISTS (SELECT 1 FROM __ref("daily_revenue"))'
                 )
+            ),
+        ),
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/notify.py"),
+                name="notify",
+                function=notify,
             ),
         ),
     )
@@ -405,6 +420,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
     assert {
         expectation.name: expectation.sql for expectation in result.assertion_expectations
     } == test_case.expected_assertion_sql
+    assert tuple(hook.name for hook in result.hook_functions) == test_case.expected_hook_names
 
 
 UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES: list[ScenarioUnmockedSeedExecutionPlanTestCase] = [

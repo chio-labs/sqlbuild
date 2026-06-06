@@ -11,6 +11,15 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.executor.run.models import HookContext
+
+
+def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.snapshot_hook_log VALUES ('{phase}')")
+
+
+def fail_snapshot_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
 
 
 def build_result_model_plan_entry() -> ModelPlanEntry:
@@ -58,8 +67,8 @@ def build_contract_model_plan_entry(
 
 def build_snapshot_execution_plan_entry(
     *,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
     contract_enforced: bool = False,
     contract_columns: tuple[ColumnInfo, ...] = (),
 ) -> ModelPlanEntry:
@@ -90,8 +99,8 @@ def build_snapshot_execution_plan_entry(
         updated_at_column="updated_at",
         contract_enforced=contract_enforced,
         contract_columns=contract_columns,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 

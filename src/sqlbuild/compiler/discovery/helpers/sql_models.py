@@ -10,6 +10,7 @@ from typing import Any
 from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
 from sqlbuild.compiler.discovery.helpers.constants import MODEL_HEADER_PATTERN
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SourceLocation
 
@@ -36,6 +37,7 @@ _RELATION_CALL_NAMES: frozenset[str] = frozenset(
         SqlReferenceKind.SOURCE.function_name,
     }
 )
+_HOOK_CALL_NAMES: frozenset[str] = frozenset({"sql", "python"})
 
 
 def parse_model_sql(contents: str, file_path: Path) -> tuple[dict[str, object], str]:
@@ -429,6 +431,8 @@ class _ModelHeaderParser:
                 self._advance()
                 if token.value in _RELATION_CALL_NAMES:
                     return self._parse_relation_call(token.value)
+                if token.value in _HOOK_CALL_NAMES:
+                    return self._parse_hook_call(token.value)
                 return {token.value: self._parse_map(end_symbol=")")}
             return _parse_word_value(token.value)
         if self._match_symbol("["):
@@ -455,6 +459,31 @@ class _ModelHeaderParser:
         relation_name: str = token.value.replace('"', '\\"')
         self._consume_symbol(")")
         return f'{name}("{relation_name}")'
+
+    def _parse_hook_call(self, name: str) -> SqlHookEntry | PythonHookEntry:
+        if name == "sql":
+            statement_token: _ModelHeaderToken = self._peek()
+            if statement_token.kind != _STRING_TOKEN:
+                raise ModelHeaderSyntaxError("sql(...) requires a quoted SQL string")
+            self._advance()
+            if self._match_symbol(","):
+                raise ModelHeaderSyntaxError("sql(...) does not accept additional arguments")
+            self._consume_symbol(")")
+            return SqlHookEntry(statement=statement_token.value)
+
+        hook_name_token: _ModelHeaderToken = self._peek()
+        if hook_name_token.kind != _STRING_TOKEN:
+            raise ModelHeaderSyntaxError("python(...) requires a quoted hook name")
+        self._advance()
+        kwargs: dict[str, object] = {}
+        while self._match_symbol(","):
+            if self._is_at_end_symbol(")"):
+                break
+            key: str = self._consume_key()
+            self._consume_symbol(":")
+            kwargs[key] = self._parse_value()
+        self._consume_symbol(")")
+        return PythonHookEntry(name=hook_name_token.value, kwargs=kwargs)
 
     def _consume_key(self) -> str:
         token: _ModelHeaderToken = self._peek()

@@ -844,7 +844,8 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (\n  materialized table\n  pre_hook 'INVALID SQL STATEMENT'\n);\n\n"
+                "MODEL (\n  materialized table\n"
+                "  pre_hooks [sql('INVALID SQL STATEMENT')]\n);\n\n"
                 "SELECT 1 AS id"
             ),
             "models/orders.sql": (
@@ -865,7 +866,8 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML,
             "models/stg_orders.sql": (
-                "MODEL (\n  materialized table\n  post_hook 'INVALID SQL STATEMENT'\n);\n\n"
+                "MODEL (\n  materialized table\n"
+                "  post_hooks [sql('INVALID SQL STATEMENT')]\n);\n\n"
                 "SELECT 88 AS id"
             ),
             "models/orders.sql": (

@@ -35,6 +35,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredAuditFile,
     DiscoveredCheckFunction,
+    DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
@@ -55,11 +56,13 @@ from sqlbuild.compiler.shared.constants import (
     YAML_FILE_SUFFIXES,
 )
 from sqlbuild.factories import get_factory_definition
+from sqlbuild.hooks import get_hook_definition
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
 from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
     FactoryDefinition,
+    HookDefinition,
     TaskDefinition,
 )
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
@@ -394,6 +397,50 @@ def discover_python_node_functions(*, project_dir: Path) -> DiscoveredPythonNode
         assets=tuple(bucket.assets),
         checks=tuple(bucket.checks),
     )
+
+
+def discover_hook_functions(*, project_dir: Path) -> tuple[DiscoveredHookFunction, ...]:
+    """Discover decorated model lifecycle hook functions under hooks/."""
+
+    hooks_root: Path = project_dir / "hooks"
+    if not hooks_root.is_dir():
+        return ()
+
+    discovered_hooks: list[DiscoveredHookFunction] = []
+    seen_names: dict[str, Path] = {}
+    file_path: Path
+    for file_path in sorted(hooks_root.rglob("*.py")):
+        if file_path.stem == "__init__" or file_path.name.startswith("_"):
+            continue
+        module: ModuleType = _load_python_node_module(
+            file_path=file_path,
+            project_dir=project_dir,
+            node_folder="hooks",
+        )
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            hook_definition: HookDefinition | None = get_hook_definition(value)
+            if hook_definition is None:
+                continue
+            existing_path: Path | None = seen_names.get(hook_definition.name)
+            if existing_path is not None:
+                raise PythonNodeDiscoveryError(
+                    f"Duplicate hook name '{hook_definition.name}' found in "
+                    f"{existing_path.relative_to(project_dir)} and "
+                    f"{file_path.relative_to(project_dir)}"
+                )
+            seen_names[hook_definition.name] = file_path
+            discovered_hooks.append(
+                DiscoveredHookFunction(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=hook_definition.name,
+                    function=value,
+                    description=hook_definition.description,
+                )
+            )
+    return tuple(discovered_hooks)
 
 
 def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscoveryBucket:

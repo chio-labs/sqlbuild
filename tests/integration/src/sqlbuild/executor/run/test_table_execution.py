@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     ExtraAuditDefinition,
+    create_python_hook_data,
+    fail_table_hook,
+    insert_table_hook_log,
     run_failure_test,
     run_success_test,
     verify_failure_warehouse_state,
@@ -169,7 +175,7 @@ DIRECT_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.DIRECT,
-        post_hook="THIS IS NOT VALID SQL",
+        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_promoted_relation="staging.orders",
         expected_row_count=1,
@@ -198,7 +204,7 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        pre_hook="CREATE TABLE staging.hook_data AS SELECT 42 AS val",
+        pre_hook=[SqlHookEntry(statement="CREATE TABLE staging.hook_data AS SELECT 42 AS val")],
         expected_row_count=1,
     ),
     TableSuccessTestCase(
@@ -208,7 +214,9 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        post_hook="CREATE TABLE staging.post_hook_ran AS SELECT 1 AS marker",
+        post_hook=[
+            SqlHookEntry(statement="CREATE TABLE staging.post_hook_ran AS SELECT 1 AS marker")
+        ],
         expected_row_count=1,
     ),
     TableSuccessTestCase(
@@ -219,10 +227,65 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
         pre_hook=[
-            "CREATE TABLE staging.hook_step_1 AS SELECT 42 AS val",
-            "CREATE TABLE staging.hook_step_2 AS SELECT * FROM staging.hook_step_1",
+            SqlHookEntry(statement="CREATE TABLE staging.hook_step_1 AS SELECT 42 AS val"),
+            SqlHookEntry(
+                statement="CREATE TABLE staging.hook_step_2 AS SELECT * FROM staging.hook_step_1"
+            ),
         ],
         expected_row_count=1,
+    ),
+    TableSuccessTestCase(
+        description="python pre_hook runs before table materialization",
+        setup_sql=(),
+        model_sql="SELECT * FROM staging.python_hook_data",
+        target_schema="staging",
+        target_name="orders",
+        promotion_mode=TablePromotionMode.STAGED,
+        pre_hook=[PythonHookEntry(name="create_data", kwargs={"value": 42})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/table.py"),
+                name="create_data",
+                function=create_python_hook_data,
+            ),
+        ),
+        expected_row_count=1,
+        expected_lifecycle_event_fragments=(
+            "CREATE TABLE staging.python_hook_data AS SELECT 42 AS val",
+            "python pre-hook created data for orders",
+        ),
+    ),
+    TableSuccessTestCase(
+        description="mixed SQL and Python hooks execute around table materialization",
+        setup_sql=("CREATE TABLE staging.hook_log (phase VARCHAR)",),
+        model_sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        promotion_mode=TablePromotionMode.STAGED,
+        pre_hook=[
+            SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_pre')"),
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
+        ],
+        post_hook=[
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+            SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_post')"),
+        ],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/table.py"),
+                name="insert_hook_log",
+                function=insert_table_hook_log,
+            ),
+        ),
+        expected_row_count=1,
+        expected_query_results=(
+            (
+                "SELECT phase FROM staging.hook_log ORDER BY rowid",
+                (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
+            ),
+        ),
     ),
 ]
 
@@ -234,7 +297,7 @@ HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        pre_hook="THIS IS NOT VALID SQL",
+        pre_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
     ),
     TableFailureTestCase(
@@ -244,8 +307,29 @@ HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        post_hook="THIS IS NOT VALID SQL",
+        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_promoted_relation="staging.orders",
+        expected_row_count=1,
+    ),
+    TableFailureTestCase(
+        description="python post_hook failure marks table failed after promotion",
+        setup_sql=(),
+        model_sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        promotion_mode=TablePromotionMode.STAGED,
+        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "table post failed"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/table.py"),
+                name="fail_hook",
+                function=fail_table_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: table post failed',
         expected_promoted_relation="staging.orders",
         expected_row_count=1,
     ),

@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     ScenarioAssertionExpectationPlan,
@@ -24,10 +25,18 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     ScenarioArtifactKind,
 )
+from sqlbuild.executor.run.models import HookContext
 
 SCENARIO_NAME: str = "revenue__customer_refund"
 SCHEMA_NAME: str = "scenario_schema"
 HASH_PREFIX: str = "51b385aebe20"
+
+
+def insert_scenario_hook_log(ctx: HookContext, model_name: str) -> None:
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.destination.schema}.scenario_hook_log AS "
+        f"SELECT '{model_name}' AS model_name, '{ctx.phase}' AS phase"
+    )
 
 
 def build_duckdb_fixture_plans() -> tuple[ScenarioFixturePlan, ...]:
@@ -102,7 +111,11 @@ def build_duckdb_cleanup_plan() -> ScenarioExecutionPlan:
     )
 
 
-def build_duckdb_model_execution_plan() -> ScenarioExecutionPlan:
+def build_duckdb_model_execution_plan(
+    *,
+    stg_orders_pre_hooks: object = None,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+) -> ScenarioExecutionPlan:
     source_target: CompiledRelationDestination = _target(
         physical_name="__sqb_51b385aebe20__source__raw__orders"
     )
@@ -127,6 +140,7 @@ def build_duckdb_model_execution_plan() -> ScenarioExecutionPlan:
             "JOIN scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
             "ON o.country_code = c.country_code"
         ),
+        pre_hooks=stg_orders_pre_hooks,
     )
     daily_revenue: ModelPlanEntry = _model_entry(
         name="daily_revenue",
@@ -172,6 +186,7 @@ def build_duckdb_model_execution_plan() -> ScenarioExecutionPlan:
         ),
         fixture_plans=build_duckdb_fixture_plans()[:2],
         model_entries=(stg_orders, daily_revenue),
+        hook_functions=hook_functions,
     )
 
 
@@ -284,7 +299,14 @@ def _target(*, physical_name: str) -> CompiledRelationDestination:
     )
 
 
-def _model_entry(*, name: str, target: CompiledRelationDestination, sql: str) -> ModelPlanEntry:
+def _model_entry(
+    *,
+    name: str,
+    target: CompiledRelationDestination,
+    sql: str,
+    pre_hooks: object = None,
+    post_hooks: object = None,
+) -> ModelPlanEntry:
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         name=name,
@@ -296,4 +318,6 @@ def _model_entry(*, name: str, target: CompiledRelationDestination, sql: str) ->
         fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl="",
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )

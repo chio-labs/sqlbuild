@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.executor.shared.types import ExecutionPhase
 
 
 @dataclass(frozen=True)
@@ -47,11 +48,74 @@ class SnapshotAdapterRenderingTestCase:
 class SnapshotLifecycleTestCase:
     description: str
     run_id: str
-    pre_hook: tuple[str, ...]
-    post_hook: tuple[str, ...]
+    pre_hook: tuple[object, ...]
+    post_hook: tuple[object, ...]
     expected_hook_events: tuple[str, ...]
     expected_model_name: str
     expected_target_name: str
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SnapshotHookFailureTestCase:
+    description: str
+    pre_hooks: object
+    post_hooks: object
+    expected_phase: ExecutionPhase
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class RenderHooksTestCase:
+    description: str
+    hooks: object
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExecuteHooksTestCase:
+    description: str
+    hooks: object
+    expected_rows: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
+class PythonHookExecutionTestCase:
+    description: str
+    hooks: object
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonHookInvocationTestCase:
+    description: str
+    expected_message: str
+    expected_rows: list[tuple[object, ...]]
+    expected_model_name: str
+    expected_phase: str
+    expected_hook_name: str
+    expected_hook_index: int
+    expected_run_id: str
+    expected_environment: str
+    expected_vars: dict[str, object]
+    expected_destination_name: str
+    expected_destination_schema: str
+    expected_adapter_name: str
+    expected_recorded_events: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonHookContextParameterTestCase:
+    description: str
+    hook_name: str
+    expected_context_count: int
+    expected_return_ignored: object
+
+
+@dataclass(frozen=True)
+class PythonHookRuntimeErrorTestCase:
+    description: str
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 import re
 from dataclasses import fields, replace
 from datetime import UTC, datetime
+from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -82,6 +84,7 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredHookFunction,
     DiscoveredProjectInputs,
     DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
@@ -95,6 +98,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -113,7 +117,9 @@ from sqlbuild.spec.models.schema import (
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
+_LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
+_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
+_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "hook_context"})
 
 
 def build_model_inputs(
@@ -158,6 +164,11 @@ def build_model_inputs(
             model_name=model_file.file_path.stem,
             effective_target_name=effective_target_name,
             run_id=run_id,
+        )
+        validate_python_hook_config(
+            values=effective_config.values,
+            model_name=model_file.file_path.stem,
+            hook_functions=discovered_inputs.hook_functions,
         )
         # Keep the interpolated-but-unexpanded form for SQL test macro mocks.
         var_substituted_sql: str = substitute_sql_vars(
@@ -259,7 +270,7 @@ def build_model_inputs(
             )
         ):
             hook_name: str
-            for hook_name in ("pre_hook", "post_hook"):
+            for hook_name in ("pre_hooks", "post_hooks"):
                 validate_hook_sql_syntax(
                     value=expanded_config.values.get(hook_name),
                     hook_name=hook_name,
@@ -2313,6 +2324,7 @@ def build_model_config(
         matched_path_default=matched_path_default,
         model_header_values=model_header_values,
     )
+    validate_model_hook_config(values=layered_values, model_name=model_name)
     raw_hook_values: dict[str, object] = {
         hook_key: layered_values[hook_key]
         for hook_key in _MODEL_HOOK_KEYS
@@ -2396,8 +2408,146 @@ def expand_model_hook_macros(
             context_values=context_values,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            hook_key=hook_key,
         )
     return expanded_values
+
+
+def validate_model_hook_config(*, values: dict[str, object], model_name: str) -> None:
+    legacy_key: str
+    for legacy_key in sorted(_LEGACY_MODEL_HOOK_KEYS):
+        if legacy_key in values:
+            plural_key: str = f"{legacy_key}s"
+            raise CompileInputError(
+                f"model '{model_name}' uses legacy '{legacy_key}'; use typed '{plural_key}' "
+                'entries like sql("...") or python("hook_name")'
+            )
+
+    hook_key: str
+    for hook_key in sorted(_MODEL_HOOK_KEYS):
+        if hook_key not in values:
+            continue
+        raw_value: object = values[hook_key]
+        if not isinstance(raw_value, list | tuple):
+            raise CompileInputError(
+                f"model '{model_name}' {hook_key} must be a list of typed hook entries"
+            )
+        hook_entry: object
+        for hook_entry in raw_value:
+            if isinstance(hook_entry, SqlHookEntry | PythonHookEntry):
+                continue
+            raise CompileInputError(
+                f"model '{model_name}' {hook_key} entries must use typed sql(...) or "
+                "python(...) hook syntax"
+            )
+
+
+def validate_python_hook_config(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    hook_functions: tuple[DiscoveredHookFunction, ...],
+) -> None:
+    """Validate Python lifecycle hook references and explicit kwargs."""
+
+    hooks_by_name: dict[str, DiscoveredHookFunction] = {
+        hook_function.name: hook_function for hook_function in hook_functions
+    }
+    hook_key: str
+    for hook_key in sorted(_MODEL_HOOK_KEYS):
+        raw_value: object | None = values.get(hook_key)
+        if not isinstance(raw_value, list | tuple):
+            continue
+        hook_index: int
+        hook_entry: object
+        for hook_index, hook_entry in enumerate(raw_value):
+            if not isinstance(hook_entry, PythonHookEntry):
+                continue
+            hook_function: DiscoveredHookFunction | None = hooks_by_name.get(hook_entry.name)
+            if hook_function is None:
+                known_hook_names: str = ", ".join(sorted(hooks_by_name)) or "none discovered"
+                raise CompileInputError(
+                    f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
+                    f"references an unknown hook. Discovered hooks: {known_hook_names}"
+                )
+            validate_python_hook_signature(
+                hook_entry=hook_entry,
+                hook_function=hook_function,
+                model_name=model_name,
+                hook_key=hook_key,
+                hook_index=hook_index,
+            )
+
+
+def validate_python_hook_signature(
+    *,
+    hook_entry: PythonHookEntry,
+    hook_function: DiscoveredHookFunction,
+    model_name: str,
+    hook_key: str,
+    hook_index: int,
+) -> None:
+    signature: Signature = inspect.signature(hook_function.function)
+    parameters: tuple[Parameter, ...] = tuple(signature.parameters.values())
+    accepts_var_keyword: bool = any(
+        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters
+    )
+    keyword_parameter_names: frozenset[str] = frozenset(
+        parameter.name
+        for parameter in parameters
+        if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+        and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
+    )
+
+    unknown_kwargs: tuple[str, ...] = tuple(
+        sorted(
+            kwarg_name
+            for kwarg_name in hook_entry.kwargs
+            if kwarg_name not in keyword_parameter_names and not accepts_var_keyword
+        )
+    )
+    if unknown_kwargs:
+        accepted_kwargs: str = _format_hook_parameter_names(keyword_parameter_names)
+        raise CompileInputError(
+            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
+            f"has unknown argument(s): {', '.join(unknown_kwargs)}. "
+            f"Accepted configured arguments: {accepted_kwargs}"
+        )
+
+    required_positional_only: tuple[str, ...] = tuple(
+        parameter.name
+        for parameter in parameters
+        if parameter.kind is Parameter.POSITIONAL_ONLY
+        and parameter.default is Parameter.empty
+        and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
+    )
+    if required_positional_only:
+        raise CompileInputError(
+            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
+            "cannot be configured because the hook function has required positional-only "
+            f"parameter(s): {', '.join(required_positional_only)}. "
+            "Use keyword-capable parameters for values supplied from MODEL hooks."
+        )
+
+    missing_kwargs: tuple[str, ...] = tuple(
+        parameter.name
+        for parameter in parameters
+        if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+        and parameter.default is Parameter.empty
+        and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
+        and parameter.name not in hook_entry.kwargs
+    )
+    if missing_kwargs:
+        raise CompileInputError(
+            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
+            f"is missing required argument(s): {', '.join(missing_kwargs)}"
+        )
+
+
+def _format_hook_parameter_names(parameter_names: frozenset[str]) -> str:
+    if not parameter_names:
+        return "none"
+    return ", ".join(sorted(parameter_names))
 
 
 def expand_sql_macros_in_value(
@@ -2408,14 +2558,17 @@ def expand_sql_macros_in_value(
     context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    hook_key: str | None = None,
+    hook_index: int | None = None,
 ) -> object:
     """Recursively expand SQL interpolation and macros in hook container shapes."""
 
     if isinstance(value, str):
         if _HOOK_TEMPLATE_PATTERN.search(value) is not None:
+            hook_label: str = _format_sql_hook_label(hook_key=hook_key, hook_index=hook_index)
             raise CompileInputError(
-                f"hook SQL in '{file_path}' does not allow ${{...}} templates; "
-                "use @@CTX:..., @@ENV:..., or @@project_var syntax"
+                f"{hook_label} in '{file_path}' uses unsupported ${{...}} template syntax. "
+                "Use @@CTX:..., @@ENV:..., or @@project_var inside sql(...) hooks."
             )
         return expand_authored_sql(
             sql=value,
@@ -2425,6 +2578,20 @@ def expand_sql_macros_in_value(
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
+    if isinstance(value, SqlHookEntry):
+        expanded_statement: object = expand_sql_macros_in_value(
+            value=value.statement,
+            file_path=file_path,
+            effective_vars=effective_vars,
+            context_values=context_values,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+            hook_key=hook_key,
+            hook_index=hook_index,
+        )
+        return SqlHookEntry(statement=str(expanded_statement))
+    if isinstance(value, PythonHookEntry):
+        return value
     if isinstance(value, list):
         return [
             expand_sql_macros_in_value(
@@ -2434,8 +2601,10 @@ def expand_sql_macros_in_value(
                 context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                hook_key=hook_key,
+                hook_index=index,
             )
-            for item in value
+            for index, item in enumerate(value)
         ]
     if isinstance(value, tuple):
         return tuple(
@@ -2446,10 +2615,20 @@ def expand_sql_macros_in_value(
                 context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                hook_key=hook_key,
+                hook_index=index,
             )
-            for item in value
+            for index, item in enumerate(value)
         )
     return value
+
+
+def _format_sql_hook_label(*, hook_key: str | None, hook_index: int | None) -> str:
+    if hook_key is None:
+        return 'sql("...") hook'
+    if hook_index is None:
+        return f'{hook_key} sql("...")'
+    return f'{hook_key}[{hook_index}] sql("...")'
 
 
 def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:
@@ -3033,6 +3212,10 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["row_diff_tolerances"] = defaults.row_diff_tolerances
     if defaults.tags:
         values["tags"] = list(defaults.tags)
+    if defaults.pre_hooks is not None:
+        values["pre_hooks"] = defaults.pre_hooks
+    if defaults.post_hooks is not None:
+        values["post_hooks"] = defaults.post_hooks
     return values
 
 

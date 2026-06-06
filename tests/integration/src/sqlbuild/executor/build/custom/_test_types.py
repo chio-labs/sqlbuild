@@ -33,6 +33,11 @@ class HookTestCase:
     expected_status: ExecutionStatus
     expected_table_exists: bool
     expected_failed_phase: ExecutionPhase | None = None
+    expected_error_fragment: str | None = None
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
+        default_factory=tuple
+    )
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

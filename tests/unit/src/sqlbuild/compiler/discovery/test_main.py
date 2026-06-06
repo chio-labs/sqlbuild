@@ -87,6 +87,13 @@ from assets.exports import export_customers
 def export_customers_exists(ctx):
     return True
 """,
+                "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+@hook(name="notify success")
+def notify_success(ctx):
+    return None
+""",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
                 "sqlbuild_local.toml": 'target = "dev"\n',
@@ -122,6 +129,7 @@ def export_customers_exists(ctx):
             expected_task_names=("fetch_window",),
             expected_asset_names=("export_customers",),
             expected_check_names=("export_customers_exists",),
+            expected_hook_names=("notify success",),
         )
     ],
     ids=["discovers raw project inputs across authored project surfaces"],
@@ -249,6 +257,10 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(check_function.name for check_function in discovered_inputs.check_functions)
         == test_case.expected_check_names
+    )
+    assert (
+        tuple(hook_function.name for hook_function in discovered_inputs.hook_functions)
+        == test_case.expected_hook_names
     )
     assert (
         None

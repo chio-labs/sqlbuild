@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
@@ -32,6 +35,9 @@ def execute_view_entry(
     model_audits: tuple[AuditPlanEntry, ...],
     run_id: str,
     query_change_tracking: bool,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    effective_target_name: str | None = None,
+    effective_vars: Mapping[str, object] | None = None,
 ) -> ModelExecutionResult:
     """Execute one view model through its full materialization lifecycle."""
 
@@ -42,16 +48,27 @@ def execute_view_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
+        )
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.pre_hook,
-                phase_label="pre_hook",
+                hooks=entry.pre_hooks,
+                phase=HookPhase.PRE_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -61,6 +78,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
@@ -85,6 +103,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     audit_error: bool = False
@@ -116,16 +135,27 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
+        )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.post_hook,
-                phase_label="post_hook",
+                hooks=entry.post_hooks,
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -136,6 +166,7 @@ def execute_view_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try_write_fingerprint(
@@ -154,4 +185,5 @@ def execute_view_entry(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
     )

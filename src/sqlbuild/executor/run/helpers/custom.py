@@ -10,6 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, SchemaFinding
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.auditing.main.execute import execute_audit
@@ -18,7 +19,8 @@ from sqlbuild.executor.custom.models import MaterializationContext, Materializat
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
@@ -42,6 +44,8 @@ def execute_custom_entry(
     effective_vars: dict[str, object],
     existing_relation: RelationInfo | None,
     on_progress: Callable[[str], None] | None = None,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    effective_target_name: str | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
@@ -53,6 +57,7 @@ def execute_custom_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.ensure_schema(
@@ -67,8 +72,16 @@ def execute_custom_entry(
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.pre_hook,
-                phase_label="pre_hook",
+                hooks=entry.pre_hooks,
+                phase=HookPhase.PRE_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -78,6 +91,7 @@ def execute_custom_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     config_dict: dict[str, Any] = dict(entry.custom_config)
@@ -196,8 +210,16 @@ def execute_custom_entry(
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.post_hook,
-                phase_label="post_hook",
+                hooks=entry.post_hooks,
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         _cleanup_relations(
@@ -215,6 +237,7 @@ def execute_custom_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try_write_fingerprint(
@@ -241,6 +264,7 @@ def execute_custom_entry(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
     )
 
 

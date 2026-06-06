@@ -514,6 +514,7 @@ def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports
         "virtual_environment_status": "finalized",
         "virtual_mode": True,
         "virtual_source_freshness_observed_source_names": ["raw_orders"],
+        "virtual_source_freshness_unchanged_source_names": ["raw_orders"],
         "virtual_source_freshness_incomplete_source_names": [],
         "virtual_source_freshness_incomplete_model_names": [],
         "virtual_stale_model_names": [],

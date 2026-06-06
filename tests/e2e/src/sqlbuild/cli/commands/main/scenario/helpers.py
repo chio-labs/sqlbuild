@@ -75,6 +75,29 @@ def build_scenario_project_files() -> dict[str, str]:
     }
 
 
+def build_scenario_python_hooks_project_files() -> dict[str, str]:
+    """Build an inline scenario project with a Python lifecycle hook."""
+
+    repo_files: dict[str, str] = build_scenario_project_files()
+    repo_files["hooks/scenario_hooks.py"] = (
+        "from sqlbuild.hooks import hook\n\n"
+        "@hook\n"
+        "def log_scenario_model(ctx):\n"
+        "    ctx.execute_sql(\n"
+        '        f"CREATE TABLE {ctx.destination.schema}.scenario_hook_log AS "\n'
+        "        f\"SELECT '{ctx.model_name}' AS model_name, '{ctx.phase}' AS phase\"\n"
+        "    )\n"
+    )
+    repo_files["models/orders.sql"] = (
+        'MODEL (materialized table, post_hooks [python("log_scenario_model")]);\n\n'
+        "SELECT\n"
+        "  id AS order_id,\n"
+        "  amount\n"
+        'FROM __source("raw_orders")\n'
+    )
+    return repo_files
+
+
 def build_capture_safety_project_files(*, use_project_row_limit: bool) -> dict[str, str]:
     """Build scenario e2e files with optional project snapshot limit config."""
 

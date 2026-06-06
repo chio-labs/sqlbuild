@@ -88,12 +88,28 @@ class BuildCompileInputsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class BuildCompileInputsPythonHookValidationTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_marker_file_exists: bool
+
+
+@dataclass(frozen=True)
 class BuildEffectiveRuntimeConfigTestCase:
     description: str
     selected_target: str | None
     cli_vars: dict[str, object] | None
     expected_target_name: str | None
     expected_vars: dict[str, object]
+
+
+@dataclass(frozen=True)
+class BuildModelConfigHooksTestCase:
+    description: str
+    default_hook: object
+    path_default_hook: object
+    expected_pre_hooks: object
+    expected_post_hooks: object
 
 
 @dataclass(frozen=True)
