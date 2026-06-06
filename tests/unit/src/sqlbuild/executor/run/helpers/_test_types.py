@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.executor.shared.types import ExecutionPhase
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,16 @@ class SnapshotLifecycleTestCase:
     expected_hook_events: tuple[str, ...]
     expected_model_name: str
     expected_target_name: str
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SnapshotHookFailureTestCase:
+    description: str
+    pre_hooks: object
+    post_hooks: object
+    expected_phase: ExecutionPhase
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

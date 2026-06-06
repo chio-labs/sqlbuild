@@ -48,6 +48,14 @@ def create_python_hook_data(ctx: HookContext, value: int) -> None:
     ctx.log(f"python pre-hook created data for {ctx.model_name}")
 
 
+def insert_table_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.hook_log VALUES ('{phase}')")
+
+
+def fail_table_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
+
+
 def build_table_plan_entry(
     *,
     name: str,
@@ -180,6 +188,7 @@ def verify_success_warehouse_state(
     )
     _verify_warning_fragment(result=result, test_case=test_case)
     _verify_lifecycle_event_fragments(result=result, test_case=test_case)
+    _verify_query_results(connection=connection, test_case=test_case)
 
 
 def verify_failure_warehouse_state(
@@ -351,6 +360,16 @@ def _verify_lifecycle_event_fragments(
     fragment: str
     for fragment in test_case.expected_lifecycle_event_fragments:
         assert any(fragment in event.content for event in result.lifecycle_events)
+
+
+def _verify_query_results(*, connection: Any, test_case: TableSuccessTestCase) -> None:
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        actual_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row) for row in connection.execute(query).fetchall()
+        )
+        assert actual_rows == expected_rows
 
 
 def _verify_error_fragment(

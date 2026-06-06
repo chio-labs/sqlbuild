@@ -60,6 +60,47 @@ class DirectPythonBuildHardeningE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonHooksBuildE2ETestCase:
+    """Test case for build-time Python lifecycle hooks."""
+
+    description: str
+    expected_exit_code: int
+    expected_orders_rows: tuple[tuple[object, ...], ...]
+    expected_hook_log_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PythonHookFailureBuildE2ETestCase:
+    """Test case for build-time Python lifecycle hook failures."""
+
+    description: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_present_tables: tuple[str, ...]
+    expected_absent_tables: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotPythonHooksBuildE2ETestCase:
+    """Test case for snapshot builds with Python lifecycle hooks."""
+
+    description: str
+    expected_exit_code: int
+    expected_snapshot_rows: tuple[tuple[object, ...], ...]
+    expected_hook_log_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class VirtualPythonHooksBuildE2ETestCase:
+    """Test case for virtual builds with Python lifecycle hooks."""
+
+    description: str
+    expected_exit_code: int
+    expected_model_rows: tuple[tuple[object, ...], ...]
+    expected_hook_log_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DirectChangesOnlyBuildE2ETestCase:
     """Test case for direct build changes-only behavior."""
 
@@ -588,6 +629,8 @@ class CompileJsonBuildE2ETestCase:
     expected_sql_fragments: tuple[str, ...]
     expected_warning_count: int = 0
     expected_diagnostic_codes: tuple[str, ...] = field(default_factory=tuple)
+    expected_pre_hooks: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    expected_post_hooks: tuple[dict[str, object], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

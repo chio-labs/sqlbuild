@@ -21,6 +21,8 @@ class ViewSuccessTestCase:
     extra_audits: tuple[object, ...] = field(default_factory=tuple)
     query_change_tracking: bool = True
     expected_warning_fragment: str | None = None
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
+    expected_lifecycle_event_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ class ViewFailureTestCase:
     audit_sql: str | None = None
     audit_severity: str = "warn"
     extra_audits: tuple[object, ...] = field(default_factory=tuple)
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

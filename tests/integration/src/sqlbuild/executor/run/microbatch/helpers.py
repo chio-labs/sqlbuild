@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -33,7 +34,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.helpers.microbatch import execute_microbatch_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
@@ -45,6 +46,14 @@ _STRATEGY_TO_ACTION: dict[str, PlanAction] = {
     IncrementalStrategy.DELETE_INSERT: PlanAction.INCREMENTAL_DELETE_INSERT,
     IncrementalStrategy.MERGE: PlanAction.INCREMENTAL_MERGE,
 }
+
+
+def insert_microbatch_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.hook_log VALUES ('{phase}')")
+
+
+def fail_microbatch_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
 
 
 def build_microbatch_plan_entry(
@@ -267,6 +276,11 @@ def _execute_test(
             else True
         ),
         is_full_refresh=test_case.is_full_refresh,
+        hook_functions=tuple(
+            hook_function
+            for hook_function in getattr(test_case, "hook_functions", ())
+            if isinstance(hook_function, DiscoveredHookFunction)
+        ),
     )
 
 

@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
@@ -24,7 +25,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.helpers.view import execute_view_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
@@ -37,6 +38,24 @@ class ViewExtraAuditDefinition:
     name: str
     audit_sql: str
     severity: str
+
+
+def create_python_view_hook_data(ctx: HookContext, value: int) -> None:
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.destination.schema}.python_view_data AS SELECT {value} AS val"
+    )
+    ctx.log(f"python view pre-hook created data for {ctx.model_name}")
+
+
+def create_python_view_order_step(ctx: HookContext, source: str, target: str) -> None:
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.destination.schema}.{target} AS "
+        f"SELECT val + 1 AS val FROM {ctx.destination.schema}.{source}"
+    )
+
+
+def fail_python_view_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
 
 
 def build_view_plan_entry(
@@ -151,6 +170,7 @@ def verify_view_success_state(
     assert len(rows) == test_case.expected_row_count
     assert len(result.audit_results) == test_case.expected_audit_count
     _verify_warning_fragment(result=result, test_case=test_case)
+    _verify_lifecycle_event_fragments(result=result, test_case=test_case)
 
 
 def verify_view_failure_state(
@@ -215,6 +235,11 @@ def _execute_view_test(
         query_change_tracking=(
             test_case.query_change_tracking if isinstance(test_case, ViewSuccessTestCase) else True
         ),
+        hook_functions=tuple(
+            hook_function
+            for hook_function in getattr(test_case, "hook_functions", ())
+            if isinstance(hook_function, DiscoveredHookFunction)
+        ),
     )
 
 
@@ -265,6 +290,16 @@ def _verify_warning_fragment(
         return
     all_warnings: str = " ".join(result.warning_messages)
     assert test_case.expected_warning_fragment in all_warnings
+
+
+def _verify_lifecycle_event_fragments(
+    *,
+    result: ModelExecutionResult,
+    test_case: ViewSuccessTestCase,
+) -> None:
+    fragment: str
+    for fragment in test_case.expected_lifecycle_event_fragments:
+        assert any(fragment in event.content for event in result.lifecycle_events)
 
 
 def _verify_error_fragment(

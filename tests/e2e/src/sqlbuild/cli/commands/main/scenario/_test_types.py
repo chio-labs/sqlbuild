@@ -30,6 +30,17 @@ class ScenarioRuntimeArtifactTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioPythonHooksCliE2ETestCase:
+    """Test case for scenario CLI execution with Python lifecycle hooks."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_hook_log_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class ScenarioLocalRuntimeArtifactTestCase:
     """Test case for local scenario target/run artifact verification."""
 
