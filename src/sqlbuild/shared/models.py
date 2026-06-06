@@ -109,6 +109,14 @@ class PythonHookEntry:
 
 
 @dataclass(frozen=True)
+class HookDefinition:
+    """Metadata attached to a decorated model lifecycle hook function."""
+
+    name: str
+    description: str | None = None
+
+
+@dataclass(frozen=True)
 class SqlResourceRef:
     """Typed dependency reference to a SQLBuild SQL graph resource."""
 

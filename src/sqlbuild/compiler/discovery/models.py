@@ -230,6 +230,17 @@ class DiscoveredCheckFunction:
 
 
 @dataclass(frozen=True)
+class DiscoveredHookFunction:
+    """A discovered project model lifecycle hook function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    description: str | None = None
+
+
+@dataclass(frozen=True)
 class DiscoveredPythonNodeFunctions:
     """Discovered project Python DAG node functions grouped by kind."""
 
@@ -260,4 +271,5 @@ class DiscoveredProjectInputs:
     task_functions: tuple[DiscoveredTaskFunction, ...] = field(default_factory=tuple)
     asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
+    hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
