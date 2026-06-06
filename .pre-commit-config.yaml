@@ -11,52 +11,9 @@ repos:
 
   - repo: local
     hooks:
-      - id: generate-docs-skill
-        name: generate docs skill
-        entry: uv run python scripts/generate_docs_skill.py
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      - id: ruff-format
-        name: ruff format
-        entry: uv run ruff format
-        language: system
-        types_or: [python, pyi]
-
-      - id: ruff-check
-        name: ruff check
-        entry: uv run ruff check --fix
-        language: system
-        types_or: [python, pyi]
-
-      - id: check-test-conventions
-        name: check test conventions
-        entry: uv run check-test-conventions tests
-        language: system
-        pass_filenames: false
-
-      - id: check-structure-conventions
-        name: check structure conventions
-        entry: uv run check-structure-conventions src/sqlbuild scripts
-        language: system
-        pass_filenames: false
-
-      - id: check-type-annotation-conventions
-        name: check type annotation conventions
-        entry: uv run check-type-annotation-conventions src tests
-        language: system
-        pass_filenames: false
-
-      - id: ty-check
-        name: ty check
-        entry: bash -c 'uv run ty check src tests'
-        language: system
-        pass_filenames: false
-
-      - id: pytest
-        name: pytest
-        entry: bash -c 'uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv'
+      - id: verify-quick
+        name: make verify-quick
+        entry: make verify-quick
         language: system
         pass_filenames: false
 
