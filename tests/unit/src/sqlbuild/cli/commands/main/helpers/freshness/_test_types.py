@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild.cli.commands.main.helpers.freshness.models import FreshnessCommandResult
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 
 
 @dataclass(frozen=True)
@@ -21,4 +22,5 @@ class FreshnessObservationTestCase:
     exclude: tuple[str, ...]
     expected_statuses: dict[str, str]
     expected_versions: dict[str, str]
+    previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None
     observed_at: datetime = datetime(2026, 1, 1, 0, 0, 0)

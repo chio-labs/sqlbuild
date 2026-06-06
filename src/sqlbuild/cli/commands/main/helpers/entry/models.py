@@ -77,6 +77,8 @@ class CliNamespace:
     lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     no_connection: bool = False
     fail_on_error: bool = False
+    fail_on_stale: bool = False
+    state: bool = False
     full: bool = False
     schema_only: bool = False
     allow_partial_diff: bool = False
@@ -222,6 +224,9 @@ class CliEntrypointHandlers:
             bool,
             Path | None,
             bool,
+            bool,
+            bool,
+            str | None,
         ],
         int,
     ]

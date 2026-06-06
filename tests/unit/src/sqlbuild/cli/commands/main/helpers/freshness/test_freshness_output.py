@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.main.helpers.freshness.output import (
     format_freshness_json,
     format_freshness_text,
 )
+from sqlbuild.cli.commands.main.helpers.freshness.types import FreshnessSourceStatus
 from tests.unit.src.sqlbuild.cli.commands.main.helpers.freshness._test_types import (
     FreshnessOutputTestCase,
 )
@@ -26,7 +27,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.freshness._test_types imp
                 sources=(
                     FreshnessSourceResult(
                         name="raw_orders",
-                        status="observed",
+                        status=FreshnessSourceStatus.OBSERVED,
                         strategy="timestamp",
                         value_kind="timestamp",
                         current_data_version="2026-01-01T00:00:00",
@@ -34,12 +35,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.freshness._test_types imp
                     ),
                     FreshnessSourceResult(
                         name="raw_payments",
-                        status="unknown",
+                        status=FreshnessSourceStatus.UNKNOWN,
                         message="no freshness config and adapter metadata unavailable",
                     ),
                     FreshnessSourceResult(
                         name="raw_events",
-                        status="error",
+                        status=FreshnessSourceStatus.ERROR,
                         message="freshness query failed",
                     ),
                 )
@@ -51,9 +52,16 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.freshness._test_types imp
                 "raw_payments  no freshness config and adapter metadata unavailable",
                 "Errors (1)",
                 "raw_events  freshness query failed",
-                "Summary: observed=1 unknown=1 errors=1",
+                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=1 errors=1",
             ),
-            expected_summary={"observed": 1, "unknown": 1, "errors": 1},
+            expected_summary={
+                "observed": 1,
+                "changed": 0,
+                "unchanged": 0,
+                "tolerated": 0,
+                "unknown": 1,
+                "errors": 1,
+            },
         )
     ],
     ids=["formats observed unknown and error sources"],

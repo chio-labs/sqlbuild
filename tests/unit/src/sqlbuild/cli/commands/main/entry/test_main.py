@@ -1071,12 +1071,19 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
                 "--vars",
                 '{"tenant":"acme"}',
                 "--fail-on-error",
+                "--state",
+                "--virtual-env",
+                "dev",
+                "--fail-on-stale",
             ],
             expected_exit_code=8,
             expected_no_sql_validation=True,
             expected_select=("raw_orders", "raw_payments"),
             expected_vars={"tenant": "acme"},
             expected_fail_on_error=True,
+            expected_state=True,
+            expected_fail_on_stale=True,
+            expected_virtual_env="dev",
         )
     ],
     ids=["passes freshness flags to handler"],
@@ -1091,6 +1098,9 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
             tuple[str, ...],
             dict[str, object],
             bool,
+            bool,
+            bool,
+            str | None,
         ]
     ] = []
 
@@ -1104,9 +1114,23 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
         json_output: bool,
         json_output_path: Path | None,
         fail_on_error: bool,
+        compare_state: bool,
+        fail_on_stale: bool,
+        virtual_env: str | None,
     ) -> int:
         del project_dir, no_color, json_output, json_output_path
-        received_args.append((no_sql_validation, select, exclude, cli_vars, fail_on_error))
+        received_args.append(
+            (
+                no_sql_validation,
+                select,
+                exclude,
+                cli_vars,
+                fail_on_error,
+                compare_state,
+                fail_on_stale,
+                virtual_env,
+            )
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1122,6 +1146,9 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
             ("raw_events",),
             test_case.expected_vars,
             test_case.expected_fail_on_error,
+            test_case.expected_state,
+            test_case.expected_fail_on_stale,
+            test_case.expected_virtual_env,
         )
     ]
 
@@ -1146,8 +1173,22 @@ def test_given_freshness_json_arguments_when_running_then_dispatches_expected_ar
         json_output: bool,
         json_output_path: Path | None,
         fail_on_error: bool,
+        compare_state: bool,
+        fail_on_stale: bool,
+        virtual_env: str | None,
     ) -> int:
-        del project_dir, no_sql_validation, no_color, select, exclude, cli_vars, fail_on_error
+        del (
+            project_dir,
+            no_sql_validation,
+            no_color,
+            select,
+            exclude,
+            cli_vars,
+            fail_on_error,
+            compare_state,
+            fail_on_stale,
+            virtual_env,
+        )
         received_args.append((json_output, json_output_path))
         return test_case.expected_exit_code
 

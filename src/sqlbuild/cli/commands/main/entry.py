@@ -148,7 +148,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     freshness_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FRESHNESS)
     freshness_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     freshness_parser.add_argument("--json", action="store_true", default=False)
+    freshness_parser.add_argument("--state", action="store_true", default=False)
+    freshness_parser.add_argument("--virtual-env", default=None)
     freshness_parser.add_argument("--fail-on-error", action="store_true", default=False)
+    freshness_parser.add_argument("--fail-on-stale", action="store_true", default=False)
     add_execution_json_output_arg(freshness_parser)
     add_select_args(freshness_parser)
     add_vars_args(freshness_parser)
@@ -665,6 +668,9 @@ def _main_with_dependencies(
                 args.json,
                 args.json_output,
                 args.fail_on_error,
+                args.state,
+                args.fail_on_stale,
+                args.virtual_env,
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(

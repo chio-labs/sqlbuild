@@ -10,6 +10,7 @@ from sqlbuild.cli.commands.main.helpers.freshness.models import (
     FreshnessCommandResult,
     FreshnessSourceResult,
 )
+from sqlbuild.cli.commands.main.helpers.freshness.types import FreshnessSourceStatus
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -17,7 +18,11 @@ from sqlbuild.compiler.source_freshness.main.normalization import (
     normalize_source_freshness_data_version,
 )
 from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
+from sqlbuild.compiler.source_freshness.main.record_equivalence import (
+    source_freshness_records_equivalent,
+)
 from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
     SourceFreshnessObservation,
     SourceFreshnessRecord,
 )
@@ -33,6 +38,8 @@ def observe_source_freshness_for_command(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     observed_at: datetime,
+    previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None,
+    previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None = None,
 ) -> FreshnessCommandResult:
     """Observe current source freshness for the CLI command."""
 
@@ -42,6 +49,15 @@ def observe_source_freshness_for_command(
         exclude=exclude,
     )
     results: list[FreshnessSourceResult] = []
+    previous_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = (
+        previous_records if previous_records is not None else {}
+    )
+    previous_by_source_name: dict[str, SourceFreshnessRecord] = (
+        previous_records_by_source_name if previous_records_by_source_name is not None else {}
+    )
+    compare_state: bool = (
+        previous_records is not None or previous_records_by_source_name is not None
+    )
     source: SourceEntry
     for source in selected_sources:
         observation_source: SourceEntry | None = _source_for_observation(
@@ -52,7 +68,7 @@ def observe_source_freshness_for_command(
             results.append(
                 FreshnessSourceResult(
                     name=source.name,
-                    status="unknown",
+                    status=FreshnessSourceStatus.UNKNOWN,
                     target_database=source.database,
                     target_schema=source.schema,
                     target_name=source.table,
@@ -71,7 +87,7 @@ def observe_source_freshness_for_command(
             results.append(
                 FreshnessSourceResult(
                     name=source.name,
-                    status="error",
+                    status=FreshnessSourceStatus.ERROR,
                     target_database=source.database,
                     target_schema=source.schema,
                     target_name=source.table,
@@ -85,18 +101,15 @@ def observe_source_freshness_for_command(
             run_id="freshness",
         )
         results.append(
-            FreshnessSourceResult(
+            _source_result_from_record(
                 name=source.name,
-                status="observed",
-                strategy=record.strategy,
-                value_kind=record.value_kind,
-                current_data_version=record.data_version,
+                current_record=record,
+                previous_record=previous_by_identity.get(record.identity)
+                or previous_by_source_name.get(record.source_name),
                 lag_tolerance=observation_source.freshness.lag_tolerance
                 if observation_source.freshness is not None
                 else None,
-                target_database=source.database,
-                target_schema=source.schema,
-                target_name=source.table,
+                compare_state=compare_state,
             )
         )
     return FreshnessCommandResult(sources=tuple(sorted(results, key=lambda item: item.name)))
@@ -125,6 +138,65 @@ def _record_from_observation(
             data_version=normalized_data_version,
         ),
         observed_at=observation.observed_at,
+    )
+
+
+def _source_result_from_record(
+    *,
+    name: str,
+    current_record: SourceFreshnessRecord,
+    previous_record: SourceFreshnessRecord | None,
+    lag_tolerance: str | None,
+    compare_state: bool,
+) -> FreshnessSourceResult:
+    if previous_record is None:
+        if compare_state:
+            return FreshnessSourceResult(
+                name=name,
+                status=FreshnessSourceStatus.UNKNOWN,
+                strategy=current_record.strategy,
+                value_kind=current_record.value_kind,
+                current_data_version=current_record.data_version,
+                lag_tolerance=lag_tolerance,
+                target_database=current_record.target_database,
+                target_schema=current_record.target_schema,
+                target_name=current_record.target_name,
+                message="previous source freshness state missing",
+            )
+        return FreshnessSourceResult(
+            name=name,
+            status=FreshnessSourceStatus.OBSERVED,
+            strategy=current_record.strategy,
+            value_kind=current_record.value_kind,
+            current_data_version=current_record.data_version,
+            lag_tolerance=lag_tolerance,
+            target_database=current_record.target_database,
+            target_schema=current_record.target_schema,
+            target_name=current_record.target_name,
+        )
+    equivalent: bool = source_freshness_records_equivalent(
+        previous_record=previous_record,
+        current_record=current_record,
+        lag_tolerance=lag_tolerance,
+    )
+    status: FreshnessSourceStatus
+    if equivalent and previous_record.data_version_hash == current_record.data_version_hash:
+        status = FreshnessSourceStatus.UNCHANGED
+    elif equivalent:
+        status = FreshnessSourceStatus.TOLERATED
+    else:
+        status = FreshnessSourceStatus.CHANGED
+    return FreshnessSourceResult(
+        name=name,
+        status=status,
+        strategy=current_record.strategy,
+        value_kind=current_record.value_kind,
+        current_data_version=current_record.data_version,
+        previous_data_version=previous_record.data_version,
+        lag_tolerance=lag_tolerance,
+        target_database=current_record.target_database,
+        target_schema=current_record.target_schema,
+        target_name=current_record.target_name,
     )
 
 
