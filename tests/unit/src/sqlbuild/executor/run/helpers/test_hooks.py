@@ -81,12 +81,44 @@ def test_given_typed_sql_hooks_when_executing_then_sql_statements_run_in_order(
         PythonHookExecutionTestCase(
             description="fails clearly for Python hooks before execution support exists",
             hooks=[PythonHookEntry(name="notify", kwargs={"message": "done"})],
-            expected_error_fragment="python hooks are not executable",
+            expected_error_fragment=(
+                r"post_hooks\[0\] python\(\"notify\"\) is valid at compile time, "
+                r"but Python hook execution is not implemented yet"
+            ),
         )
     ],
     ids=["fails clearly for Python hooks before execution support exists"],
 )
 def test_given_python_hook_when_executing_then_it_fails_until_python_hooks_exist(
+    test_case: PythonHookExecutionTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        execute_hooks(
+            connection=connection,
+            adapter=adapter,
+            hooks=test_case.hooks,
+            phase_label="post_hooks",
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookExecutionTestCase(
+            description="fails clearly for invalid hook entry shape",
+            hooks=[SqlHookEntry(statement="SELECT 1"), object()],
+            expected_error_fragment=(
+                r"post_hooks\[1\] must be sql\(\"\.\.\.\"\) or python\(\"\.\.\.\"\), "
+                r"got object"
+            ),
+        )
+    ],
+    ids=["fails clearly for invalid hook entry shape"],
+)
+def test_given_invalid_hook_entry_when_executing_then_it_reports_hook_index(
     test_case: PythonHookExecutionTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()

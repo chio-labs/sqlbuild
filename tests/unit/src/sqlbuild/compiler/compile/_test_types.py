@@ -88,6 +88,13 @@ class BuildCompileInputsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class BuildCompileInputsPythonHookValidationTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_marker_file_exists: bool
+
+
+@dataclass(frozen=True)
 class BuildEffectiveRuntimeConfigTestCase:
     description: str
     selected_target: str | None

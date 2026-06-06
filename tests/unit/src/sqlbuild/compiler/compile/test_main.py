@@ -35,6 +35,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
+    BuildCompileInputsPythonHookValidationTestCase,
     BuildCompileInputsTestCase,
     BuildModelConfigHooksTestCase,
     ResolveTargetConfigTestCase,
@@ -1495,6 +1496,15 @@ MODEL (
 SELECT 1 AS id
 """.strip()
             + "\n",
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify(ctx, message):
+    return None
+""".strip()
+            + "\n",
         },
         selected_target=None,
         cli_vars=None,
@@ -1518,6 +1528,121 @@ SELECT 1 AS id
         expected_seed_names=(),
         expected_source_names=(),
         expected_effective_target_name="dev",
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_query_sqls=("SELECT 1 AS id",),
+        expected_model_references=((),),
+    ),
+    BuildCompileInputsTestCase(
+        description="validates Python hook kwargs while allowing defaults and variadic kwargs",
+        repo_files=base_repo_files()
+        | {
+            "models/orders.sql": """
+MODEL (
+  pre_hooks [
+    python("defaulted", channel: "alerts"),
+    python("flexible", extra: "value"),
+    python("context_named", message: "ok"),
+    python("optional_positional_only"),
+  ],
+);
+
+SELECT 1 AS id
+""".strip()
+            + "\n",
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def defaulted(context, channel, message="ready"):
+    return None
+
+
+@hook
+def flexible(ctx, **kwargs):
+    return None
+
+
+@hook
+def context_named(hook_context, message):
+    return None
+
+
+@hook
+def optional_positional_only(ctx, channel="alerts", /):
+    return None
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "pre_hooks": [
+                    PythonHookEntry(name="defaulted", kwargs={"channel": "alerts"}),
+                    PythonHookEntry(name="flexible", kwargs={"extra": "value"}),
+                    PythonHookEntry(name="context_named", kwargs={"message": "ok"}),
+                    PythonHookEntry(name="optional_positional_only", kwargs={}),
+                ],
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_target_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_query_sqls=("SELECT 1 AS id",),
+        expected_model_references=((),),
+    ),
+    BuildCompileInputsTestCase(
+        description="preserves raw Python hook kwargs after discovered hook validation",
+        repo_files=base_repo_files()
+        | {
+            "models/orders.sql": """
+MODEL (
+  post_hooks [
+    python("notify", message: "@@CTX:destination.qualified", macro_text: "@format_message()"),
+  ],
+);
+
+SELECT 1 AS id
+""".strip()
+            + "\n",
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify(ctx, message, macro_text):
+    return None
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "post_hooks": [
+                    PythonHookEntry(
+                        name="notify",
+                        kwargs={
+                            "message": "@@CTX:destination.qualified",
+                            "macro_text": "@format_message()",
+                        },
+                    ),
+                ],
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
         expected_model_query_sqls=("SELECT 1 AS id",),
@@ -3265,7 +3390,7 @@ path = "${CTX:schema}"
         },
         selected_target=None,
         run_id=None,
-        expected_error_fragment="SQL syntax error in pre_hooks for model 'broken'",
+        expected_error_fragment=r"model 'broken' pre_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when post_hook sql has invalid syntax",
@@ -3277,7 +3402,20 @@ path = "${CTX:schema}"
         },
         selected_target=None,
         run_id=None,
-        expected_error_fragment="SQL syntax error in post_hooks for model 'broken'",
+        expected_error_fragment=r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when hook sql is not an executable statement",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": ("MODEL (post_hooks [sql('1 + 1')]);\n\nSELECT 1 AS id\n"),
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL .* "
+            r"must be a valid executable SQL statement"
+        ),
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when hook sql uses config template syntax",
@@ -3292,7 +3430,117 @@ path = "${CTX:schema}"
         },
         selected_target=None,
         run_id=None,
-        expected_error_fragment=r"hook SQL .* does not allow \$\{\.\.\.\} templates",
+        expected_error_fragment=(
+            r"post_hooks\[0\] sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
+            r"template syntax"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when python hook references unknown hook name",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+            ),
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"post_hooks\[0\] python\(\"notify\"\) references an unknown hook"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises with nonzero hook index when later python hook is invalid",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (post_hooks [python("known"), python("missing")]);\n\nSELECT 1 AS id\n'
+            ),
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def known(ctx):
+    return None
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"post_hooks\[1\] python\(\"missing\"\) references an unknown hook"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when python hook is missing required kwarg",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (pre_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+            ),
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify(ctx, channel):
+    return None
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"pre_hooks\[0\] python\(\"notify\"\) is missing required argument\(s\): channel"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when python hook receives unknown kwarg",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (post_hooks [python("notify", unknown: "value")]);\n\nSELECT 1 AS id\n'
+            ),
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify(ctx):
+    return None
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"post_hooks\[0\] python\(\"notify\"\) has unknown argument\(s\): unknown"
+        ),
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when python hook requires positional only argument",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": (
+                'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+            ),
+            "hooks/notifications.py": """
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify(ctx, channel, /):
+    return None
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment=(
+            r"post_hooks\[0\] python\(\"notify\"\) cannot be configured .* "
+            r"channel"
+        ),
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when model header tags is a string instead of list",
@@ -3401,6 +3649,47 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
                 project_dir=tmp_path
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildCompileInputsPythonHookValidationTestCase(
+            description="Python hook validation inspects signatures without executing hooks",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": (
+                    'MODEL (post_hooks [python("notify", channel: "alerts")]);\n\nSELECT 1 AS id\n'
+                ),
+                "hooks/notifications.py": """
+from pathlib import Path
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify(ctx, channel):
+    Path(__file__).with_name("executed.marker").write_text("executed", encoding="utf-8")
+""".strip()
+                + "\n",
+            },
+            expected_marker_file_exists=False,
+        ),
+    ],
+    ids=["Python hook validation inspects signatures without executing hooks"],
+)
+def test_given_python_hook_when_building_compile_inputs_then_validation_does_not_execute_hook(
+    test_case: BuildCompileInputsPythonHookValidationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    build_compile_inputs(discovered_inputs)
+
+    assert (
+        tmp_path / "hooks" / "executed.marker"
+    ).is_file() is test_case.expected_marker_file_exists
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,7 @@ def execute_hooks(
     hooks: object,
     phase_label: str,
 ) -> None:
-    """Execute pre/post hook SQL strings."""
+    """Execute pre/post lifecycle hook entries."""
 
     if hooks is None:
         return
@@ -27,23 +27,32 @@ def execute_hooks(
         adapter.execute(connection, hooks.statement)
         return
     if isinstance(hooks, PythonHookEntry):
-        raise ExecutorInputError("python hooks are not executable in this release slice")
+        raise ExecutorInputError(
+            f'{phase_label} python("{hooks.name}") is valid at compile time, '
+            "but Python hook execution is not implemented yet"
+        )
     if isinstance(hooks, list | tuple):
+        hook_index: int
         hook: object
-        for hook in hooks:
+        for hook_index, hook in enumerate(hooks):
             if isinstance(hook, str):
                 adapter.execute(connection, hook)
             elif isinstance(hook, SqlHookEntry):
                 adapter.execute(connection, hook.statement)
             elif isinstance(hook, PythonHookEntry):
-                raise ExecutorInputError("python hooks are not executable in this release slice")
+                raise ExecutorInputError(
+                    f'{phase_label}[{hook_index}] python("{hook.name}") is valid at compile time, '
+                    "but Python hook execution is not implemented yet"
+                )
             else:
                 raise ExecutorInputError(
-                    f"{phase_label} hook entry must be a string or typed hook, got {type(hook)}"
+                    f'{phase_label}[{hook_index}] must be sql("...") or python("..."), '
+                    f"got {type(hook).__name__}"
                 )
         return
     raise ExecutorInputError(
-        f"{phase_label} must be a string, typed hook, or list of hooks, got {type(hooks)}"
+        f'{phase_label} must be a sql("...")/python("...") hook entry or list of hook entries, '
+        f"got {type(hooks).__name__}"
     )
 
 
@@ -58,8 +67,9 @@ def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
         return ()
     if isinstance(hooks, list | tuple):
         statements: list[str] = []
+        hook_index: int
         hook: object
-        for hook in hooks:
+        for hook_index, hook in enumerate(hooks):
             if isinstance(hook, str):
                 statements.append(hook)
             elif isinstance(hook, SqlHookEntry):
@@ -68,9 +78,11 @@ def render_hooks(*, hooks: object, phase_label: str) -> tuple[str, ...]:
                 continue
             else:
                 raise ExecutorInputError(
-                    f"{phase_label} hook entry must be a string or typed hook, got {type(hook)}"
+                    f'{phase_label}[{hook_index}] must be sql("...") or python("..."), '
+                    f"got {type(hook).__name__}"
                 )
         return tuple(statements)
     raise ExecutorInputError(
-        f"{phase_label} must be a string, typed hook, or list of hooks, got {type(hooks)}"
+        f'{phase_label} must be a sql("...")/python("...") hook entry or list of hook entries, '
+        f"got {type(hooks).__name__}"
     )
