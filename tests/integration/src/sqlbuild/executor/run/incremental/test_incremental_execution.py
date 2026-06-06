@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
     IncrementalFailureTestCase,
     IncrementalSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.incremental.helpers import (
+    fail_incremental_hook,
+    insert_incremental_hook_log,
     run_failure_test,
     run_success_test,
     verify_failure_state,
@@ -235,8 +240,37 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         target_schema="main",
         target_name="orders",
         incremental_strategy="append",
-        pre_hook="INSERT INTO main.hook_log VALUES ('pre')",
-        post_hook="INSERT INTO main.hook_log VALUES ('post')",
+        pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+        post_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('post')")],
+        expected_row_count=2,
+        expected_query_results=(
+            (
+                "SELECT phase FROM main.hook_log ORDER BY phase",
+                (("post",), ("pre",)),
+            ),
+        ),
+    ),
+    IncrementalSuccessTestCase(
+        description="python pre and post hooks execute around incremental lifecycle",
+        setup_sql=(
+            "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",
+            "INSERT INTO main.orders VALUES (1, 'alice')",
+            "CREATE TABLE main.hook_log (phase VARCHAR)",
+        ),
+        model_sql="SELECT 2 AS id, 'bob' AS name",
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="append",
+        pre_hook=[PythonHookEntry(name="insert_hook_log", kwargs={"phase": "pre"})],
+        post_hook=[PythonHookEntry(name="insert_hook_log", kwargs={"phase": "post"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/incremental.py"),
+                name="insert_hook_log",
+                function=insert_incremental_hook_log,
+            ),
+        ),
         expected_row_count=2,
         expected_query_results=(
             (
@@ -466,8 +500,31 @@ FAILURE_TEST_CASES: list[IncrementalFailureTestCase] = [
         target_schema="main",
         target_name="orders",
         incremental_strategy="append",
-        pre_hook="SELECT * FROM nonexistent_table_for_hook",
+        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        expected_row_count=1,
+    ),
+    IncrementalFailureTestCase(
+        description="python pre_hook failure blocks incremental execution",
+        setup_sql=(
+            "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",
+            "INSERT INTO main.orders VALUES (1, 'alice')",
+        ),
+        model_sql="SELECT 2 AS id, 'bob' AS name",
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="append",
+        pre_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "pre boom"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/incremental.py"),
+                name="fail_hook",
+                function=fail_incremental_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: pre boom',
         expected_row_count=1,
     ),
     IncrementalFailureTestCase(
@@ -480,8 +537,33 @@ FAILURE_TEST_CASES: list[IncrementalFailureTestCase] = [
         target_schema="main",
         target_name="orders",
         incremental_strategy="append",
-        post_hook="SELECT * FROM nonexistent_table_for_hook",
+        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_staging_relation="main.orders__delta",
+        expected_promoted_relation="main.orders",
+        expected_row_count=2,
+    ),
+    IncrementalFailureTestCase(
+        description="python post_hook failure after DML marks model failed",
+        setup_sql=(
+            "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",
+            "INSERT INTO main.orders VALUES (1, 'alice')",
+        ),
+        model_sql="SELECT 2 AS id, 'bob' AS name",
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="append",
+        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "post boom"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/incremental.py"),
+                name="fail_hook",
+                function=fail_incremental_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: post boom',
         expected_staging_relation="main.orders__delta",
         expected_promoted_relation="main.orders",
         expected_row_count=2,

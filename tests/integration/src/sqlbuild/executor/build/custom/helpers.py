@@ -19,12 +19,21 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.helpers.custom import execute_custom_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
+
+
+def insert_custom_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.hook_marker VALUES ('{phase}')")
+
+
+def fail_custom_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
 
 
 def build_custom_plan_entry(
@@ -32,8 +41,8 @@ def build_custom_plan_entry(
     name: str = "test_model",
     sql: str = "SELECT 1 AS id",
     reason: PlanReason = PlanReason.NO_CHANGE,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
     custom_config: dict[str, object] | None = None,
     custom_placeholders: dict[str, str] | None = None,
 ) -> ModelPlanEntry:
@@ -55,8 +64,8 @@ def build_custom_plan_entry(
         custom_materialization_name="test_custom",
         custom_config=custom_config if custom_config is not None else {"test_key": "test_value"},
         custom_placeholders=custom_placeholders if custom_placeholders is not None else {},
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 
@@ -103,6 +112,7 @@ def run_custom_entry(
     existing_relation: RelationInfo | None = None,
     target: str = "test",
     effective_vars: dict[str, object] | None = None,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
 ) -> ModelExecutionResult:
     """Execute a custom materialization lifecycle with full control over parameters."""
 
@@ -121,6 +131,7 @@ def run_custom_entry(
         target=target,
         effective_vars=effective_vars or {},
         existing_relation=existing_relation,
+        hook_functions=hook_functions,
     )
 
 

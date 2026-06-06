@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
     ViewSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.view.helpers import (
+    create_python_view_hook_data,
+    create_python_view_order_step,
+    fail_python_view_hook,
     run_view_failure_test,
     run_view_success_test,
     verify_view_failure_state,
@@ -65,8 +71,65 @@ SUCCESS_TEST_CASES: list[ViewSuccessTestCase] = [
         model_sql="SELECT * FROM test_schema.hook_data",
         target_schema="test_schema",
         target_name="dim_customers",
-        pre_hook="CREATE TABLE test_schema.hook_data AS SELECT 42 AS val",
+        pre_hook=[SqlHookEntry(statement="CREATE TABLE test_schema.hook_data AS SELECT 42 AS val")],
         expected_row_count=1,
+    ),
+    ViewSuccessTestCase(
+        description="view with python pre_hook runs before creation",
+        setup_sql=(),
+        model_sql="SELECT * FROM test_schema.python_view_data",
+        target_schema="test_schema",
+        target_name="dim_customers",
+        pre_hook=[PythonHookEntry(name="create_view_data", kwargs={"value": 42})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/view.py"),
+                name="create_view_data",
+                function=create_python_view_hook_data,
+            ),
+        ),
+        expected_row_count=1,
+        expected_lifecycle_event_fragments=(
+            "CREATE TABLE test_schema.python_view_data AS SELECT 42 AS val",
+            "python view pre-hook created data for dim_view",
+        ),
+    ),
+    ViewSuccessTestCase(
+        description="view with mixed pre_hooks preserves authored order",
+        setup_sql=(),
+        model_sql="SELECT * FROM test_schema.view_step_3",
+        target_schema="test_schema",
+        target_name="dim_customers",
+        pre_hook=[
+            SqlHookEntry(statement="CREATE TABLE test_schema.view_step_1 AS SELECT 40 AS val"),
+            PythonHookEntry(
+                name="create_order_step",
+                kwargs={"source": "view_step_1", "target": "view_step_2"},
+            ),
+            SqlHookEntry(
+                statement=(
+                    "CREATE TABLE test_schema.view_step_3 AS "
+                    "SELECT val + 1 AS val FROM test_schema.view_step_2"
+                )
+            ),
+        ],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/view.py"),
+                name="create_order_step",
+                function=create_python_view_order_step,
+            ),
+        ),
+        expected_row_count=1,
+        expected_lifecycle_event_fragments=(
+            "CREATE TABLE test_schema.view_step_1 AS SELECT 40 AS val",
+            "CREATE TABLE test_schema.view_step_2 AS SELECT val + 1 AS val "
+            "FROM test_schema.view_step_1",
+            "CREATE TABLE test_schema.view_step_3 AS SELECT val + 1 AS val "
+            "FROM test_schema.view_step_2",
+        ),
     ),
     ViewSuccessTestCase(
         description="view with post_hook runs hook after creation",
@@ -74,7 +137,9 @@ SUCCESS_TEST_CASES: list[ViewSuccessTestCase] = [
         model_sql="SELECT 1 AS id",
         target_schema="test_schema",
         target_name="dim_customers",
-        post_hook="CREATE TABLE test_schema.post_hook_ran AS SELECT 1 AS marker",
+        post_hook=[
+            SqlHookEntry(statement="CREATE TABLE test_schema.post_hook_ran AS SELECT 1 AS marker")
+        ],
         expected_row_count=1,
     ),
     ViewSuccessTestCase(
@@ -116,8 +181,26 @@ FAILURE_TEST_CASES: list[ViewFailureTestCase] = [
         model_sql="SELECT 1 AS id",
         target_schema="test_schema",
         target_name="dim_customers",
-        pre_hook="THIS IS NOT VALID SQL",
+        pre_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
+    ),
+    ViewFailureTestCase(
+        description="python pre_hook failure blocks view creation",
+        setup_sql=(),
+        model_sql="SELECT 1 AS id",
+        target_schema="test_schema",
+        target_name="dim_customers",
+        pre_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "pre boom"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/view.py"),
+                name="fail_hook",
+                function=fail_python_view_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: pre boom',
     ),
     ViewFailureTestCase(
         description="post_hook failure marks view failed with promoted relation",
@@ -125,8 +208,27 @@ FAILURE_TEST_CASES: list[ViewFailureTestCase] = [
         model_sql="SELECT 1 AS id",
         target_schema="test_schema",
         target_name="dim_customers",
-        post_hook="THIS IS NOT VALID SQL",
+        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_promoted_relation="test_schema.dim_customers",
+    ),
+    ViewFailureTestCase(
+        description="python post_hook failure marks view failed with promoted relation",
+        setup_sql=(),
+        model_sql="SELECT 1 AS id",
+        target_schema="test_schema",
+        target_name="dim_customers",
+        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "post boom"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/view.py"),
+                name="fail_hook",
+                function=fail_python_view_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: post boom',
         expected_promoted_relation="test_schema.dim_customers",
     ),
 ]

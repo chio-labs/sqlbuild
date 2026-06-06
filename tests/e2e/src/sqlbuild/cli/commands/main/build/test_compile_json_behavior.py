@@ -11,7 +11,11 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     CompileJsonBuildE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waffle_shop, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
+    prepare_waffle_shop,
+    run_sqb,
+)
 
 
 @pytest.mark.parametrize(
@@ -90,3 +94,71 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
     assert resources["tests"]
     assert all("logical_ddl" not in model for model in models)
     assert all("action" not in model for model in models)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileJsonBuildE2ETestCase(
+            description="compile json reports normalized lifecycle hook metadata",
+            command=("compile", "--json"),
+            expected_exit_code=0,
+            expected_model_names=("orders",),
+            expected_sql_fragments=("SELECT 1 AS id",),
+            expected_pre_hooks=(
+                {"type": "sql", "statement": "SELECT 1"},
+                {"type": "python", "name": "notify", "kwargs": {"message": "starting"}},
+            ),
+            expected_post_hooks=(
+                {"type": "python", "name": "notify", "kwargs": {"message": "done"}},
+            ),
+        )
+    ],
+    ids=["compile json reports normalized lifecycle hook metadata"],
+)
+def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_metadata(
+    test_case: CompileJsonBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="compile_json_hooks_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "compile_json_hooks_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "compile_json_hooks_project.duckdb"\n'
+            ),
+            "hooks/notify.py": (
+                "from sqlbuild.hooks import hook\n\n"
+                "@hook\n"
+                "def notify(ctx, message):\n"
+                "    ctx.log(message)\n"
+            ),
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized table,\n"
+                '  pre_hooks [sql("SELECT 1"), python("notify", message: "starting")],\n'
+                '  post_hooks [python("notify", message: "done")]\n'
+                ");\n\n"
+                "SELECT 1 AS id\n"
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, object] = json.loads(result.stdout)
+    resources: dict[str, object] = payload["resources"]
+    models: list[dict[str, object]] = resources["models"]
+    orders: dict[str, object] = next(model for model in models if model["name"] == "orders")
+    fragment: str
+    for fragment in test_case.expected_sql_fragments:
+        assert fragment in str(orders["query_sql"])
+    assert orders["pre_hooks"] == list(test_case.expected_pre_hooks)
+    assert orders["post_hooks"] == list(test_case.expected_post_hooks)

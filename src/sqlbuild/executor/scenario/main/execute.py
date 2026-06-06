@@ -55,6 +55,7 @@ def execute_scenario_model(
                 model_audits=(),
                 run_id=run_id,
                 query_change_tracking=False,
+                hook_functions=scenario_plan.hook_functions,
             )
         )
 
@@ -75,6 +76,7 @@ def execute_scenario_model(
             promotion_mode=TablePromotionMode.DIRECT,
             run_id=run_id,
             query_change_tracking=False,
+            hook_functions=scenario_plan.hook_functions,
         )
     )
 

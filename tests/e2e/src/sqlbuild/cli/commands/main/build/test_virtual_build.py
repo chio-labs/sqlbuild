@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualPartialRollbackE2ETestCase,
     VirtualPromoteE2ETestCase,
     VirtualPythonBuildE2ETestCase,
+    VirtualPythonHooksBuildE2ETestCase,
     VirtualRollbackE2ETestCase,
     VirtualSourceFreshnessBuildE2ETestCase,
     VirtualWaffleShopE2ETestCase,
@@ -159,6 +160,78 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         ),
     )
     assert repeat_ref_hash_rows == ref_hash_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPythonHooksBuildE2ETestCase(
+            description="virtual build executes discovered Python lifecycle hook",
+            expected_exit_code=0,
+            expected_model_rows=((7,),),
+            expected_hook_log_rows=(("fact_orders", "post_hooks"),),
+        )
+    ],
+    ids=["virtual build executes discovered Python lifecycle hook"],
+)
+def test_given_virtual_build_with_python_hooks_when_building_then_hooks_execute(
+    test_case: VirtualPythonHooksBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_python_hooks_build",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "hooks/lifecycle.py": dedent(
+                """
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def log_virtual_hook(ctx):
+                    ctx.execute_sql(
+                        "CREATE TABLE main.virtual_hook_log AS "
+                        f"SELECT '{ctx.model_name}' AS model_name, '{ctx.phase}' AS phase"
+                    )
+                """
+            ).strip()
+            + "\n",
+            "models/fact_orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  post_hooks [python("log_virtual_hook")]
+                );
+
+                SELECT 7 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+
+    assert build_result.returncode == test_case.expected_exit_code, build_result.stderr
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT id FROM dev__dev.fact_orders ORDER BY id",
+    ) == list(test_case.expected_model_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT model_name, phase FROM main.virtual_hook_log",
+    ) == list(test_case.expected_hook_log_rows)
 
 
 @pytest.mark.parametrize(

@@ -94,6 +94,29 @@ class FactoryDefinition:
 
 
 @dataclass(frozen=True)
+class SqlHookEntry:
+    """A model lifecycle hook that executes SQL."""
+
+    statement: str
+
+
+@dataclass(frozen=True)
+class PythonHookEntry:
+    """A model lifecycle hook that invokes a discovered Python hook."""
+
+    name: str
+    kwargs: dict[str, object]
+
+
+@dataclass(frozen=True)
+class HookDefinition:
+    """Metadata attached to a decorated model lifecycle hook function."""
+
+    name: str
+    description: str | None = None
+
+
+@dataclass(frozen=True)
 class SqlResourceRef:
     """Typed dependency reference to a SQLBuild SQL graph resource."""
 

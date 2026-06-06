@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.models.core import (
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
@@ -342,8 +343,8 @@ class ModelPlanEntry:
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     contract_enforced: bool = False
     contract_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
-    pre_hook: object = None
-    post_hook: object = None
+    pre_hooks: object = None
+    post_hooks: object = None
     previous_query_sql: str | None = None
     fingerprint_metadata_json: str | None = None
     previous_metadata_json: str | None = None
@@ -569,6 +570,7 @@ class ScenarioExecutionPlan:
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     expected_expectations: tuple[ScenarioExpectedExpectationPlan, ...] = field(
         default_factory=tuple
     )
@@ -601,5 +603,6 @@ class PlanOutput:
     function_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
+    hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     source_freshness: DirectSourceFreshnessPlanningResult | None = None
     metadata: dict[str, object] = field(default_factory=dict)

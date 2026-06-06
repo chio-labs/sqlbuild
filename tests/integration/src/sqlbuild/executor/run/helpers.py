@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
@@ -25,7 +26,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
@@ -40,6 +41,21 @@ class ExtraAuditDefinition:
     severity: str
 
 
+def create_python_hook_data(ctx: HookContext, value: int) -> None:
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.destination.schema}.python_hook_data AS SELECT {value} AS val"
+    )
+    ctx.log(f"python pre-hook created data for {ctx.model_name}")
+
+
+def insert_table_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.hook_log VALUES ('{phase}')")
+
+
+def fail_table_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
+
+
 def build_table_plan_entry(
     *,
     name: str,
@@ -47,8 +63,8 @@ def build_table_plan_entry(
     target_schema: str | None,
     target_name: str,
     type_enforcement: bool = False,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for table execution tests."""
 
@@ -70,8 +86,8 @@ def build_table_plan_entry(
         resolved_sql=sql,
         logical_ddl=f"CREATE TABLE {qualified} AS {sql}",
         type_enforcement=type_enforcement,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 
@@ -171,6 +187,8 @@ def verify_success_warehouse_state(
         test_case=test_case,
     )
     _verify_warning_fragment(result=result, test_case=test_case)
+    _verify_lifecycle_event_fragments(result=result, test_case=test_case)
+    _verify_query_results(connection=connection, test_case=test_case)
 
 
 def verify_failure_warehouse_state(
@@ -208,8 +226,8 @@ def _execute_test(
         target_schema=test_case.target_schema,
         target_name=test_case.target_name,
         type_enforcement=test_case.type_enforcement,
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)
@@ -242,6 +260,11 @@ def _execute_test(
         run_id="test_run",
         query_change_tracking=(
             test_case.query_change_tracking if isinstance(test_case, TableSuccessTestCase) else True
+        ),
+        hook_functions=tuple(
+            hook_function
+            for hook_function in getattr(test_case, "hook_functions", ())
+            if isinstance(hook_function, DiscoveredHookFunction)
         ),
     )
 
@@ -327,6 +350,26 @@ def _verify_warning_fragment(
         return
     all_warnings: str = " ".join(result.warning_messages)
     assert test_case.expected_warning_fragment in all_warnings
+
+
+def _verify_lifecycle_event_fragments(
+    *,
+    result: ModelExecutionResult,
+    test_case: TableSuccessTestCase,
+) -> None:
+    fragment: str
+    for fragment in test_case.expected_lifecycle_event_fragments:
+        assert any(fragment in event.content for event in result.lifecycle_events)
+
+
+def _verify_query_results(*, connection: Any, test_case: TableSuccessTestCase) -> None:
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        actual_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row) for row in connection.execute(query).fetchall()
+        )
+        assert actual_rows == expected_rows
 
 
 def _verify_error_fragment(

@@ -32,6 +32,7 @@ class DiscoverProjectInputsTestCase:
     expected_task_names: tuple[str, ...] = ()
     expected_asset_names: tuple[str, ...] = ()
     expected_check_names: tuple[str, ...] = ()
+    expected_hook_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

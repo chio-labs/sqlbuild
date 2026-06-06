@@ -16,6 +16,7 @@ from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredPythonFunctionFile,
@@ -396,5 +397,6 @@ class CompiledProject:
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
+    hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None

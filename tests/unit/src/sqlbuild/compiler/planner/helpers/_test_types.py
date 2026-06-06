@@ -409,6 +409,7 @@ class ScenarioExecutionPlanTestCase:
     expected_expected_actual_destinations: dict[str, str]
     expected_expected_sql: dict[str, str]
     expected_assertion_sql: dict[str, str]
+    expected_hook_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

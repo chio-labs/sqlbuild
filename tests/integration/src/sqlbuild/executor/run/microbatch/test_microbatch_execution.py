@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -15,11 +17,14 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
+    fail_microbatch_hook,
+    insert_microbatch_hook_log,
     run_failure_test,
     run_success_test,
     verify_failure_state,
@@ -234,7 +239,7 @@ SUCCESS_TEST_CASES: list[MicrobatchSuccessTestCase] = [
         expected_audit_count=4,
     ),
     MicrobatchSuccessTestCase(
-        description="hooks run once around entire batch loop",
+        description="SQL and Python hooks run once around entire batch loop",
         setup_sql=(
             _TS_SOURCE_SQL,
             _TS_SOURCE_DATA,
@@ -250,13 +255,27 @@ SUCCESS_TEST_CASES: list[MicrobatchSuccessTestCase] = [
         batch_size="1h",
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
-        pre_hook="INSERT INTO main.hook_log VALUES ('pre')",
-        post_hook="INSERT INTO main.hook_log VALUES ('post')",
+        pre_hook=[
+            SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('sql_pre')"),
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
+        ],
+        post_hook=[
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+            SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('sql_post')"),
+        ],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/microbatch.py"),
+                name="insert_hook_log",
+                function=insert_microbatch_hook_log,
+            ),
+        ),
         expected_row_count=3,
         expected_query_results=(
             (
-                "SELECT phase FROM main.hook_log ORDER BY phase",
-                (("post",), ("pre",)),
+                "SELECT phase FROM main.hook_log ORDER BY rowid",
+                (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
             ),
         ),
     ),
@@ -414,8 +433,37 @@ FAILURE_TEST_CASES: list[MicrobatchFailureTestCase] = [
         batch_size="1h",
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
-        pre_hook="SELECT * FROM nonexistent_table_for_hook",
+        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        expected_row_count=0,
+    ),
+    MicrobatchFailureTestCase(
+        description="python pre_hook failure blocks all batches",
+        setup_sql=(
+            _TS_SOURCE_SQL,
+            _TS_SOURCE_DATA,
+            "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+        ),
+        model_sql=_TS_MODEL_SQL,
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="append",
+        cursor_column="event_time",
+        cursor_type="timestamp",
+        batch_size="1h",
+        microbatch_start="2026-01-01T00:00:00",
+        microbatch_end="2026-01-01T03:00:00",
+        pre_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "microbatch pre failed"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/microbatch.py"),
+                name="fail_hook",
+                function=fail_microbatch_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: microbatch pre failed',
         expected_row_count=0,
     ),
     MicrobatchFailureTestCase(
@@ -491,8 +539,37 @@ FAILURE_TEST_CASES: list[MicrobatchFailureTestCase] = [
         batch_size="1h",
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
-        post_hook="SELECT * FROM nonexistent_table_for_hook",
+        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_row_count=3,
+    ),
+    MicrobatchFailureTestCase(
+        description="python post_hook failure after multiple successful batches",
+        setup_sql=(
+            _TS_SOURCE_SQL,
+            _TS_SOURCE_DATA,
+            "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+        ),
+        model_sql=_TS_MODEL_SQL,
+        target_schema="main",
+        target_name="orders",
+        incremental_strategy="append",
+        cursor_column="event_time",
+        cursor_type="timestamp",
+        batch_size="1h",
+        microbatch_start="2026-01-01T00:00:00",
+        microbatch_end="2026-01-01T03:00:00",
+        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "microbatch post failed"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/microbatch.py"),
+                name="fail_hook",
+                function=fail_microbatch_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: microbatch post failed',
         expected_row_count=3,
     ),
     MicrobatchFailureTestCase(

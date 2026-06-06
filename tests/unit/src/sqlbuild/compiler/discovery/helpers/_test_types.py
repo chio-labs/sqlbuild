@@ -94,6 +94,24 @@ class LoadLocalConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverHookFunctionsTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_hook_names: tuple[str, ...]
+    expected_hook_paths: tuple[str, ...]
+    expected_hook_descriptions: tuple[str | None, ...]
+    expected_function_names: tuple[str, ...]
+    expected_marker_file_exists: bool = False
+
+
+@dataclass(frozen=True)
+class DiscoverHookFunctionsErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ParseModelSqlHeaderTestCase:
     description: str
     contents: str

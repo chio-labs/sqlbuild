@@ -9,6 +9,7 @@ from sqlbuild.compiler.discovery.helpers.sql_models import (
     model_output_column_locations,
     parse_model_sql,
 )
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.schema import SourceLocation
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ModelHeaderColumnLocationTestCase,
@@ -122,7 +123,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         MODEL (
           schema "analytics mart",
           description "Bob said \\"hello\\"",
-          post_hook ["grant select on @@CTX:destination.qualified to role analytics"],
+          post_hooks [sql("grant select on @@CTX:destination.qualified to role analytics")],
         );
 
         SELECT 1
@@ -130,7 +131,11 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         expected_header_values={
             "schema": "analytics mart",
             "description": 'Bob said "hello"',
-            "post_hook": ["grant select on @@CTX:destination.qualified to role analytics"],
+            "post_hooks": [
+                SqlHookEntry(
+                    statement="grant select on @@CTX:destination.qualified to role analytics"
+                )
+            ],
         },
         expected_query="SELECT 1",
     ),
@@ -255,6 +260,42 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         },
         expected_query="SELECT 1",
     ),
+    ParseModelSqlHeaderTestCase(
+        description="accepts typed SQL and Python lifecycle hooks",
+        contents="""
+        MODEL (
+          pre_hooks [
+            sql("insert into audit_log select 'starting'"),
+            python("notify", channel: "#data", attempts: 2, urgent: true),
+          ],
+          post_hooks [
+            python("notify success", message: "@@CTX:destination.qualified"),
+            sql("grant select on @@CTX:destination.qualified to role analytics"),
+          ],
+        );
+
+        SELECT 1
+        """,
+        expected_header_values={
+            "pre_hooks": [
+                SqlHookEntry(statement="insert into audit_log select 'starting'"),
+                PythonHookEntry(
+                    name="notify",
+                    kwargs={"channel": "#data", "attempts": 2, "urgent": True},
+                ),
+            ],
+            "post_hooks": [
+                PythonHookEntry(
+                    name="notify success",
+                    kwargs={"message": "@@CTX:destination.qualified"},
+                ),
+                SqlHookEntry(
+                    statement="grant select on @@CTX:destination.qualified to role analytics"
+                ),
+            ],
+        },
+        expected_query="SELECT 1",
+    ),
 ]
 
 
@@ -348,6 +389,39 @@ MODEL_SQL_ERROR_TEST_CASES: list[ParseModelSqlErrorTestCase] = [
         SELECT 1
         """,
         expected_error_fragment="quote values with spaces",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when sql hook receives extra arguments",
+        contents="""
+        MODEL (
+          pre_hooks [sql("select 1", label: "extra")]
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="does not accept additional arguments",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when python hook name is not quoted",
+        contents="""
+        MODEL (
+          post_hooks [python(notify)]
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="requires a quoted hook name",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when python hook kwarg does not use colon syntax",
+        contents="""
+        MODEL (
+          post_hooks [python("notify", channel "#data")]
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="expected ':'",
     ),
 ]
 

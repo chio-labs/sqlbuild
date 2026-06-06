@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -9,6 +10,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapter.shared.types import PromotionStrategy, TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -37,7 +39,8 @@ from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.helpers.view import (
     execute_view_entry as execute_view_entry,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
@@ -61,6 +64,9 @@ def execute_table_entry(
     promotion_mode: TablePromotionMode,
     run_id: str,
     query_change_tracking: bool,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    effective_target_name: str | None = None,
+    effective_vars: Mapping[str, object] | None = None,
 ) -> ModelExecutionResult:
     """Execute one table model through its full materialization lifecycle."""
 
@@ -79,6 +85,7 @@ def execute_table_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
     runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
     resolved_sql: str = entry.resolved_sql
@@ -92,6 +99,7 @@ def execute_table_entry(
                 warnings=warnings,
                 audit_results=audit_results,
                 statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
         runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
             adapter=adapter,
@@ -121,13 +129,23 @@ def execute_table_entry(
             schema=target_schema,
             statement_recorder=statement_recorder,
         )
-        statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
+        )
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.pre_hook,
-                phase_label="pre_hook",
+                hooks=entry.pre_hooks,
+                phase=HookPhase.PRE_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -137,6 +155,7 @@ def execute_table_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     if promotion_mode == TablePromotionMode.STAGED:
@@ -160,7 +179,11 @@ def execute_table_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
             resolved_sql=resolved_sql,
+            hook_functions=hook_functions,
+            effective_target_name=effective_target_name,
+            effective_vars=effective_vars,
         )
 
     if entry.contract_enforced:
@@ -175,6 +198,7 @@ def execute_table_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     return _direct_lifecycle(
@@ -192,7 +216,11 @@ def execute_table_entry(
         warnings=warnings,
         audit_results=audit_results,
         statement_recorder=statement_recorder,
+        hook_results=hook_results,
         resolved_sql=resolved_sql,
+        hook_functions=hook_functions,
+        effective_target_name=effective_target_name,
+        effective_vars=effective_vars,
     )
 
 
@@ -217,7 +245,11 @@ def _staged_lifecycle(
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
+    hook_results: list[HookExecutionResult],
     resolved_sql: str,
+    hook_functions: tuple[DiscoveredHookFunction, ...],
+    effective_target_name: str | None,
+    effective_vars: Mapping[str, object] | None,
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
@@ -246,6 +278,7 @@ def _staged_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     if entry.type_enforcement and declared_columns:
@@ -298,6 +331,7 @@ def _staged_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     overrides: dict[str, str] = {entry.name: staging_qualified}
@@ -394,13 +428,23 @@ def _staged_lifecycle(
         )
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
+        )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.post_hook,
-                phase_label="post_hook",
+                hooks=entry.post_hooks,
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -411,6 +455,7 @@ def _staged_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try_write_fingerprint(
@@ -429,6 +474,7 @@ def _staged_lifecycle(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
     )
 
 
@@ -448,7 +494,11 @@ def _direct_lifecycle(
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
+    hook_results: list[HookExecutionResult],
     resolved_sql: str,
+    hook_functions: tuple[DiscoveredHookFunction, ...],
+    effective_target_name: str | None,
+    effective_vars: Mapping[str, object] | None,
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
@@ -464,6 +514,7 @@ def _direct_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
@@ -482,6 +533,7 @@ def _direct_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     audit_error: bool = False
@@ -513,16 +565,27 @@ def _direct_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
+        )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.post_hook,
-                phase_label="post_hook",
+                hooks=entry.post_hooks,
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=hook_functions,
+                model_name=entry.name,
+                destination=entry.destination,
+                run_id=run_id,
+                environment=effective_target_name,
+                effective_vars=effective_vars,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -533,6 +596,7 @@ def _direct_lifecycle(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try_write_fingerprint(
@@ -551,4 +615,5 @@ def _direct_lifecycle(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
     )

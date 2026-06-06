@@ -131,6 +131,7 @@ def assemble_compiled_project(
             for scenario_input in inputs.scenario_inputs
         ),
         loader_functions=inputs.discovered_inputs.loader_functions,
+        hook_functions=inputs.discovered_inputs.hook_functions,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )

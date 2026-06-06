@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run.helpers.snapshot import (
@@ -17,14 +19,20 @@ from sqlbuild.executor.run.helpers.snapshot import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.project import SnapshotsConfig
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
+    SnapshotHookFailureTestCase,
     SnapshotLifecycleTestCase,
     SnapshotRuntimeContractErrorTestCase,
     SnapshotSchemaChangeTestCase,
 )
-from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_snapshot_execution_plan_entry
+from tests.unit.src.sqlbuild.executor.run.helpers.helpers import (
+    build_snapshot_execution_plan_entry,
+    fail_snapshot_hook,
+    insert_snapshot_hook_log,
+)
 
 COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaChangeTestCase] = [
     SnapshotSchemaChangeTestCase(
@@ -58,28 +66,59 @@ INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaCha
     ),
 ]
 
+SNAPSHOT_HOOK_FAILURE_TEST_CASES: list[SnapshotHookFailureTestCase] = [
+    SnapshotHookFailureTestCase(
+        description="python pre hook failure",
+        pre_hooks=(PythonHookEntry(name="fail_hook", kwargs={"message": "snapshot pre failed"}),),
+        post_hooks=None,
+        expected_phase=ExecutionPhase.PRE_HOOK,
+        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: snapshot pre failed',
+    ),
+    SnapshotHookFailureTestCase(
+        description="python post hook failure",
+        pre_hooks=None,
+        post_hooks=(PythonHookEntry(name="fail_hook", kwargs={"message": "snapshot post failed"}),),
+        expected_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: snapshot post failed',
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
     [
         SnapshotLifecycleTestCase(
-            description="successful snapshot runs hooks writes fingerprint and cleans delta",
+            description="snapshot runs SQL and Python hooks and cleans delta",
             run_id="snapshot_lifecycle_run",
             pre_hook=(
-                "CREATE TABLE main.snapshot_hook_log (phase VARCHAR)",
-                "INSERT INTO main.snapshot_hook_log VALUES ('pre')",
+                SqlHookEntry(statement="CREATE TABLE main.snapshot_hook_log (phase VARCHAR)"),
+                SqlHookEntry(statement="INSERT INTO main.snapshot_hook_log VALUES ('sql_pre')"),
+                PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
             ),
-            post_hook=("INSERT INTO main.snapshot_hook_log VALUES ('post')",),
+            post_hook=(
+                PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+                SqlHookEntry(statement="INSERT INTO main.snapshot_hook_log VALUES ('sql_post')"),
+            ),
             expected_hook_events=(
                 "CREATE TABLE main.snapshot_hook_log (phase VARCHAR)",
-                "INSERT INTO main.snapshot_hook_log VALUES ('pre')",
-                "INSERT INTO main.snapshot_hook_log VALUES ('post')",
+                "INSERT INTO main.snapshot_hook_log VALUES ('sql_pre')",
+                "INSERT INTO main.snapshot_hook_log VALUES ('python_pre')",
+                "INSERT INTO main.snapshot_hook_log VALUES ('python_post')",
+                "INSERT INTO main.snapshot_hook_log VALUES ('sql_post')",
             ),
             expected_model_name="customer_snapshot",
             expected_target_name="customer_snapshot",
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/snapshot.py"),
+                    name="insert_hook_log",
+                    function=insert_snapshot_hook_log,
+                ),
+            ),
         )
     ],
-    ids=["successful snapshot runs hooks writes fingerprint and cleans delta"],
+    ids=["snapshot runs SQL and Python hooks and cleans delta"],
 )
 def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effects(
     test_case: SnapshotLifecycleTestCase,
@@ -87,8 +126,8 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     entry: ModelPlanEntry = build_snapshot_execution_plan_entry(
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
@@ -101,6 +140,11 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
         model_audits=(),
         run_id=test_case.run_id,
         query_change_tracking=True,
+        hook_functions=tuple(
+            hook_function
+            for hook_function in test_case.hook_functions
+            if isinstance(hook_function, DiscoveredHookFunction)
+        ),
     )
     hook_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)
@@ -115,7 +159,7 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     lifecycle_sql: tuple[str, ...] = tuple(event.content for event in result.lifecycle_events)
 
     assert result.status == ExecutionStatus.SUCCESS
-    assert hook_rows == (("pre",), ("post",))
+    assert hook_rows == (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",))
     assert fingerprint_rows == (
         (test_case.expected_model_name, test_case.expected_target_name, test_case.run_id),
     )
@@ -131,6 +175,49 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     expected_hook_event: str
     for expected_hook_event in test_case.expected_hook_events:
         assert expected_hook_event in lifecycle_sql
+
+    adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNAPSHOT_HOOK_FAILURE_TEST_CASES,
+    ids=[case.description for case in SNAPSHOT_HOOK_FAILURE_TEST_CASES],
+)
+def test_given_python_snapshot_hook_failure_when_executing_then_reports_hook_phase(
+    test_case: SnapshotHookFailureTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    entry: ModelPlanEntry = build_snapshot_execution_plan_entry(
+        pre_hooks=test_case.pre_hooks,
+        post_hooks=test_case.post_hooks,
+    )
+
+    result: ModelExecutionResult = execute_snapshot_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_targets={},
+        seed_targets={},
+        source_map={},
+        model_audits=(),
+        run_id="snapshot_hook_failure_run",
+        query_change_tracking=True,
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/snapshot.py"),
+                name="fail_hook",
+                function=fail_snapshot_hook,
+            ),
+        ),
+    )
+
+    assert result.status == ExecutionStatus.FAILED
+    assert result.failed_phase == test_case.expected_phase
+    assert result.error_message is not None
+    assert test_case.expected_error_fragment in result.error_message
 
     adapter.close(connection)
 

@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
     substitute_placeholder_defaults,
 )
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 _VALID_HOOK_ROOT_KEYS: frozenset[str] = frozenset(
     {
@@ -100,26 +101,45 @@ def validate_hook_sql_syntax(
     model_name: str,
     file_path: Path,
     placeholders: dict[str, str] | None = None,
+    hook_label: str | None = None,
 ) -> None:
     """Validate hook SQL strings recursively inside supported hook container shapes."""
 
     if isinstance(value, str):
+        effective_label: str = hook_label or hook_name
         _validate_sql_syntax_with_message(
             query_sql=value,
-            error_prefix=f"SQL syntax error in {hook_name} for model '{model_name}' ({file_path})",
+            error_prefix=f"model '{model_name}' {effective_label} has invalid SQL ({file_path})",
             placeholders=placeholders,
             require_hook_statement=True,
         )
         return
+    if isinstance(value, SqlHookEntry):
+        validate_hook_sql_syntax(
+            value=value.statement,
+            hook_name=hook_name,
+            model_name=model_name,
+            file_path=file_path,
+            placeholders=placeholders,
+            hook_label=hook_label or f'{hook_name} sql("...")',
+        )
+        return
+    if isinstance(value, PythonHookEntry):
+        return
     if isinstance(value, list | tuple):
+        hook_index: int
         item: object
-        for item in value:
+        for hook_index, item in enumerate(value):
+            item_label: str | None = None
+            if isinstance(item, SqlHookEntry | str):
+                item_label = f'{hook_name}[{hook_index}] sql("...")'
             validate_hook_sql_syntax(
                 value=item,
                 hook_name=hook_name,
                 model_name=model_name,
                 file_path=file_path,
                 placeholders=placeholders,
+                hook_label=item_label,
             )
 
 

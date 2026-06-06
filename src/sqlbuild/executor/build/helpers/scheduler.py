@@ -835,6 +835,8 @@ def _dispatch_model(
             effective_vars=effective_vars or {},
             existing_relation=existing,
             on_progress=on_progress,
+            hook_functions=plan.hook_functions,
+            effective_target_name=target,
         )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH
@@ -856,6 +858,9 @@ def _dispatch_model(
             declared_columns=entry.declared_columns,
             run_id=run_id,
             query_change_tracking=query_change_tracking,
+            hook_functions=plan.hook_functions,
+            effective_target_name=target,
+            effective_vars=effective_vars,
         )
     if is_full_refresh_microbatch:
         return execute_microbatch_entry(
@@ -870,6 +875,9 @@ def _dispatch_model(
             run_id=run_id,
             query_change_tracking=query_change_tracking,
             is_full_refresh=True,
+            hook_functions=plan.hook_functions,
+            effective_target_name=target,
+            effective_vars=effective_vars,
         )
     if entry.action in INCREMENTAL_ACTIONS:
         return execute_incremental_entry(
@@ -883,6 +891,9 @@ def _dispatch_model(
             declared_columns=entry.declared_columns,
             run_id=run_id,
             query_change_tracking=query_change_tracking,
+            hook_functions=plan.hook_functions,
+            effective_target_name=target,
+            effective_vars=effective_vars,
         )
     if entry.action == PlanAction.CREATE_VIEW:
         return execute_view_entry(
@@ -895,6 +906,9 @@ def _dispatch_model(
             model_audits=model_audits,
             run_id=run_id,
             query_change_tracking=query_change_tracking,
+            hook_functions=plan.hook_functions,
+            effective_target_name=target,
+            effective_vars=effective_vars,
         )
     if entry.action == PlanAction.SNAPSHOT:
         return execute_snapshot_entry(
@@ -909,6 +923,9 @@ def _dispatch_model(
             query_change_tracking=query_change_tracking,
             snapshots=snapshots,
             allow_snapshot_schema_change=allow_snapshot_schema_change,
+            hook_functions=plan.hook_functions,
+            effective_target_name=target,
+            effective_vars=effective_vars,
         )
     return execute_table_entry(
         entry=entry,
@@ -922,6 +939,9 @@ def _dispatch_model(
         promotion_mode=promotion_mode,
         run_id=run_id,
         query_change_tracking=query_change_tracking,
+        hook_functions=plan.hook_functions,
+        effective_target_name=target,
+        effective_vars=effective_vars,
     )
 
 

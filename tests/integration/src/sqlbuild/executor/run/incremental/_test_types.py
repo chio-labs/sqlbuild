@@ -41,6 +41,7 @@ class IncrementalSuccessTestCase:
     )
     expected_column_names: tuple[str, ...] = field(default_factory=tuple)
     expected_delta_cleaned: bool = True
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -78,3 +79,4 @@ class IncrementalFailureTestCase:
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
         default_factory=tuple
     )
+    hook_functions: tuple[object, ...] = field(default_factory=tuple)

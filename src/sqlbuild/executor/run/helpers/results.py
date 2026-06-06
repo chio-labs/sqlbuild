@@ -19,7 +19,7 @@ from sqlbuild.executor.run.constants import (
     RUN_TYPE_ENFORCEMENT_FAILED_CODE,
     RUN_UNKNOWN_FAILED_CODE,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
 
@@ -34,6 +34,7 @@ def build_failed_result(
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
+    hook_results: list[HookExecutionResult] | None = None,
 ) -> ModelExecutionResult:
     """Build a failed ModelExecutionResult for a specific phase."""
 
@@ -54,6 +55,7 @@ def build_failed_result(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results or ()),
         error_code=rendered_code,
         error_help=rendered_help,
         error_message=rendered_error,

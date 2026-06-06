@@ -103,6 +103,8 @@ class DefaultsConfig:
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     tags: tuple[str, ...] = field(default_factory=tuple)
     contract: str | None = None
+    pre_hooks: object | None = None
+    post_hooks: object | None = None
 
 
 @dataclass(frozen=True)

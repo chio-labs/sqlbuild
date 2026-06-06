@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
@@ -37,6 +38,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioFixtureExecutionResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioAssertionExpectationIntegrationTestCase,
@@ -56,6 +58,7 @@ from tests.integration.src.sqlbuild.executor.scenario.helpers import (
     build_duckdb_invalid_fixture_plan,
     build_duckdb_model_execution_plan,
     create_table,
+    insert_scenario_hook_log,
     relation_exists,
     relation_rows,
 )
@@ -238,7 +241,19 @@ def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
-    scenario_plan: ScenarioExecutionPlan = build_duckdb_model_execution_plan()
+    scenario_plan: ScenarioExecutionPlan = build_duckdb_model_execution_plan(
+        stg_orders_pre_hooks=(
+            PythonHookEntry(name="insert_scenario_hook_log", kwargs={"model_name": "stg_orders"}),
+        ),
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/scenario.py"),
+                name="insert_scenario_hook_log",
+                function=insert_scenario_hook_log,
+            ),
+        ),
+    )
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = execute_scenario_fixtures(
         scenario_name=SCENARIO_NAME,
         fixture_plans=scenario_plan.fixture_plans,
@@ -265,6 +280,7 @@ def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
         relation_rows(connection, "__sqb_51b385aebe20__model__daily_revenue")
         == test_case.expected_rows
     )
+    assert relation_rows(connection, "scenario_hook_log") == (("stg_orders", "pre_hooks"),)
 
 
 EXPECTED_EXPECTATION_TEST_CASES: list[ScenarioExpectedExpectationIntegrationTestCase] = [

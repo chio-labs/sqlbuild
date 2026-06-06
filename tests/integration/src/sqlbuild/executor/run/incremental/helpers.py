@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     CursorBounds,
@@ -31,7 +32,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.helpers.incremental import execute_incremental_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
     IncrementalFailureTestCase,
@@ -43,6 +44,14 @@ _STRATEGY_TO_ACTION: dict[str, PlanAction] = {
     IncrementalStrategy.DELETE_INSERT: PlanAction.INCREMENTAL_DELETE_INSERT,
     IncrementalStrategy.MERGE: PlanAction.INCREMENTAL_MERGE,
 }
+
+
+def insert_incremental_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.hook_log VALUES ('{phase}')")
+
+
+def fail_incremental_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
 
 
 def build_incremental_plan_entry(
@@ -62,8 +71,8 @@ def build_incremental_plan_entry(
     cursor_input_relations: tuple[tuple[str, str], ...] = (),
     cursor_inputs_model_backed: bool = False,
     type_enforcement: bool = False,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for incremental execution tests."""
 
@@ -107,8 +116,8 @@ def build_incremental_plan_entry(
         cursor_bounds=cursor_bounds,
         cursor_input_relations=input_relations,
         type_enforcement=type_enforcement,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 
@@ -287,8 +296,8 @@ def _execute_test(
         cursor_input_relations=test_case.cursor_input_relations,
         cursor_inputs_model_backed=test_case.cursor_inputs_model_backed,
         type_enforcement=test_case.type_enforcement,
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)
@@ -322,6 +331,11 @@ def _execute_test(
             test_case.query_change_tracking
             if isinstance(test_case, IncrementalSuccessTestCase)
             else True
+        ),
+        hook_functions=tuple(
+            hook_function
+            for hook_function in getattr(test_case, "hook_functions", ())
+            if isinstance(hook_function, DiscoveredHookFunction)
         ),
     )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -10,11 +11,13 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     CleanupTestCase,
     ContextVerificationTestCase,
@@ -31,6 +34,8 @@ from tests.integration.src.sqlbuild.executor.build.custom.helpers import (
     build_passing_audit,
     build_simple_fn,
     build_user_audit_fn,
+    fail_custom_hook,
+    insert_custom_hook_log,
     relation_exists,
     resolve_fn,
     row_count,
@@ -132,22 +137,40 @@ def test_given_custom_materialization_when_failing_then_reports_failure(
 
 HOOK_TEST_CASES: list[HookTestCase] = [
     HookTestCase(
-        description="pre_hook executes before materialization",
-        pre_hook="CREATE TABLE main.hook_marker (x INT); INSERT INTO main.hook_marker VALUES (1)",
-        post_hook=None,
+        description="SQL and Python hooks execute around custom materialization",
+        pre_hook=[
+            SqlHookEntry(
+                statement=(
+                    "CREATE TABLE main.hook_marker (phase VARCHAR); "
+                    "INSERT INTO main.hook_marker VALUES ('sql_pre')"
+                )
+            ),
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
+        ],
+        post_hook=[
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+            SqlHookEntry(statement="INSERT INTO main.hook_marker VALUES ('sql_post')"),
+        ],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/custom.py"),
+                name="insert_hook_log",
+                function=insert_custom_hook_log,
+            ),
+        ),
         expected_status=ExecutionStatus.SUCCESS,
         expected_table_exists=True,
-    ),
-    HookTestCase(
-        description="post_hook executes after materialization",
-        pre_hook=None,
-        post_hook="CREATE TABLE main.hook_marker (x INT); INSERT INTO main.hook_marker VALUES (2)",
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_table_exists=True,
+        expected_query_results=(
+            (
+                "SELECT phase FROM main.hook_marker ORDER BY rowid",
+                (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
+            ),
+        ),
     ),
     HookTestCase(
         description="pre_hook failure skips materialization",
-        pre_hook="SELECT * FROM nonexistent_table_for_hook",
+        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         post_hook=None,
         expected_status=ExecutionStatus.FAILED,
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
@@ -156,9 +179,43 @@ HOOK_TEST_CASES: list[HookTestCase] = [
     HookTestCase(
         description="post_hook failure after successful materialization",
         pre_hook=None,
-        post_hook="SELECT * FROM nonexistent_table_for_hook",
+        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_status=ExecutionStatus.FAILED,
         expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_table_exists=True,
+    ),
+    HookTestCase(
+        description="python pre_hook failure skips custom materialization",
+        pre_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "custom pre failed"})],
+        post_hook=None,
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/custom.py"),
+                name="fail_hook",
+                function=fail_custom_hook,
+            ),
+        ),
+        expected_status=ExecutionStatus.FAILED,
+        expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: custom pre failed',
+        expected_table_exists=False,
+    ),
+    HookTestCase(
+        description="python post_hook failure after custom materialization",
+        pre_hook=None,
+        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "custom post failed"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/custom.py"),
+                name="fail_hook",
+                function=fail_custom_hook,
+            ),
+        ),
+        expected_status=ExecutionStatus.FAILED,
+        expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: custom post failed',
         expected_table_exists=True,
     ),
 ]
@@ -176,20 +233,34 @@ def test_given_custom_materialization_with_hooks_when_executing_then_handles_hoo
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(
         sql="SELECT 1 AS id",
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     result: ModelExecutionResult = run_custom_entry(
-        adapter=adapter, connection=connection, entry=entry, materialize_fn=build_simple_fn()
+        adapter=adapter,
+        connection=connection,
+        entry=entry,
+        materialize_fn=build_simple_fn(),
+        hook_functions=tuple(
+            hook_function
+            for hook_function in test_case.hook_functions
+            if isinstance(hook_function, DiscoveredHookFunction)
+        ),
     )
 
     assert result.status == test_case.expected_status
     assert result.failed_phase == test_case.expected_failed_phase
+    assert (test_case.expected_error_fragment or "") in (result.error_message or "")
     assert (
         relation_exists(connection, schema="main", name="test_model")
         == test_case.expected_table_exists
     )
+    for query, expected_rows in test_case.expected_query_results:
+        actual_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row) for row in connection.execute(query).fetchall()
+        )
+        assert actual_rows == expected_rows
 
 
 FRAMEWORK_AUDIT_TEST_CASES: list[FrameworkAuditTestCase] = [

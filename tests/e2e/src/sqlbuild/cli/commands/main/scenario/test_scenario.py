@@ -14,12 +14,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioLocalRetainE2ETestCase,
     ScenarioLocalRuntimeArtifactTestCase,
     ScenarioLocalSnapshotSyncE2ETestCase,
+    ScenarioPythonHooksCliE2ETestCase,
     ScenarioRuntimeArtifactTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_local_duckdb_state,
     assert_runtime_artifact_contains,
     build_scenario_project_files,
+    build_scenario_python_hooks_project_files,
     list_scenario_relation_names,
     maybe_capture_scenario_snapshot,
     maybe_corrupt_scenario_snapshot_dialect,
@@ -32,6 +34,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
     prepare_waffle_shop,
+    query_duckdb,
     run_sqb,
 )
 
@@ -911,6 +914,48 @@ def test_given_scenario_project_when_running_scenario_test_then_cli_behaves_as_e
         db_path=project_dir / "scenario_demo.duckdb"
     )
     assert len(retained_names) == test_case.expected_retained_prefix_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioPythonHooksCliE2ETestCase(
+            description="scenario CLI executes discovered Python model hook",
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--retain"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "order_totals_pass",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_hook_log_rows=(("orders", "post_hooks"),),
+        )
+    ],
+    ids=["scenario CLI executes discovered Python model hook"],
+)
+def test_given_scenario_project_with_python_hooks_when_running_cli_then_hooks_execute(
+    test_case: ScenarioPythonHooksCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_python_hooks_project",
+        repo_files=build_scenario_python_hooks_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "scenario_demo.duckdb",
+        sql="SELECT model_name, phase FROM main.scenario_hook_log",
+    ) == list(test_case.expected_hook_log_rows)
 
 
 @pytest.mark.parametrize(
