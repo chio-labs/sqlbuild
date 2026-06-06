@@ -73,9 +73,10 @@ def build_snowflake_virtual_seed_project_toml(
     return (
         'name = "snowflake_virtual_seed"\n'
         'adapter = "snowflake"\n'
+        'default_target = "dev"\n\n'
         "[settings]\n"
         "virtual_environments = true\n"
-        'default_target = "dev"\n\n'
+        "\n"
         "[connection]\n"
         'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
         'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'

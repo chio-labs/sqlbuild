@@ -145,6 +145,18 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_vars_args(run_parser)
     add_dbt_config_args(run_parser)
 
+    freshness_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FRESHNESS)
+    freshness_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    freshness_parser.add_argument("--json", action="store_true", default=False)
+    freshness_parser.add_argument("--state", action="store_true", default=False)
+    freshness_parser.add_argument("--virtual-env", default=None)
+    freshness_parser.add_argument("--fail-on-error", action="store_true", default=False)
+    freshness_parser.add_argument("--fail-on-stale", action="store_true", default=False)
+    add_execution_json_output_arg(freshness_parser)
+    add_select_args(freshness_parser)
+    add_vars_args(freshness_parser)
+    add_dbt_config_args(freshness_parser)
+
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     test_parser.add_argument("--json", action="store_true", default=False)
@@ -403,6 +415,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.dbt import run_dbt_command
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
+    from sqlbuild.cli.commands.main.freshness import run_freshness
     from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.init import run_init
     from sqlbuild.cli.commands.main.janitor import run_janitor
@@ -457,6 +470,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         run_build=run_build,
         run_run=run_run,
+        run_freshness=run_freshness,
         run_test=run_test,
         run_check=run_check,
         run_audit=run_audit,
@@ -642,6 +656,21 @@ def _main_with_dependencies(
                 args.changes_only,
                 args.json,
                 args.json_output,
+            )
+        if args.command == CliCommand.FRESHNESS:
+            return handlers.run_freshness(
+                project_dir,
+                args.no_sql_validation,
+                args.no_color,
+                select,
+                tuple(args.exclude),
+                args.vars,
+                args.json,
+                args.json_output,
+                args.fail_on_error,
+                args.state,
+                args.fail_on_stale,
+                args.virtual_env,
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(

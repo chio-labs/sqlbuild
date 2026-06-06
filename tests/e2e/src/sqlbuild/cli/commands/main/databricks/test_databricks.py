@@ -64,7 +64,73 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
-from tests.integration.src.sqlbuild.adapters.databricks.helpers import build_unique_schema_name
+from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
+    build_databricks_connection_config,
+    build_unique_schema_name,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksCliTestCase(
+            description="source freshness uses databricks table metadata",
+            command=("--no-color", "freshness", "--select", "raw_orders"),
+            expected_stdout_fragments=(
+                "Observed (1)",
+                "raw_orders  integer",
+                "adapter",
+                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+            ),
+        )
+    ],
+    ids=["source freshness uses databricks table metadata"],
+)
+def test_given_physical_source_without_freshness_when_running_on_databricks_then_uses_metadata(
+    tmp_path: Path,
+    test_case: DatabricksCliTestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_freshness_meta")
+    catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_freshness_metadata",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_project_toml(
+                project_name="databricks_freshness_metadata",
+                schema_name=schema_name,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    database: {catalog_name}\n"
+                f"    schema: {schema_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        raw_orders_relation: str = relation_name(schema_name=schema_name, name="raw_orders")
+        execute_databricks_sql(
+            schema_name=schema_name,
+            sql=f"CREATE OR REPLACE TABLE {raw_orders_relation} AS SELECT 1 AS id",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout, result.stdout
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
 
 
 @pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
@@ -1194,6 +1260,72 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
             assert daily_revenue_rows == test_case.expected_daily_revenue_rows
     finally:
         with databricks_e2e_timing("cleanup schema"):
+            cleanup_databricks_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksBuildE2ETestCase(
+            description="direct changes only build prunes unchanged databricks model",
+            expected_table_name="orders",
+            expected_row_count=1,
+            expected_fact_order_rows=(),
+            expected_udf_rows=(),
+            expected_daily_revenue_rows=(),
+            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+        )
+    ],
+    ids=["direct changes only build prunes unchanged databricks model"],
+)
+def test_given_built_direct_project_when_building_changes_only_on_databricks_then_prunes_model(
+    tmp_path: Path,
+    test_case: DatabricksBuildE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_changes_only")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="databricks_changes_only",
+        repo_files={
+            "sqlbuild_project.toml": build_databricks_project_toml(
+                project_name="databricks_changes_only",
+                schema_name=schema_name,
+            ),
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+
+    try:
+        with databricks_e2e_timing("prepare changes-only schema"):
+            ensure_databricks_schema_ready(schema_name=schema_name)
+        with databricks_e2e_timing("initial sqb build"):
+            initial_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build"),
+                project_dir=project_dir,
+            )
+        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+        with databricks_e2e_timing("changes-only sqb build"):
+            changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+                command=("--no-color", "build", "--changes-only"),
+                project_dir=project_dir,
+            )
+
+        assert changes_only_result.returncode == test_case.expected_return_code, (
+            changes_only_result.stdout + changes_only_result.stderr
+        )
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in changes_only_result.stdout, changes_only_result.stdout
+        assert (
+            databricks_relation_row_count(
+                schema_name=schema_name,
+                relation=test_case.expected_table_name,
+            )
+            == test_case.expected_row_count
+        )
+    finally:
+        with databricks_e2e_timing("cleanup changes-only schema"):
             cleanup_databricks_schema(schema_name=schema_name)
 
 
