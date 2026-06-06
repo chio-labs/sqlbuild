@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.1](https://github.com/chio-labs/sqlbuild/compare/v0.28.0...v0.28.1) (2026-06-06)
+
+
+### Documentation
+
+* clarify playground quick start ([75fa2c0](https://github.com/chio-labs/sqlbuild/commit/75fa2c0449fd96a241d29689c6d6d0b0b3cdb603))
+* clarify playground quick start ([e0da66e](https://github.com/chio-labs/sqlbuild/commit/e0da66ee5203ea94585d1d81a2bb43c78702429c))
+
 ## [0.28.0](https://github.com/chio-labs/sqlbuild/compare/v0.27.0...v0.28.0) (2026-06-06)
 
 
