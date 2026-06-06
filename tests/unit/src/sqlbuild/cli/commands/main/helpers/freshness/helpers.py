@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.models import QueryResult
+from datetime import datetime
+
+from sqlbuild.adapter.shared.models import QueryResult, TableFreshnessMetadata
+from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+    source_freshness_data_version_hash,
+)
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
@@ -8,11 +14,28 @@ from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessV
 class FreshnessRecordingAdapter:
     adapter_name: str = "freshness_test"
 
-    def __init__(self) -> None:
+    def __init__(self, *, table_metadata_supported: bool = False) -> None:
         self.queries: list[str] = []
+        self.metadata_requests: list[tuple[str | None, str | None, str]] = []
+        self.table_metadata_supported: bool = table_metadata_supported
 
     def supports_table_freshness_metadata(self) -> bool:
-        return False
+        return self.table_metadata_supported
+
+    def get_table_freshness_metadata(
+        self,
+        _connection: object,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> TableFreshnessMetadata:
+        self.metadata_requests.append((database, schema, name))
+        return TableFreshnessMetadata(
+            data_version=datetime(2026, 1, 2, 3, 4, 5),
+            value_kind="timestamp",
+            observed_at=datetime(2026, 1, 2, 3, 5, 0),
+        )
 
     def query(self, _connection: object, sql: str, *, limit: int | None = None) -> QueryResult:
         del limit
@@ -23,6 +46,11 @@ class FreshnessRecordingAdapter:
             return QueryResult(columns=("data_version",), rows=((1,),))
         if "raw_payments" in sql:
             return QueryResult(columns=("data_version",), rows=((2,),))
+        if "raw_lag" in sql:
+            return QueryResult(
+                columns=("data_version",),
+                rows=((datetime(2026, 1, 1, 0, 5, 0),),),
+            )
         return QueryResult(columns=("data_version",), rows=((0,),))
 
 
@@ -56,4 +84,53 @@ def freshness_sources() -> tuple[SourceEntry, ...]:
             ),
         ),
         SourceEntry(name="raw_unknown", expression="SELECT 4 AS event_id"),
+        SourceEntry(
+            name="raw_lag",
+            expression="SELECT 5 AS event_id",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                query="SELECT TIMESTAMP '2026-01-01 00:05:00' AS data_version FROM raw_lag",
+                lag_tolerance="10m",
+            ),
+        ),
+    )
+
+
+def adapter_metadata_sources() -> tuple[SourceEntry, ...]:
+    return (
+        SourceEntry(
+            name="raw_metadata",
+            database="analytics",
+            schema="raw",
+            table="orders",
+        ),
+    )
+
+
+def source_freshness_record(
+    *,
+    source_name: str,
+    value_kind: str = "integer",
+    data_version: str = "1",
+    data_version_hash: str | None = None,
+) -> SourceFreshnessRecord:
+    return SourceFreshnessRecord(
+        source_name=source_name,
+        target_database=None,
+        target_schema=None,
+        target_name=None,
+        run_id="previous",
+        strategy="sql",
+        value_kind=value_kind,
+        data_version=data_version,
+        data_version_hash=data_version_hash
+        if data_version_hash is not None
+        else source_freshness_data_version_hash(
+            source_name=source_name,
+            strategy="sql",
+            value_kind=value_kind,
+            data_version=data_version,
+        ),
+        observed_at=datetime(2025, 12, 31, 0, 0, 0),
     )
