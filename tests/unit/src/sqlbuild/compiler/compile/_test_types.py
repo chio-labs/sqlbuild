@@ -97,6 +97,15 @@ class BuildEffectiveRuntimeConfigTestCase:
 
 
 @dataclass(frozen=True)
+class BuildModelConfigHooksTestCase:
+    description: str
+    default_hook: object
+    path_default_hook: object
+    expected_pre_hooks: object
+    expected_post_hooks: object
+
+
+@dataclass(frozen=True)
 class SeedRefRegressionTestCase:
     description: str
     repo_files: dict[str, str]

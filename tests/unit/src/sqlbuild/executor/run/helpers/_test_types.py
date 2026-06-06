@@ -47,11 +47,32 @@ class SnapshotAdapterRenderingTestCase:
 class SnapshotLifecycleTestCase:
     description: str
     run_id: str
-    pre_hook: tuple[str, ...]
-    post_hook: tuple[str, ...]
+    pre_hook: tuple[object, ...]
+    post_hook: tuple[object, ...]
     expected_hook_events: tuple[str, ...]
     expected_model_name: str
     expected_target_name: str
+
+
+@dataclass(frozen=True)
+class RenderHooksTestCase:
+    description: str
+    hooks: object
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExecuteHooksTestCase:
+    description: str
+    hooks: object
+    expected_rows: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
+class PythonHookExecutionTestCase:
+    description: str
+    hooks: object
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

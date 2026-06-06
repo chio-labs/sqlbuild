@@ -71,12 +71,12 @@ def execute_incremental_entry(
     resolved_sql: str = entry.resolved_sql
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.pre_hook, phase_label="pre_hook"))
+        statement_recorder.record_many(render_hooks(hooks=entry.pre_hooks, phase_label="pre_hook"))
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.pre_hook,
+                hooks=entry.pre_hooks,
                 phase_label="pre_hook",
             )
     except Exception as exc:
@@ -319,12 +319,14 @@ def execute_incremental_entry(
         )
 
     try:
-        statement_recorder.record_many(render_hooks(hooks=entry.post_hook, phase_label="post_hook"))
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.post_hooks, phase_label="post_hook")
+        )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.post_hook,
+                hooks=entry.post_hooks,
                 phase_label="post_hook",
             )
     except Exception as exc:

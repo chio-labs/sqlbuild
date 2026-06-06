@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
     substitute_placeholder_defaults,
 )
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 _VALID_HOOK_ROOT_KEYS: frozenset[str] = frozenset(
     {
@@ -110,6 +111,17 @@ def validate_hook_sql_syntax(
             placeholders=placeholders,
             require_hook_statement=True,
         )
+        return
+    if isinstance(value, SqlHookEntry):
+        validate_hook_sql_syntax(
+            value=value.statement,
+            hook_name=hook_name,
+            model_name=model_name,
+            file_path=file_path,
+            placeholders=placeholders,
+        )
+        return
+    if isinstance(value, PythonHookEntry):
         return
     if isinstance(value, list | tuple):
         item: object

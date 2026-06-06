@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     CleanupTestCase,
     ContextVerificationTestCase,
@@ -133,7 +134,13 @@ def test_given_custom_materialization_when_failing_then_reports_failure(
 HOOK_TEST_CASES: list[HookTestCase] = [
     HookTestCase(
         description="pre_hook executes before materialization",
-        pre_hook="CREATE TABLE main.hook_marker (x INT); INSERT INTO main.hook_marker VALUES (1)",
+        pre_hook=[
+            SqlHookEntry(
+                statement=(
+                    "CREATE TABLE main.hook_marker (x INT); INSERT INTO main.hook_marker VALUES (1)"
+                )
+            )
+        ],
         post_hook=None,
         expected_status=ExecutionStatus.SUCCESS,
         expected_table_exists=True,
@@ -141,13 +148,19 @@ HOOK_TEST_CASES: list[HookTestCase] = [
     HookTestCase(
         description="post_hook executes after materialization",
         pre_hook=None,
-        post_hook="CREATE TABLE main.hook_marker (x INT); INSERT INTO main.hook_marker VALUES (2)",
+        post_hook=[
+            SqlHookEntry(
+                statement=(
+                    "CREATE TABLE main.hook_marker (x INT); INSERT INTO main.hook_marker VALUES (2)"
+                )
+            )
+        ],
         expected_status=ExecutionStatus.SUCCESS,
         expected_table_exists=True,
     ),
     HookTestCase(
         description="pre_hook failure skips materialization",
-        pre_hook="SELECT * FROM nonexistent_table_for_hook",
+        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         post_hook=None,
         expected_status=ExecutionStatus.FAILED,
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
@@ -156,7 +169,7 @@ HOOK_TEST_CASES: list[HookTestCase] = [
     HookTestCase(
         description="post_hook failure after successful materialization",
         pre_hook=None,
-        post_hook="SELECT * FROM nonexistent_table_for_hook",
+        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_status=ExecutionStatus.FAILED,
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_table_exists=True,
@@ -176,8 +189,8 @@ def test_given_custom_materialization_with_hooks_when_executing_then_handles_hoo
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(
         sql="SELECT 1 AS id",
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     result: ModelExecutionResult = run_custom_entry(

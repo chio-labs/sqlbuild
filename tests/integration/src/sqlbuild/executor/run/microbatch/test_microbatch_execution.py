@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
@@ -250,8 +251,8 @@ SUCCESS_TEST_CASES: list[MicrobatchSuccessTestCase] = [
         batch_size="1h",
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
-        pre_hook="INSERT INTO main.hook_log VALUES ('pre')",
-        post_hook="INSERT INTO main.hook_log VALUES ('post')",
+        pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+        post_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('post')")],
         expected_row_count=3,
         expected_query_results=(
             (
@@ -414,7 +415,7 @@ FAILURE_TEST_CASES: list[MicrobatchFailureTestCase] = [
         batch_size="1h",
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
-        pre_hook="SELECT * FROM nonexistent_table_for_hook",
+        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
         expected_row_count=0,
     ),
@@ -491,7 +492,7 @@ FAILURE_TEST_CASES: list[MicrobatchFailureTestCase] = [
         batch_size="1h",
         microbatch_start="2026-01-01T00:00:00",
         microbatch_end="2026-01-01T03:00:00",
-        post_hook="SELECT * FROM nonexistent_table_for_hook",
+        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_row_count=3,
     ),

@@ -32,8 +32,8 @@ def build_custom_plan_entry(
     name: str = "test_model",
     sql: str = "SELECT 1 AS id",
     reason: PlanReason = PlanReason.NO_CHANGE,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
     custom_config: dict[str, object] | None = None,
     custom_placeholders: dict[str, str] | None = None,
 ) -> ModelPlanEntry:
@@ -55,8 +55,8 @@ def build_custom_plan_entry(
         custom_materialization_name="test_custom",
         custom_config=custom_config if custom_config is not None else {"test_key": "test_value"},
         custom_placeholders=custom_placeholders if custom_placeholders is not None else {},
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 

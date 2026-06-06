@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.models import SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_helpers import (
     build_model_from_metadata_test_case,
     build_model_from_test_case,
@@ -199,6 +200,26 @@ DETECT_MODEL_METADATA_TEST_CASES: list[DetectModelMetadataTestCase] = [
             '"execution_signature":{"contract":{"columns":[{"name":"order_id",'
             '"nullable":false,"type":"INTEGER"}],"enforced":true}}',
         ),
+    ),
+    DetectModelMetadataTestCase(
+        description="detects config change when typed hook execution signature changes",
+        config_values={
+            "post_hooks": [SqlHookEntry(statement="INSERT INTO audit_log SELECT 'new'")]
+        },
+        schema_columns=(),
+        deps=(),
+        function_local_hashes={},
+        previous_metadata_json=build_version_identity_metadata_json(
+            model_name="orders",
+            config_values={
+                "post_hooks": [SqlHookEntry(statement="INSERT INTO audit_log SELECT 'old'")]
+            },
+            execution_signature={
+                "post_hooks": [SqlHookEntry(statement="INSERT INTO audit_log SELECT 'old'")]
+            },
+        ),
+        expected_change_kind=ChangeKind.CONFIG_CHANGED,
+        expected_metadata_fragments=('"post_hooks":["SqlHookEntry',),
     ),
 ]
 

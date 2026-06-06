@@ -47,8 +47,8 @@ def build_table_plan_entry(
     target_schema: str | None,
     target_name: str,
     type_enforcement: bool = False,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for table execution tests."""
 
@@ -70,8 +70,8 @@ def build_table_plan_entry(
         resolved_sql=sql,
         logical_ddl=f"CREATE TABLE {qualified} AS {sql}",
         type_enforcement=type_enforcement,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 
@@ -208,8 +208,8 @@ def _execute_test(
         target_schema=test_case.target_schema,
         target_name=test_case.target_name,
         type_enforcement=test_case.type_enforcement,
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)

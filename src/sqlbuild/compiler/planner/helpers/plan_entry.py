@@ -338,8 +338,8 @@ def plan_model_from_change(
         type_enforcement=type_enforcement,
     )
 
-    pre_hook: object = model.config.values.get("pre_hook")
-    post_hook: object = model.config.values.get("post_hook")
+    pre_hooks: object = model.config.values.get("pre_hooks")
+    post_hooks: object = model.config.values.get("post_hooks")
     cursor_column: str | None = _get_config_str(model, "cursor")
     cursor_type: str | None = _get_config_str(model, "cursor_type")
     cursor_grain: str | None = _get_config_str(model, "cursor_grain")
@@ -479,8 +479,8 @@ def plan_model_from_change(
         declared_columns=declared_columns,
         contract_enforced=contract_enforced,
         contract_columns=contract_columns,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
         previous_query_sql=previous_query_sql,
         fingerprint_metadata_json=change_result.fingerprint_metadata_json,
         previous_metadata_json=change_result.previous_metadata_json,

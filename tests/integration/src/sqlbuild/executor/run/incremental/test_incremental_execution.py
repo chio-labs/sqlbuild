@@ -11,6 +11,7 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
     IncrementalFailureTestCase,
     IncrementalSuccessTestCase,
@@ -235,8 +236,8 @@ SUCCESS_TEST_CASES: list[IncrementalSuccessTestCase] = [
         target_schema="main",
         target_name="orders",
         incremental_strategy="append",
-        pre_hook="INSERT INTO main.hook_log VALUES ('pre')",
-        post_hook="INSERT INTO main.hook_log VALUES ('post')",
+        pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+        post_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('post')")],
         expected_row_count=2,
         expected_query_results=(
             (
@@ -466,7 +467,7 @@ FAILURE_TEST_CASES: list[IncrementalFailureTestCase] = [
         target_schema="main",
         target_name="orders",
         incremental_strategy="append",
-        pre_hook="SELECT * FROM nonexistent_table_for_hook",
+        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
         expected_row_count=1,
     ),
@@ -480,7 +481,7 @@ FAILURE_TEST_CASES: list[IncrementalFailureTestCase] = [
         target_schema="main",
         target_name="orders",
         incremental_strategy="append",
-        post_hook="SELECT * FROM nonexistent_table_for_hook",
+        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_staging_relation="main.orders__delta",
         expected_promoted_relation="main.orders",

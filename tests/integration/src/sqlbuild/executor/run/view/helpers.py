@@ -45,8 +45,8 @@ def build_view_plan_entry(
     sql: str,
     target_schema: str | None,
     target_name: str,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for view execution tests."""
 
@@ -67,8 +67,8 @@ def build_view_plan_entry(
         fingerprint_query_sql=sql,
         resolved_sql=sql,
         logical_ddl=f"CREATE OR REPLACE VIEW {qualified} AS {sql}",
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 
@@ -183,8 +183,8 @@ def _execute_view_test(
         sql=test_case.model_sql,
         target_schema=test_case.target_schema,
         target_name=test_case.target_name,
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     target_qualified: str = _build_target_qualified(

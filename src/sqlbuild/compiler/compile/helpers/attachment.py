@@ -95,6 +95,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -113,7 +114,8 @@ from sqlbuild.spec.models.schema import (
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
+_LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
+_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 
 
 def build_model_inputs(
@@ -259,7 +261,7 @@ def build_model_inputs(
             )
         ):
             hook_name: str
-            for hook_name in ("pre_hook", "post_hook"):
+            for hook_name in ("pre_hooks", "post_hooks"):
                 validate_hook_sql_syntax(
                     value=expanded_config.values.get(hook_name),
                     hook_name=hook_name,
@@ -2313,6 +2315,7 @@ def build_model_config(
         matched_path_default=matched_path_default,
         model_header_values=model_header_values,
     )
+    validate_model_hook_config(values=layered_values, model_name=model_name)
     raw_hook_values: dict[str, object] = {
         hook_key: layered_values[hook_key]
         for hook_key in _MODEL_HOOK_KEYS
@@ -2400,6 +2403,35 @@ def expand_model_hook_macros(
     return expanded_values
 
 
+def validate_model_hook_config(*, values: dict[str, object], model_name: str) -> None:
+    legacy_key: str
+    for legacy_key in sorted(_LEGACY_MODEL_HOOK_KEYS):
+        if legacy_key in values:
+            plural_key: str = f"{legacy_key}s"
+            raise CompileInputError(
+                f"model '{model_name}' uses legacy '{legacy_key}'; use typed '{plural_key}' "
+                'entries like sql("...") or python("hook_name")'
+            )
+
+    hook_key: str
+    for hook_key in sorted(_MODEL_HOOK_KEYS):
+        if hook_key not in values:
+            continue
+        raw_value: object = values[hook_key]
+        if not isinstance(raw_value, list | tuple):
+            raise CompileInputError(
+                f"model '{model_name}' {hook_key} must be a list of typed hook entries"
+            )
+        hook_entry: object
+        for hook_entry in raw_value:
+            if isinstance(hook_entry, SqlHookEntry | PythonHookEntry):
+                continue
+            raise CompileInputError(
+                f"model '{model_name}' {hook_key} entries must use typed sql(...) or "
+                "python(...) hook syntax"
+            )
+
+
 def expand_sql_macros_in_value(
     *,
     value: object,
@@ -2425,6 +2457,18 @@ def expand_sql_macros_in_value(
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
+    if isinstance(value, SqlHookEntry):
+        expanded_statement: object = expand_sql_macros_in_value(
+            value=value.statement,
+            file_path=file_path,
+            effective_vars=effective_vars,
+            context_values=context_values,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+        )
+        return SqlHookEntry(statement=str(expanded_statement))
+    if isinstance(value, PythonHookEntry):
+        return value
     if isinstance(value, list):
         return [
             expand_sql_macros_in_value(
@@ -3033,6 +3077,10 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["row_diff_tolerances"] = defaults.row_diff_tolerances
     if defaults.tags:
         values["tags"] = list(defaults.tags)
+    if defaults.pre_hooks is not None:
+        values["pre_hooks"] = defaults.pre_hooks
+    if defaults.post_hooks is not None:
+        values["post_hooks"] = defaults.post_hooks
     return values
 
 
