@@ -17,6 +17,7 @@ def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
         "tasks",
         "assets",
         "checks",
+        "hooks",
         "tests/unit",
         "tests/scenarios",
         "functions/sql",
