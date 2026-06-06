@@ -103,6 +103,17 @@ class SnapshotPythonHooksBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonHooksLifecycleMatrixBuildE2ETestCase:
+    """Test case for build-time Python hooks across materialization kinds."""
+
+    description: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_hook_log_rows: tuple[tuple[object, ...], ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
 class VirtualPythonHooksBuildE2ETestCase:
     """Test case for virtual builds with Python lifecycle hooks."""
 

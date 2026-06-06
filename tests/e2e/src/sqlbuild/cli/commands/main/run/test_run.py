@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import pytest
@@ -18,6 +19,97 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     table_exists,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
+            description="run executes discovered Python lifecycle hooks",
+            expected_exit_code=0,
+            expected_table_names=("orders", "hook_log"),
+            expected_view_names=(),
+            expected_output_fragments=(
+                "Execution  sqb run",
+                "table     orders",
+                "pre_hook  python  log_hook",
+                "post_hook python  log_hook",
+            ),
+            expected_query_results=(
+                ("SELECT order_id FROM main.orders", ((1,),)),
+                (
+                    "SELECT model_name, phase FROM main.hook_log ORDER BY phase",
+                    (("orders", "post_hooks"), ("orders", "pre_hooks")),
+                ),
+            ),
+        )
+    ],
+    ids=["run executes discovered Python lifecycle hooks"],
+)
+def test_given_project_with_python_hooks_when_running_run_then_hooks_execute(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_hooks_run_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "python_hooks_run_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "python_hooks_run_project.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "hooks/lifecycle.py": dedent(
+                """
+                from sqlbuild.hooks import HookContext, hook
+
+
+                @hook
+                def log_hook(ctx: HookContext):
+                    ctx.execute_sql(
+                        f"CREATE TABLE IF NOT EXISTS {ctx.destination.schema}.hook_log "
+                        "(model_name VARCHAR, phase VARCHAR)"
+                    )
+                    ctx.execute_sql(
+                        f"INSERT INTO {ctx.destination.schema}.hook_log VALUES "
+                        f"('{ctx.model_name}', '{ctx.phase}')"
+                    )
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("log_hook")],
+                  post_hooks [python("log_hook")]
+                );
+
+                SELECT 1 AS order_id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"),
+        project_dir=project_dir,
+    )
+    db_path: Path = project_dir / "python_hooks_run_project.duckdb"
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in result.stdout
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    for query, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=db_path, sql=query) == list(expected_rows)
 
 
 @pytest.mark.parametrize(

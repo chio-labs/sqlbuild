@@ -73,6 +73,12 @@ class RenderHooksTestCase:
 
 
 @dataclass(frozen=True)
+class PublicHookContextExportTestCase:
+    description: str
+    expected_export_name: str
+
+
+@dataclass(frozen=True)
 class ExecuteHooksTestCase:
     description: str
     hooks: object
