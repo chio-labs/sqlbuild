@@ -32,7 +32,7 @@ pip install sqlbuild
 uv pip install sqlbuild
 ```
 
-Create and run the playground project:
+Create and run the included playground project:
 
 ```bash
 sqb playground waffle-shop
