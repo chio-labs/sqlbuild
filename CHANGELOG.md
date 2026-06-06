@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.29.0](https://github.com/chio-labs/sqlbuild/compare/v0.28.1...v0.29.0) (2026-06-06)
+
+
+### Features
+
+* add typed model lifecycle hooks ([0f92dd2](https://github.com/chio-labs/sqlbuild/commit/0f92dd233c65ef71b28d96b9122c334efe80bba4))
+* discover python lifecycle hooks ([692c318](https://github.com/chio-labs/sqlbuild/commit/692c318d9d2530c07dc5b032061d3243b1c11dfe))
+* invoke python lifecycle hooks ([9506f9d](https://github.com/chio-labs/sqlbuild/commit/9506f9ddad5b9cd8ea4752608d082e78d2cabb1f))
+* scaffold hooks directory on init ([5a773b4](https://github.com/chio-labs/sqlbuild/commit/5a773b4aa86094f6a704323726022cb3caac3013))
+* show lifecycle hooks in build output ([75db00b](https://github.com/chio-labs/sqlbuild/commit/75db00bbf574caf37f25571bd3bb4be735095d0b))
+* validate python lifecycle hooks ([1b63282](https://github.com/chio-labs/sqlbuild/commit/1b63282a4ddc21c75680bac1e1983dc68f18fca4))
+
 ## [0.28.1](https://github.com/chio-labs/sqlbuild/compare/v0.28.0...v0.28.1) (2026-06-06)
 
 
