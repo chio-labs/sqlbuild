@@ -46,7 +46,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
         command=("--no-color", "build"),
         expected_exit_code=1,
         expected_stderr_fragments=(
-            "SQL syntax error in pre_hooks for model 'orders'",
+            "model 'orders' pre_hooks[0] sql(\"...\") has invalid SQL",
             "hook SQL must be a valid executable SQL statement",
             "settings.sql_validation: false",
         ),
