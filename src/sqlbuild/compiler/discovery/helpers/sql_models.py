@@ -38,6 +38,7 @@ _RELATION_CALL_NAMES: frozenset[str] = frozenset(
     }
 )
 _HOOK_CALL_NAMES: frozenset[str] = frozenset({"sql", "python"})
+_MODEL_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 
 
 def parse_model_sql(contents: str, file_path: Path) -> tuple[dict[str, object], str]:
@@ -414,7 +415,11 @@ class _ModelHeaderParser:
                 raise ModelHeaderSyntaxError(
                     f"unexpected token '{key}' without a value; quote values with spaces"
                 )
-            values[key] = self._parse_value()
+            values[key] = (
+                self._parse_hook_field_value(key)
+                if key in _MODEL_HOOK_FIELD_NAMES
+                else self._parse_value()
+            )
             self._match_symbol(",")
         if end_symbol is not None:
             self._consume_symbol(end_symbol)
@@ -450,6 +455,43 @@ class _ModelHeaderParser:
             self._match_symbol(",")
         self._consume_symbol("]")
         return values
+
+    def _parse_hook_field_value(self, field_name: str) -> list[object]:
+        if not self._match_symbol("["):
+            token: _ModelHeaderToken = self._peek()
+            raise ModelHeaderSyntaxError(
+                f"{field_name} must be a list of typed sql(...) or python(...) hook entries "
+                f"at position {token.position}"
+            )
+        values: list[object] = []
+        while not self._is_at_end_symbol("]"):
+            if self._match_symbol(","):
+                continue
+            values.append(self._parse_hook_list_entry(field_name))
+            self._match_symbol(",")
+        self._consume_symbol("]")
+        return values
+
+    def _parse_hook_list_entry(self, field_name: str) -> object:
+        token: _ModelHeaderToken = self._peek()
+        if token.kind == _STRING_TOKEN:
+            self._advance()
+            return token.value
+        if token.kind != _WORD_TOKEN:
+            raise ModelHeaderSyntaxError(
+                f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
+            )
+        self._advance()
+        if self._peek().kind != _SYMBOL_TOKEN or self._peek().value != "(":
+            raise ModelHeaderSyntaxError(
+                f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
+            )
+        self._advance()
+        if token.value not in _HOOK_CALL_NAMES:
+            raise ModelHeaderSyntaxError(
+                f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
+            )
+        return self._parse_hook_call(token.value)
 
     def _parse_relation_call(self, name: str) -> str:
         token: _ModelHeaderToken = self._peek()

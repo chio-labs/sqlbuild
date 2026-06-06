@@ -14,3 +14,7 @@ class RunE2ETestCase:
     expected_table_names: tuple[str, ...]
     expected_view_names: tuple[str, ...]
     expected_fact_orders_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
+        default_factory=tuple
+    )
