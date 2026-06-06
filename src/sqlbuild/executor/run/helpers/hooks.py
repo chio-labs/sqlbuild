@@ -10,9 +10,10 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.executor.run.models import HookContext, HookRelation
+from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookRelation
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
@@ -30,16 +31,31 @@ def execute_hooks(
     environment: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
     statement_recorder: StatementRecorder | None = None,
+    hook_results: list[HookExecutionResult] | None = None,
 ) -> None:
     """Execute pre/post lifecycle hook entries."""
 
     if hooks is None:
         return
     if isinstance(hooks, str):
-        adapter.execute(connection, hooks)
+        _execute_sql_hook(
+            connection=connection,
+            adapter=adapter,
+            statement=hooks,
+            hook_index=0,
+            phase=phase,
+            hook_results=hook_results,
+        )
         return
     if isinstance(hooks, SqlHookEntry):
-        adapter.execute(connection, hooks.statement)
+        _execute_sql_hook(
+            connection=connection,
+            adapter=adapter,
+            statement=hooks.statement,
+            hook_index=0,
+            phase=phase,
+            hook_results=hook_results,
+        )
         return
     if isinstance(hooks, PythonHookEntry):
         invoke_python_hook(
@@ -55,6 +71,7 @@ def execute_hooks(
             environment=environment,
             effective_vars=effective_vars,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
         return
     if isinstance(hooks, list | tuple):
@@ -62,9 +79,23 @@ def execute_hooks(
         hook: object
         for hook_index, hook in enumerate(hooks):
             if isinstance(hook, str):
-                adapter.execute(connection, hook)
+                _execute_sql_hook(
+                    connection=connection,
+                    adapter=adapter,
+                    statement=hook,
+                    hook_index=hook_index,
+                    phase=phase,
+                    hook_results=hook_results,
+                )
             elif isinstance(hook, SqlHookEntry):
-                adapter.execute(connection, hook.statement)
+                _execute_sql_hook(
+                    connection=connection,
+                    adapter=adapter,
+                    statement=hook.statement,
+                    hook_index=hook_index,
+                    phase=phase,
+                    hook_results=hook_results,
+                )
             elif isinstance(hook, PythonHookEntry):
                 invoke_python_hook(
                     connection=connection,
@@ -79,6 +110,7 @@ def execute_hooks(
                     environment=environment,
                     effective_vars=effective_vars,
                     statement_recorder=statement_recorder,
+                    hook_results=hook_results,
                 )
             else:
                 raise ExecutorInputError(
@@ -106,6 +138,7 @@ def invoke_python_hook(
     environment: str | None,
     effective_vars: Mapping[str, object] | None,
     statement_recorder: StatementRecorder | None,
+    hook_results: list[HookExecutionResult] | None = None,
 ) -> None:
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
     hook_function: Callable[..., object] | None = _find_hook_function(
@@ -113,9 +146,29 @@ def invoke_python_hook(
         hook_functions=hook_functions,
     )
     if hook_function is None:
-        raise ExecutorInputError(f"{hook_label} was not found in the runtime hook registry")
+        error_message: str = f"{hook_label} was not found in the runtime hook registry"
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message=error_message,
+        )
+        raise ExecutorInputError(error_message)
     if model_name is None or destination is None:
-        raise ExecutorInputError(f"{hook_label} is missing runtime model context")
+        error_message = f"{hook_label} is missing runtime model context"
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message=error_message,
+        )
+        raise ExecutorInputError(error_message)
 
     context: HookContext = build_hook_context(
         connection=connection,
@@ -137,7 +190,88 @@ def invoke_python_hook(
     try:
         hook_function(**kwargs)
     except Exception as exc:
-        raise ExecutorInputError(f"{hook_label} failed: {exc}") from exc
+        error_message: str = f"{hook_label} failed: {exc}"
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message=error_message,
+        )
+        raise ExecutorInputError(error_message) from exc
+    _record_hook_result(
+        hook_results=hook_results,
+        phase=phase,
+        hook_index=hook_index,
+        hook_type="python",
+        label=hook_entry.name,
+        status=ExecutionStatus.SUCCESS,
+    )
+
+
+def _execute_sql_hook(
+    *,
+    connection: Any,
+    adapter: BaseAdapter,
+    statement: str,
+    hook_index: int,
+    phase: HookPhase,
+    hook_results: list[HookExecutionResult] | None,
+) -> None:
+    try:
+        adapter.execute(connection, statement)
+    except Exception as exc:
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="sql",
+            label=_sql_hook_preview(statement),
+            status=ExecutionStatus.FAILED,
+            error_message=str(exc),
+        )
+        raise
+    _record_hook_result(
+        hook_results=hook_results,
+        phase=phase,
+        hook_index=hook_index,
+        hook_type="sql",
+        label=_sql_hook_preview(statement),
+        status=ExecutionStatus.SUCCESS,
+    )
+
+
+def _record_hook_result(
+    *,
+    hook_results: list[HookExecutionResult] | None,
+    phase: HookPhase,
+    hook_index: int,
+    hook_type: str,
+    label: str,
+    status: ExecutionStatus,
+    error_message: str | None = None,
+) -> None:
+    if hook_results is None:
+        return
+    hook_results.append(
+        HookExecutionResult(
+            phase=phase,
+            index=hook_index,
+            hook_type=hook_type,
+            label=label,
+            status=status,
+            error_message=error_message,
+        )
+    )
+
+
+def _sql_hook_preview(statement: str) -> str:
+    normalized: str = " ".join(statement.split())
+    if len(normalized) <= 80:
+        return normalized
+    return normalized[:77] + "..."
 
 
 def build_hook_context(

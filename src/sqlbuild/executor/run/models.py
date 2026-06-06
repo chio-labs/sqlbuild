@@ -60,6 +60,16 @@ class HookContext:
 
 
 @dataclass(frozen=True)
+class HookExecutionResult:
+    phase: HookPhase
+    index: int
+    hook_type: str
+    label: str
+    status: ExecutionStatus
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelExecutionResult:
     """Outcome of one model materialization lifecycle."""
 
@@ -72,6 +82,7 @@ class ModelExecutionResult:
     audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+    hook_results: tuple[HookExecutionResult, ...] = field(default_factory=tuple)
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None

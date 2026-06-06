@@ -24,7 +24,7 @@ from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -71,6 +71,7 @@ def execute_incremental_entry(
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
+    hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
     runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
     runtime_cursor_bounds: CursorBounds | None = None
@@ -93,6 +94,7 @@ def execute_incremental_entry(
                 environment=effective_target_name,
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -102,6 +104,7 @@ def execute_incremental_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
@@ -147,6 +150,7 @@ def execute_incremental_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try:
@@ -350,6 +354,7 @@ def execute_incremental_entry(
                 environment=effective_target_name,
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -361,6 +366,7 @@ def execute_incremental_entry(
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
+            hook_results=hook_results,
         )
 
     try_write_fingerprint(
@@ -387,6 +393,7 @@ def execute_incremental_entry(
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
     )
 
 
