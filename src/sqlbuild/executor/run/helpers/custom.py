@@ -68,7 +68,7 @@ def execute_custom_entry(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.pre_hooks,
-                phase_label="pre_hook",
+                phase_label="pre_hooks",
             )
     except Exception as exc:
         return build_failed_result(
@@ -197,7 +197,7 @@ def execute_custom_entry(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.post_hooks,
-                phase_label="post_hook",
+                phase_label="post_hooks",
             )
     except Exception as exc:
         _cleanup_relations(
