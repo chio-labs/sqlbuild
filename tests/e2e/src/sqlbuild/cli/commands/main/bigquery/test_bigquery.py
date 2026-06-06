@@ -81,6 +81,67 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     [
+        BigQueryCliTestCase(
+            description="source freshness uses bigquery table metadata",
+            command=("--no-color", "freshness", "--select", "raw_orders"),
+            expected_stdout_fragments=(
+                "Observed (1)",
+                "raw_orders  timestamp",
+                "adapter",
+                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+            ),
+        )
+    ],
+    ids=["source freshness uses bigquery table metadata"],
+)
+def test_given_physical_source_without_freshness_when_running_on_bigquery_then_uses_metadata(
+    tmp_path: Path,
+    test_case: BigQueryCliTestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_freshness_meta")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_freshness_metadata",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_project_toml(
+                project_name="bigquery_freshness_metadata",
+                dataset_name=dataset_name,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    schema: {dataset_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        raw_orders_relation: str = relation_name(dataset_name=dataset_name, name="raw_orders")
+        execute_bigquery_sql(
+            dataset_name=dataset_name,
+            sql=f"CREATE OR REPLACE TABLE {raw_orders_relation} AS SELECT 1 AS id",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout, result.stdout
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         BigQueryVirtualSeedE2ETestCase(
             description="virtual seeded incremental build uses clone on bigquery",
             expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),

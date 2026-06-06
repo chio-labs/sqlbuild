@@ -78,6 +78,67 @@ from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     [
+        SnowflakeCliTestCase(
+            description="source freshness uses snowflake table metadata",
+            command=("--no-color", "freshness", "--select", "raw_orders"),
+            expected_stdout_fragments=(
+                "Observed (1)",
+                "raw_orders  timestamp",
+                "adapter",
+                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+            ),
+        )
+    ],
+    ids=["source freshness uses snowflake table metadata"],
+)
+def test_given_physical_source_without_freshness_when_running_on_snowflake_then_uses_metadata(
+    tmp_path: Path,
+    test_case: SnowflakeCliTestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_freshness_meta")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_freshness_metadata",
+        repo_files={
+            "sqlbuild_project.toml": build_snowflake_project_toml(
+                project_name="snowflake_freshness_metadata",
+                schema_name=schema_name,
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                f"    schema: {schema_name}\n"
+                "    table: raw_orders\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    try:
+        ensure_query_schema_ready(schema_name=schema_name)
+        raw_orders_relation: str = relation_name(schema_name=schema_name, name="raw_orders")
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=f"CREATE OR REPLACE TABLE {raw_orders_relation} AS SELECT 1 AS id",
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout, result.stdout
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SnowflakeVirtualSeedE2ETestCase(
             description="virtual seeded incremental build uses clone on snowflake",
             expected_rows=(("1", "10"), ("2", "21"), ("3", "31")),
