@@ -296,6 +296,22 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         },
         expected_query="SELECT 1",
     ),
+    ParseModelSqlHeaderTestCase(
+        description="accepts python-only lifecycle hook list",
+        contents="""
+        MODEL (
+          post_hooks [python("notify", channel: "alerts")]
+        );
+
+        SELECT 1
+        """,
+        expected_header_values={
+            "post_hooks": [
+                PythonHookEntry(name="notify", kwargs={"channel": "alerts"}),
+            ],
+        },
+        expected_query="SELECT 1",
+    ),
 ]
 
 
@@ -422,6 +438,28 @@ MODEL_SQL_ERROR_TEST_CASES: list[ParseModelSqlErrorTestCase] = [
         SELECT 1
         """,
         expected_error_fragment="expected ':'",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when hook list uses unknown constructor",
+        contents="""
+        MODEL (
+          post_hooks [notify("done")]
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="post_hooks entries must use typed sql",
+    ),
+    ParseModelSqlErrorTestCase(
+        description="raises when hook list uses uppercase constructor",
+        contents="""
+        MODEL (
+          pre_hooks [SQL("SELECT 1")]
+        );
+
+        SELECT 1
+        """,
+        expected_error_fragment="pre_hooks entries must use typed sql",
     ),
 ]
 

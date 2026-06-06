@@ -13,15 +13,34 @@ from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.models import HookContext
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.hooks import HookContext as PublicHookContext
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     ExecuteHooksTestCase,
+    PublicHookContextExportTestCase,
     PythonHookContextParameterTestCase,
     PythonHookExecutionTestCase,
     PythonHookInvocationTestCase,
     PythonHookRuntimeErrorTestCase,
     RenderHooksTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PublicHookContextExportTestCase(
+            description="exports hook context from public hooks module",
+            expected_export_name="HookContext",
+        )
+    ],
+    ids=["exports hook context from public hooks module"],
+)
+def test_given_public_hooks_module_when_importing_then_hook_context_is_exported(
+    test_case: PublicHookContextExportTestCase,
+) -> None:
+    assert PublicHookContext.__name__ == test_case.expected_export_name
+    assert PublicHookContext is HookContext
 
 
 @pytest.mark.parametrize(

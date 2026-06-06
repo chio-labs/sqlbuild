@@ -1190,6 +1190,10 @@ def project_columns(ctx) -> str:
         f"'{optional_suffix}' AS suffix"
     )
 
+
+def grant_select(target: str) -> str:
+    return f"GRANT SELECT ON {target} TO analyst_role"
+
 """.strip()
             + "\n",
             "sqlbuild_project.toml": """
@@ -1212,7 +1216,7 @@ database = "analytics"
             "models/staging/orders.sql": """
 MODEL (
   alias orders_dev,
-  post_hooks [sql('GRANT SELECT ON @@CTX:destination.qualified TO analyst_role')],
+  post_hooks [sql('@grant_select("@@CTX:destination.qualified")')],
 );
 
 select @project_columns() from __source("raw_orders")
