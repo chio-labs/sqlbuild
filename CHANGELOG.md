@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.28.0](https://github.com/chio-labs/sqlbuild/compare/v0.27.0...v0.28.0) (2026-06-06)
+
+
+### Features
+
+* add source freshness command ([a2d543d](https://github.com/chio-labs/sqlbuild/commit/a2d543d4efeab7df472c7d02385c7a75a6fa116f))
+* add source freshness state comparison ([77c70d9](https://github.com/chio-labs/sqlbuild/commit/77c70d90310ca399f346a8390089a7b0cf540b55))
+
+
+### Bug Fixes
+
+* place provider default target at top level ([a861c03](https://github.com/chio-labs/sqlbuild/commit/a861c03cf263db723f16d1ae1f2447805d23a588))
+
 ## [0.27.0](https://github.com/chio-labs/sqlbuild/compare/v0.26.2...v0.27.0) (2026-06-03)
 
 
