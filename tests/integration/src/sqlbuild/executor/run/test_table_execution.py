@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableSuccessTestCase,
@@ -169,7 +170,7 @@ DIRECT_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.DIRECT,
-        post_hook="THIS IS NOT VALID SQL",
+        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_promoted_relation="staging.orders",
         expected_row_count=1,
@@ -198,7 +199,7 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        pre_hook="CREATE TABLE staging.hook_data AS SELECT 42 AS val",
+        pre_hook=[SqlHookEntry(statement="CREATE TABLE staging.hook_data AS SELECT 42 AS val")],
         expected_row_count=1,
     ),
     TableSuccessTestCase(
@@ -208,7 +209,9 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        post_hook="CREATE TABLE staging.post_hook_ran AS SELECT 1 AS marker",
+        post_hook=[
+            SqlHookEntry(statement="CREATE TABLE staging.post_hook_ran AS SELECT 1 AS marker")
+        ],
         expected_row_count=1,
     ),
     TableSuccessTestCase(
@@ -219,8 +222,10 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
         pre_hook=[
-            "CREATE TABLE staging.hook_step_1 AS SELECT 42 AS val",
-            "CREATE TABLE staging.hook_step_2 AS SELECT * FROM staging.hook_step_1",
+            SqlHookEntry(statement="CREATE TABLE staging.hook_step_1 AS SELECT 42 AS val"),
+            SqlHookEntry(
+                statement="CREATE TABLE staging.hook_step_2 AS SELECT * FROM staging.hook_step_1"
+            ),
         ],
         expected_row_count=1,
     ),
@@ -234,7 +239,7 @@ HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        pre_hook="THIS IS NOT VALID SQL",
+        pre_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
     ),
     TableFailureTestCase(
@@ -244,7 +249,7 @@ HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         target_schema="staging",
         target_name="orders",
         promotion_mode=TablePromotionMode.STAGED,
-        post_hook="THIS IS NOT VALID SQL",
+        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_promoted_relation="staging.orders",
         expected_row_count=1,

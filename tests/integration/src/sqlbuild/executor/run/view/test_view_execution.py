@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
     ViewSuccessTestCase,
@@ -65,7 +66,7 @@ SUCCESS_TEST_CASES: list[ViewSuccessTestCase] = [
         model_sql="SELECT * FROM test_schema.hook_data",
         target_schema="test_schema",
         target_name="dim_customers",
-        pre_hook="CREATE TABLE test_schema.hook_data AS SELECT 42 AS val",
+        pre_hook=[SqlHookEntry(statement="CREATE TABLE test_schema.hook_data AS SELECT 42 AS val")],
         expected_row_count=1,
     ),
     ViewSuccessTestCase(
@@ -74,7 +75,9 @@ SUCCESS_TEST_CASES: list[ViewSuccessTestCase] = [
         model_sql="SELECT 1 AS id",
         target_schema="test_schema",
         target_name="dim_customers",
-        post_hook="CREATE TABLE test_schema.post_hook_ran AS SELECT 1 AS marker",
+        post_hook=[
+            SqlHookEntry(statement="CREATE TABLE test_schema.post_hook_ran AS SELECT 1 AS marker")
+        ],
         expected_row_count=1,
     ),
     ViewSuccessTestCase(
@@ -116,7 +119,7 @@ FAILURE_TEST_CASES: list[ViewFailureTestCase] = [
         model_sql="SELECT 1 AS id",
         target_schema="test_schema",
         target_name="dim_customers",
-        pre_hook="THIS IS NOT VALID SQL",
+        pre_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.PRE_HOOK,
     ),
     ViewFailureTestCase(
@@ -125,7 +128,7 @@ FAILURE_TEST_CASES: list[ViewFailureTestCase] = [
         model_sql="SELECT 1 AS id",
         target_schema="test_schema",
         target_name="dim_customers",
-        post_hook="THIS IS NOT VALID SQL",
+        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
         expected_promoted_relation="test_schema.dim_customers",
     ),

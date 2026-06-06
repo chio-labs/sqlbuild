@@ -62,8 +62,8 @@ def build_incremental_plan_entry(
     cursor_input_relations: tuple[tuple[str, str], ...] = (),
     cursor_inputs_model_backed: bool = False,
     type_enforcement: bool = False,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for incremental execution tests."""
 
@@ -107,8 +107,8 @@ def build_incremental_plan_entry(
         cursor_bounds=cursor_bounds,
         cursor_input_relations=input_relations,
         type_enforcement=type_enforcement,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 
@@ -287,8 +287,8 @@ def _execute_test(
         cursor_input_relations=test_case.cursor_input_relations,
         cursor_inputs_model_backed=test_case.cursor_inputs_model_backed,
         type_enforcement=test_case.type_enforcement,
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)

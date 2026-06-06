@@ -58,8 +58,8 @@ def build_contract_model_plan_entry(
 
 def build_snapshot_execution_plan_entry(
     *,
-    pre_hook: object = None,
-    post_hook: object = None,
+    pre_hooks: object = None,
+    post_hooks: object = None,
     contract_enforced: bool = False,
     contract_columns: tuple[ColumnInfo, ...] = (),
 ) -> ModelPlanEntry:
@@ -90,8 +90,8 @@ def build_snapshot_execution_plan_entry(
         updated_at_column="updated_at",
         contract_enforced=contract_enforced,
         contract_columns=contract_columns,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
     )
 
 

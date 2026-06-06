@@ -18,6 +18,7 @@ from sqlbuild.executor.run.helpers.snapshot import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.shared.models import SqlHookEntry
 from sqlbuild.spec.models.project import SnapshotsConfig
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     SnapshotLifecycleTestCase,
@@ -66,10 +67,12 @@ INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaCha
             description="successful snapshot runs hooks writes fingerprint and cleans delta",
             run_id="snapshot_lifecycle_run",
             pre_hook=(
-                "CREATE TABLE main.snapshot_hook_log (phase VARCHAR)",
-                "INSERT INTO main.snapshot_hook_log VALUES ('pre')",
+                SqlHookEntry(statement="CREATE TABLE main.snapshot_hook_log (phase VARCHAR)"),
+                SqlHookEntry(statement="INSERT INTO main.snapshot_hook_log VALUES ('pre')"),
             ),
-            post_hook=("INSERT INTO main.snapshot_hook_log VALUES ('post')",),
+            post_hook=(
+                SqlHookEntry(statement="INSERT INTO main.snapshot_hook_log VALUES ('post')"),
+            ),
             expected_hook_events=(
                 "CREATE TABLE main.snapshot_hook_log (phase VARCHAR)",
                 "INSERT INTO main.snapshot_hook_log VALUES ('pre')",
@@ -87,8 +90,8 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     entry: ModelPlanEntry = build_snapshot_execution_plan_entry(
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(

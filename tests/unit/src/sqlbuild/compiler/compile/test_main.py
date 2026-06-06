@@ -6,13 +6,16 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.compile.helpers.attachment import build_model_config
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models.core import CompileProjectInputs
+from sqlbuild.compiler.compile.models.core import CompileModelConfig, CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.exceptions import SpecConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
+    DefaultsConfig,
     LocalClonePolicy,
     LocalConfig,
     LocalTargetConfig,
@@ -33,6 +36,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsErrorTestCase,
     BuildCompileInputsTestCase,
+    BuildModelConfigHooksTestCase,
     ResolveTargetConfigTestCase,
     SeedRefRegressionTestCase,
 )
@@ -1207,7 +1211,7 @@ database = "analytics"
             "models/staging/orders.sql": """
 MODEL (
   alias orders_dev,
-  post_hook ['GRANT SELECT ON @@CTX:destination.qualified TO analyst_role'],
+  post_hooks [sql('GRANT SELECT ON @@CTX:destination.qualified TO analyst_role')],
 );
 
 select @project_columns() from __source("raw_orders")
@@ -1253,7 +1257,11 @@ sources:
                 "schema": "marts",
                 "alias": "orders_dev",
                 "database": "analytics",
-                "post_hook": ["GRANT SELECT ON analytics.marts.orders_dev TO analyst_role"],
+                "post_hooks": [
+                    SqlHookEntry(
+                        statement="GRANT SELECT ON analytics.marts.orders_dev TO analyst_role"
+                    )
+                ],
             },
         ),
         expected_model_path_defaults=(None,),
@@ -1322,7 +1330,7 @@ min_amount = "100"
             + "\n",
             "models/orders.sql": """
 MODEL (
-  pre_hook "insert into @@audit_schema.load_log select '@@ENV:USER_NAME'",
+  pre_hooks [sql("insert into @@audit_schema.load_log select '@@ENV:USER_NAME'")],
   columns (order_id (audits [source_filter])),
 );
 
@@ -1386,7 +1394,9 @@ sources:
         cli_vars=None,
         run_id=None,
         expected_model_schema_names=("orders",),
-        expected_model_config_values=({"pre_hook": "insert into audit.load_log select 'runner'"},),
+        expected_model_config_values=(
+            {"pre_hooks": [SqlHookEntry(statement="insert into audit.load_log select 'runner'")]},
+        ),
         expected_model_query_sqls=(
             "SELECT *\n"
             "FROM analytics_raw.orders\n"
@@ -1454,6 +1464,64 @@ sources:
             "USER_NAME": "runner",
             "SOURCE_SYSTEM": "crm",
         },
+    ),
+    BuildCompileInputsTestCase(
+        description="expands typed SQL hooks without expanding Python hook kwargs",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[defaults]
+schema = "marts"
+
+[targets]
+
+[targets.dev]
+database = "analytics"
+""".strip()
+            + "\n",
+            "models/orders.sql": """
+MODEL (
+  alias orders_dev,
+  post_hooks [
+    sql("select '@@CTX:destination.qualified' as target"),
+    python("notify", message: "@@CTX:destination.qualified"),
+  ],
+);
+
+SELECT 1 AS id
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=(
+            {
+                "schema": "marts",
+                "alias": "orders_dev",
+                "database": "analytics",
+                "post_hooks": [
+                    SqlHookEntry(statement="select 'analytics.marts.orders_dev' as target"),
+                    PythonHookEntry(
+                        name="notify",
+                        kwargs={"message": "@@CTX:destination.qualified"},
+                    ),
+                ],
+            },
+        ),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_target_name="dev",
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_query_sqls=("SELECT 1 AS id",),
+        expected_model_references=((),),
     ),
     BuildCompileInputsTestCase(
         description="expands vars and macros in sql function bodies and headers",
@@ -3158,35 +3226,67 @@ path = "${CTX:schema}"
         expected_error_fragment="SQL syntax error in model 'broken'",
     ),
     BuildCompileInputsErrorTestCase(
+        description="raises when legacy pre_hook config is used",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": ("MODEL (pre_hook 'SELECT 1');\n\nSELECT 1 AS id\n"),
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment="uses legacy 'pre_hook'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when legacy post_hook config is used",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": ("MODEL (post_hook ['SELECT 1']);\n\nSELECT 1 AS id\n"),
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment="uses legacy 'post_hook'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when plural hooks use bare SQL strings",
+        repo_files=base_repo_files()
+        | {
+            "models/staging/broken.sql": ("MODEL (post_hooks ['SELECT 1']);\n\nSELECT 1 AS id\n"),
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment="post_hooks entries must use typed sql",
+    ),
+    BuildCompileInputsErrorTestCase(
         description="raises when pre_hook sql has invalid syntax",
         repo_files=base_repo_files()
         | {
             "models/staging/broken.sql": (
-                "MODEL (pre_hook 'THIS IS NOT VALID SQL');\n\nSELECT 1 AS id\n"
+                "MODEL (pre_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
             ),
         },
         selected_target=None,
         run_id=None,
-        expected_error_fragment="SQL syntax error in pre_hook for model 'broken'",
+        expected_error_fragment="SQL syntax error in pre_hooks for model 'broken'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when post_hook sql has invalid syntax",
         repo_files=base_repo_files()
         | {
             "models/staging/broken.sql": (
-                "MODEL (post_hook 'THIS IS NOT VALID SQL');\n\nSELECT 1 AS id\n"
+                "MODEL (post_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
             ),
         },
         selected_target=None,
         run_id=None,
-        expected_error_fragment="SQL syntax error in post_hook for model 'broken'",
+        expected_error_fragment="SQL syntax error in post_hooks for model 'broken'",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when hook sql uses config template syntax",
         repo_files=base_repo_files()
         | {
             "models/staging/broken.sql": (
-                "MODEL (post_hook 'GRANT SELECT ON ${CTX:destination.qualified} TO analyst');\n\n"
+                "MODEL (post_hooks ["
+                "sql('GRANT SELECT ON ${CTX:destination.qualified} TO analyst')"
+                "]);\n\n"
                 "SELECT 1 AS id\n"
             ),
         },
@@ -3301,6 +3401,51 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
                 project_dir=tmp_path
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildModelConfigHooksTestCase(
+            description="layers typed hooks from defaults and path defaults",
+            default_hook=[
+                SqlHookEntry(statement="CREATE TABLE audit_log AS SELECT 'default' AS source")
+            ],
+            path_default_hook=[
+                SqlHookEntry(statement="INSERT INTO audit_log SELECT 'path' AS source")
+            ],
+            expected_pre_hooks=[
+                SqlHookEntry(statement="CREATE TABLE audit_log AS SELECT 'default' AS source")
+            ],
+            expected_post_hooks=[
+                SqlHookEntry(statement="INSERT INTO audit_log SELECT 'path' AS source")
+            ],
+        )
+    ],
+    ids=["layers typed hooks from defaults and path defaults"],
+)
+def test_given_typed_hook_defaults_when_building_config_then_layers_values(
+    test_case: BuildModelConfigHooksTestCase,
+) -> None:
+    defaults: DefaultsConfig = DefaultsConfig(pre_hooks=test_case.default_hook)
+    path_defaults: dict[str, dict[str, object]] = {
+        "models/marts": {"post_hooks": test_case.path_default_hook}
+    }
+
+    config: CompileModelConfig = build_model_config(
+        defaults=defaults,
+        path_defaults=path_defaults,
+        matched_path_default="models/marts",
+        model_header_values={},
+        effective_vars={},
+        target_config=None,
+        model_name="orders",
+        effective_target_name=None,
+        run_id="run_123",
+    )
+
+    assert config.values["pre_hooks"] == test_case.expected_pre_hooks
+    assert config.values["post_hooks"] == test_case.expected_post_hooks
 
 
 @pytest.mark.parametrize(

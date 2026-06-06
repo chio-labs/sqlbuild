@@ -18,7 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 
 TEST_CASES: list[CliFailureBuildE2ETestCase] = [
     CliFailureBuildE2ETestCase(
-        description="invalid pre_hook fails at compile time",
+        description="invalid typed pre hook fails at compile time",
         repo_files={
             "sqlbuild_project.toml": dedent(
                 """
@@ -35,7 +35,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
                 """
                 MODEL (
                   materialized table,
-                  pre_hook 'THIS IS NOT VALID SQL'
+                  pre_hooks [sql('THIS IS NOT VALID SQL')]
                 );
 
                 SELECT 1 AS id
@@ -46,7 +46,7 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
         command=("--no-color", "build"),
         expected_exit_code=1,
         expected_stderr_fragments=(
-            "SQL syntax error in pre_hook for model 'orders'",
+            "SQL syntax error in pre_hooks for model 'orders'",
             "hook SQL must be a valid executable SQL statement",
             "settings.sql_validation: false",
         ),

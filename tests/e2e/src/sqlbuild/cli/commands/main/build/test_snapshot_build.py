@@ -250,8 +250,8 @@ def test_given_snapshot_selector_when_excluding_downstream_then_only_snapshot_bu
                       unique_key [customer_id],
                       snapshot_strategy timestamp,
                       updated_at updated_at,
-                      pre_hook "INSERT INTO main.hook_log VALUES ('pre')",
-                      post_hook "INSERT INTO main.hook_log VALUES ('post')"
+                      pre_hooks [sql("INSERT INTO main.hook_log VALUES ('pre')")],
+                      post_hooks [sql("INSERT INTO main.hook_log VALUES ('post')")]
                     );
 
                     SELECT customer_id, plan, updated_at
@@ -631,7 +631,7 @@ SNAPSHOT_FAILURE_CONSISTENCY_TEST_CASES: list[SnapshotFailureConsistencyBuildE2E
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
                   updated_at updated_at,
-                  pre_hook "SELECT * FROM main.pre_hook_guard"
+                  pre_hooks [sql("SELECT * FROM main.pre_hook_guard")]
                 );
 
                 SELECT customer_id, plan, updated_at
@@ -704,7 +704,7 @@ SNAPSHOT_FAILURE_CONSISTENCY_TEST_CASES: list[SnapshotFailureConsistencyBuildE2E
                   unique_key [customer_id],
                   snapshot_strategy timestamp,
                   updated_at updated_at,
-                  post_hook "SELECT * FROM main.post_hook_guard"
+                  post_hooks [sql("SELECT * FROM main.post_hook_guard")]
                 );
 
                 SELECT customer_id, plan, updated_at

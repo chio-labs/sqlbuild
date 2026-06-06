@@ -342,8 +342,8 @@ class ModelPlanEntry:
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     contract_enforced: bool = False
     contract_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
-    pre_hook: object = None
-    post_hook: object = None
+    pre_hooks: object = None
+    post_hooks: object = None
     previous_query_sql: str | None = None
     fingerprint_metadata_json: str | None = None
     previous_metadata_json: str | None = None

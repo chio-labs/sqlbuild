@@ -67,7 +67,7 @@ def execute_custom_entry(
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.pre_hook,
+                hooks=entry.pre_hooks,
                 phase_label="pre_hook",
             )
     except Exception as exc:
@@ -196,7 +196,7 @@ def execute_custom_entry(
             execute_hooks(
                 connection=connection,
                 adapter=adapter,
-                hooks=entry.post_hook,
+                hooks=entry.post_hooks,
                 phase_label="post_hook",
             )
     except Exception as exc:

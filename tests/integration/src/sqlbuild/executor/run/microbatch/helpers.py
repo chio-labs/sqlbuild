@@ -106,8 +106,8 @@ def build_microbatch_plan_entry(
         microbatch_range=microbatch_range,
         unique_key=test_case.unique_key,
         on_schema_change=test_case.on_schema_change,
-        pre_hook=test_case.pre_hook,
-        post_hook=test_case.post_hook,
+        pre_hooks=test_case.pre_hook,
+        post_hooks=test_case.post_hook,
     )
 
 

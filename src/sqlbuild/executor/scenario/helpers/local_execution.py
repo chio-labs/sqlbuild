@@ -217,8 +217,8 @@ def _build_local_execution_plan(
                 entry,
                 destination=relation_plan.model_targets[entry.name],
                 resolved_sql=local_sql,
-                pre_hook=None,
-                post_hook=None,
+                pre_hooks=None,
+                post_hooks=None,
                 type_enforcement=False,
             )
         )

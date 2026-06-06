@@ -44,10 +44,10 @@ def _model_execution_signature(model: CompiledModel) -> dict[str, object]:
         signature["custom_config"] = model.config.values["config"]
     if "placeholders" in model.config.values:
         signature["custom_placeholders"] = model.config.values["placeholders"]
-    if "pre_hook" in model.config.values:
-        signature["pre_hook"] = model.config.values["pre_hook"]
-    if "post_hook" in model.config.values:
-        signature["post_hook"] = model.config.values["post_hook"]
+    if "pre_hooks" in model.config.values:
+        signature["pre_hooks"] = model.config.values["pre_hooks"]
+    if "post_hooks" in model.config.values:
+        signature["post_hooks"] = model.config.values["post_hooks"]
     return signature
 
 

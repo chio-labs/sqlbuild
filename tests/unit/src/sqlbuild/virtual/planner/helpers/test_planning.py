@@ -8,6 +8,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.shared.models import SqlHookEntry
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
@@ -843,12 +844,18 @@ def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
     first_graph: ProjectGraph = build_virtual_planner_test_project(
         upstream_query_sql=test_case.upstream_query_sql,
         downstream_query_sql=test_case.downstream_query_sql,
-        upstream_extra_config={"pre_hook": "SELECT 1", "post_hook": "SELECT 2"},
+        upstream_extra_config={
+            "pre_hooks": [SqlHookEntry(statement="SELECT 1")],
+            "post_hooks": [SqlHookEntry(statement="SELECT 2")],
+        },
     )
     second_graph: ProjectGraph = build_virtual_planner_test_project(
         upstream_query_sql=test_case.upstream_query_sql,
         downstream_query_sql=test_case.downstream_query_sql,
-        upstream_extra_config={"pre_hook": "SELECT 3", "post_hook": "SELECT 4"},
+        upstream_extra_config={
+            "pre_hooks": [SqlHookEntry(statement="SELECT 3")],
+            "post_hooks": [SqlHookEntry(statement="SELECT 4")],
+        },
     )
 
     first_hashes: dict[str, str] = build_expected_version_hashes(
