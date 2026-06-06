@@ -20,6 +20,8 @@ from tests.integration.src.sqlbuild.executor.run._test_types import (
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     ExtraAuditDefinition,
     create_python_hook_data,
+    fail_table_hook,
+    insert_table_hook_log,
     run_failure_test,
     run_success_test,
     verify_failure_warehouse_state,
@@ -254,6 +256,37 @@ HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
             "python pre-hook created data for orders",
         ),
     ),
+    TableSuccessTestCase(
+        description="mixed SQL and Python hooks execute around table materialization",
+        setup_sql=("CREATE TABLE staging.hook_log (phase VARCHAR)",),
+        model_sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        promotion_mode=TablePromotionMode.STAGED,
+        pre_hook=[
+            SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_pre')"),
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
+        ],
+        post_hook=[
+            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+            SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_post')"),
+        ],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/table.py"),
+                name="insert_hook_log",
+                function=insert_table_hook_log,
+            ),
+        ),
+        expected_row_count=1,
+        expected_query_results=(
+            (
+                "SELECT phase FROM staging.hook_log ORDER BY rowid",
+                (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
+            ),
+        ),
+    ),
 ]
 
 HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
@@ -276,6 +309,27 @@ HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         promotion_mode=TablePromotionMode.STAGED,
         post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
         expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_promoted_relation="staging.orders",
+        expected_row_count=1,
+    ),
+    TableFailureTestCase(
+        description="python post_hook failure marks table failed after promotion",
+        setup_sql=(),
+        model_sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        promotion_mode=TablePromotionMode.STAGED,
+        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "table post failed"})],
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/table.py"),
+                name="fail_hook",
+                function=fail_table_hook,
+            ),
+        ),
+        expected_failed_phase=ExecutionPhase.POST_HOOK,
+        expected_error_fragment='post_hooks[0] python("fail_hook") failed: table post failed',
         expected_promoted_relation="staging.orders",
         expected_row_count=1,
     ),

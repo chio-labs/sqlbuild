@@ -26,6 +26,7 @@ from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.schema import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100
@@ -175,7 +176,24 @@ def _model_resource(
     }
     if model.destination.qualified_name is not None:
         item["qualified_name"] = model.destination.qualified_name
+    for hook_key in ("pre_hooks", "post_hooks"):
+        hooks: object = model.config.values.get(hook_key)
+        if hooks is not None:
+            item[hook_key] = _hook_resources(hooks=hooks)
     return item
+
+
+def _hook_resources(*, hooks: object) -> list[dict[str, object]]:
+    if not isinstance(hooks, (list, tuple)):
+        return []
+    resources: list[dict[str, object]] = []
+    hook: object
+    for hook in hooks:
+        if isinstance(hook, SqlHookEntry):
+            resources.append({"type": "sql", "statement": hook.statement})
+        elif isinstance(hook, PythonHookEntry):
+            resources.append({"type": "python", "name": hook.name, "kwargs": hook.kwargs})
+    return resources
 
 
 def _source_resource(source: CompiledSource) -> dict[str, object]:

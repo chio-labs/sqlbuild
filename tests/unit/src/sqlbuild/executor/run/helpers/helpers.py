@@ -11,6 +11,15 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.executor.run.models import HookContext
+
+
+def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:
+    ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.snapshot_hook_log VALUES ('{phase}')")
+
+
+def fail_snapshot_hook(ctx: HookContext, message: str) -> None:
+    raise RuntimeError(message)
 
 
 def build_result_model_plan_entry() -> ModelPlanEntry:
