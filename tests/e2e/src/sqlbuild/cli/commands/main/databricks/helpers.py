@@ -72,9 +72,10 @@ def build_databricks_virtual_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "databricks"\n'
+        'default_target = "dev"\n\n'
         "[settings]\n"
         "virtual_environments = true\n"
-        'default_target = "dev"\n\n'
+        "\n"
         "[connection]\n"
         'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
         'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
