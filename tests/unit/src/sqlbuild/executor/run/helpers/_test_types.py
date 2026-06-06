@@ -76,6 +76,38 @@ class PythonHookExecutionTestCase:
 
 
 @dataclass(frozen=True)
+class PythonHookInvocationTestCase:
+    description: str
+    expected_message: str
+    expected_rows: list[tuple[object, ...]]
+    expected_model_name: str
+    expected_phase: str
+    expected_hook_name: str
+    expected_hook_index: int
+    expected_run_id: str
+    expected_environment: str
+    expected_vars: dict[str, object]
+    expected_destination_name: str
+    expected_destination_schema: str
+    expected_adapter_name: str
+    expected_recorded_events: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonHookContextParameterTestCase:
+    description: str
+    hook_name: str
+    expected_context_count: int
+    expected_return_ignored: object
+
+
+@dataclass(frozen=True)
+class PythonHookRuntimeErrorTestCase:
+    description: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class SnapshotRuntimeContractErrorTestCase:
     description: str
     contract_columns: tuple[ColumnInfo, ...]

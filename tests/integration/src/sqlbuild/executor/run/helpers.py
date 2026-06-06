@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
@@ -25,7 +26,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
@@ -38,6 +39,13 @@ class ExtraAuditDefinition:
     name: str
     audit_sql: str
     severity: str
+
+
+def create_python_hook_data(ctx: HookContext, value: int) -> None:
+    ctx.execute_sql(
+        f"CREATE TABLE {ctx.destination.schema}.python_hook_data AS SELECT {value} AS val"
+    )
+    ctx.log(f"python pre-hook created data for {ctx.model_name}")
 
 
 def build_table_plan_entry(
@@ -171,6 +179,7 @@ def verify_success_warehouse_state(
         test_case=test_case,
     )
     _verify_warning_fragment(result=result, test_case=test_case)
+    _verify_lifecycle_event_fragments(result=result, test_case=test_case)
 
 
 def verify_failure_warehouse_state(
@@ -242,6 +251,11 @@ def _execute_test(
         run_id="test_run",
         query_change_tracking=(
             test_case.query_change_tracking if isinstance(test_case, TableSuccessTestCase) else True
+        ),
+        hook_functions=tuple(
+            hook_function
+            for hook_function in getattr(test_case, "hook_functions", ())
+            if isinstance(hook_function, DiscoveredHookFunction)
         ),
     )
 
@@ -327,6 +341,16 @@ def _verify_warning_fragment(
         return
     all_warnings: str = " ".join(result.warning_messages)
     assert test_case.expected_warning_fragment in all_warnings
+
+
+def _verify_lifecycle_event_fragments(
+    *,
+    result: ModelExecutionResult,
+    test_case: TableSuccessTestCase,
+) -> None:
+    fragment: str
+    for fragment in test_case.expected_lifecycle_event_fragments:
+        assert any(fragment in event.content for event in result.lifecycle_events)
 
 
 def _verify_error_fragment(

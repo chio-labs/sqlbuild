@@ -124,6 +124,7 @@ def build_plan_output(
         function_targets=relations.function_targets,
         source_map=relations.source_map,
         source_read_map=relations.source_read_map,
+        hook_functions=project.hook_functions,
     )
 
 
