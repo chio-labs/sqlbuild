@@ -290,7 +290,9 @@ def _polyglot_projection_upstream_columns(
 
 def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str], ...]:
     if str(getattr(expression, "kind", "")) == "column":
-        return ((str(getattr(expression, "name", "") or ""), _polyglot_column_table_name(expression)),)
+        return (
+            (str(getattr(expression, "name", "") or ""), _polyglot_column_table_name(expression)),
+        )
     try:
         payload: object = expression.to_dict()
     except Exception:
