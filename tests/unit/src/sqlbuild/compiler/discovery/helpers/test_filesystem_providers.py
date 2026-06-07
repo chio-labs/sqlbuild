@@ -328,7 +328,7 @@ def test_given_env_backed_provider_settings_when_discovering_then_instance_has_e
     "test_case",
     [
         DiscoverProviderSecretErrorTestCase(
-            description="invalid plain env setting error includes full pydantic detail",
+            description="invalid plain env setting error redacts raw input value",
             repo_files={
                 "providers/slack.py": """
 from pydantic import Field
@@ -346,12 +346,12 @@ class SlackProvider(Provider):
             expected_error_fragment=(
                 "Provider 'slack_provider' in providers/slack.py has invalid settings"
             ),
-            expected_raw_error_fragment="input_value='super-secret-token-value'",
+            unexpected_error_fragment="super-secret-token-value",
         ),
     ],
-    ids=["invalid plain env setting error includes full pydantic detail"],
+    ids=["invalid plain env setting error redacts raw input value"],
 )
-def test_given_invalid_plain_env_setting_when_discovering_then_error_includes_full_pydantic_detail(
+def test_given_invalid_plain_env_setting_when_discovering_then_error_redacts_raw_value(
     test_case: DiscoverProviderSecretErrorTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -365,4 +365,4 @@ def test_given_invalid_plain_env_setting_when_discovering_then_error_includes_fu
 
     error_message: str = str(exc_info.value)
     assert test_case.expected_error_fragment in error_message
-    assert test_case.expected_raw_error_fragment in error_message
+    assert test_case.unexpected_error_fragment not in error_message

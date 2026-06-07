@@ -146,7 +146,7 @@ class DiscoverProviderSecretErrorTestCase:
     env_name: str
     env_value: str
     expected_error_fragment: str
-    expected_raw_error_fragment: str
+    unexpected_error_fragment: str
 
 
 @dataclass(frozen=True)

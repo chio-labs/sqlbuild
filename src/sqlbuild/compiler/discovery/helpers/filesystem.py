@@ -517,8 +517,20 @@ def _provider_instance(
     except ValidationError as error:
         relative_path: Path = file_path.relative_to(project_dir)
         raise ProviderDiscoveryError(
-            f"Provider '{provider_name}' in {relative_path} has invalid settings:\n{error}"
+            f"Provider '{provider_name}' in {relative_path} has invalid settings:\n"
+            f"{_format_provider_validation_error(error)}"
         ) from error
+
+
+def _format_provider_validation_error(error: ValidationError) -> str:
+    details: list[str] = []
+    for item in error.errors(include_input=False):
+        location: object = item.get("loc", ())
+        location_text: str = ".".join(str(part) for part in location) if location else "<root>"
+        message: object = item.get("msg", "invalid value")
+        error_type: object = item.get("type", "validation_error")
+        details.append(f"{location_text}: {message} [{error_type}]")
+    return "\n".join(details) or "invalid provider settings"
 
 
 def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscoveryBucket:

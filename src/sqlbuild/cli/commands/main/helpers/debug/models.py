@@ -19,6 +19,7 @@ class DebugLine:
 class DebugResult:
     runtime: tuple[DebugLine, ...]
     configuration: tuple[DebugLine, ...]
+    providers: tuple[DebugLine, ...]
     connection: tuple[DebugLine, ...]
 
     @property
@@ -27,4 +28,4 @@ class DebugResult:
 
     @property
     def lines(self) -> tuple[DebugLine, ...]:
-        return self.runtime + self.configuration + self.connection
+        return self.runtime + self.configuration + self.providers + self.connection
