@@ -16,6 +16,7 @@ from scripts.structure.structure_conventions.rules import (
     check_adapter_contract_implementation_shortcuts,
     check_banned_generic_filename,
     check_classes_module_name,
+    check_classes_package_module_shape,
     check_client_module_shape,
     check_constants_module,
     check_constants_outside_constants,
@@ -75,6 +76,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_banned_generic_filename(file_path))
         violations.extend(check_helpers_module_name(file_path))
         violations.extend(check_classes_module_name(file_path))
+        violations.extend(check_classes_package_module_shape(actual_repo_root, file_path, module))
         violations.extend(check_init_module(file_path, module))
         violations.extend(check_entry_module_shape(file_path, module))
         violations.extend(check_main_entry_name_collisions(actual_repo_root, file_path))

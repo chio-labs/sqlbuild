@@ -159,7 +159,7 @@ def test_given_provider_files_when_discovering_then_returns_provider_classes(
     assert tuple(provider.provider_class.__name__ for provider in providers) == (
         test_case.expected_provider_class_names
     )
-    assert tuple(provider.instance.__class__ for provider in providers) == tuple(
+    assert tuple(provider.settings.__class__ for provider in providers) == tuple(
         provider.provider_class for provider in providers
     )
     assert (
@@ -316,7 +316,7 @@ def test_given_env_backed_provider_settings_when_discovering_then_instance_has_e
 
     assert len(providers) == 1
     assert providers[0].name == test_case.expected_provider_name
-    assert providers[0].instance.model_dump()[test_case.expected_field_name] == (
+    assert providers[0].settings.model_dump()[test_case.expected_field_name] == (
         test_case.expected_field_value
     )
 

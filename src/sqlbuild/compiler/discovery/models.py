@@ -243,13 +243,13 @@ class DiscoveredHookFunction:
 
 @dataclass(frozen=True)
 class DiscoveredProvider:
-    """A discovered project provider class and configured settings instance."""
+    """A discovered project provider class and validated settings object."""
 
     file_path: Path
     relative_path: Path
     name: str
     provider_class: type[Provider]
-    instance: Provider
+    settings: Provider
 
 
 @dataclass(frozen=True)

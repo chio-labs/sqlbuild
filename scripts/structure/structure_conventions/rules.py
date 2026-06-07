@@ -431,6 +431,32 @@ def check_classes_module_name(file_path: Path) -> list[Violation]:
     ]
 
 
+def check_classes_package_module_shape(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Require runtime classes/ modules to define exactly one class."""
+
+    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if len(relative_parts) < 5 or relative_parts[:2] != ("src", "sqlbuild"):
+        return []
+    if "classes" not in relative_parts[2:-1] or file_path.name == "__init__.py":
+        return []
+
+    class_nodes: list[ast.ClassDef] = [
+        node for node in module.body if isinstance(node, ast.ClassDef)
+    ]
+    if len(class_nodes) == 1:
+        return []
+    return [
+        Violation(
+            code="SC043",
+            path=file_path,
+            line=1,
+            message="runtime classes/ modules must define exactly one class",
+        )
+    ]
+
+
 def check_init_module(file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate __init__.py contents."""
 

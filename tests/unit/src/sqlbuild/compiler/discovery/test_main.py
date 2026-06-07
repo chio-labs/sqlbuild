@@ -283,7 +283,7 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
         tuple(provider.provider_class.__name__ for provider in discovered_inputs.providers)
         == test_case.expected_provider_class_names
     )
-    assert tuple(provider.instance.__class__ for provider in discovered_inputs.providers) == tuple(
+    assert tuple(provider.settings.__class__ for provider in discovered_inputs.providers) == tuple(
         provider.provider_class for provider in discovered_inputs.providers
     )
     assert (

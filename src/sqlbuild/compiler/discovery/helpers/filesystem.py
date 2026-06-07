@@ -488,7 +488,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
                     relative_path=file_path.relative_to(project_dir),
                     name=provider_name,
                     provider_class=provider_class,
-                    instance=_provider_instance(
+                    settings=_provider_instance(
                         provider_class=provider_class,
                         provider_name=provider_name,
                         file_path=file_path,
