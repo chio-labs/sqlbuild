@@ -122,6 +122,15 @@ class DiscoverProviderClassesTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverProviderCacheIsolationTestCase:
+    description: str
+    first_repo_files: dict[str, str]
+    second_repo_files: dict[str, str]
+    expected_first_provider_names: tuple[str, ...]
+    expected_second_provider_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DiscoverProviderClassesErrorTestCase:
     description: str
     repo_files: dict[str, str]
