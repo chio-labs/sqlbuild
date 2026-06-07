@@ -19,7 +19,7 @@ from sqlbuild.compiler.discovery.constants import (
     PROJECT_CONFIG_FILENAME,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 _SECRET_CONNECTION_KEYS: frozenset[str] = frozenset(
@@ -97,6 +97,7 @@ def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugRes
     return DebugResult(
         runtime=tuple(runtime),
         configuration=tuple(configuration),
+        providers=tuple(_build_provider_lines(discovered_inputs.providers)),
         connection=tuple(connection),
     )
 
@@ -142,6 +143,36 @@ def _build_connection_config_lines(connection_config: dict[str, object]) -> list
         DebugLine(label=key, message=_sanitize_connection_value(key=key, value=value))
         for key, value in sorted(connection_config.items())
     ]
+
+
+def _build_provider_lines(providers: tuple[DiscoveredProvider, ...]) -> list[DebugLine]:
+    if not providers:
+        return [
+            DebugLine(
+                label="providers",
+                message="none discovered",
+                status=DebugCheckStatus.OK,
+            )
+        ]
+    lines: list[DebugLine] = [
+        DebugLine(
+            label="providers",
+            message=str(len(providers)),
+            status=DebugCheckStatus.OK,
+            status_message="discovered",
+        )
+    ]
+    provider: DiscoveredProvider
+    for provider in providers:
+        lines.append(
+            DebugLine(
+                label=provider.name,
+                message=f"{provider.relative_path}:{provider.provider_class.__name__}",
+                status=DebugCheckStatus.OK,
+                status_message="valid settings",
+            )
+        )
+    return lines
 
 
 def _append_connection_checks(
