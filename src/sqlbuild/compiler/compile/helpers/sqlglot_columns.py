@@ -202,10 +202,12 @@ def _infer_columns_from_polyglot_ast(
         return None
 
     column_nullability_by_table = dict(column_nullability_by_table)
-    alias_nullability: dict[str, InferredNullability] = _polyglot_alias_nullability_from_select(
-        select=select,
-        column_nullability_by_table=column_nullability_by_table,
-    )
+    alias_nullability: dict[str, InferredNullability] = {}
+    if _has_known_nullability(column_nullability_by_table):
+        alias_nullability = _polyglot_alias_nullability_from_select(
+            select=select,
+            column_nullability_by_table=column_nullability_by_table,
+        )
     columns: list[InferredColumn] = []
     projection: Any
     for projection in getattr(select, "expressions", ()):
@@ -354,6 +356,8 @@ def _polyglot_lineage_upstream_columns(
 
 
 def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str], ...]:
+    if str(getattr(expression, "kind", "")) == "column":
+        return ((str(getattr(expression, "name", "") or ""), _polyglot_column_table_name(expression)),)
     try:
         payload: object = expression.to_dict()
     except Exception:
@@ -382,6 +386,16 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
 
     visit(payload)
     return tuple(refs)
+
+
+def _has_known_nullability(
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+) -> bool:
+    return any(
+        value != InferredNullability.UNKNOWN
+        for column_facts in column_nullability_by_table.values()
+        for value in column_facts.values()
+    )
 
 
 def _polyglot_lineage_transform_kind(expression: Any, *, has_upstream: bool) -> ColumnTransformKind:

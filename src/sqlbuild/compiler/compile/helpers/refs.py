@@ -33,6 +33,9 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
     index: int = 0
     length: int = len(sql)
     while index < length:
+        index = _next_reference_scan_position(sql=sql, start=index)
+        if index >= length:
+            break
         if sql.startswith("--", index):
             index = skip_line_comment(sql=sql, start=index)
             continue
@@ -41,10 +44,6 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
             continue
         if sql[index] in {"'", '"', "`"}:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-
-        if sql[index] != "_" or index + 1 >= length or sql[index + 1] != "_":
-            index += 1
             continue
 
         parsed_reference: tuple[CompileSqlReference, int] | None = _parse_reference_at(
@@ -57,6 +56,16 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
         references.append(parsed_reference[0])
         index = parsed_reference[1]
     return tuple(references)
+
+
+def _next_reference_scan_position(*, sql: str, start: int) -> int:
+    positions: list[int] = []
+    token: str
+    for token in ("__", "--", "/*", "'", '"', "`"):
+        position: int = sql.find(token, start)
+        if position >= 0:
+            positions.append(position)
+    return min(positions, default=len(sql))
 
 
 def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, int] | None:
