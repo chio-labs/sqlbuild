@@ -24,9 +24,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
+    build_discovered_provider_usage,
     build_function_entry,
     build_model_entry,
     build_plan_output,
+    build_plan_provider_usage,
     build_schema_finding,
     build_seed_entry,
     build_source_load_entry,
@@ -770,6 +772,122 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "remaining stale after selection: orders_rollup",
         ),
     ),
+    FormatPlanTestCase(
+        description="provider usages show compact selected Python surface counts",
+        plan_output=build_plan_output(
+            provider_usages=(
+                build_plan_provider_usage(
+                    provider_name="marker_provider",
+                    consumer_kind="loader",
+                    consumer_name="raw_orders",
+                ),
+                build_plan_provider_usage(
+                    provider_name="marker_provider",
+                    consumer_kind="hook",
+                    consumer_name="mark_pre",
+                ),
+            ),
+        ),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="publish_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.READ_SIDE,
+                provider_usages=(build_discovered_provider_usage(),),
+            ),
+        ),
+        expected_fragments=(
+            "Providers",
+            "marker_provider  used by 3 selected Python surfaces",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="provider usages show verbose selected Python surface details",
+        plan_output=build_plan_output(
+            provider_usages=(
+                build_plan_provider_usage(
+                    provider_name="marker_provider",
+                    consumer_kind="loader",
+                    consumer_name="raw_orders",
+                ),
+                build_plan_provider_usage(
+                    provider_name="marker_provider",
+                    consumer_kind="hook",
+                    consumer_name="mark_pre",
+                ),
+            ),
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="publish_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.READ_SIDE,
+                provider_usages=(build_discovered_provider_usage(),),
+            ),
+        ),
+        expected_fragments=(
+            "Providers",
+            "  marker_provider",
+            "    hook mark_pre (MarkerProvider)",
+            "    loader raw_orders (MarkerProvider)",
+            "    task publish_orders (MarkerProvider)",
+        ),
+        unexpected_fragments=("used by 3 selected Python surfaces", "parameter"),
+    ),
+]
+
+COLOR_TEST_CASES: list[FormatPlanColorTestCase] = [
+    FormatPlanColorTestCase(
+        description="styles header names warnings and diffs semantically",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="dim_customers",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.SCHEMA_CHANGED,
+                    schema_findings=(
+                        build_schema_finding(
+                            kind=SchemaChangeKind.COLUMN_ADDED,
+                            column_name="discount",
+                            expected_type="FLOAT",
+                        ),
+                    ),
+                    previous_query_sql="SELECT old_column FROM raw",
+                ),
+            ),
+            warnings=(
+                build_warning(
+                    model_name="dim_customers",
+                    message="schema change requires rebuild",
+                    severity=WarningSeverity.WARNING,
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "\033[32m\033[1mPlan ready (1 selected)\033[0m",
+            "\033[34m\033[1mdim_customers\033[0m",
+            "\033[32m      + discount  FLOAT   (added)\033[0m",
+            "\033[33m\033[1mWarnings (1)\033[0m",
+            "\033[33m- schema change requires rebuild\033[0m",
+        ),
+    ),
+    FormatPlanColorTestCase(
+        description="styles provider names and consumers semantically",
+        plan_output=build_plan_output(
+            provider_usages=(
+                build_plan_provider_usage(
+                    provider_name="marker_provider",
+                    consumer_kind="loader",
+                    consumer_name="raw_orders",
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "\033[34m\033[1mmarker_provider\033[0m",
+            "\033[2mused by 1 selected Python surface\033[0m",
+        ),
+    ),
 ]
 
 
@@ -803,43 +921,8 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        FormatPlanColorTestCase(
-            description="styles header names warnings and diffs semantically",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="dim_customers",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.SCHEMA_CHANGED,
-                        schema_findings=(
-                            build_schema_finding(
-                                kind=SchemaChangeKind.COLUMN_ADDED,
-                                column_name="discount",
-                                expected_type="FLOAT",
-                            ),
-                        ),
-                        previous_query_sql="SELECT old_column FROM raw",
-                    ),
-                ),
-                warnings=(
-                    build_warning(
-                        model_name="dim_customers",
-                        message="schema change requires rebuild",
-                        severity=WarningSeverity.WARNING,
-                    ),
-                ),
-            ),
-            expected_fragments=(
-                "\033[32m\033[1mPlan ready (1 selected)\033[0m",
-                "\033[34m\033[1mdim_customers\033[0m",
-                "\033[32m      + discount  FLOAT   (added)\033[0m",
-                "\033[33m\033[1mWarnings (1)\033[0m",
-                "\033[33m- schema change requires rebuild\033[0m",
-            ),
-        ),
-    ],
-    ids=["styles header names warnings and diffs semantically"],
+    COLOR_TEST_CASES,
+    ids=[case.description for case in COLOR_TEST_CASES],
 )
 def test_given_plan_output_when_formatting_with_color_then_styles_semantic_parts(
     test_case: FormatPlanColorTestCase,

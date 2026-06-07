@@ -132,6 +132,7 @@ def assemble_compiled_project(
         ),
         loader_functions=inputs.discovered_inputs.loader_functions,
         hook_functions=inputs.discovered_inputs.hook_functions,
+        materialization_files=inputs.discovered_inputs.materialization_files,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )

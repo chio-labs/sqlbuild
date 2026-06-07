@@ -79,3 +79,11 @@ class ProviderHookContextConflictE2ETestCase:
     command: tuple[str, ...]
     context_parameter_name: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ProviderPlanOutputE2ETestCase:
+    description: str
+    expected_text_fragments: tuple[str, ...]
+    expected_provider_name: str
+    expected_used_by: tuple[tuple[str, str, str], ...]

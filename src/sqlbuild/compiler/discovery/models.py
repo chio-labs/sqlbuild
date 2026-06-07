@@ -160,6 +160,17 @@ class DiscoveredMaterializationFile:
     file_path: Path
     relative_path: Path
     name: str
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DiscoveredProviderUsage:
+    """Framework-owned metadata for provider usage by a Python callable surface."""
+
+    provider_name: str
+    parameter_name: str
+    annotation_class_name: str | None = None
+    annotation_module: str | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +189,7 @@ class DiscoveredLoaderFunction:
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     contract: str | None = None
     connection_mode: LoaderConnectionMode = LoaderConnectionMode.SQLBUILD
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -194,6 +206,7 @@ class DiscoveredTaskFunction:
     description: str | None = None
     meta: dict[str, object] | None = None
     retry: RetryPolicy | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -212,6 +225,7 @@ class DiscoveredAssetFunction:
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
     retry: RetryPolicy | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -228,6 +242,7 @@ class DiscoveredCheckFunction:
     group: str | None = None
     description: str | None = None
     meta: dict[str, object] | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -239,6 +254,7 @@ class DiscoveredHookFunction:
     name: str
     function: Callable[..., object]
     description: str | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
