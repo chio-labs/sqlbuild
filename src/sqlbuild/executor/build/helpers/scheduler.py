@@ -71,6 +71,7 @@ from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
@@ -126,6 +127,7 @@ class BuildScheduler:
         precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
         initial_load_results: tuple[LoadExecutionResult, ...] = (),
         initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
+        providers: ProviderContainer | None = None,
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
@@ -169,6 +171,7 @@ class BuildScheduler:
         self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
         self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
         self._use_color: bool = use_color
+        self._providers: ProviderContainer | None = providers
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
@@ -451,6 +454,7 @@ class BuildScheduler:
             on_progress=self._on_progress,
             on_node_start=self._on_node_start,
             use_color=self._use_color,
+            providers=self._providers,
         )
 
     def _execute_seed_node(self, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
@@ -622,6 +626,7 @@ class BuildScheduler:
                     effective_vars=self._effective_vars,
                     warehouse_relations=self._warehouse_relations,
                     on_progress=self._on_sub_progress,
+                    providers=self._providers,
                 )
             except Exception as error:
                 result = ModelExecutionResult(
@@ -805,6 +810,7 @@ def _dispatch_model(
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_progress: Callable[[str], None] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> ModelExecutionResult:
     """Route a model to the correct executor based on action and mode."""
 
@@ -837,6 +843,7 @@ def _dispatch_model(
             on_progress=on_progress,
             hook_functions=plan.hook_functions,
             effective_target_name=target,
+            providers=providers,
         )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH

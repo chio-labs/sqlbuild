@@ -48,6 +48,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
 )
+from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
@@ -151,88 +152,99 @@ def run_check(
         adapter=adapter,
         pipeline_result=pipeline_result,
     )
-    connection: Any = adapter.connect(connection_config)
+    provider_session: Any = build_provider_session(discovered_inputs.providers)
     try:
-        ingress_result: PythonIngressLoaderExecutorResult = execute_ingress_python_loader_nodes(
-            python_graph=python_graph,
-            selected_python_names=lifecycle_plan.ingress_python_node_names,
-            loader_functions=discovered_inputs.loader_functions,
-            source_map=pipeline_result.plan_output.source_map,
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            run_id=pipeline_result.project.run_id,
-            target=pipeline_result.project.effective_target_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=False,
-            default_database=adapter.default_database(),
-            default_schema=adapter.default_schema(),
+        connection: Any = adapter.connect(connection_config)
+        try:
+            ingress_result: PythonIngressLoaderExecutorResult = execute_ingress_python_loader_nodes(
+                python_graph=python_graph,
+                selected_python_names=lifecycle_plan.ingress_python_node_names,
+                loader_functions=discovered_inputs.loader_functions,
+                source_map=pipeline_result.plan_output.source_map,
+                adapter=adapter,
+                connection_config=connection_config,
+                connection=connection,
+                run_id=pipeline_result.project.run_id,
+                target=pipeline_result.project.effective_target_name,
+                vars=pipeline_result.project.effective_vars,
+                is_reload=False,
+                default_database=adapter.default_database(),
+                default_schema=adapter.default_schema(),
+                use_color=use_color,
+                relation_targets=relation_targets,
+                providers=provider_session.providers,
+            )
+            record_python_run_state_results(
+                discovered_inputs=discovered_inputs,
+                run_state=ingress_result.run_state,
+                python_results=ingress_result.python_results,
+                load_results=ingress_result.load_results,
+                source_map=pipeline_result.plan_output.source_map,
+            )
+            read_side_results: tuple[PythonNodeExecutionResult, ...] = (
+                run_check_read_side_dependencies(
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=connection,
+                    pipeline_result=pipeline_result,
+                    python_graph=python_graph,
+                    lifecycle_plan=lifecycle_plan,
+                    relation_targets=relation_targets,
+                    providers=provider_session.providers,
+                )
+            )
+            record_python_run_state_results(
+                discovered_inputs=discovered_inputs,
+                run_state=ingress_result.run_state,
+                python_results=read_side_results,
+                source_map=pipeline_result.plan_output.source_map,
+            )
+            results: tuple[PythonCheckExecutionResult, ...] = execute_python_checks(
+                check_functions=check_functions,
+                python_graph=python_graph,
+                upstream_python_results=(*ingress_result.python_results, *read_side_results),
+                upstream_load_results=ingress_result.load_results,
+                upstream_load_results_by_loader_name=load_results_by_loader_name(
+                    source_map=pipeline_result.plan_output.source_map,
+                    load_results=ingress_result.load_results,
+                ),
+                adapter=adapter,
+                connection_config=connection_config,
+                connection=connection,
+                run_id=pipeline_result.project.run_id,
+                target=pipeline_result.project.effective_target_name,
+                vars=pipeline_result.project.effective_vars,
+                is_reload=False,
+                run_state=ingress_result.run_state,
+                default_database=adapter.default_database(),
+                default_schema=adapter.default_schema(),
+                relation_targets=relation_targets,
+                providers=provider_session.providers,
+            )
+        finally:
+            adapter.close(connection)
+        write_check_results(
+            stream=progress_stream,
+            results=results,
             use_color=use_color,
-            relation_targets=relation_targets,
-        )
-        record_python_run_state_results(
-            discovered_inputs=discovered_inputs,
-            run_state=ingress_result.run_state,
-            python_results=ingress_result.python_results,
-            load_results=ingress_result.load_results,
-            source_map=pipeline_result.plan_output.source_map,
-        )
-        read_side_results: tuple[PythonNodeExecutionResult, ...] = run_check_read_side_dependencies(
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            pipeline_result=pipeline_result,
-            python_graph=python_graph,
-            lifecycle_plan=lifecycle_plan,
-            relation_targets=relation_targets,
-        )
-        record_python_run_state_results(
-            discovered_inputs=discovered_inputs,
-            run_state=ingress_result.run_state,
-            python_results=read_side_results,
-            source_map=pipeline_result.plan_output.source_map,
-        )
-        results: tuple[PythonCheckExecutionResult, ...] = execute_python_checks(
             check_functions=check_functions,
             python_graph=python_graph,
-            upstream_python_results=(*ingress_result.python_results, *read_side_results),
-            upstream_load_results=ingress_result.load_results,
-            upstream_load_results_by_loader_name=load_results_by_loader_name(
-                source_map=pipeline_result.plan_output.source_map,
-                load_results=ingress_result.load_results,
-            ),
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            run_id=pipeline_result.project.run_id,
-            target=pipeline_result.project.effective_target_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=False,
-            run_state=ingress_result.run_state,
-            default_database=adapter.default_database(),
-            default_schema=adapter.default_schema(),
-            relation_targets=relation_targets,
         )
+        pass_count: int = sum(1 for result in results if result.passed)
+        warn_count: int = sum(1 for result in results if result.warned)
+        fail_count: int = sum(1 for result in results if result.failed)
+        progress_stream.write(
+            f"\nPASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  TOTAL={len(results)}\n"
+        )
+        progress_stream.flush()
+        write_python_check_runtime_target(
+            target_dir=effective_project_dir / "target", results=results
+        )
+        write_execution_json_output(
+            payload=format_check_json(results=results),
+            json_output=json_output,
+            json_output_path=json_output_path,
+        )
+        return 0 if fail_count == 0 else 1
     finally:
-        adapter.close(connection)
-    write_check_results(
-        stream=progress_stream,
-        results=results,
-        use_color=use_color,
-        check_functions=check_functions,
-        python_graph=python_graph,
-    )
-    pass_count: int = sum(1 for result in results if result.passed)
-    warn_count: int = sum(1 for result in results if result.warned)
-    fail_count: int = sum(1 for result in results if result.failed)
-    progress_stream.write(
-        f"\nPASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  TOTAL={len(results)}\n"
-    )
-    progress_stream.flush()
-    write_python_check_runtime_target(target_dir=effective_project_dir / "target", results=results)
-    write_execution_json_output(
-        payload=format_check_json(results=results),
-        json_output=json_output,
-        json_output_path=json_output_path,
-    )
-    return 0 if fail_count == 0 else 1
+        provider_session.close()

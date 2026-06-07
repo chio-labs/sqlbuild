@@ -6,7 +6,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent
@@ -36,6 +36,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
@@ -170,46 +171,51 @@ def run_load(
         concurrency=effective_concurrency,
         use_color=use_color,
     )
-    results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
-        sources=selected_sources,
-        reference_sources=reference_sources,
-        loader_functions=discovered_inputs.loader_functions,
-        connection_config=connection_config,
-        adapter=adapter,
-        run_id=run_id,
-        target=target_name,
-        vars=effective_vars,
-        is_reload=reload,
-        start_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.start_ts),
-        end_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.end_ts),
-        start_cursor_int=parse_cursor_integer(effective_cursor_overrides.start_int),
-        end_cursor_int=parse_cursor_integer(effective_cursor_overrides.end_int),
-        max_concurrency=effective_concurrency,
-        on_load_complete=on_complete,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        use_color=use_color,
-    )
-    elapsed: float = time.monotonic() - start
-    success_count: int = sum(1 for result in results if result.status.value == "success")
-    fail_count: int = sum(1 for result in results if result.status.value == "failed")
-    skip_count: int = sum(1 for result in results if result.status.value == "skipped")
-    completion_message: str = (
-        "Completed successfully." if fail_count == 0 else "Completed with errors."
-    )
-    progress_stream.write(f"\n{completion_message}\n")
-    progress_stream.write(
-        f"PASS={success_count}  WARN=0  FAIL={fail_count}  SKIP={skip_count}  "
-        f"TOTAL={len(results)}  ({elapsed:.2f}s)\n"
-    )
-    progress_stream.flush()
-    write_execution_json_output(
-        payload=format_load_execution_json(results=results),
-        json_output=json_output,
-        json_output_path=json_output_path,
-    )
-    return 0 if fail_count == 0 else 1
+    provider_session: Any = build_provider_session(discovered_inputs.providers)
+    try:
+        results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
+            sources=selected_sources,
+            reference_sources=reference_sources,
+            loader_functions=discovered_inputs.loader_functions,
+            connection_config=connection_config,
+            adapter=adapter,
+            run_id=run_id,
+            target=target_name,
+            vars=effective_vars,
+            is_reload=reload,
+            start_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.start_ts),
+            end_cursor_ts=parse_cursor_timestamp(effective_cursor_overrides.end_ts),
+            start_cursor_int=parse_cursor_integer(effective_cursor_overrides.start_int),
+            end_cursor_int=parse_cursor_integer(effective_cursor_overrides.end_int),
+            max_concurrency=effective_concurrency,
+            on_load_complete=on_complete,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+            use_color=use_color,
+            providers=provider_session.providers,
+        )
+        elapsed: float = time.monotonic() - start
+        success_count: int = sum(1 for result in results if result.status.value == "success")
+        fail_count: int = sum(1 for result in results if result.status.value == "failed")
+        skip_count: int = sum(1 for result in results if result.status.value == "skipped")
+        completion_message: str = (
+            "Completed successfully." if fail_count == 0 else "Completed with errors."
+        )
+        progress_stream.write(f"\n{completion_message}\n")
+        progress_stream.write(
+            f"PASS={success_count}  WARN=0  FAIL={fail_count}  SKIP={skip_count}  "
+            f"TOTAL={len(results)}  ({elapsed:.2f}s)\n"
+        )
+        progress_stream.flush()
+        write_execution_json_output(
+            payload=format_load_execution_json(results=results),
+            json_output=json_output,
+            json_output_path=json_output_path,
+        )
+        return 0 if fail_count == 0 else 1
+    finally:
+        provider_session.close()
 
 
 def _build_on_complete(

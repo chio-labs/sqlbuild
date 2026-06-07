@@ -159,6 +159,9 @@ def test_given_provider_files_when_discovering_then_returns_provider_classes(
     assert tuple(provider.provider_class.__name__ for provider in providers) == (
         test_case.expected_provider_class_names
     )
+    assert tuple(provider.provider_class.__module__ for provider in providers) == tuple(
+        path.removesuffix(".py").replace("/", ".") for path in test_case.expected_provider_paths
+    )
     assert tuple(provider.settings.__class__ for provider in providers) == tuple(
         provider.provider_class for provider in providers
     )

@@ -16,6 +16,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import build_load_execution_indexes
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -38,6 +39,7 @@ def run_external_source_loads_before_connections(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
     use_color: bool,
+    providers: ProviderContainer | None = None,
 ) -> ExternalSourceLoadResults:
     """Run external source-load nodes before SQLBuild opens warehouse connections."""
 
@@ -93,6 +95,7 @@ def run_external_source_loads_before_connections(
             on_progress=on_progress,
             on_node_start=on_node_start,
             use_color=use_color,
+            providers=providers,
         )
         results.append(result)
         completed_keys.add(key)

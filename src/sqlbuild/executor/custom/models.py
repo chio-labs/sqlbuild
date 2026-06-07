@@ -11,6 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 
 
@@ -41,6 +42,7 @@ class MaterializationContext:
     on_progress: Callable[[str], None] | None
     logger: logging.Logger
     statement_recorder: StatementRecorder = field(default_factory=StatementRecorder)
+    providers: ProviderContainer = field(default_factory=_empty_provider_container)
 
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""

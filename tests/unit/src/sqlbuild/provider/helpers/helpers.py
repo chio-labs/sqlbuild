@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
+from importlib.machinery import ModuleSpec
+from pathlib import Path
+from types import ModuleType
 from typing import ClassVar
 
 from sqlbuild.providers import Provider
@@ -43,3 +48,13 @@ def mismatched_provider(slack_provider: ClockProvider) -> None:
 
 def reserved_context_conflict(ctx: object) -> object:
     return ctx
+
+
+def load_module(*, module_name: str, file_path: Path) -> ModuleType:
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module

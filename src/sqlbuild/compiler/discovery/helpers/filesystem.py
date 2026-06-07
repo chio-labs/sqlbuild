@@ -842,9 +842,13 @@ def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder:
 
 
 def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = "sqlbuild_project_provider_" + "_".join(
-        file_path.relative_to(project_dir).with_suffix("").parts
-    )
+    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    existing_module: ModuleType | None = sys.modules.get(module_name)
+    if existing_module is not None:
+        existing_file: object = getattr(existing_module, "__file__", None)
+        if isinstance(existing_file, str) and Path(existing_file).resolve() == file_path.resolve():
+            return existing_module
+        sys.modules.pop(module_name, None)
     spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
         raise ProviderDiscoveryError(f"Could not load provider file {file_path}")
