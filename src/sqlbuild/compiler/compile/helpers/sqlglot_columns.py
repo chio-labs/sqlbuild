@@ -40,6 +40,57 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
+_POLYGLOT_KIND_ALIAS: str = "alias"
+_POLYGLOT_KIND_ARRAY_AGG: str = "array_agg"
+_POLYGLOT_KIND_AVG: str = "avg"
+_POLYGLOT_KIND_CAST: str = "cast"
+_POLYGLOT_KIND_COALESCE: str = "coalesce"
+_POLYGLOT_KIND_COLUMN: str = "column"
+_POLYGLOT_KIND_COUNT: str = "count"
+_POLYGLOT_KIND_EXCEPT: str = "except"
+_POLYGLOT_KIND_INTERSECT: str = "intersect"
+_POLYGLOT_KIND_LITERAL: str = "literal"
+_POLYGLOT_KIND_MAX: str = "max"
+_POLYGLOT_KIND_MIN: str = "min"
+_POLYGLOT_KIND_NULL: str = "null"
+_POLYGLOT_KIND_SELECT: str = "select"
+_POLYGLOT_KIND_STRING_AGG: str = "string_agg"
+_POLYGLOT_KIND_SUM: str = "sum"
+_POLYGLOT_KIND_TABLE: str = "table"
+_POLYGLOT_KIND_TRY_CAST: str = "try_cast"
+_POLYGLOT_KIND_UNION: str = "union"
+_POLYGLOT_SET_OPERATION_KINDS: frozenset[str] = frozenset(
+    {_POLYGLOT_KIND_UNION, _POLYGLOT_KIND_INTERSECT, _POLYGLOT_KIND_EXCEPT}
+)
+_POLYGLOT_CAST_KINDS: frozenset[str] = frozenset({_POLYGLOT_KIND_CAST, _POLYGLOT_KIND_TRY_CAST})
+_POLYGLOT_AGGREGATE_KINDS: frozenset[str] = frozenset(
+    {
+        _POLYGLOT_KIND_AVG,
+        _POLYGLOT_KIND_COUNT,
+        _POLYGLOT_KIND_MAX,
+        _POLYGLOT_KIND_MIN,
+        _POLYGLOT_KIND_SUM,
+        _POLYGLOT_KIND_ARRAY_AGG,
+        _POLYGLOT_KIND_STRING_AGG,
+    }
+)
+_POLYGLOT_PAYLOAD_ALIAS: str = "alias"
+_POLYGLOT_PAYLOAD_COLUMN: str = "column"
+_POLYGLOT_PAYLOAD_DATA_TYPE: str = "data_type"
+_POLYGLOT_PAYLOAD_FROM: str = "from"
+_POLYGLOT_PAYLOAD_EXPRESSIONS: str = "expressions"
+_POLYGLOT_PAYLOAD_JOINS: str = "joins"
+_POLYGLOT_PAYLOAD_KIND: str = "kind"
+_POLYGLOT_PAYLOAD_NAME: str = "name"
+_POLYGLOT_PAYLOAD_PRECISION: str = "precision"
+_POLYGLOT_PAYLOAD_SCALE: str = "scale"
+_POLYGLOT_PAYLOAD_SELECT: str = "select"
+_POLYGLOT_PAYLOAD_TABLE: str = "table"
+_POLYGLOT_PAYLOAD_THIS: str = "this"
+_POLYGLOT_PAYLOAD_TO: str = "to"
+_POLYGLOT_JOIN_FULL: str = "FULL"
+_POLYGLOT_JOIN_LEFT: str = "LEFT"
+_POLYGLOT_JOIN_RIGHT: str = "RIGHT"
 
 
 def infer_columns_with_sqlglot(
@@ -182,18 +233,14 @@ def _infer_columns_from_polyglot_ast(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
 ) -> tuple[InferredColumn, ...] | None | bool:
-    infer_nullability: bool = str(getattr(parsed, "kind", "")) not in {
-        "union",
-        "intersect",
-        "except",
-    }
+    infer_nullability: bool = str(getattr(parsed, "kind", "")) not in _POLYGLOT_SET_OPERATION_KINDS
     select: Any | None = parsed
-    if str(getattr(select, "kind", "")) != "select":
+    if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         try:
-            select = parsed.find("select")
+            select = parsed.find(_POLYGLOT_KIND_SELECT)
         except Exception:
             return None
-    if select is None or str(getattr(select, "kind", "")) != "select":
+    if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return None
 
     column_nullability_by_table = dict(column_nullability_by_table)
@@ -212,7 +259,9 @@ def _infer_columns_from_polyglot_ast(
         if not name or name == "*":
             continue
         inner: Any = (
-            projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+            projection.this
+            if str(getattr(projection, "kind", "")) == _POLYGLOT_KIND_ALIAS
+            else projection
         )
         col_type: str | None = _polyglot_cast_type(inner)
         nullability: InferredNullability = InferredNullability.UNKNOWN
@@ -234,18 +283,14 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
 ) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool:
-    infer_nullability: bool = str(getattr(parsed, "kind", "")) not in {
-        "union",
-        "intersect",
-        "except",
-    }
+    infer_nullability: bool = str(getattr(parsed, "kind", "")) not in _POLYGLOT_SET_OPERATION_KINDS
     select: Any | None = parsed
-    if str(getattr(select, "kind", "")) != "select":
+    if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         try:
-            select = parsed.find("select")
+            select = parsed.find(_POLYGLOT_KIND_SELECT)
         except Exception:
             return None, (), False
-    if select is None or str(getattr(select, "kind", "")) != "select":
+    if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return None, (), False
 
     column_nullability_by_table = dict(column_nullability_by_table)
@@ -260,6 +305,9 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         parsed=select,
         references=references,
     )
+    unqualified_resource: tuple[CompiledResourceType, str] | None = _single_alias_resource(
+        alias_map
+    )
 
     columns: list[InferredColumn] = []
     lineage_columns: list[CompiledLineageColumnFact] = []
@@ -270,7 +318,9 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
             has_star = True
             continue
         inner: Any = (
-            projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+            projection.this
+            if str(getattr(projection, "kind", "")) == _POLYGLOT_KIND_ALIAS
+            else projection
         )
         if bool(getattr(inner, "is_star", False)):
             has_star = True
@@ -299,6 +349,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         upstream_columns, confidence = _polyglot_lineage_upstream_columns(
             projection=projection,
             alias_map=alias_map,
+            unqualified_resource=unqualified_resource,
         )
         transform_kind: ColumnTransformKind = _polyglot_lineage_transform_kind(
             inner,
@@ -322,11 +373,14 @@ def _extract_polyglot_lineage_facts(
     parsed: Any,
     references: tuple[CompileSqlReference, ...],
 ) -> tuple[tuple[CompiledLineageColumnFact, ...], bool]:
-    if str(getattr(parsed, "kind", "")) != "select":
+    if str(getattr(parsed, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return (), False
     alias_map: dict[str, tuple[CompiledResourceType, str]] = _polyglot_reference_alias_map(
         parsed=parsed,
         references=references,
+    )
+    unqualified_resource: tuple[CompiledResourceType, str] | None = _single_alias_resource(
+        alias_map
     )
     lineage_columns: list[CompiledLineageColumnFact] = []
     has_star: bool = False
@@ -336,7 +390,9 @@ def _extract_polyglot_lineage_facts(
             has_star = True
             continue
         inner: Any = (
-            projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+            projection.this
+            if str(getattr(projection, "kind", "")) == _POLYGLOT_KIND_ALIAS
+            else projection
         )
         if bool(getattr(inner, "is_star", False)):
             has_star = True
@@ -347,6 +403,7 @@ def _extract_polyglot_lineage_facts(
         upstream_columns, confidence = _polyglot_lineage_upstream_columns(
             projection=projection,
             alias_map=alias_map,
+            unqualified_resource=unqualified_resource,
         )
         transform_kind: ColumnTransformKind = _polyglot_lineage_transform_kind(
             inner,
@@ -377,7 +434,7 @@ def _polyglot_reference_alias_map(
         resource_by_name[reference.ref_name] = (resource_type, reference.ref_name)
     alias_map: dict[str, tuple[CompiledResourceType, str]] = {}
     try:
-        tables: tuple[Any, ...] = tuple(parsed.find_all("table"))
+        tables: tuple[Any, ...] = tuple(parsed.find_all(_POLYGLOT_KIND_TABLE))
     except Exception:
         return alias_map
     table: Any
@@ -407,6 +464,7 @@ def _polyglot_lineage_upstream_columns(
     *,
     projection: Any,
     alias_map: dict[str, tuple[CompiledResourceType, str]],
+    unqualified_resource: tuple[CompiledResourceType, str] | None,
 ) -> tuple[tuple[CompiledLineageSourceFact, ...], ColumnLineageConfidence]:
     columns: list[CompiledLineageSourceFact] = []
     seen: set[tuple[CompiledResourceType, str, str]] = set()
@@ -418,8 +476,8 @@ def _polyglot_lineage_upstream_columns(
         resource: tuple[CompiledResourceType, str] | None = None
         if table_name:
             resource = alias_map.get(table_name)
-        elif len({resource_name for _, resource_name in alias_map.values()}) == 1:
-            resource = next(iter(alias_map.values()))
+        elif unqualified_resource is not None:
+            resource = unqualified_resource
             confidence = ColumnLineageConfidence.MEDIUM
         else:
             confidence = ColumnLineageConfidence.UNKNOWN
@@ -440,8 +498,21 @@ def _polyglot_lineage_upstream_columns(
     return tuple(columns), confidence
 
 
+def _single_alias_resource(
+    alias_map: dict[str, tuple[CompiledResourceType, str]],
+) -> tuple[CompiledResourceType, str] | None:
+    resource: tuple[CompiledResourceType, str] | None = None
+    for candidate in alias_map.values():
+        if resource is None:
+            resource = candidate
+            continue
+        if candidate[1] != resource[1]:
+            return None
+    return resource
+
+
 def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str], ...]:
-    if str(getattr(expression, "kind", "")) == "column":
+    if str(getattr(expression, "kind", "")) == _POLYGLOT_KIND_COLUMN:
         return (
             (str(getattr(expression, "name", "") or ""), _polyglot_column_table_name(expression)),
         )
@@ -454,15 +525,19 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
     def visit(node: object) -> None:
         if isinstance(node, dict):
             node_dict: dict[str, object] = cast(dict[str, object], node)
-            column_payload: object = node_dict.get("column")
+            column_payload: object = node_dict.get(_POLYGLOT_PAYLOAD_COLUMN)
             if isinstance(column_payload, dict):
                 column_dict: dict[str, object] = cast(dict[str, object], column_payload)
-                column_name: str = _polyglot_name_payload_value(column_dict.get("name"))
-                table_payload: object = column_dict.get("table")
+                column_name: str = _polyglot_name_payload_value(
+                    column_dict.get(_POLYGLOT_PAYLOAD_NAME)
+                )
+                table_payload: object = column_dict.get(_POLYGLOT_PAYLOAD_TABLE)
                 table_name: str = ""
                 if isinstance(table_payload, dict):
                     table_dict: dict[str, object] = cast(dict[str, object], table_payload)
-                    table_name = _polyglot_name_payload_value(table_dict.get("name"))
+                    table_name = _polyglot_name_payload_value(
+                        table_dict.get(_POLYGLOT_PAYLOAD_NAME)
+                    )
                 refs.append((column_name, table_name))
                 return
             for value in node_dict.values():
@@ -489,31 +564,28 @@ def _polyglot_lineage_transform_kind(expression: Any, *, has_upstream: bool) -> 
     kind: str = str(getattr(expression, "kind", ""))
     if bool(getattr(expression, "is_star", False)):
         return ColumnTransformKind.STAR
-    if kind in {"cast", "try_cast"}:
+    if kind in _POLYGLOT_CAST_KINDS:
         return ColumnTransformKind.CAST
     if _polyglot_has_aggregation(expression):
         return ColumnTransformKind.AGGREGATION
     if not has_upstream:
         return ColumnTransformKind.CONSTANT
-    if kind == "column":
+    if kind == _POLYGLOT_KIND_COLUMN:
         return ColumnTransformKind.DIRECT
     return ColumnTransformKind.EXPRESSION
 
 
 def _polyglot_has_aggregation(expression: Any) -> bool:
-    aggregate_kinds: frozenset[str] = frozenset(
-        {"avg", "count", "max", "min", "sum", "array_agg", "string_agg"}
-    )
     try:
         nodes: tuple[Any, ...] = tuple(expression.walk())
     except Exception:
         return False
-    return any(str(getattr(node, "kind", "")) in aggregate_kinds for node in nodes)
+    return any(str(getattr(node, "kind", "")) in _POLYGLOT_AGGREGATE_KINDS for node in nodes)
 
 
 def _polyglot_cast_type(expression: Any) -> str | None:
     kind: str = str(getattr(expression, "kind", ""))
-    if kind not in {"cast", "try_cast"}:
+    if kind not in _POLYGLOT_CAST_KINDS:
         return None
     try:
         payload: object = expression.to_dict().get(kind, {})
@@ -521,15 +593,15 @@ def _polyglot_cast_type(expression: Any) -> str | None:
         return None
     if not isinstance(payload, dict):
         return None
-    target: object = payload.get("to")
+    target: object = payload.get(_POLYGLOT_PAYLOAD_TO)
     if not isinstance(target, dict):
         return None
-    raw_type: object = target.get("data_type")
+    raw_type: object = target.get(_POLYGLOT_PAYLOAD_DATA_TYPE)
     if not isinstance(raw_type, str) or not raw_type:
         return None
     type_name: str = _polyglot_type_name(raw_type)
-    precision: object = target.get("precision")
-    scale: object = target.get("scale")
+    precision: object = target.get(_POLYGLOT_PAYLOAD_PRECISION)
+    scale: object = target.get(_POLYGLOT_PAYLOAD_SCALE)
     if type_name == "DECIMAL" and isinstance(precision, int):
         if isinstance(scale, int):
             return f"DECIMAL({precision}, {scale})"
@@ -564,17 +636,17 @@ def _infer_polyglot_nullability(
     inference_profile: ExpressionInferenceProfile,
 ) -> InferredNullability:
     kind: str = str(getattr(expression, "kind", ""))
-    if kind == "null":
+    if kind == _POLYGLOT_KIND_NULL:
         return InferredNullability.NULLABLE
-    if kind == "literal":
+    if kind == _POLYGLOT_KIND_LITERAL:
         return InferredNullability.NON_NULL
-    if kind == "column":
+    if kind == _POLYGLOT_KIND_COLUMN:
         return _infer_polyglot_column_nullability(
             expression=expression,
             alias_nullability=alias_nullability,
             column_nullability_by_table=column_nullability_by_table,
         )
-    if kind == "cast":
+    if kind == _POLYGLOT_KIND_CAST:
         inner: Any | None = getattr(expression, "this", None)
         if inner is None:
             return InferredNullability.UNKNOWN
@@ -584,11 +656,11 @@ def _infer_polyglot_nullability(
             column_nullability_by_table=column_nullability_by_table,
             inference_profile=inference_profile,
         )
-    if kind == "try_cast":
+    if kind == _POLYGLOT_KIND_TRY_CAST:
         return InferredNullability.UNKNOWN
-    if kind == "count":
+    if kind == _POLYGLOT_KIND_COUNT:
         return InferredNullability.NON_NULL
-    if kind == "coalesce":
+    if kind == _POLYGLOT_KIND_COALESCE:
         child_nullabilities: list[InferredNullability] = [
             _infer_polyglot_nullability(
                 expression=child,
@@ -626,15 +698,15 @@ def _infer_polyglot_shallow_nullability(
     inference_profile: ExpressionInferenceProfile,
 ) -> InferredNullability:
     kind: str = str(getattr(expression, "kind", ""))
-    if kind == "null":
+    if kind == _POLYGLOT_KIND_NULL:
         return InferredNullability.NULLABLE
-    if kind == "literal":
+    if kind == _POLYGLOT_KIND_LITERAL:
         return InferredNullability.NON_NULL
-    if kind == "count":
+    if kind == _POLYGLOT_KIND_COUNT:
         return InferredNullability.NON_NULL
-    if kind == "column":
+    if kind == _POLYGLOT_KIND_COLUMN:
         return InferredNullability.UNKNOWN
-    if kind == "cast":
+    if kind == _POLYGLOT_KIND_CAST:
         inner: Any | None = getattr(expression, "this", None)
         if inner is None:
             return InferredNullability.UNKNOWN
@@ -642,9 +714,9 @@ def _infer_polyglot_shallow_nullability(
             expression=inner,
             inference_profile=inference_profile,
         )
-    if kind == "try_cast":
+    if kind == _POLYGLOT_KIND_TRY_CAST:
         return InferredNullability.UNKNOWN
-    if kind == "coalesce":
+    if kind == _POLYGLOT_KIND_COALESCE:
         child_nullabilities: tuple[InferredNullability, ...] = tuple(
             _infer_polyglot_shallow_nullability(
                 expression=child,
@@ -682,14 +754,14 @@ def _infer_polyglot_column_nullability(
     if not column_name:
         return InferredNullability.UNKNOWN
     try:
-        payload: object = expression.to_dict().get("column", {})
+        payload: object = expression.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
     except Exception:
         payload = {}
     table_name: str = ""
     if isinstance(payload, dict):
-        table_payload: object = payload.get("table")
+        table_payload: object = payload.get(_POLYGLOT_PAYLOAD_TABLE)
         if isinstance(table_payload, dict):
-            raw_name: object = table_payload.get("name")
+            raw_name: object = table_payload.get(_POLYGLOT_PAYLOAD_NAME)
             if isinstance(raw_name, str):
                 table_name = raw_name
     if table_name:
@@ -712,7 +784,7 @@ def _infer_polyglot_column_nullability(
 
 
 def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
-    if str(getattr(expression, "kind", "")) == "column":
+    if str(getattr(expression, "kind", "")) == _POLYGLOT_KIND_COLUMN:
         return (expression,)
     columns: list[Any] = []
     seen: set[int] = set()
@@ -722,7 +794,7 @@ def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
         if node_id in seen:
             return
         seen.add(node_id)
-        if str(getattr(node, "kind", "")) == "column":
+        if str(getattr(node, "kind", "")) == _POLYGLOT_KIND_COLUMN:
             columns.append(node)
             return
         for child in _polyglot_child_expressions(node):
@@ -734,15 +806,15 @@ def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
 
 def _polyglot_column_table_name(column: Any) -> str:
     try:
-        payload: object = column.to_dict().get("column", {})
+        payload: object = column.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
     except Exception:
         return ""
     if not isinstance(payload, dict):
         return ""
-    table_payload: object = payload.get("table")
+    table_payload: object = payload.get(_POLYGLOT_PAYLOAD_TABLE)
     if not isinstance(table_payload, dict):
         return ""
-    raw_name: object = table_payload.get("name")
+    raw_name: object = table_payload.get(_POLYGLOT_PAYLOAD_NAME)
     return raw_name if isinstance(raw_name, str) else ""
 
 
@@ -776,19 +848,19 @@ def _polyglot_alias_nullability_from_select(
     current_aliases: set[str] = set()
 
     try:
-        select_payload: object = select.to_dict().get("select", {})
+        select_payload: object = select.to_dict().get(_POLYGLOT_PAYLOAD_SELECT, {})
     except Exception:
         select_payload = {}
     if not isinstance(select_payload, dict):
         return alias_nullability
 
-    from_payload: object = select_payload.get("from")
+    from_payload: object = select_payload.get(_POLYGLOT_PAYLOAD_FROM)
     if isinstance(from_payload, dict):
-        from_expressions: object = from_payload.get("expressions")
+        from_expressions: object = from_payload.get(_POLYGLOT_PAYLOAD_EXPRESSIONS)
         if isinstance(from_expressions, list) and len(from_expressions) == 1:
             from_table_payload: object = from_expressions[0]
             if isinstance(from_table_payload, dict):
-                table_payload: object = from_table_payload.get("table")
+                table_payload: object = from_table_payload.get(_POLYGLOT_PAYLOAD_TABLE)
                 if isinstance(table_payload, dict):
                     alias, table_name = _polyglot_table_payload_alias_and_name(table_payload)
                     current_aliases.add(alias)
@@ -799,29 +871,29 @@ def _polyglot_alias_nullability_from_select(
                         column_nullability_by_table=column_nullability_by_table,
                     )
 
-    joins_payload: object = select_payload.get("joins")
+    joins_payload: object = select_payload.get(_POLYGLOT_PAYLOAD_JOINS)
     if not isinstance(joins_payload, list):
         return alias_nullability
     for join_payload in joins_payload:
         if not isinstance(join_payload, dict):
             continue
-        this_payload: object = join_payload.get("this")
+        this_payload: object = join_payload.get(_POLYGLOT_PAYLOAD_THIS)
         if not isinstance(this_payload, dict):
             continue
-        joined_table_payload: object = this_payload.get("table")
+        joined_table_payload: object = this_payload.get(_POLYGLOT_PAYLOAD_TABLE)
         if not isinstance(joined_table_payload, dict):
             continue
         joined_alias, joined_table_name = _polyglot_table_payload_alias_and_name(
             joined_table_payload
         )
-        side: str = str(join_payload.get("kind") or "").upper()
-        if side == "LEFT":
+        side: str = str(join_payload.get(_POLYGLOT_PAYLOAD_KIND) or "").upper()
+        if side == _POLYGLOT_JOIN_LEFT:
             alias_nullability[joined_alias] = InferredNullability.NULLABLE
-        elif side == "RIGHT":
+        elif side == _POLYGLOT_JOIN_RIGHT:
             for alias in current_aliases:
                 alias_nullability[alias] = InferredNullability.NULLABLE
             alias_nullability[joined_alias] = InferredNullability.UNKNOWN
-        elif side == "FULL":
+        elif side == _POLYGLOT_JOIN_FULL:
             for alias in current_aliases:
                 alias_nullability[alias] = InferredNullability.NULLABLE
             alias_nullability[joined_alias] = InferredNullability.NULLABLE
@@ -844,8 +916,10 @@ def _polyglot_table_alias_or_name(table: Any) -> str:
 
 
 def _polyglot_table_payload_alias_and_name(table_payload: dict[str, object]) -> tuple[str, str]:
-    table_name: str = _polyglot_name_payload_value(table_payload.get("name"))
-    alias: str = _polyglot_name_payload_value(table_payload.get("alias")) or table_name
+    table_name: str = _polyglot_name_payload_value(table_payload.get(_POLYGLOT_PAYLOAD_NAME))
+    alias: str = (
+        _polyglot_name_payload_value(table_payload.get(_POLYGLOT_PAYLOAD_ALIAS)) or table_name
+    )
     return alias, table_name
 
 
@@ -854,7 +928,7 @@ def _polyglot_name_payload_value(payload: object) -> str:
         return payload
     if isinstance(payload, dict):
         payload_dict: dict[str, object] = cast(dict[str, object], payload)
-        name: object = payload_dict.get("name")
+        name: object = payload_dict.get(_POLYGLOT_PAYLOAD_NAME)
         if isinstance(name, str):
             return name
     return ""

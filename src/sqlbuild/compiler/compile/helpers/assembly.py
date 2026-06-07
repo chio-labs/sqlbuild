@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, replace
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.deps import (
@@ -65,6 +66,17 @@ from sqlbuild.spec.models.project import (
 from sqlbuild.spec.models.schema import SchemaAuditInstance, SchemaColumn, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
+_POLYGLOT_ANALYSIS_WORKERS: int = 2
+_POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
+
+
+@dataclass(frozen=True)
+class _ModelSqlAnalysis:
+    polyglot_analysis: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    )
+    placeholders: dict[str, str] | None
+
 
 def assemble_compiled_project(
     inputs: CompileProjectInputs,
@@ -81,6 +93,14 @@ def assemble_compiled_project(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
         _build_column_nullability_by_table(inputs)
     )
+    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
+    model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
+    if sqlglot_enabled:
+        model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
+            model_inputs=inputs.model_inputs,
+            column_nullability_by_table=column_nullability_by_table,
+            inference_profile=profile,
+        )
     return CompiledProject(
         run_id=inputs.run_id,
         effective_target_name=inputs.effective_target_name,
@@ -103,7 +123,8 @@ def assemble_compiled_project(
                 sqlglot_enabled=sqlglot_enabled,
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
-                inference_profile=inference_profile,
+                inference_profile=profile,
+                sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
             )
             for model_input in inputs.model_inputs
         ),
@@ -151,28 +172,30 @@ def _assemble_compiled_model(
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
+    sql_analysis: _ModelSqlAnalysis | None = None,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_columns: tuple[CompiledLineageColumnFact, ...] | None = None
     fast_lineage_has_star: bool = False
-    raw_placeholders: object | None = model_input.config.values.get("placeholders")
     placeholders: dict[str, str] | None = (
-        {str(k): str(v) for k, v in raw_placeholders.items()}
-        if isinstance(raw_placeholders, dict)
-        else None
+        sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
     )
     if sqlglot_enabled:
         profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
         polyglot_analysis: (
             tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool]
             | bool
-        ) = analyze_columns_and_lineage_with_polyglot(
-            query_sql=model_input.query_sql,
-            references=model_input.references,
-            placeholders=placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            inference_profile=profile,
+        ) = (
+            sql_analysis.polyglot_analysis
+            if sql_analysis is not None
+            else analyze_columns_and_lineage_with_polyglot(
+                query_sql=model_input.query_sql,
+                references=model_input.references,
+                placeholders=placeholders,
+                column_nullability_by_table=column_nullability_by_table,
+                inference_profile=profile,
+            )
         )
         if isinstance(polyglot_analysis, tuple):
             inferred_columns = polyglot_analysis[0]
@@ -219,6 +242,72 @@ def _assemble_compiled_model(
         output_column_locations=model_input.model_file.output_column_locations,
         macro_deps=find_macro_call_names(model_input.macro_source_sql),
     )
+
+
+def _analyze_model_sql_in_parallel(
+    *,
+    model_inputs: tuple[CompileModelInput, ...],
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    inference_profile: ExpressionInferenceProfile,
+) -> dict[str, _ModelSqlAnalysis]:
+    if not model_inputs:
+        return {}
+    if len(model_inputs) < _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS:
+        return {
+            _model_name(model_input): _analyze_model_sql(
+                model_input,
+                column_nullability_by_table,
+                inference_profile,
+            )
+            for model_input in model_inputs
+        }
+    workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(model_inputs))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
+            executor.map(
+                lambda model_input: _analyze_model_sql(
+                    model_input,
+                    column_nullability_by_table,
+                    inference_profile,
+                ),
+                model_inputs,
+            )
+        )
+    return {
+        _model_name(model_input): analysis
+        for model_input, analysis in zip(model_inputs, analyses, strict=True)
+    }
+
+
+def _analyze_model_sql(
+    model_input: CompileModelInput,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    inference_profile: ExpressionInferenceProfile,
+) -> _ModelSqlAnalysis:
+    placeholders: dict[str, str] | None = _model_placeholders(model_input)
+    return _ModelSqlAnalysis(
+        polyglot_analysis=analyze_columns_and_lineage_with_polyglot(
+            query_sql=model_input.query_sql,
+            references=model_input.references,
+            placeholders=placeholders,
+            column_nullability_by_table=column_nullability_by_table,
+            inference_profile=inference_profile,
+        ),
+        placeholders=placeholders,
+    )
+
+
+def _model_placeholders(model_input: CompileModelInput) -> dict[str, str] | None:
+    raw_placeholders: object | None = model_input.config.values.get("placeholders")
+    return (
+        {str(k): str(v) for k, v in raw_placeholders.items()}
+        if isinstance(raw_placeholders, dict)
+        else None
+    )
+
+
+def _model_name(model_input: CompileModelInput) -> str:
+    return model_input.model_file.file_path.stem
 
 
 def _build_column_nullability_by_table(
