@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.30.0](https://github.com/chio-labs/sqlbuild/compare/v0.29.0...v0.30.0) (2026-06-07)
+
+
+### Features
+
+* add provider base API ([595ca69](https://github.com/chio-labs/sqlbuild/commit/595ca694b7f34487986837de60ba624a6322e882))
+* add provider runtime sessions ([19518f9](https://github.com/chio-labs/sqlbuild/commit/19518f9f893586cdba1c8f17890391d94a5f6e88))
+* discover project providers ([d2b921d](https://github.com/chio-labs/sqlbuild/commit/d2b921d99928d5f1c1f81d05dad8fd7e4bfd1421))
+* expose providers on python contexts ([cc86c65](https://github.com/chio-labs/sqlbuild/commit/cc86c65db3569482b886303245e01ce1636dab4f))
+* inject providers into python nodes ([a085da5](https://github.com/chio-labs/sqlbuild/commit/a085da51899b4d36bea34b957f6001fac7ebd340))
+* show provider usage in plans ([6c06f16](https://github.com/chio-labs/sqlbuild/commit/6c06f16e61a44437335205a40a6dfc9a2ec4277c))
+* support providers in python hooks ([ce276da](https://github.com/chio-labs/sqlbuild/commit/ce276daaa9fd1597a4f7315905d595ddae5dd9fb))
+* wire providers into command execution ([86f5d05](https://github.com/chio-labs/sqlbuild/commit/86f5d059529424b7ed238b03fb9d9c17aa7f65a6))
+
+
+### Bug Fixes
+
+* isolate provider discovery imports ([96b6101](https://github.com/chio-labs/sqlbuild/commit/96b61016a3e7e69a66ed7eaaa3227622b70f588c))
+* polish provider diagnostics ([4a87c81](https://github.com/chio-labs/sqlbuild/commit/4a87c810aace7719449a88098d91c699a8be00ee))
+* preserve provider suffix in default names ([e095507](https://github.com/chio-labs/sqlbuild/commit/e0955070c8c61d357659833ae534173bf8d9972d))
+
 ## [0.29.0](https://github.com/chio-labs/sqlbuild/compare/v0.28.1...v0.29.0) (2026-06-06)
 
 
