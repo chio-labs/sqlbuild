@@ -13,6 +13,17 @@ from sqlbuild.compiler.shared.helpers.sql_scanning import (
 from sqlbuild.shared.types import SqlReferenceKind
 
 _CONTEXT: str = "SQL reference"
+_REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
+    ("__dbt_ref(", SqlReferenceKind.DBT_REF),
+    ("__table_fn(", SqlReferenceKind.TABLE_FUNCTION),
+    ("__source(", SqlReferenceKind.SOURCE),
+    ("__seed(", SqlReferenceKind.SEED),
+    ("__udf(", SqlReferenceKind.UDF),
+    ("__ref(", SqlReferenceKind.REF),
+)
+_REFERENCE_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
+    ref_kind: prefix[:-1] for prefix, ref_kind in _REFERENCE_PREFIXES
+}
 
 
 def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
@@ -32,6 +43,10 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
 
+        if sql[index] != "_" or index + 1 >= length or sql[index + 1] != "_":
+            index += 1
+            continue
+
         parsed_reference: tuple[CompileSqlReference, int] | None = _parse_reference_at(
             sql=sql,
             start=index,
@@ -46,22 +61,15 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
 
 def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, int] | None:
     ref_kind: SqlReferenceKind | None = None
-    if sql.startswith(f"{SqlReferenceKind.DBT_REF.function_name}(", start):
-        ref_kind = SqlReferenceKind.DBT_REF
-    elif sql.startswith(f"{SqlReferenceKind.SEED.function_name}(", start):
-        ref_kind = SqlReferenceKind.SEED
-    elif sql.startswith(f"{SqlReferenceKind.SOURCE.function_name}(", start):
-        ref_kind = SqlReferenceKind.SOURCE
-    elif sql.startswith(f"{SqlReferenceKind.UDF.function_name}(", start):
-        ref_kind = SqlReferenceKind.UDF
-    elif sql.startswith(f"{SqlReferenceKind.TABLE_FUNCTION.function_name}(", start):
-        ref_kind = SqlReferenceKind.TABLE_FUNCTION
-    elif sql.startswith(f"{SqlReferenceKind.REF.function_name}(", start):
-        ref_kind = SqlReferenceKind.REF
+    prefix: str
+    for prefix, candidate_kind in _REFERENCE_PREFIXES:
+        if sql.startswith(prefix, start):
+            ref_kind = candidate_kind
+            break
     if ref_kind is None:
         return None
 
-    open_paren_index: int = start + len(ref_prefix(ref_kind))
+    open_paren_index: int = start + len(_REFERENCE_PREFIX_BY_KIND[ref_kind])
     closing_paren_index: int = find_matching_paren(
         sql=sql, open_paren_index=open_paren_index, context=_CONTEXT
     )
@@ -96,7 +104,7 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
 
 def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
     normalized_ref_kind: SqlReferenceKind = SqlReferenceKind(ref_kind)
-    return normalized_ref_kind.function_name
+    return _REFERENCE_PREFIX_BY_KIND[normalized_ref_kind]
 
 
 def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:

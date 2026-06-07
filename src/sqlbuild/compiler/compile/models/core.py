@@ -29,6 +29,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     LocalConfig,
@@ -94,6 +95,28 @@ class CompileSqlReference:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "ref_kind", SqlReferenceKind(self.ref_kind))
+
+
+@dataclass(frozen=True)
+class CompiledLineageSourceFact:
+    """Compact upstream column fact extracted during SQL analysis."""
+
+    resource_type: CompiledResourceType | str
+    resource_name: str
+    column_name: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "resource_type", CompiledResourceType(self.resource_type))
+
+
+@dataclass(frozen=True)
+class CompiledLineageColumnFact:
+    """Compact output column lineage fact extracted during SQL analysis."""
+
+    output_column: str
+    upstream_columns: tuple[CompiledLineageSourceFact, ...] = field(default_factory=tuple)
+    transform_kind: ColumnTransformKind = ColumnTransformKind.UNKNOWN
+    confidence: ColumnLineageConfidence = ColumnLineageConfidence.UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -179,6 +202,7 @@ class CompileModelInput:
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
+    sql_validation_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -289,6 +313,8 @@ class CompiledModel:
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
+    fast_lineage_columns: tuple[CompiledLineageColumnFact, ...] | None = None
+    fast_lineage_has_star: bool = False
     authored_sql: str = ""
     output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
     macro_deps: tuple[str, ...] = field(default_factory=tuple)

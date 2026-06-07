@@ -14,7 +14,12 @@ def assemble_project(
     inputs: CompileProjectInputs,
     *,
     inference_profile: ExpressionInferenceProfile | None = None,
+    skip_column_inference: bool = False,
 ) -> CompiledProject:
     """Convert compile inputs into the planner-ready project view."""
 
-    return assemble_compiled_project(inputs, inference_profile=inference_profile)
+    return assemble_compiled_project(
+        inputs,
+        inference_profile=inference_profile,
+        skip_column_inference=skip_column_inference,
+    )

@@ -5,11 +5,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
 from sqlbuild.compiler.discovery.helpers.constants import MODEL_HEADER_PATTERN
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SourceLocation
@@ -109,26 +107,12 @@ def model_output_column_locations(
     header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
     if header_match is None:
         return {}
+    del sqlglot_enabled
     sql_start: int = header_match.start("sql")
     sql: str = header_match.group("sql")
-    sqlglot_output_names: tuple[str | None, ...] | None = (
-        _sqlglot_projection_output_names(sql) if sqlglot_enabled else None
-    )
-    if sqlglot_output_names == ():
-        return {}
     projection_ranges: tuple[tuple[int, int], ...] | None = _top_level_select_projection_ranges(sql)
     if projection_ranges is None:
         return {}
-    if sqlglot_output_names is not None:
-        if len(sqlglot_output_names) != len(projection_ranges):
-            return {}
-        return _locations_from_projection_names(
-            contents=contents,
-            sql_start=sql_start,
-            relative_path=relative_path,
-            projection_ranges=projection_ranges,
-            output_names=sqlglot_output_names,
-        )
     return _scanner_output_column_locations(
         contents=contents,
         sql_start=sql_start,
@@ -176,29 +160,6 @@ def _scanner_output_column_locations(
     return locations
 
 
-def _locations_from_projection_names(
-    *,
-    contents: str,
-    sql_start: int,
-    relative_path: Path,
-    projection_ranges: tuple[tuple[int, int], ...],
-    output_names: tuple[str | None, ...],
-) -> dict[str, SourceLocation]:
-    locations: dict[str, SourceLocation] = {}
-    for output_name, projection_range in zip(output_names, projection_ranges, strict=True):
-        if output_name is None or output_name == "*":
-            continue
-        location: SourceLocation | None = _location_for_projection_range(
-            contents=contents,
-            sql_start=sql_start,
-            relative_path=relative_path,
-            projection_range=projection_range,
-        )
-        if location is not None:
-            locations[output_name] = location
-    return locations
-
-
 def _location_for_projection_range(
     *, contents: str, sql_start: int, relative_path: Path, projection_range: tuple[int, int]
 ) -> SourceLocation | None:
@@ -215,31 +176,6 @@ def _location_for_projection_range(
         end=sql_start + end_offset,
         relative_path=relative_path,
     )
-
-
-def _sqlglot_projection_output_names(sql: str) -> tuple[str | None, ...] | None:
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
-        return None
-    try:
-        parsed: Any = sqlglot_module.parse_one(sql)
-    except Exception:
-        return None
-    if type(parsed).__name__ != "Select":
-        return ()
-    output_names: list[str | None] = []
-    projection: Any
-    for projection in parsed.expressions:
-        if "Star" in type(projection).__name__:
-            output_names.append(None)
-            continue
-        raw_name: object | None = getattr(projection, "alias_or_name", None)
-        if raw_name is None:
-            output_names.append(None)
-            continue
-        output_name: str = str(raw_name)
-        output_names.append(output_name if output_name and output_name != "*" else None)
-    return tuple(output_names)
 
 
 def _location_for_header_token(

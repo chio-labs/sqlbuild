@@ -7,8 +7,16 @@ from typing import Any
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
-from sqlbuild.compiler.compile.models.core import InferredColumn
+from sqlbuild.compiler.compile.models.core import (
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
+    CompileSqlReference,
+    InferredColumn,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
+from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,
     reference_call_prefix_pattern_text,
@@ -45,15 +53,25 @@ def infer_columns_with_sqlglot(
     extractable column names.
     """
 
-    sqlglot_module: Any | None = import_sqlglot()
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if sqlglot_module is None or expressions_module is None:
-        return None
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+
+    polyglot_columns: tuple[InferredColumn, ...] | None | bool = _infer_columns_with_polyglot(
+        cleaned_sql=cleaned_sql,
+        dialect=profile.sqlglot_dialect,
+        column_nullability_by_table=column_nullability_by_table or {},
+        inference_profile=profile,
+    )
+    if isinstance(polyglot_columns, tuple):
+        return polyglot_columns
+
+    sqlglot_module: Any | None = import_sqlglot()
+    expressions_module: Any | None = import_sqlglot_expressions()
+    if sqlglot_module is None or expressions_module is None:
+        return None
 
     try:
         parsed: Any = sqlglot_module.parse_one(cleaned_sql, dialect=profile.sqlglot_dialect)
@@ -76,6 +94,412 @@ def infer_columns_with_sqlglot(
         infer_nullability=infer_nullability,
         inference_profile=profile,
     )
+
+
+def analyze_columns_with_polyglot(
+    *,
+    query_sql: str,
+    placeholders: dict[str, str] | None = None,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    inference_profile: ExpressionInferenceProfile | None = None,
+) -> tuple[InferredColumn, ...] | None | bool:
+    """Infer columns with one Polyglot parse, returning False when unavailable."""
+
+    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    if placeholders:
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+    return _infer_columns_with_polyglot(
+        cleaned_sql=cleaned_sql,
+        dialect=profile.sqlglot_dialect,
+        column_nullability_by_table=column_nullability_by_table or {},
+        inference_profile=profile,
+    )
+
+
+def analyze_columns_and_lineage_with_polyglot(
+    *,
+    query_sql: str,
+    references: tuple[CompileSqlReference, ...] = (),
+    placeholders: dict[str, str] | None = None,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    inference_profile: ExpressionInferenceProfile | None = None,
+) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool:
+    """Infer columns and compact lineage facts from one Polyglot parse."""
+
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        return False
+    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    if placeholders:
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+    try:
+        parsed: Any = polyglot_module.parse_one(
+            cleaned_sql,
+            dialect=profile.sqlglot_dialect or "generic",
+        )
+    except Exception:
+        return False
+    columns: tuple[InferredColumn, ...] | None | bool = _infer_columns_from_polyglot_ast(
+        parsed=parsed,
+        column_nullability_by_table=column_nullability_by_table or {},
+        inference_profile=profile,
+    )
+    if columns is False:
+        return False
+    lineage_columns, has_star = _extract_polyglot_lineage_facts(
+        parsed=parsed,
+        references=references,
+    )
+    return columns, lineage_columns, has_star
+
+
+def _infer_columns_with_polyglot(
+    *,
+    cleaned_sql: str,
+    dialect: str | None,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    inference_profile: ExpressionInferenceProfile,
+) -> tuple[InferredColumn, ...] | None | bool:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        return False
+    try:
+        parsed: Any = polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
+    except Exception:
+        return False
+    return _infer_columns_from_polyglot_ast(
+        parsed=parsed,
+        column_nullability_by_table=column_nullability_by_table,
+        inference_profile=inference_profile,
+    )
+
+
+def _infer_columns_from_polyglot_ast(
+    *,
+    parsed: Any,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    inference_profile: ExpressionInferenceProfile,
+) -> tuple[InferredColumn, ...] | None | bool:
+    infer_nullability: bool = str(getattr(parsed, "kind", "")) not in {
+        "union",
+        "intersect",
+        "except",
+    }
+    select: Any | None = parsed
+    if str(getattr(select, "kind", "")) != "select":
+        try:
+            select = parsed.find("select")
+        except Exception:
+            return None
+    if select is None or str(getattr(select, "kind", "")) != "select":
+        return None
+
+    columns: list[InferredColumn] = []
+    projection: Any
+    for projection in getattr(select, "expressions", ()):
+        if bool(getattr(projection, "is_star", False)):
+            continue
+        name: str = str(getattr(projection, "output_name", "") or "")
+        if not name or name == "*":
+            continue
+        inner: Any = projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+        col_type: str | None = _polyglot_cast_type(inner)
+        nullability: InferredNullability = InferredNullability.UNKNOWN
+        if infer_nullability:
+            nullability = _infer_polyglot_nullability(
+                expression=inner,
+                column_nullability_by_table=column_nullability_by_table,
+                inference_profile=inference_profile,
+            )
+        columns.append(InferredColumn(name=name, type=col_type, nullability=nullability))
+    return tuple(columns)
+
+
+def _extract_polyglot_lineage_facts(
+    *,
+    parsed: Any,
+    references: tuple[CompileSqlReference, ...],
+) -> tuple[tuple[CompiledLineageColumnFact, ...], bool]:
+    if str(getattr(parsed, "kind", "")) != "select":
+        return (), False
+    alias_map: dict[str, tuple[CompiledResourceType, str]] = _polyglot_reference_alias_map(
+        parsed=parsed,
+        references=references,
+    )
+    lineage_columns: list[CompiledLineageColumnFact] = []
+    has_star: bool = False
+    projection: Any
+    for projection in getattr(parsed, "expressions", ()):
+        if bool(getattr(projection, "is_star", False)):
+            has_star = True
+            continue
+        inner: Any = projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+        if bool(getattr(inner, "is_star", False)):
+            has_star = True
+            continue
+        output_column: str = str(getattr(projection, "output_name", "") or "")
+        if not output_column or output_column == "*":
+            continue
+        upstream_columns, confidence = _polyglot_lineage_upstream_columns(
+            projection=projection,
+            alias_map=alias_map,
+        )
+        transform_kind: ColumnTransformKind = _polyglot_lineage_transform_kind(
+            inner,
+            has_upstream=bool(upstream_columns),
+        )
+        lineage_columns.append(
+            CompiledLineageColumnFact(
+                output_column=output_column,
+                upstream_columns=upstream_columns,
+                transform_kind=transform_kind,
+                confidence=confidence
+                if upstream_columns or transform_kind == ColumnTransformKind.CONSTANT
+                else ColumnLineageConfidence.UNKNOWN,
+            )
+        )
+    return tuple(lineage_columns), has_star
+
+
+def _polyglot_reference_alias_map(
+    *, parsed: Any, references: tuple[CompileSqlReference, ...]
+) -> dict[str, tuple[CompiledResourceType, str]]:
+    resource_by_name: dict[str, tuple[CompiledResourceType, str]] = {}
+    reference: CompileSqlReference
+    for reference in references:
+        resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
+        if resource_type is None:
+            continue
+        resource_by_name[reference.ref_name] = (resource_type, reference.ref_name)
+    alias_map: dict[str, tuple[CompiledResourceType, str]] = {}
+    try:
+        tables: tuple[Any, ...] = tuple(parsed.find_all("table"))
+    except Exception:
+        return alias_map
+    table: Any
+    for table in tables:
+        table_name: str = str(getattr(table, "name", "") or "")
+        resource: tuple[CompiledResourceType, str] | None = resource_by_name.get(table_name)
+        if resource is None:
+            continue
+        alias_map[table_name] = resource
+        alias_or_name: str = str(getattr(table, "alias_or_name", "") or "")
+        if alias_or_name:
+            alias_map[alias_or_name] = resource
+    return alias_map
+
+
+def _lineage_resource_type(reference: CompileSqlReference) -> CompiledResourceType | None:
+    if reference.ref_kind == SqlReferenceKind.REF:
+        return CompiledResourceType.MODEL
+    if reference.ref_kind == SqlReferenceKind.SOURCE:
+        return CompiledResourceType.SOURCE
+    if reference.ref_kind == SqlReferenceKind.SEED:
+        return CompiledResourceType.SEED
+    return None
+
+
+def _polyglot_lineage_upstream_columns(
+    *,
+    projection: Any,
+    alias_map: dict[str, tuple[CompiledResourceType, str]],
+) -> tuple[tuple[CompiledLineageSourceFact, ...], ColumnLineageConfidence]:
+    columns: list[CompiledLineageSourceFact] = []
+    seen: set[tuple[CompiledResourceType, str, str]] = set()
+    confidence: ColumnLineageConfidence = ColumnLineageConfidence.HIGH
+    try:
+        column_nodes: tuple[Any, ...] = tuple(projection.find_all("column"))
+    except Exception:
+        return (), ColumnLineageConfidence.UNKNOWN
+    column: Any
+    for column in column_nodes:
+        if bool(getattr(column, "is_star", False)):
+            continue
+        column_name: str = str(getattr(column, "name", "") or "")
+        if not column_name:
+            continue
+        table_name: str = _polyglot_column_table_name(column)
+        resource: tuple[CompiledResourceType, str] | None = None
+        if table_name:
+            resource = alias_map.get(table_name)
+        elif len({resource_name for _, resource_name in alias_map.values()}) == 1:
+            resource = next(iter(alias_map.values()))
+            confidence = ColumnLineageConfidence.MEDIUM
+        else:
+            confidence = ColumnLineageConfidence.UNKNOWN
+        if resource is None:
+            continue
+        resource_type, resource_name = resource
+        key: tuple[CompiledResourceType, str, str] = (resource_type, resource_name, column_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        columns.append(
+            CompiledLineageSourceFact(
+                resource_type=resource_type,
+                resource_name=resource_name,
+                column_name=column_name,
+            )
+        )
+    return tuple(columns), confidence
+
+
+def _polyglot_lineage_transform_kind(expression: Any, *, has_upstream: bool) -> ColumnTransformKind:
+    kind: str = str(getattr(expression, "kind", ""))
+    if bool(getattr(expression, "is_star", False)):
+        return ColumnTransformKind.STAR
+    if kind in {"cast", "try_cast"}:
+        return ColumnTransformKind.CAST
+    if _polyglot_has_aggregation(expression):
+        return ColumnTransformKind.AGGREGATION
+    if not has_upstream:
+        return ColumnTransformKind.CONSTANT
+    if kind == "column":
+        return ColumnTransformKind.DIRECT
+    return ColumnTransformKind.EXPRESSION
+
+
+def _polyglot_has_aggregation(expression: Any) -> bool:
+    aggregate_kinds: frozenset[str] = frozenset(
+        {"avg", "count", "max", "min", "sum", "array_agg", "string_agg"}
+    )
+    try:
+        nodes: tuple[Any, ...] = tuple(expression.walk())
+    except Exception:
+        return False
+    return any(str(getattr(node, "kind", "")) in aggregate_kinds for node in nodes)
+
+
+def _polyglot_cast_type(expression: Any) -> str | None:
+    kind: str = str(getattr(expression, "kind", ""))
+    if kind not in {"cast", "try_cast"}:
+        return None
+    try:
+        payload: object = expression.to_dict().get(kind, {})
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    target: object = payload.get("to")
+    if not isinstance(target, dict):
+        return None
+    raw_type: object = target.get("data_type")
+    if not isinstance(raw_type, str) or not raw_type:
+        return None
+    return _polyglot_type_name(raw_type)
+
+
+def _polyglot_type_name(raw_type: str) -> str:
+    known_types: dict[str, str] = {
+        "big_int": "BIGINT",
+        "bool": "BOOLEAN",
+        "boolean": "BOOLEAN",
+        "date": "DATE",
+        "decimal": "DECIMAL",
+        "double": "DOUBLE",
+        "float": "FLOAT",
+        "int": "INT",
+        "integer": "INT",
+        "text": "TEXT",
+        "timestamp": "TIMESTAMP",
+        "var_char": "TEXT",
+        "varchar": "TEXT",
+    }
+    return known_types.get(raw_type, raw_type.replace("_", " ").upper())
+
+
+def _infer_polyglot_nullability(
+    *,
+    expression: Any,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    inference_profile: ExpressionInferenceProfile,
+) -> InferredNullability:
+    kind: str = str(getattr(expression, "kind", ""))
+    if kind == "null":
+        return InferredNullability.NULLABLE
+    if kind == "literal":
+        return InferredNullability.NON_NULL
+    if kind == "column":
+        return _infer_polyglot_column_nullability(
+            expression=expression,
+            column_nullability_by_table=column_nullability_by_table,
+        )
+    if kind == "cast":
+        inner: Any | None = getattr(expression, "this", None)
+        if inner is None:
+            return InferredNullability.UNKNOWN
+        return _infer_polyglot_nullability(
+            expression=inner,
+            column_nullability_by_table=column_nullability_by_table,
+            inference_profile=inference_profile,
+        )
+    if kind == "try_cast":
+        return InferredNullability.UNKNOWN
+    if kind == "count":
+        return InferredNullability.NON_NULL
+    if kind == "coalesce":
+        child_nullabilities: list[InferredNullability] = [
+            _infer_polyglot_nullability(
+                expression=child,
+                column_nullability_by_table=column_nullability_by_table,
+                inference_profile=inference_profile,
+            )
+            for child in getattr(expression, "expressions", ())
+        ]
+        if any(value == InferredNullability.NON_NULL for value in child_nullabilities):
+            return InferredNullability.NON_NULL
+        if child_nullabilities and all(
+            value == InferredNullability.NULLABLE for value in child_nullabilities
+        ):
+            return InferredNullability.NULLABLE
+        return InferredNullability.UNKNOWN
+    rule: FunctionNullabilityRule | None = inference_profile.function_nullability_rule(kind)
+    if rule is None:
+        return InferredNullability.UNKNOWN
+    child_nullabilities: tuple[InferredNullability, ...] = tuple(
+        _infer_polyglot_nullability(
+            expression=child,
+            column_nullability_by_table=column_nullability_by_table,
+            inference_profile=inference_profile,
+        )
+        for child in getattr(expression, "expressions", ())
+    )
+    return rule(child_nullabilities)
+
+
+def _infer_polyglot_column_nullability(
+    *,
+    expression: Any,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+) -> InferredNullability:
+    column_name: str = str(getattr(expression, "name", "") or "")
+    if not column_name:
+        return InferredNullability.UNKNOWN
+    try:
+        payload: object = expression.to_dict().get("column", {})
+    except Exception:
+        payload = {}
+    table_name: str = ""
+    if isinstance(payload, dict):
+        table_payload: object = payload.get("table")
+        if isinstance(table_payload, dict):
+            raw_name: object = table_payload.get("name")
+            if isinstance(raw_name, str):
+                table_name = raw_name
+    if table_name:
+        return column_nullability_by_table.get(table_name, {}).get(
+            column_name, InferredNullability.UNKNOWN
+        )
+    matches: list[InferredNullability] = [
+        columns[column_name]
+        for columns in column_nullability_by_table.values()
+        if column_name in columns
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return InferredNullability.UNKNOWN
 
 
 def substitute_placeholder_defaults(query_sql: str, placeholders: dict[str, str]) -> str:

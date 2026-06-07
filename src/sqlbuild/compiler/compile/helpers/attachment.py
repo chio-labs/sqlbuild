@@ -134,6 +134,7 @@ def build_model_inputs(
     run_id: str,
     macro_context: MacroContext,
     no_sql_validation: bool = False,
+    defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
@@ -191,14 +192,15 @@ def build_model_inputs(
             if isinstance(raw_placeholders, dict)
             else None
         )
-        if (
+        sql_validation_enabled: bool = (
             effective_settings.sqlglot
             and not no_sql_validation
             and _is_sql_validation_enabled(
                 project_setting=effective_settings.sql_validation,
                 model_config=effective_config,
             )
-        ):
+        )
+        if sql_validation_enabled and not defer_model_sql_validation:
             validate_sql_syntax(
                 query_sql=expanded_query_sql,
                 model_name=model_file.file_path.stem,
@@ -310,6 +312,7 @@ def build_model_inputs(
                     query_sql=expanded_query_sql,
                     macro_source_sql=var_substituted_sql,
                     references=references,
+                    sql_validation_enabled=sql_validation_enabled,
                 )
             )
             continue
@@ -322,6 +325,7 @@ def build_model_inputs(
                 macro_source_sql=var_substituted_sql,
                 references=references,
                 schema_entry=header_schema_entry,
+                sql_validation_enabled=sql_validation_enabled,
             )
         )
 
