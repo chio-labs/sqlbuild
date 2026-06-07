@@ -38,7 +38,11 @@ from sqlbuild.executor.shared.helpers.python_node_scheduler import (
     build_python_node_ready_queue,
     unlock_downstream_python_nodes,
 )
-from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.models import AssetDefinition, RetryPolicy, SqlResourceRef, TaskDefinition
 from sqlbuild.tasks import get_task_definition
 
@@ -259,6 +263,7 @@ def _execute_ready_node(
         end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state,
+        providers=providers,
     )
     try:
         returned: object = _call_node_with_retry(
@@ -353,6 +358,7 @@ def _build_context(
     end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
+    providers: ProviderContainer | None,
 ) -> TaskContext | AssetContext:
     context_logger: logging.Logger = logger or logging.getLogger(
         f"sqlbuild.{node_kind.value}.{node.name}"
@@ -377,6 +383,7 @@ def _build_context(
                 for dependency in node.depends_on
                 if isinstance(dependency, SqlResourceRef)
             ),
+            providers=providers if providers is not None else _empty_provider_container(),
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
@@ -399,6 +406,7 @@ def _build_context(
         allowed_sql_refs=frozenset(
             dependency for dependency in node.depends_on if isinstance(dependency, SqlResourceRef)
         ),
+        providers=providers if providers is not None else _empty_provider_container(),
         start_cursor_ts=start_cursor_ts,
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,

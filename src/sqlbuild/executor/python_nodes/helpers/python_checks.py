@@ -23,7 +23,11 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 
@@ -104,6 +108,7 @@ def execute_python_check_nodes(
             default_schema=default_schema,
             relation_targets={} if relation_targets is None else relation_targets,
             allowed_sql_refs=frozenset(),
+            providers=providers if providers is not None else _empty_provider_container(),
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
