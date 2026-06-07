@@ -10,6 +10,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_project_toml
 from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
+    ProviderCommandConcurrencyE2ETestCase,
     ProviderCommandDiagnosticE2ETestCase,
     ProviderCommandE2ETestCase,
     ProviderCommandFailureE2ETestCase,
@@ -592,3 +593,126 @@ def test_given_custom_materialization_with_provider_when_it_fails_then_provider_
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
     assert marker_entries == test_case.expected_marker_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderCommandConcurrencyE2ETestCase(
+            description="concurrent provider-backed source loaders share command provider session",
+            command=("--no-color", "build", "--concurrency", "2"),
+            expected_marker_entries=("setup", "alpha", "beta", "teardown"),
+            expected_exit_code=0,
+        )
+    ],
+    ids=["concurrent provider-backed source loaders share command provider session"],
+)
+def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_provider_session(
+    test_case: ProviderCommandConcurrencyE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-command-concurrent-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_command_concurrent_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "provider_command_concurrent_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "provider_command_concurrent_project.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "providers/concurrent_marker.py": dedent(
+                f"""
+                from pathlib import Path
+                from time import sleep
+
+                from sqlbuild.providers import Provider
+
+
+                class ConcurrentMarkerProvider(Provider):
+                    marker_path: str = {str(marker_path)!r}
+
+                    @property
+                    def token(self):
+                        return str(id(self))
+
+                    def setup(self, ctx):
+                        sleep(0.05)
+                        self.mark("setup")
+
+                    def teardown(self):
+                        self.mark("teardown")
+
+                    def mark(self, label):
+                        with Path(self.marker_path).open("a", encoding="utf-8") as marker:
+                            marker.write(f"{{label}}:{{self.token}}\\n")
+                """
+            ).strip()
+            + "\n",
+            "loaders/events.py": dedent(
+                """
+                from providers.concurrent_marker import ConcurrentMarkerProvider
+                from sqlbuild.loaders import loader
+
+
+                @loader
+                def raw_alpha(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    concurrent_marker_provider.mark("alpha")
+                    return [{"event_id": 1}]
+
+
+                @loader
+                def raw_beta(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    concurrent_marker_provider.mark("beta")
+                    return [{"event_id": 2}]
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_alpha
+                    managed: true
+                    write_strategy: table
+                    columns:
+                      - name: event_id
+                        type: INTEGER
+                  - name: raw_beta
+                    managed: true
+                    write_strategy: table
+                    columns:
+                      - name: event_id
+                        type: INTEGER
+                """
+            ).strip()
+            + "\n",
+            "models/fact_alpha.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_alpha")\n'
+            ),
+            "models/fact_beta.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_beta")\n'
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    marker_labels: tuple[str, ...] = tuple(
+        entry.split(":", maxsplit=1)[0] for entry in marker_entries
+    )
+    marker_tokens: set[str] = {entry.split(":", maxsplit=1)[1] for entry in marker_entries}
+    assert marker_labels[0] == test_case.expected_marker_entries[0]
+    assert set(marker_labels[1:3]) == set(test_case.expected_marker_entries[1:3])
+    assert marker_labels[3] == test_case.expected_marker_entries[3]
+    assert len(marker_entries) == len(test_case.expected_marker_entries)
+    assert len(marker_tokens) == 1

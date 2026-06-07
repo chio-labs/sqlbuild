@@ -37,3 +37,11 @@ class ProviderCustomMaterializationE2ETestCase:
     command: tuple[str, ...]
     expected_marker_entries: tuple[str, ...]
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ProviderCommandConcurrencyE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_marker_entries: tuple[str, ...]
+    expected_exit_code: int
