@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
+from pathlib import Path
 from typing import get_type_hints
 
 from sqlbuild.provider.classes.container import ProviderContainer
@@ -87,8 +88,40 @@ def _provider_for_parameter(
     except ProviderLookupError as error:
         raise ProviderInjectionError(str(error)) from error
     if provider_annotation is not None and not isinstance(provider, provider_annotation):
+        alias_message: str | None = _provider_alias_import_message(
+            parameter_name=parameter.name,
+            provider=provider,
+            provider_annotation=provider_annotation,
+        )
+        if alias_message is not None:
+            raise ProviderInjectionError(alias_message)
         raise ProviderInjectionError(
             f"Provider parameter '{parameter.name}' expected {provider_annotation.__name__}, "
             f"but provider '{parameter.name}' is {provider.__class__.__name__}"
         )
     return provider
+
+
+def _provider_alias_import_message(
+    *,
+    parameter_name: str,
+    provider: Provider,
+    provider_annotation: type[Provider],
+) -> str | None:
+    provider_class: type[Provider] = provider.__class__
+    if provider_class.__name__ != provider_annotation.__name__:
+        return None
+    provider_file: str | None = inspect.getsourcefile(provider_class)
+    annotation_file: str | None = inspect.getsourcefile(provider_annotation)
+    if provider_file is None or annotation_file is None:
+        return None
+    if Path(provider_file).resolve() != Path(annotation_file).resolve():
+        return None
+    return (
+        f"Provider parameter '{parameter_name}' is annotated with "
+        f"{provider_annotation.__name__} imported as "
+        f"'{provider_annotation.__module__}', but provider '{parameter_name}' was discovered as "
+        f"{provider_class.__module__}.{provider_class.__name__}. Import project providers using "
+        "the project-root providers package path, for example: "
+        "from providers.my_provider import MyProvider"
+    )

@@ -17,6 +17,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeRunState,
 )
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 
 
@@ -43,6 +44,7 @@ def execute_python_checks(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
+    providers: ProviderContainer | None = None,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -68,4 +70,5 @@ def execute_python_checks(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         logger=logger,
+        providers=providers,
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
@@ -56,6 +56,7 @@ from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
+from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -200,86 +201,100 @@ def run_run(
         use_color=use_color,
     )
 
-    python_lifecycle: DirectPythonLifecycleState = prepare_direct_python_lifecycle(
-        discovered_inputs=discovered_inputs,
-        pipeline_result=pipeline_result,
-        plan_output=plan_output,
-        adapter=adapter,
-        connection_config=connection_config,
-        include_python=include_python,
-        reload_sources=reload_sources,
-        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
-        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
-        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
-        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
-        use_color=use_color,
-        progress_stream=progress_stream,
-        on_node_start=callbacks.on_node_start,
-        on_node_complete=callbacks.on_node_complete,
-    )
-    result: BuildExecutionResult = run_build_pipeline(
-        plan=plan_output,
-        connection_config=connection_config,
-        adapter=adapter,
-        settings=pipeline_result.project.settings,
-        snapshots=discovered_inputs.project_config.snapshots,
-        allow_snapshot_schema_change=allow_snapshot_schema_change,
-        run_id=pipeline_result.project.run_id,
-        run_tests=False,
-        run_audits=False,
-        fail_fast=fail_fast,
-        max_concurrency=effective_concurrency,
-        on_node_start=callbacks.on_node_start,
-        on_node_complete=python_lifecycle.on_node_complete,
-        on_sub_progress=callbacks.on_sub_progress,
-        custom_materializations=pipeline_result.custom_materializations,
-        loader_functions=python_lifecycle.loader_functions,
-        loader_is_reload=reload_sources,
-        precompleted_keys=python_lifecycle.precompleted_keys,
-        initial_load_results=python_lifecycle.ingress_load_results,
-        initial_failed_keys=python_lifecycle.blocked_keys,
-        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
-        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
-        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
-        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
-        use_color=use_color,
-    )
-    if changes_only:
-        append_eligible_direct_source_freshness_records(
-            plan=plan_output,
-            result=result,
+    provider_session: Any = build_provider_session(discovered_inputs.providers)
+    try:
+        python_lifecycle: DirectPythonLifecycleState = prepare_direct_python_lifecycle(
+            discovered_inputs=discovered_inputs,
+            pipeline_result=pipeline_result,
+            plan_output=plan_output,
             adapter=adapter,
             connection_config=connection_config,
-            run_id=pipeline_result.project.run_id,
+            include_python=include_python,
+            reload_sources=reload_sources,
+            start_cursor_ts=parse_cursor_timestamp(
+                (cursor_overrides or CursorOverrides()).start_ts
+            ),
+            end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+            start_cursor_int=parse_cursor_integer(
+                (cursor_overrides or CursorOverrides()).start_int
+            ),
+            end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
+            use_color=use_color,
+            progress_stream=progress_stream,
+            on_node_start=callbacks.on_node_start,
+            on_node_complete=callbacks.on_node_complete,
+            providers=provider_session.providers,
         )
-    python_lifecycle.finalize()
-    python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
-    write_runtime_target(
-        target_dir=effective_project_dir / "target",
-        plan_output=plan_output,
-        result=result,
-    )
-
-    footer: str = format_build_footer(
-        result=result,
-        elapsed=callbacks.elapsed,
-        use_color=use_color,
-        python_node_results=python_results,
-    )
-    progress_stream.write("\n" + footer + "\n")
-    progress_stream.flush()
-    write_execution_json_output(
-        payload=format_run_execution_json(
-            result=result,
+        result: BuildExecutionResult = run_build_pipeline(
             plan=plan_output,
-            python_node_results=python_results,
-        ),
-        json_output=json_output,
-        json_output_path=json_output_path,
-    )
+            connection_config=connection_config,
+            adapter=adapter,
+            settings=pipeline_result.project.settings,
+            snapshots=discovered_inputs.project_config.snapshots,
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
+            run_id=pipeline_result.project.run_id,
+            run_tests=False,
+            run_audits=False,
+            fail_fast=fail_fast,
+            max_concurrency=effective_concurrency,
+            on_node_start=callbacks.on_node_start,
+            on_node_complete=python_lifecycle.on_node_complete,
+            on_sub_progress=callbacks.on_sub_progress,
+            custom_materializations=pipeline_result.custom_materializations,
+            loader_functions=python_lifecycle.loader_functions,
+            loader_is_reload=reload_sources,
+            precompleted_keys=python_lifecycle.precompleted_keys,
+            initial_load_results=python_lifecycle.ingress_load_results,
+            initial_failed_keys=python_lifecycle.blocked_keys,
+            start_cursor_ts=parse_cursor_timestamp(
+                (cursor_overrides or CursorOverrides()).start_ts
+            ),
+            end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+            start_cursor_int=parse_cursor_integer(
+                (cursor_overrides or CursorOverrides()).start_int
+            ),
+            end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+            use_color=use_color,
+            providers=provider_session.providers,
+        )
+        if changes_only:
+            append_eligible_direct_source_freshness_records(
+                plan=plan_output,
+                result=result,
+                adapter=adapter,
+                connection_config=connection_config,
+                run_id=pipeline_result.project.run_id,
+            )
+        python_lifecycle.finalize()
+        python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
+        write_runtime_target(
+            target_dir=effective_project_dir / "target",
+            plan_output=plan_output,
+            result=result,
+        )
 
-    python_failed: bool = python_node_results_failed(python_results)
-    return 0 if result.status == BuildStatus.SUCCESS and not python_failed else 1
+        footer: str = format_build_footer(
+            result=result,
+            elapsed=callbacks.elapsed,
+            use_color=use_color,
+            python_node_results=python_results,
+        )
+        progress_stream.write("\n" + footer + "\n")
+        progress_stream.flush()
+        write_execution_json_output(
+            payload=format_run_execution_json(
+                result=result,
+                plan=plan_output,
+                python_node_results=python_results,
+            ),
+            json_output=json_output,
+            json_output_path=json_output_path,
+        )
+
+        python_failed: bool = python_node_results_failed(python_results)
+        return 0 if result.status == BuildStatus.SUCCESS and not python_failed else 1
+    finally:
+        provider_session.close()

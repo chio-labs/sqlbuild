@@ -27,6 +27,7 @@ from sqlbuild.executor.shared.helpers.load_execution import (
     build_source_upstream_names,
     dependency_node_names,
 )
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -51,6 +52,7 @@ def run_load_pipeline(
     on_connection_complete: Callable[[int, float], None] | None = None,
     on_connection_error: Callable[[int, float], None] | None = None,
     use_color: bool = False,
+    providers: ProviderContainer | None = None,
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
@@ -98,6 +100,7 @@ def run_load_pipeline(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            providers=providers,
         )
         preloaded_results.append(result)
         if result.status.value == "failed" or (
@@ -177,6 +180,7 @@ def run_load_pipeline(
                         start_cursor_int=start_cursor_int,
                         end_cursor_int=end_cursor_int,
                         use_color=use_color,
+                        providers=providers,
                     ),
                     state=state,
                     on_load_complete=on_load_complete,
@@ -210,6 +214,7 @@ def run_load_pipeline(
                         end_cursor_int,
                         use_color,
                         state.completion_queue,
+                        providers,
                     )
                 if not state.in_flight:
                     break

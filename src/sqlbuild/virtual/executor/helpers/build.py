@@ -58,6 +58,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
 )
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.naming import (
     resolve_destination_qualified_name,
     resolve_qualified_name_parts,
@@ -152,6 +153,7 @@ def run_virtual_build(
     on_connection_error: Callable[[int, float], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    providers: ProviderContainer | None = None,
 ) -> VirtualBuildPipelineResult:
     """Execute a virtual-mode build."""
 
@@ -428,6 +430,7 @@ def run_virtual_build(
                 on_node_start=hooks.on_node_start,
                 on_node_complete=hooks.on_node_complete,
                 relation_targets=relation_targets,
+                providers=providers,
             )
         finally:
             adapter.close(ingress_connection)
@@ -486,6 +489,7 @@ def run_virtual_build(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             query_change_tracking=False,
+            providers=providers,
         )
     if result.status == BuildStatus.SUCCESS:
         _persist_successful_virtual_build(
@@ -522,6 +526,7 @@ def run_virtual_build(
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
+            providers=providers,
         )
         if any(
             python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results
@@ -625,6 +630,7 @@ def _run_read_side_python_nodes(
     end_cursor_ts: datetime | None,
     start_cursor_int: int | None,
     end_cursor_int: int | None,
+    providers: ProviderContainer | None,
 ) -> tuple[PythonNodeExecutionResult, ...]:
     if not lifecycle_plan.read_side_python_node_names:
         return ()
@@ -647,6 +653,7 @@ def _run_read_side_python_nodes(
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
+            providers=providers,
         )
         load_result: LoadExecutionResult
         for load_result in result.load_results:

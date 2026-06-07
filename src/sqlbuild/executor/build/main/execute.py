@@ -29,6 +29,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
 
@@ -67,6 +68,7 @@ def execute_build_plan(
     precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
     initial_load_results: tuple[LoadExecutionResult, ...] = (),
     initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
+    providers: ProviderContainer | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
@@ -105,6 +107,7 @@ def execute_build_plan(
         precompleted_keys=precompleted_keys,
         initial_load_results=initial_load_results,
         initial_failed_keys=initial_failed_keys,
+        providers=providers,
     )
 
     model_results: tuple[ModelExecutionResult, ...]
