@@ -21,9 +21,9 @@ from sqlbuild.compiler.compile.helpers.sqlglot_validation import validate_sql_sy
 from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
-    CompiledLineageColumnFact,
     CompiledAudit,
     CompiledFunction,
+    CompiledLineageColumnFact,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -164,7 +164,10 @@ def _assemble_compiled_model(
     )
     if sqlglot_enabled:
         profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-        polyglot_analysis = analyze_columns_and_lineage_with_polyglot(
+        polyglot_analysis: (
+            tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool]
+            | bool
+        ) = analyze_columns_and_lineage_with_polyglot(
             query_sql=model_input.query_sql,
             references=model_input.references,
             placeholders=placeholders,
