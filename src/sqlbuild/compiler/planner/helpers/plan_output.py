@@ -10,7 +10,12 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredHookFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredMaterializationFile,
+    DiscoveredProviderUsage,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.loader_dag import upstream_loader_dependency_names
@@ -26,17 +31,20 @@ from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     FunctionChangeResult,
     FunctionPlanEntry,
+    ModelPlanEntry,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
     PlannerScope,
     PlanOutput,
+    PlanProviderUsage,
     PlanWarning,
     SeedPlanEntry,
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
+from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -125,6 +133,116 @@ def build_plan_output(
         source_map=relations.source_map,
         source_read_map=relations.source_read_map,
         hook_functions=project.hook_functions,
+        provider_usages=_build_provider_usages(
+            project=project,
+            model_entries=model_entry_results.entries,
+            source_load_entries=source_load_entries,
+        ),
+    )
+
+
+def _build_provider_usages(
+    *,
+    project: CompiledProject,
+    model_entries: tuple[ModelPlanEntry, ...],
+    source_load_entries: tuple[SourceLoadPlanEntry, ...],
+) -> tuple[PlanProviderUsage, ...]:
+    usages: list[PlanProviderUsage] = []
+    loader_by_name: dict[str, DiscoveredLoaderFunction] = {
+        loader.name: loader for loader in project.loader_functions
+    }
+    source_load_entry: SourceLoadPlanEntry
+    for source_load_entry in source_load_entries:
+        loader: DiscoveredLoaderFunction | None = loader_by_name.get(source_load_entry.loader)
+        if loader is None:
+            continue
+        usages.extend(
+            _to_plan_provider_usages(
+                provider_usages=loader.provider_usages,
+                consumer_kind="loader",
+                consumer_name=loader.name,
+            )
+        )
+
+    hook_by_name: dict[str, DiscoveredHookFunction] = {
+        hook.name: hook for hook in project.hook_functions
+    }
+    materialization_by_name: dict[str, DiscoveredMaterializationFile] = {
+        materialization.name: materialization for materialization in project.materialization_files
+    }
+    model_entry: ModelPlanEntry
+    for model_entry in model_entries:
+        usages.extend(
+            _hook_provider_usages(
+                hook_entries=(model_entry.pre_hooks, model_entry.post_hooks),
+                hook_by_name=hook_by_name,
+            )
+        )
+        if model_entry.custom_materialization_name is None:
+            continue
+        materialization: DiscoveredMaterializationFile | None = materialization_by_name.get(
+            model_entry.custom_materialization_name
+        )
+        if materialization is None:
+            continue
+        usages.extend(
+            _to_plan_provider_usages(
+                provider_usages=materialization.provider_usages,
+                consumer_kind="custom materialization",
+                consumer_name=materialization.name,
+            )
+        )
+    return tuple(usages)
+
+
+def _hook_provider_usages(
+    *,
+    hook_entries: tuple[object, ...],
+    hook_by_name: dict[str, DiscoveredHookFunction],
+) -> tuple[PlanProviderUsage, ...]:
+    usages: list[PlanProviderUsage] = []
+    hooks: list[object] = []
+    hook_entry: object
+    for hook_entry in hook_entries:
+        if hook_entry is None:
+            continue
+        if isinstance(hook_entry, list | tuple):
+            hooks.extend(hook_entry)
+        else:
+            hooks.append(hook_entry)
+    hook: object
+    for hook in hooks:
+        if not isinstance(hook, PythonHookEntry):
+            continue
+        discovered_hook: DiscoveredHookFunction | None = hook_by_name.get(hook.name)
+        if discovered_hook is None:
+            continue
+        usages.extend(
+            _to_plan_provider_usages(
+                provider_usages=discovered_hook.provider_usages,
+                consumer_kind="hook",
+                consumer_name=discovered_hook.name,
+            )
+        )
+    return tuple(usages)
+
+
+def _to_plan_provider_usages(
+    *,
+    provider_usages: tuple[DiscoveredProviderUsage, ...],
+    consumer_kind: str,
+    consumer_name: str,
+) -> tuple[PlanProviderUsage, ...]:
+    return tuple(
+        PlanProviderUsage(
+            provider_name=usage.provider_name,
+            consumer_kind=consumer_kind,
+            consumer_name=consumer_name,
+            parameter_name=usage.parameter_name,
+            annotation_class_name=usage.annotation_class_name,
+            annotation_module=usage.annotation_module,
+        )
+        for usage in provider_usages
     )
 
 

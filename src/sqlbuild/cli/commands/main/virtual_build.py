@@ -51,6 +51,7 @@ from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult, PythonNodeRunState
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
@@ -88,6 +89,7 @@ def run_virtual_build(
     use_color: bool = False,
     progress_stream: TextIO | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    providers: ProviderContainer | None = None,
 ) -> int:
     """Execute a virtual build and render CLI output."""
 
@@ -185,6 +187,7 @@ def run_virtual_build(
         on_connection_error=connection_progress.on_connection_error,
         on_progress=planning_progress.on_progress,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        providers=providers,
     )
     plan_output: PlanOutput = result.display_plan_output
     write_python_node_results(
@@ -241,6 +244,7 @@ def run_virtual_build(
                     run_state=check_run_state,
                     default_database=adapter.default_database(),
                     default_schema=adapter.default_schema(),
+                    providers=providers,
                 )
             finally:
                 adapter.close(check_connection)

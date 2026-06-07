@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.executor.python_nodes.helpers.execution import execute_python_nodes
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutorResult
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.provider.main.runtime import ProviderContainer
 
 
 def run_python_nodes(
@@ -29,6 +30,7 @@ def run_python_nodes(
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
+    providers: ProviderContainer | None = None,
 ) -> PythonNodeExecutorResult:
     """Execute task/asset Python nodes in dependency order."""
 
@@ -48,4 +50,5 @@ def run_python_nodes(
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
+        providers=providers,
     )

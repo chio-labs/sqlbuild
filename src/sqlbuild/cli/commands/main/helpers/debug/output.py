@@ -15,6 +15,7 @@ def format_debug_text(result: DebugResult, *, use_color: bool) -> str:
     lines: list[str] = ["", header, ""]
     _append_section(lines, "Runtime", result.runtime, style=style)
     _append_section(lines, "Configuration", result.configuration, style=style)
+    _append_section(lines, "Providers", result.providers, style=style)
     _append_section(lines, "Connection", result.connection, style=style)
     return "\n".join(lines) + "\n"
 
@@ -25,6 +26,7 @@ def format_debug_json(result: DebugResult) -> str:
             "success": result.success,
             "runtime": [_line_to_json(line) for line in result.runtime],
             "configuration": [_line_to_json(line) for line in result.configuration],
+            "providers": [_line_to_json(line) for line in result.providers],
             "connection": [_line_to_json(line) for line in result.connection],
         },
         sort_keys=True,

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
@@ -66,6 +67,7 @@ class DiscoveredPythonNode:
     group: str | None = None
     description: str | None = None
     meta: dict[str, object] | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
     loader: DiscoveredPythonLoaderMetadata | None = None
     task: DiscoveredPythonTaskMetadata | None = None
     asset: DiscoveredPythonAssetMetadata | None = None

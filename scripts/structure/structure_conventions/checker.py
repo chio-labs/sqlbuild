@@ -16,6 +16,7 @@ from scripts.structure.structure_conventions.rules import (
     check_adapter_contract_implementation_shortcuts,
     check_banned_generic_filename,
     check_classes_module_name,
+    check_classes_package_module_shape,
     check_client_module_shape,
     check_constants_module,
     check_constants_outside_constants,
@@ -38,6 +39,7 @@ from scripts.structure.structure_conventions.rules import (
     check_no_relative_imports,
     check_no_sibling_package_imports,
     check_private_definition_ordering,
+    check_public_provider_module_shape,
     check_shared_package_imports,
     check_shared_package_structure,
     check_top_level_domain_direct_modules,
@@ -66,6 +68,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_dev_tooling_location(actual_repo_root, file_path))
         violations.extend(check_top_level_domain_role_placement(actual_repo_root, file_path))
         violations.extend(check_top_level_domain_direct_modules(actual_repo_root, file_path))
+        violations.extend(check_public_provider_module_shape(actual_repo_root, file_path, module))
         violations.extend(check_nested_runtime_package_direct_modules(actual_repo_root, file_path))
         violations.extend(
             check_nested_runtime_package_direct_subpackages(actual_repo_root, file_path)
@@ -73,6 +76,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_banned_generic_filename(file_path))
         violations.extend(check_helpers_module_name(file_path))
         violations.extend(check_classes_module_name(file_path))
+        violations.extend(check_classes_package_module_shape(actual_repo_root, file_path, module))
         violations.extend(check_init_module(file_path, module))
         violations.extend(check_entry_module_shape(file_path, module))
         violations.extend(check_main_entry_name_collisions(actual_repo_root, file_path))

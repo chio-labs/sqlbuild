@@ -148,6 +148,24 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC005", "SC027"),
     ),
     CheckPathsTestCase(
+        description="reports multiple classes in classes package module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/classes/session.py": dedent(
+                """
+                class ExampleSession:
+                    pass
+
+
+                class ExampleContainer:
+                    pass
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC043",),
+    ),
+    CheckPathsTestCase(
         description="reports non-minimal init module",
         repo_files=compliant_repo_files()
         | {

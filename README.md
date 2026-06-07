@@ -3,26 +3,28 @@
 </p>
 
 <p align="center">
-  Typed, test-first SQL pipelines with local E2E testing.
+  SQL-first warehouse pipelines with ingestion, validation, Python extension points, and local testing.
 </p>
 
-SQLBuild is a SQL pipeline framework that validates SQL at compile time, blocks bad data before promotion, and runs full E2E tests with no warehouse required.
+SQLBuild is a SQL-first framework for building reliable warehouse pipelines. It keeps a dbt-like floor for SQL models while adding compile-time validation, pre-promotion audits, source loaders, lightweight Python extension points, virtual environments, and local E2E replay.
 
 ## Key features
 
-- **SQL unit tests that chain across models** - Mock your sources, assert on the model you care about, and SQLBuild resolves every intermediate model automatically. One test file can be a full integration test across your pipeline.
-- **End-to-end scenarios with local replay** - Define coherent fixture worlds, run the real project graph in an isolated warehouse slice, capture JSONL snapshots, and replay them locally through DuckDB for fast CI feedback.
+- **SQL-first models with compile-time validation** - Define models as SQL files with `MODEL()` headers while SQLBuild resolves references, validates SQL, infers columns, checks contracts, and computes lineage before anything runs.
 - **Audits that block bad data** - Audits run before data reaches the target table. For full table builds, SQLBuild materializes into a staging table and only promotes if audits pass. For incremental models, delta-phase audits validate each batch before DML.
-- **Python macros, not Jinja** - Macros are real Python functions. Testable, debuggable, and composable with standard tooling.
 - **Change-aware incremental rebuilds** - Fingerprint-based query change detection, schema diff tracking, and configurable backfill policies with automatic cascade through the DAG.
 - **Cursor-based incremental processing** - Automatic gap detection and resume. If a model fails for several runs, the next build replays from where it left off. Microbatch mode splits large ranges into configurable batches.
+- **Source loaders** - Load external data into source tables with Python functions while keeping SQL models analyzable. Supports incremental write strategies (table, append, delete\_insert, merge), cursor-based loading, loader-to-loader dependencies, and concurrent execution. Loaders run automatically during builds.
+- **Python macros, not Jinja** - Macros are real Python functions. Testable, debuggable, and composable with standard tooling.
 - **User-defined functions** - SQL and Python UDFs managed as project resources, with table functions for predicate-pushdown-friendly alternatives to final-layer views.
+- **Custom materializations** - Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
+- **SQL unit tests that chain across models** - Mock your sources, assert on the model you care about, and SQLBuild resolves every intermediate model automatically. One test file can be a full integration test across your pipeline.
+- **End-to-end scenarios with local replay** - Define coherent fixture worlds, run the real project graph in an isolated warehouse slice, capture JSONL snapshots, and replay them locally through DuckDB for fast CI feedback.
 - **Environment diffs** - Compare schemas and row-level data between environments with `sqb diff prod:dev`.
 - **Zero-copy cloning** - Branch environments instantly with `sqb clone` without duplicating data. No `manifest.json` required.
-- **Source loaders** - Load external data into source tables with Python functions. Supports incremental write strategies (table, append, delete\_insert, merge), cursor-based loading, loader-to-loader dependencies, and concurrent execution. Loaders run automatically during builds.
-- **Custom materializations** - Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
 - **Path-between selectors** - `--select fact_orders~daily_activity_rollup` selects every model on the shortest path between two nodes.
 - **Advanced virtual environments** - Optional state-backed workflows for low-copy branching, promotion, and rollback when your team is ready to operate a shared state store.
+- **First-class Dagster integration** - Use Dagster for scheduling, sensors, and cross-system coordination while SQLBuild handles SQL compilation, planning, builds, audits, and tests.
 
 ## Quick start
 

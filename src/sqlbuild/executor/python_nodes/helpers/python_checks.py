@@ -23,6 +23,11 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 
@@ -50,6 +55,7 @@ def execute_python_check_nodes(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
+    providers: ProviderContainer | None = None,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -102,13 +108,18 @@ def execute_python_check_nodes(
             default_schema=default_schema,
             relation_targets={} if relation_targets is None else relation_targets,
             allowed_sql_refs=frozenset(),
+            providers=providers if providers is not None else _empty_provider_container(),
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
         )
         try:
-            returned: object = check_function.function(context)
+            returned: object = invoke_with_providers(
+                function=check_function.function,
+                context=context,
+                providers=providers,
+            )
             check_result: PythonCheckResult = normalize_python_check_return(
                 returned=returned,
                 default_severity=check_function.severity,

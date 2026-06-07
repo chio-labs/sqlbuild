@@ -96,6 +96,12 @@ def _check_src_mirroring(
 
     area_path = package_path / relative_parts[4]
     if not area_path.exists():
+        if (
+            relative_parts[3] == "sqlbuild"
+            and relative_parts[4] == "providers"
+            and (package_path / "providers.py").is_file()
+        ):
+            return []
         return [
             Violation(
                 code="TC033",

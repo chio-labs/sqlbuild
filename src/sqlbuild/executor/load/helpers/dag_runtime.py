@@ -25,6 +25,7 @@ from sqlbuild.executor.shared.helpers.python_node_scheduler import (
 )
 from sqlbuild.executor.shared.helpers.worker_completion import run_worker_with_completion
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -106,6 +107,7 @@ def execute_ready_dag_source(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
     use_color: bool = False,
+    providers: ProviderContainer | None = None,
 ) -> LoadExecutionResult:
     """Execute one ready DAG node or return a skipped result."""
 
@@ -144,6 +146,7 @@ def execute_ready_dag_source(
         use_color=use_color,
         loader_ref_entries=indexes.loader_ref_entries,
         source_ref_entries=indexes.source_by_name,
+        providers=providers,
     )
 
 
@@ -166,6 +169,7 @@ def load_dag_worker(
     end_cursor_int: int | None,
     use_color: bool,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
+    providers: ProviderContainer | None = None,
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
 
@@ -188,6 +192,7 @@ def load_dag_worker(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            providers=providers,
         )
 
     run_worker_with_completion(

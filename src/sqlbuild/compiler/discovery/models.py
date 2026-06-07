@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.providers import Provider
 from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
@@ -159,6 +160,17 @@ class DiscoveredMaterializationFile:
     file_path: Path
     relative_path: Path
     name: str
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DiscoveredProviderUsage:
+    """Framework-owned metadata for provider usage by a Python callable surface."""
+
+    provider_name: str
+    parameter_name: str
+    annotation_class_name: str | None = None
+    annotation_module: str | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +189,7 @@ class DiscoveredLoaderFunction:
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     contract: str | None = None
     connection_mode: LoaderConnectionMode = LoaderConnectionMode.SQLBUILD
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -193,6 +206,7 @@ class DiscoveredTaskFunction:
     description: str | None = None
     meta: dict[str, object] | None = None
     retry: RetryPolicy | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -211,6 +225,7 @@ class DiscoveredAssetFunction:
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
     retry: RetryPolicy | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -227,6 +242,7 @@ class DiscoveredCheckFunction:
     group: str | None = None
     description: str | None = None
     meta: dict[str, object] | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -238,6 +254,18 @@ class DiscoveredHookFunction:
     name: str
     function: Callable[..., object]
     description: str | None = None
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DiscoveredProvider:
+    """A discovered project provider class and validated settings object."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    provider_class: type[Provider]
+    settings: Provider
 
 
 @dataclass(frozen=True)
@@ -272,4 +300,5 @@ class DiscoveredProjectInputs:
     asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None

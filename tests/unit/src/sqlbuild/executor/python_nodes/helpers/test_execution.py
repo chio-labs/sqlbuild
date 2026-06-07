@@ -19,6 +19,8 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutorResult,
     PythonNodeRunState,
 )
+from sqlbuild.provider.classes.container import ProviderContainer
+from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.shared.models import RetryPolicy
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeExecutorTestCase,
@@ -27,8 +29,11 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     EXPECTED_END_CURSOR_TS,
     EXPECTED_START_CURSOR_TS,
+    ExecutionSlackProvider,
     FlakyTask,
     PythonNodeContextTestAdapter,
+    context_provider_asset,
+    context_provider_task,
     cursor_window,
     export_after_failure,
     export_after_mixed_skip,
@@ -37,6 +42,9 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     fail_orders,
     fetch_orders,
     hard_skip_empty_orders,
+    missing_context_provider_task,
+    provider_asset,
+    provider_task,
     skip_empty_orders,
     successful_sibling,
 )
@@ -151,6 +159,222 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
     )
     assert result.run_state.payload(fetch_orders) == test_case.expected_payloads[0]
     assert result.run_state.payload(export_orders) == test_case.expected_payloads[1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeExecutorTestCase(
+            description="injects provider into task and asset execution",
+            expected_names=("provider_task", "provider_asset"),
+            expected_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SUCCESS),
+            expected_payloads=(
+                {"target": "dev", "provider": "slack"},
+                {"target": "dev", "provider": "slack"},
+            ),
+            expected_materialized=(None, None),
+            expected_error_fragments=(None, None),
+        )
+    ],
+    ids=["injects provider into task and asset execution"],
+)
+def test_given_provider_parameters_when_executing_python_nodes_then_providers_are_injected(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    nodes: tuple[DiscoveredTaskFunction | DiscoveredAssetFunction, ...] = (
+        DiscoveredTaskFunction(
+            file_path=Path("/project/tasks/provider.py"),
+            relative_path=Path("tasks/provider.py"),
+            name="provider_task",
+            function=provider_task,
+        ),
+        DiscoveredAssetFunction(
+            file_path=Path("/project/assets/provider.py"),
+            relative_path=Path("assets/provider.py"),
+            name="provider_asset",
+            function=provider_asset,
+        ),
+    )
+    providers: ProviderContainer = ProviderSession(
+        {"slack_provider": ExecutionSlackProvider(label="slack")}
+    ).providers
+
+    result: PythonNodeExecutorResult = execute_python_nodes(
+        nodes=nodes,
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="run_1",
+        target="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+        providers=providers,
+    )
+
+    assert tuple(item.node_name for item in result.results) == test_case.expected_names
+    assert tuple(item.status for item in result.results) == test_case.expected_statuses
+    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeExecutorTestCase(
+            description="exposes providers on task and asset contexts",
+            expected_names=("context_provider_task", "context_provider_asset"),
+            expected_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SUCCESS),
+            expected_payloads=(
+                {"attr": "slack", "item": "slack"},
+                {"attr": "slack", "item": "slack"},
+            ),
+            expected_materialized=(None, None),
+            expected_error_fragments=(None, None),
+        )
+    ],
+    ids=["exposes providers on task and asset contexts"],
+)
+def test_given_provider_container_when_executing_python_nodes_then_context_exposes_providers(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    nodes: tuple[DiscoveredTaskFunction | DiscoveredAssetFunction, ...] = (
+        DiscoveredTaskFunction(
+            file_path=Path("/project/tasks/provider.py"),
+            relative_path=Path("tasks/provider.py"),
+            name="context_provider_task",
+            function=context_provider_task,
+        ),
+        DiscoveredAssetFunction(
+            file_path=Path("/project/assets/provider.py"),
+            relative_path=Path("assets/provider.py"),
+            name="context_provider_asset",
+            function=context_provider_asset,
+        ),
+    )
+    providers: ProviderContainer = ProviderSession(
+        {"slack_provider": ExecutionSlackProvider(label="slack")}
+    ).providers
+
+    result: PythonNodeExecutorResult = execute_python_nodes(
+        nodes=nodes,
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="run_1",
+        target="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+        providers=providers,
+    )
+
+    assert tuple(item.node_name for item in result.results) == test_case.expected_names
+    assert tuple(item.status for item in result.results) == test_case.expected_statuses
+    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeExecutorTestCase(
+            description="normalizes missing provider container as task and asset failures",
+            expected_names=("provider_task", "provider_asset"),
+            expected_statuses=(PythonNodeStatus.FAILED, PythonNodeStatus.FAILED),
+            expected_payloads=(None, None),
+            expected_materialized=(None, None),
+            expected_error_fragments=(
+                "Provider parameter 'slack_provider' requires provider 'slack_provider', "
+                "but no provider container is available",
+                "Provider parameter 'slack_provider' requires provider 'slack_provider', "
+                "but no provider container is available",
+            ),
+        )
+    ],
+    ids=["normalizes missing provider container as task and asset failures"],
+)
+def test_given_missing_provider_container_when_executing_python_nodes_then_failures_are_recorded(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    nodes: tuple[DiscoveredTaskFunction | DiscoveredAssetFunction, ...] = (
+        DiscoveredTaskFunction(
+            file_path=Path("/project/tasks/provider.py"),
+            relative_path=Path("tasks/provider.py"),
+            name="provider_task",
+            function=provider_task,
+        ),
+        DiscoveredAssetFunction(
+            file_path=Path("/project/assets/provider.py"),
+            relative_path=Path("assets/provider.py"),
+            name="provider_asset",
+            function=provider_asset,
+        ),
+    )
+
+    result: PythonNodeExecutorResult = execute_python_nodes(
+        nodes=nodes,
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="run_1",
+        target="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+    )
+
+    assert tuple(item.node_name for item in result.results) == test_case.expected_names
+    assert tuple(item.status for item in result.results) == test_case.expected_statuses
+    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+    assert tuple(item.materialized for item in result.results) == test_case.expected_materialized
+    for item, expected in zip(result.results, test_case.expected_error_fragments, strict=True):
+        assert expected is not None
+        assert expected in (item.error_message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeExecutorTestCase(
+            description="missing context provider lookup records task failure",
+            expected_names=("missing_context_provider_task",),
+            expected_statuses=(PythonNodeStatus.FAILED,),
+            expected_payloads=(None,),
+            expected_materialized=(None,),
+            expected_error_fragments=(
+                "Provider 'slack_provider' was not found. Available providers: none",
+            ),
+        )
+    ],
+    ids=["missing context provider lookup records task failure"],
+)
+def test_given_missing_context_provider_when_executing_python_node_then_failure_is_recorded(
+    test_case: PythonNodeExecutorTestCase,
+) -> None:
+    result: PythonNodeExecutorResult = execute_python_nodes(
+        nodes=(
+            DiscoveredTaskFunction(
+                file_path=Path("/project/tasks/provider.py"),
+                relative_path=Path("tasks/provider.py"),
+                name="missing_context_provider_task",
+                function=missing_context_provider_task,
+            ),
+        ),
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="run_1",
+        target="dev",
+        vars={},
+        is_reload=False,
+        statement_recorder=StatementRecorder(),
+    )
+
+    assert tuple(item.node_name for item in result.results) == test_case.expected_names
+    assert tuple(item.status for item in result.results) == test_case.expected_statuses
+    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+    expected_error_fragment: str | None = test_case.expected_error_fragments[0]
+    assert expected_error_fragment is not None
+    assert expected_error_fragment in (result.results[0].error_message or "")
 
 
 @pytest.mark.parametrize(

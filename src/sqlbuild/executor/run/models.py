@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult, Statemen
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class HookContext:
     adapter: BaseAdapter = field(repr=False)
     connection: Any = field(repr=False)
     statement_recorder: StatementRecorder = field(repr=False)
+    providers: ProviderContainer = field(default_factory=_empty_provider_container, repr=False)
 
     def execute_sql(self, sql: str) -> None:
         self.statement_recorder.record(sql)

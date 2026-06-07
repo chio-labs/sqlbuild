@@ -34,6 +34,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
 )
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -56,6 +57,7 @@ def prepare_direct_python_lifecycle(
     progress_stream: TextIO,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None],
+    providers: ProviderContainer | None = None,
 ) -> DirectPythonLifecycleState:
     """Execute ingress Python and prepare read-side dispatch for direct run/build."""
 
@@ -119,6 +121,7 @@ def prepare_direct_python_lifecycle(
                 on_node_start=on_node_start,
                 on_node_complete=on_node_complete,
                 relation_targets=relation_targets,
+                providers=providers,
             )
         finally:
             adapter.close(ingress_connection)
@@ -155,6 +158,7 @@ def prepare_direct_python_lifecycle(
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
+            providers=providers,
         )
         for ingress_load_result in ingress_load_results:
             read_side_tracker.record_sql_result(ingress_load_result)

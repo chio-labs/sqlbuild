@@ -42,6 +42,7 @@ from sqlbuild.executor.pipeline.helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.pipeline.helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SettingsConfig, SnapshotsConfig
 
@@ -81,6 +82,7 @@ def run_build_pipeline(
     precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
     initial_load_results: tuple[LoadExecutionResult, ...] = (),
     initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
+    providers: ProviderContainer | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
@@ -105,6 +107,7 @@ def run_build_pipeline(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
             use_color=use_color,
+            providers=providers,
         )
     )
     worker_connections: list[Any] = []
@@ -169,6 +172,7 @@ def run_build_pipeline(
             precompleted_keys=precompleted_keys | external_source_load_results.completed_keys,
             initial_load_results=(*initial_load_results, *external_source_load_results.results),
             initial_failed_keys=initial_failed_keys | external_source_load_results.failed_keys,
+            providers=providers,
         )
     finally:
         conn: Any

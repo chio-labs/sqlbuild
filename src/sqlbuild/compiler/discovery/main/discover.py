@@ -12,6 +12,7 @@ from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_macro_files,
     discover_materialization_files,
     discover_model_files,
+    discover_provider_classes,
     discover_python_function_files,
     discover_python_node_functions,
     discover_scenario_files,
@@ -33,6 +34,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredProvider,
     DiscoveredPythonNodeFunctions,
     DiscoveredSourceFile,
     DiscoveredTaskFunction,
@@ -52,8 +54,10 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
     )
 
     source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(project_dir=project_dir)
+    providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(project_dir=project_dir)
     python_nodes: DiscoveredPythonNodeFunctions = discover_python_node_functions(
-        project_dir=project_dir
+        project_dir=project_dir,
+        providers=providers,
     )
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = tuple(
         python_nodes.loaders
@@ -77,12 +81,16 @@ def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
         scenario_files=discover_scenario_files(project_dir=project_dir),
         audit_files=discover_audit_files(project_dir=project_dir),
         macro_files=discover_macro_files(project_dir=project_dir),
-        materialization_files=discover_materialization_files(project_dir=project_dir),
+        materialization_files=discover_materialization_files(
+            project_dir=project_dir,
+            providers=providers,
+        ),
         loader_functions=loader_functions,
         task_functions=task_functions,
         asset_functions=asset_functions,
         check_functions=check_functions,
-        hook_functions=discover_hook_functions(project_dir=project_dir),
+        hook_functions=discover_hook_functions(project_dir=project_dir, providers=providers),
+        providers=providers,
         adapter_file=discover_adapter_file(project_dir=project_dir),
     )
     validate_discovered_inputs(discovered_inputs)

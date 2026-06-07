@@ -28,6 +28,15 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.debug._test_types import 
                         "found and valid",
                     ),
                 ),
+                providers=(
+                    DebugLine("providers", "1", DebugCheckStatus.OK, "discovered"),
+                    DebugLine(
+                        "marker_provider",
+                        "providers/marker.py:MarkerProvider",
+                        DebugCheckStatus.OK,
+                        "valid settings",
+                    ),
+                ),
                 connection=(
                     DebugLine("token", "****"),
                     DebugLine(
@@ -45,6 +54,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.debug._test_types import 
                 "\n"
                 "Configuration:\n"
                 "  project file: /repo/sqlbuild_project.toml [OK found and valid]\n"
+                "\n"
+                "Providers:\n"
+                "  providers: 1 [OK discovered]\n"
+                "  marker_provider: providers/marker.py:MarkerProvider [OK valid settings]\n"
                 "\n"
                 "Connection:\n"
                 "  token: ****\n"

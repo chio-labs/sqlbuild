@@ -25,6 +25,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRunState,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.shared.models import SqlResourceRef
@@ -131,6 +132,7 @@ def run_check_read_side_dependencies(
     python_graph: PythonNodeGraph,
     lifecycle_plan: PythonSqlRunLifecyclePlan,
     relation_targets: dict[SqlResourceRef, str],
+    providers: ProviderContainer | None = None,
 ) -> tuple[PythonNodeExecutionResult, ...]:
     """Run read-side Python dependencies for checks against existing SQL relations."""
 
@@ -150,6 +152,7 @@ def run_check_read_side_dependencies(
         default_database=adapter.default_database(),
         default_schema=adapter.default_schema(),
         relation_targets=relation_targets,
+        providers=providers,
     )
     sql_ref: SqlResourceRef
     for sql_ref in sorted(
