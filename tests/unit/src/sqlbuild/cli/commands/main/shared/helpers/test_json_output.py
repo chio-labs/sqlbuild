@@ -21,8 +21,10 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
+    build_discovered_provider_usage,
     build_model_entry,
     build_plan_output,
+    build_plan_provider_usage,
     build_seed_entry,
     build_source_load_entry,
     build_warning,
@@ -147,6 +149,39 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             '"name": "export_orders"',
             '"kind": "asset"',
             '"phase": "read_side"',
+        ),
+    ),
+    JsonOutputTestCase(
+        description="plan json includes provider usage metadata",
+        plan_output=build_plan_output(
+            provider_usages=(
+                build_plan_provider_usage(
+                    provider_name="marker_provider",
+                    consumer_kind="loader",
+                    consumer_name="raw_orders",
+                ),
+            ),
+        ),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="publish_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.READ_SIDE,
+                provider_usages=(build_discovered_provider_usage(),),
+            ),
+        ),
+        expected_keys=("providers",),
+        expected_fragments=(
+            '"providers"',
+            '"name": "marker_provider"',
+            '"used_by"',
+            '"kind": "loader"',
+            '"name": "raw_orders"',
+            '"kind": "task"',
+            '"name": "publish_orders"',
+            '"parameter": "marker_provider"',
+            '"class_name": "MarkerProvider"',
+            '"module": "providers.marker"',
         ),
     ),
 ]

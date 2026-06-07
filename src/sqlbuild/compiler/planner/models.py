@@ -580,6 +580,18 @@ class ScenarioExecutionPlan:
 
 
 @dataclass(frozen=True)
+class PlanProviderUsage:
+    """Provider usage metadata scoped to planned work."""
+
+    provider_name: str
+    consumer_kind: str
+    consumer_name: str
+    parameter_name: str
+    annotation_class_name: str | None = None
+    annotation_module: str | None = None
+
+
+@dataclass(frozen=True)
 class PlanOutput:
     """Complete execution plan produced by the planner."""
 
@@ -604,5 +616,6 @@ class PlanOutput:
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
     source_freshness: DirectSourceFreshnessPlanningResult | None = None
     metadata: dict[str, object] = field(default_factory=dict)

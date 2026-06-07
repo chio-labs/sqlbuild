@@ -32,6 +32,7 @@ def build_python_plan_entries(
                     name=node.name,
                     kind=node.kind,
                     phase=PythonRunPhase.PRE_SQL_INGRESS,
+                    provider_usages=node.provider_usages,
                 )
             )
     for node_name in _ordered_python_names(
@@ -45,6 +46,7 @@ def build_python_plan_entries(
                     name=node.name,
                     kind=node.kind,
                     phase=PythonRunPhase.READ_SIDE,
+                    provider_usages=node.provider_usages,
                 )
             )
     return tuple(entries)

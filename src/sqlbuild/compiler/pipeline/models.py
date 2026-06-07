@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 
@@ -21,6 +22,7 @@ class PythonPlanEntry:
     name: str
     kind: PythonNodeKind
     phase: PythonRunPhase
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

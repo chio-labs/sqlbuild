@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
+    PlanProviderUsage,
     PlanWarning,
     SeedPlanEntry,
     SourceLoadPlanEntry,
@@ -34,6 +35,10 @@ def format_plan_json(
     python_nodes: list[dict[str, object]] = [
         _serialize_python_plan_entry(entry) for entry in python_plan_entries
     ]
+    providers: list[dict[str, object]] = _serialize_provider_usages(
+        plan=plan,
+        python_plan_entries=python_plan_entries,
+    )
 
     result: dict[str, object] = {
         "selected_count": len(plan.model_entries)
@@ -46,6 +51,7 @@ def format_plan_json(
         "source_loads": source_loads,
         "functions": functions,
         "python_nodes": python_nodes,
+        "providers": providers,
         "warnings": warnings,
     }
     if plan.metadata:
@@ -256,3 +262,56 @@ def _serialize_python_plan_entry(entry: PythonPlanEntry) -> dict[str, object]:
         "kind": entry.kind.value,
         "phase": entry.phase.value,
     }
+
+
+def _serialize_provider_usages(
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...]
+) -> list[dict[str, object]]:
+    usage_by_provider: dict[str, list[PlanProviderUsage]] = {}
+    usage: PlanProviderUsage
+    for usage in plan.provider_usages:
+        usage_by_provider.setdefault(usage.provider_name, []).append(usage)
+    python_entry: PythonPlanEntry
+    for python_entry in python_plan_entries:
+        for provider_usage in python_entry.provider_usages:
+            usage_by_provider.setdefault(provider_usage.provider_name, []).append(
+                PlanProviderUsage(
+                    provider_name=provider_usage.provider_name,
+                    consumer_kind=python_entry.kind.value,
+                    consumer_name=python_entry.name,
+                    parameter_name=provider_usage.parameter_name,
+                    annotation_class_name=provider_usage.annotation_class_name,
+                    annotation_module=provider_usage.annotation_module,
+                )
+            )
+    return [
+        {
+            "name": provider_name,
+            "used_by": [
+                _serialize_provider_usage(usage)
+                for usage in sorted(
+                    usages,
+                    key=lambda item: (
+                        item.consumer_kind,
+                        item.consumer_name,
+                        item.parameter_name,
+                    ),
+                )
+            ],
+        }
+        for provider_name, usages in sorted(usage_by_provider.items())
+    ]
+
+
+def _serialize_provider_usage(usage: PlanProviderUsage) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "kind": usage.consumer_kind,
+        "name": usage.consumer_name,
+        "parameter": usage.parameter_name,
+    }
+    if usage.annotation_class_name is not None or usage.annotation_module is not None:
+        payload["annotation"] = {
+            "class_name": usage.annotation_class_name,
+            "module": usage.annotation_module,
+        }
+    return payload

@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationDestination,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
@@ -16,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
+    PlanProviderUsage,
     PlanWarning,
     SchemaFinding,
     SeedPlanEntry,
@@ -97,6 +99,7 @@ def build_plan_output(
     function_entries: tuple[FunctionPlanEntry, ...] = (),
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = (),
     warnings: tuple[PlanWarning, ...] = (),
+    provider_usages: tuple[PlanProviderUsage, ...] = (),
     metadata: dict[str, object] | None = None,
 ) -> PlanOutput:
     """Build a minimal PlanOutput for formatter tests."""
@@ -112,7 +115,42 @@ def build_plan_output(
         source_load_entries=source_load_entries,
         selected_keys=selected_keys,
         warnings=warnings,
+        provider_usages=provider_usages,
         metadata={} if metadata is None else metadata,
+    )
+
+
+def build_plan_provider_usage(
+    *,
+    provider_name: str = "marker_provider",
+    consumer_kind: str = "loader",
+    consumer_name: str = "raw_orders",
+    parameter_name: str = "marker_provider",
+    annotation_class_name: str | None = "MarkerProvider",
+    annotation_module: str | None = "providers.marker",
+) -> PlanProviderUsage:
+    return PlanProviderUsage(
+        provider_name=provider_name,
+        consumer_kind=consumer_kind,
+        consumer_name=consumer_name,
+        parameter_name=parameter_name,
+        annotation_class_name=annotation_class_name,
+        annotation_module=annotation_module,
+    )
+
+
+def build_discovered_provider_usage(
+    *,
+    provider_name: str = "marker_provider",
+    parameter_name: str = "marker_provider",
+    annotation_class_name: str | None = "MarkerProvider",
+    annotation_module: str | None = "providers.marker",
+) -> DiscoveredProviderUsage:
+    return DiscoveredProviderUsage(
+        provider_name=provider_name,
+        parameter_name=parameter_name,
+        annotation_class_name=annotation_class_name,
+        annotation_module=annotation_module,
     )
 
 

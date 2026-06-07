@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from textwrap import dedent
+from typing import cast
 
 import pytest
 
@@ -20,6 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     ProviderHookDiagnosticE2ETestCase,
     ProviderHookE2ETestCase,
     ProviderHookMaterializationE2ETestCase,
+    ProviderPlanOutputE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
@@ -66,6 +70,182 @@ PROVIDER_MARKER_FILE: str = (
     ).strip()
     + "\n"
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderPlanOutputE2ETestCase(
+            description="plan output shows provider usage for selected Python surfaces",
+            expected_text_fragments=(
+                "Providers",
+                "  marker_provider",
+                "    custom materialization copy_table (MarkerProvider)",
+                "    hook mark_pre (MarkerProvider)",
+                "    loader raw_orders (MarkerProvider)",
+                "    task publish_orders (MarkerProvider)",
+            ),
+            expected_provider_name="marker_provider",
+            expected_used_by=(
+                ("custom materialization", "copy_table", "marker_provider"),
+                ("hook", "mark_pre", "marker_provider"),
+                ("loader", "raw_orders", "marker_provider"),
+                ("task", "publish_orders", "marker_provider"),
+            ),
+        )
+    ],
+    ids=["plan output shows provider usage for selected Python surfaces"],
+)
+def test_given_provider_usages_when_planning_then_text_and_json_include_selected_surfaces(
+    test_case: ProviderPlanOutputE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_plan_output_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "provider_plan_output_project"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [connection]
+                database = "provider_plan_output_project.duckdb"
+
+                [targets.dev]
+                schema = "main"
+                defer_sources_to = "dev"
+                """
+            ).strip()
+            + "\n",
+            "providers/marker.py": dedent(
+                """
+                from sqlbuild.providers import Provider
+
+
+                class MarkerProvider(Provider):
+                    label: str = "plan-output"
+                """
+            ).strip()
+            + "\n",
+            "loaders/raw_orders.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.loaders import loader
+
+
+                @loader
+                def raw_orders(marker_provider: MarkerProvider):
+                    return [{"order_id": 1, "amount": 10}]
+                """
+            ).strip()
+            + "\n",
+            "tasks/publish_orders.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.tasks import task
+
+
+                @task
+                def publish_orders(marker_provider: MarkerProvider):
+                    marker_provider.label
+                """
+            ).strip()
+            + "\n",
+            "hooks/mark_pre.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(marker_provider: MarkerProvider):
+                    marker_provider.label
+                """
+            ).strip()
+            + "\n",
+            "materializations/copy_table.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.executor.custom.models import (
+                    MaterializationContext,
+                    MaterializationResult,
+                )
+
+
+                def materialize(
+                    ctx: MaterializationContext,
+                    marker_provider: MarkerProvider,
+                ) -> MaterializationResult:
+                    marker_provider.label
+                    ctx.execute_sql(f"CREATE TABLE {ctx.destination} AS {ctx.sql}")
+                    return MaterializationResult(relation=ctx.destination)
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    managed: true
+                    write_strategy: table
+                    columns:
+                      - name: order_id
+                        type: INTEGER
+                      - name: amount
+                        type: INTEGER
+                """
+            ).strip()
+            + "\n",
+            "models/stg_orders.sql": dedent(
+                """
+                MODEL (
+                  materialized copy_table,
+                  pre_hooks [python("mark_pre")]
+                );
+
+                SELECT order_id, amount
+                FROM __source("raw_orders")
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    text_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--verbose"),
+        project_dir=project_dir,
+    )
+    assert text_result.returncode == 0, text_result.stdout + text_result.stderr
+    expected_text_fragment: str
+    for expected_text_fragment in test_case.expected_text_fragments:
+        assert expected_text_fragment in text_result.stdout
+
+    json_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--json"),
+        project_dir=project_dir,
+    )
+    assert json_result.returncode == 0, json_result.stdout + json_result.stderr
+    payload: dict[str, object] = json.loads(json_result.stdout)
+    providers_obj: object = payload["providers"]
+    assert isinstance(providers_obj, list)
+    providers: list[object] = providers_obj
+    assert len(providers) == 1
+    provider: dict[str, object] = cast(dict[str, object], providers[0])
+    assert provider["name"] == test_case.expected_provider_name
+    used_by_obj: object = provider["used_by"]
+    assert isinstance(used_by_obj, list)
+    used_by: Sequence[object] = used_by_obj
+    actual_used_by: tuple[tuple[str, str, str], ...] = tuple(
+        (
+            str(cast(dict[str, object], entry)["kind"]),
+            str(cast(dict[str, object], entry)["name"]),
+            str(cast(dict[str, object], entry)["parameter"]),
+        )
+        for entry in used_by
+    )
+    assert actual_used_by == test_case.expected_used_by
 
 
 @pytest.mark.parametrize(

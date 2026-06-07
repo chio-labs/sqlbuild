@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredProvider,
+    DiscoveredProviderUsage,
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.python_nodes.models import (
@@ -24,7 +25,6 @@ from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonTaskMetadata,
     PythonNodeDependencyEdge,
     PythonNodeGraph,
-    PythonNodeProviderUsage,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.loaders import get_loader_definition
@@ -269,8 +269,8 @@ def _build_check_node(
 
 def _provider_usages(
     *, function: Callable[..., object], provider_by_name: dict[str, DiscoveredProvider]
-) -> tuple[PythonNodeProviderUsage, ...]:
-    usages: list[PythonNodeProviderUsage] = []
+) -> tuple[DiscoveredProviderUsage, ...]:
+    usages: list[DiscoveredProviderUsage] = []
     type_hints: dict[str, object] = get_type_hints(function)
     parameter: inspect.Parameter
     for parameter in inspect.signature(function).parameters.values():
@@ -284,7 +284,7 @@ def _provider_usages(
             annotation_class_name = annotation.__name__
             annotation_module = annotation.__module__
         usages.append(
-            PythonNodeProviderUsage(
+            DiscoveredProviderUsage(
                 provider_name=discovered_provider.name,
                 parameter_name=parameter.name,
                 annotation_class_name=annotation_class_name,
