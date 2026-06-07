@@ -9,6 +9,7 @@ from sqlbuild.compiler.discovery.exceptions import ProviderDiscoveryError
 from sqlbuild.compiler.discovery.helpers.filesystem import discover_provider_classes
 from sqlbuild.compiler.discovery.models import DiscoveredProvider
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
+    DiscoverProviderCacheIsolationTestCase,
     DiscoverProviderClassesErrorTestCase,
     DiscoverProviderClassesTestCase,
     DiscoverProviderEnvSettingsTestCase,
@@ -168,6 +169,71 @@ def test_given_provider_files_when_discovering_then_returns_provider_classes(
     assert (
         tmp_path / "providers" / "setup.marker"
     ).is_file() is test_case.expected_marker_file_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverProviderCacheIsolationTestCase(
+            description="isolates provider package cache between project directories",
+            first_repo_files={
+                "providers/shared.py": """
+from sqlbuild.providers import Provider
+
+
+class FirstProvider(Provider):
+    pass
+""".strip()
+                + "\n",
+            },
+            second_repo_files={
+                "providers/shared.py": """
+from sqlbuild.providers import Provider
+
+
+class ImportedProvider(Provider):
+    pass
+""".strip()
+                + "\n",
+                "providers/public.py": """
+from providers.shared import ImportedProvider
+from sqlbuild.providers import Provider
+
+
+class PublicProvider(Provider):
+    pass
+""".strip()
+                + "\n",
+            },
+            expected_first_provider_names=("first_provider",),
+            expected_second_provider_names=("public_provider", "imported_provider"),
+        )
+    ],
+    ids=["isolates provider package cache between project directories"],
+)
+def test_given_previous_project_provider_package_when_discovering_then_uses_current_project_package(
+    test_case: DiscoverProviderCacheIsolationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    first_project_dir: Path = tmp_path / "first"
+    second_project_dir: Path = tmp_path / "second"
+    write_repo_files(first_project_dir, test_case.first_repo_files)
+    write_repo_files(second_project_dir, test_case.second_repo_files)
+
+    first_providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(
+        project_dir=first_project_dir
+    )
+    second_providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(
+        project_dir=second_project_dir
+    )
+
+    assert tuple(provider.name for provider in first_providers) == (
+        test_case.expected_first_provider_names
+    )
+    assert tuple(provider.name for provider in second_providers) == (
+        test_case.expected_second_provider_names
+    )
 
 
 ERROR_TEST_CASES: tuple[DiscoverProviderClassesErrorTestCase, ...] = (

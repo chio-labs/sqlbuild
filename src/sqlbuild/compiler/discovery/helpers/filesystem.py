@@ -969,6 +969,10 @@ def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder:
 
 def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    _evict_stale_project_package_modules(
+        root_module=module_name.split(".", maxsplit=1)[0],
+        project_dir=project_dir,
+    )
     existing_module: ModuleType | None = sys.modules.get(module_name)
     if existing_module is not None:
         existing_file: object = getattr(existing_module, "__file__", None)
@@ -991,6 +995,30 @@ def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     finally:
         sys.path = old_path
     return module
+
+
+def _evict_stale_project_package_modules(*, root_module: str, project_dir: Path) -> None:
+    root_path: Path = (project_dir / root_module).resolve()
+    module_name: str
+    module: ModuleType
+    for module_name, module in tuple(sys.modules.items()):
+        if module_name != root_module and not module_name.startswith(f"{root_module}."):
+            continue
+        module_file: object = getattr(module, "__file__", None)
+        if isinstance(module_file, str):
+            try:
+                Path(module_file).resolve().relative_to(project_dir.resolve())
+                continue
+            except ValueError:
+                sys.modules.pop(module_name, None)
+                continue
+        module_paths: object = getattr(module, "__path__", None)
+        if module_paths is None:
+            sys.modules.pop(module_name, None)
+            continue
+        if any(Path(path).resolve() == root_path for path in module_paths):
+            continue
+        sys.modules.pop(module_name, None)
 
 
 def _load_materialization_module(*, file_path: Path, project_dir: Path) -> ModuleType:
