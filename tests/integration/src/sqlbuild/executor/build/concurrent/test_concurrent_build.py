@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -200,6 +201,133 @@ def test_given_concurrent_build_when_executing_then_succeeds(
     assert result.status == test_case.expected_status
     assert result.success_count == test_case.expected_success_count
     verify_concurrent_warehouse_state(db_path=db_path, adapter=adapter, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConcurrentBuildTestCase(
+            description="concurrent provider-backed source loaders share one provider session",
+            project_files={},
+            max_concurrency=2,
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=4,
+            expected_marker_entries=("setup", "alpha", "beta", "teardown"),
+            use_provider_session=True,
+            expected_query_results=(
+                ("SELECT event_id FROM main.fact_alpha", ((1,),)),
+                ("SELECT event_id FROM main.fact_beta", ((2,),)),
+            ),
+        )
+    ],
+    ids=["concurrent provider-backed source loaders share one provider session"],
+)
+def test_given_concurrent_provider_backed_loaders_when_executing_then_share_provider_session(
+    test_case: ConcurrentBuildTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+) -> None:
+    marker_path: Path = tmp_path / "provider-concurrent-marker.log"
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_YML,
+            "providers/concurrent_marker.py": dedent(
+                f"""
+                from pathlib import Path
+                from time import sleep
+
+                from sqlbuild.providers import Provider
+
+
+                class ConcurrentMarkerProvider(Provider):
+                    marker_path: str = {str(marker_path)!r}
+
+                    @property
+                    def token(self):
+                        return str(id(self))
+
+                    def setup(self, ctx):
+                        sleep(0.05)
+                        self.mark("setup")
+
+                    def teardown(self):
+                        self.mark("teardown")
+
+                    def mark(self, label):
+                        with Path(self.marker_path).open("a", encoding="utf-8") as marker:
+                            marker.write(f"{{label}}:{{self.token}}\\n")
+                """
+            ).strip()
+            + "\n",
+            "loaders/events.py": dedent(
+                """
+                from providers.concurrent_marker import ConcurrentMarkerProvider
+                from sqlbuild.loaders import loader
+
+
+                @loader
+                def raw_alpha(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    concurrent_marker_provider.mark("alpha")
+                    return [{"event_id": 1}]
+
+
+                @loader
+                def raw_beta(ctx, concurrent_marker_provider: ConcurrentMarkerProvider):
+                    concurrent_marker_provider.mark("beta")
+                    return [{"event_id": 2}]
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_alpha
+                    managed: true
+                    write_strategy: table
+                    columns:
+                      - name: event_id
+                        type: INTEGER
+                  - name: raw_beta
+                    managed: true
+                    write_strategy: table
+                    columns:
+                      - name: event_id
+                        type: INTEGER
+                """
+            ).strip()
+            + "\n",
+            "models/fact_alpha.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_alpha")\n'
+            ),
+            "models/fact_beta.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_beta")\n'
+            ),
+        },
+    )
+    db_path: Path = tmp_path / "test.duckdb"
+
+    result: BuildExecutionResult = run_concurrent_build(
+        test_case=test_case,
+        project_dir=tmp_path,
+        db_path=db_path,
+        adapter=adapter,
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.success_count == test_case.expected_success_count
+    verify_concurrent_warehouse_state(db_path=db_path, adapter=adapter, test_case=test_case)
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    marker_labels: tuple[str, ...] = tuple(
+        entry.split(":", maxsplit=1)[0] for entry in marker_entries
+    )
+    marker_tokens: set[str] = {entry.split(":", maxsplit=1)[1] for entry in marker_entries}
+    assert marker_labels[0] == test_case.expected_marker_entries[0]
+    assert set(marker_labels[1:3]) == set(test_case.expected_marker_entries[1:3])
+    assert marker_labels[3] == test_case.expected_marker_entries[3]
+    assert len(marker_entries) == len(test_case.expected_marker_entries)
+    assert len(marker_tokens) == 1
 
 
 @pytest.mark.parametrize(
