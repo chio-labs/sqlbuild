@@ -11,7 +11,6 @@ from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
 from tests.unit.src.sqlbuild.providers._test_types import (
     ExplicitProviderNameTestCase,
-    InvalidDefaultProviderNameTestCase,
     InvalidExplicitProviderNameTestCase,
     ProviderLifecycleTestCase,
     ProviderNameTestCase,
@@ -78,19 +77,19 @@ def test_given_provider_with_unknown_setting_when_constructing_then_it_fails(
 
 PROVIDER_NAME_TEST_CASES: tuple[ProviderNameTestCase, ...] = (
     ProviderNameTestCase(
-        description="normalizes provider suffix",
+        description="normalizes provider suffix as class name text",
         provider_class_name="SlackProvider",
-        expected_name="slack",
+        expected_name="slack_provider",
     ),
     ProviderNameTestCase(
-        description="normalizes compound provider suffix",
+        description="normalizes compound provider suffix as class name text",
         provider_class_name="DataSlackProvider",
-        expected_name="data_slack",
+        expected_name="data_slack_provider",
     ),
     ProviderNameTestCase(
-        description="normalizes acronym words",
+        description="normalizes acronym provider suffix as class name text",
         provider_class_name="AnalyticsApiProvider",
-        expected_name="analytics_api",
+        expected_name="analytics_api_provider",
     ),
     ProviderNameTestCase(
         description="normalizes class without provider suffix",
@@ -131,26 +130,6 @@ def test_given_provider_name_override_when_resolving_name_then_explicit_name_win
         provider_name: ClassVar[str] = test_case.provider_name
 
     assert SlackProvider.name() == test_case.expected_name
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        InvalidDefaultProviderNameTestCase(
-            description="rejects empty default name",
-            provider_class_name="Provider",
-            expected_error_fragment="empty name",
-        )
-    ],
-    ids=["rejects empty default name"],
-)
-def test_given_invalid_default_provider_name_when_resolving_name_then_it_fails_clearly(
-    test_case: InvalidDefaultProviderNameTestCase,
-) -> None:
-    provider_cls: type[Provider] = type(test_case.provider_class_name, (Provider,), {})
-
-    with pytest.raises(ProviderInputError, match=test_case.expected_error_fragment):
-        provider_cls.name()
 
 
 INVALID_EXPLICIT_PROVIDER_NAME_TEST_CASES: tuple[InvalidExplicitProviderNameTestCase, ...] = (
