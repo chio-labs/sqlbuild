@@ -45,3 +45,37 @@ class ProviderCommandConcurrencyE2ETestCase:
     command: tuple[str, ...]
     expected_marker_entries: tuple[str, ...]
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ProviderHookE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_marker_entries: tuple[str, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ProviderHookDiagnosticE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ProviderHookMaterializationE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    model_relative_path: str
+    model_sql: str
+    extra_repo_files: dict[str, str]
+    expected_marker_entries: tuple[str, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ProviderHookContextConflictE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    context_parameter_name: str
+    expected_error_fragment: str

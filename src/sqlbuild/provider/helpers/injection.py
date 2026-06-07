@@ -11,7 +11,7 @@ from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.exceptions import ProviderInjectionError, ProviderLookupError
 from sqlbuild.providers import Provider
 
-_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx"})
+_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx", "hook_context"})
 
 
 def call_with_provider_injection(
@@ -19,6 +19,7 @@ def call_with_provider_injection(
     function: Callable[..., object],
     context: object,
     providers: ProviderContainer | None = None,
+    supplied_kwargs: dict[str, object] | None = None,
 ) -> object:
     """Call a Python node function with context and name-based provider injection."""
 
@@ -27,7 +28,7 @@ def call_with_provider_injection(
         type_hints: dict[str, object] = get_type_hints(function)
     except TypeError:
         type_hints = {}
-    kwargs: dict[str, object] = {}
+    kwargs: dict[str, object] = dict(supplied_kwargs or {})
     context_bound: bool = False
     for parameter in signature.parameters.values():
         if parameter.kind in {
@@ -37,6 +38,12 @@ def call_with_provider_injection(
             continue
         annotation: object = type_hints.get(parameter.name, parameter.annotation)
         if parameter.name in _CONTEXT_PARAMETER_NAMES:
+            if parameter.name in kwargs:
+                raise ProviderInjectionError(
+                    f"Hook argument '{parameter.name}' conflicts with reserved context "
+                    f"parameter '{parameter.name}'. Rename the hook argument; context "
+                    "parameters are injected by SQLBuild."
+                )
             if providers is not None and parameter.name in providers:
                 raise ProviderInjectionError(
                     f"Provider name '{parameter.name}' conflicts with reserved context parameter "
@@ -45,6 +52,12 @@ def call_with_provider_injection(
             kwargs[parameter.name] = context
             context_bound = True
             continue
+        if providers is not None and parameter.name in providers and parameter.name in kwargs:
+            raise ProviderInjectionError(
+                f"Hook argument '{parameter.name}' conflicts with provider injection for "
+                f"parameter '{parameter.name}'. Rename the hook argument or remove it to let "
+                "SQLBuild inject the provider."
+            )
         provider: Provider | None = _provider_for_parameter(
             parameter=parameter,
             annotation=annotation,
@@ -52,6 +65,8 @@ def call_with_provider_injection(
         )
         if provider is not None:
             kwargs[parameter.name] = provider
+            continue
+        if parameter.name in kwargs:
             continue
         if not context_bound and parameter.default is inspect.Parameter.empty:
             kwargs[parameter.name] = context
