@@ -107,7 +107,6 @@ def model_output_column_locations(
     header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
     if header_match is None:
         return {}
-    del sqlglot_enabled
     sql_start: int = header_match.start("sql")
     sql: str = header_match.group("sql")
     projection_ranges: tuple[tuple[int, int], ...] | None = _top_level_select_projection_ranges(sql)
@@ -118,19 +117,69 @@ def model_output_column_locations(
         sql_start=sql_start,
         relative_path=relative_path,
         projection_ranges=projection_ranges,
+        sqlglot_enabled=sqlglot_enabled,
     )
 
 
 def _top_level_select_projection_ranges(sql: str) -> tuple[tuple[int, int], ...] | None:
-    select_start: int | None = _find_top_level_keyword(sql, "SELECT", start=0)
-    if select_start is None:
+    bounds: tuple[int, int] | None = _top_level_select_list_bounds(sql)
+    if bounds is None:
         return None
-    select_list_start: int = select_start + len("SELECT")
-    if _find_top_level_keyword(sql, "UNION", start=select_list_start) is not None:
-        return None
-    from_start: int | None = _find_top_level_keyword(sql, "FROM", start=select_list_start)
-    select_list_end: int = from_start if from_start is not None else len(sql)
+    select_list_start, select_list_end = bounds
     return _split_top_level_select_items(sql, start=select_list_start, end=select_list_end)
+
+
+def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
+    depth: int = 0
+    index: int = 0
+    select_list_start: int | None = None
+    select_list_end: int | None = None
+    in_quote: str | None = None
+    length: int = len(sql)
+    while index < length:
+        character: str = sql[index]
+        if in_quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == in_quote:
+                in_quote = None
+            index += 1
+            continue
+        if character in _QUOTE_NAMES:
+            in_quote = character
+            index += 1
+            continue
+        if character == "(":
+            depth += 1
+            index += 1
+            continue
+        if character == ")":
+            depth = max(0, depth - 1)
+            index += 1
+            continue
+        if depth != 0:
+            index += 1
+            continue
+        upper_character: str = character.upper()
+        if select_list_start is None:
+            if upper_character == "S" and _keyword_at(sql, "SELECT", index):
+                select_list_start = index + len("SELECT")
+                index = select_list_start
+                continue
+        else:
+            if upper_character == "U" and _keyword_at(sql, "UNION", index):
+                return None
+            if (
+                select_list_end is None
+                and upper_character == "F"
+                and _keyword_at(sql, "FROM", index)
+            ):
+                select_list_end = index
+        index += 1
+    if select_list_start is None:
+        return None
+    return select_list_start, select_list_end if select_list_end is not None else length
 
 
 def _scanner_output_column_locations(
@@ -139,13 +188,15 @@ def _scanner_output_column_locations(
     sql_start: int,
     relative_path: Path,
     projection_ranges: tuple[tuple[int, int], ...],
+    sqlglot_enabled: bool,
 ) -> dict[str, SourceLocation]:
     locations: dict[str, SourceLocation] = {}
     item_start: int
     item_end: int
     for item_start, item_end in projection_ranges:
         output_name: str | None = _select_item_output_name(
-            contents[sql_start + item_start : sql_start + item_end]
+            contents[sql_start + item_start : sql_start + item_end],
+            sqlglot_enabled=sqlglot_enabled,
         )
         if output_name is None:
             continue
@@ -274,7 +325,7 @@ def _split_top_level_select_items(sql: str, *, start: int, end: int) -> tuple[tu
     return tuple(items)
 
 
-def _select_item_output_name(item: str) -> str | None:
+def _select_item_output_name(item: str, *, sqlglot_enabled: bool) -> str | None:
     as_match: re.Match[str] | None = re.search(
         r"\s+AS\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",
         item,
@@ -288,7 +339,15 @@ def _select_item_output_name(item: str) -> str | None:
         item,
     )
     if bare_match is None:
-        return None
+        if not sqlglot_enabled:
+            return None
+        implicit_alias_match: re.Match[str] | None = re.search(
+            r"\)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",
+            item,
+        )
+        if implicit_alias_match is None:
+            return None
+        return implicit_alias_match.group("name").strip('"')
     return bare_match.group("name").strip('"')
 
 
