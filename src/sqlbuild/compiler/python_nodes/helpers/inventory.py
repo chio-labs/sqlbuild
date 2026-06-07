@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
+from typing import get_type_hints
 
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
@@ -11,6 +13,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredProvider,
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.python_nodes.models import (
@@ -21,9 +24,11 @@ from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonTaskMetadata,
     PythonNodeDependencyEdge,
     PythonNodeGraph,
+    PythonNodeProviderUsage,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.loaders import get_loader_definition
+from sqlbuild.providers import Provider
 from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
@@ -42,6 +47,7 @@ def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> Py
         task_functions=discovered_inputs.task_functions,
         asset_functions=discovered_inputs.asset_functions,
         check_functions=discovered_inputs.check_functions,
+        providers=discovered_inputs.providers,
     )
     dependency_edges: tuple[PythonNodeDependencyEdge, ...] = build_python_node_dependency_edges(
         nodes=nodes
@@ -64,22 +70,26 @@ def build_python_nodes(
     task_functions: tuple[DiscoveredTaskFunction, ...] = (),
     asset_functions: tuple[DiscoveredAssetFunction, ...] = (),
     check_functions: tuple[DiscoveredCheckFunction, ...] = (),
+    providers: tuple[DiscoveredProvider, ...] = (),
 ) -> tuple[DiscoveredPythonNode, ...]:
     """Return the shared internal node view for all executable Python node kinds."""
 
     nodes: list[DiscoveredPythonNode] = []
+    provider_by_name: dict[str, DiscoveredProvider] = {
+        discovered_provider.name: discovered_provider for discovered_provider in providers
+    }
     loader_function: DiscoveredLoaderFunction
     for loader_function in loader_functions:
-        nodes.append(_build_loader_node(loader_function))
+        nodes.append(_build_loader_node(loader_function, provider_by_name=provider_by_name))
     task_function: DiscoveredTaskFunction
     for task_function in task_functions:
-        nodes.append(_build_task_node(task_function))
+        nodes.append(_build_task_node(task_function, provider_by_name=provider_by_name))
     asset_function: DiscoveredAssetFunction
     for asset_function in asset_functions:
-        nodes.append(_build_asset_node(asset_function))
+        nodes.append(_build_asset_node(asset_function, provider_by_name=provider_by_name))
     check_function: DiscoveredCheckFunction
     for check_function in check_functions:
-        nodes.append(_build_check_node(check_function))
+        nodes.append(_build_check_node(check_function, provider_by_name=provider_by_name))
     return tuple(nodes)
 
 
@@ -163,7 +173,9 @@ def build_python_node_path_index(*, nodes: tuple[DiscoveredPythonNode, ...]) -> 
     return {node.name: node.relative_path.parent.as_posix() for node in nodes}
 
 
-def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode:
+def _build_loader_node(
+    loader: DiscoveredLoaderFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.LOADER,
         file_path=loader.file_path,
@@ -172,6 +184,9 @@ def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode
         function=loader.function,
         depends_on=loader.depends_on,
         sql_deps=_sql_deps(loader.depends_on),
+        provider_usages=_provider_usages(
+            function=loader.function, provider_by_name=provider_by_name
+        ),
         loader=DiscoveredPythonLoaderMetadata(
             destination=loader.destination,
             write_strategy=loader.write_strategy,
@@ -184,7 +199,9 @@ def _build_loader_node(loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode
     )
 
 
-def _build_task_node(task: DiscoveredTaskFunction) -> DiscoveredPythonNode:
+def _build_task_node(
+    task: DiscoveredTaskFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.TASK,
         file_path=task.file_path,
@@ -197,11 +214,14 @@ def _build_task_node(task: DiscoveredTaskFunction) -> DiscoveredPythonNode:
         group=task.group,
         description=task.description,
         meta=task.meta,
+        provider_usages=_provider_usages(function=task.function, provider_by_name=provider_by_name),
         task=DiscoveredPythonTaskMetadata(retry=task.retry),
     )
 
 
-def _build_asset_node(asset: DiscoveredAssetFunction) -> DiscoveredPythonNode:
+def _build_asset_node(
+    asset: DiscoveredAssetFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.ASSET,
         file_path=asset.file_path,
@@ -214,6 +234,9 @@ def _build_asset_node(asset: DiscoveredAssetFunction) -> DiscoveredPythonNode:
         group=asset.group,
         description=asset.description,
         meta=asset.meta,
+        provider_usages=_provider_usages(
+            function=asset.function, provider_by_name=provider_by_name
+        ),
         asset=DiscoveredPythonAssetMetadata(
             columns=asset.columns,
             column_lineage=asset.column_lineage,
@@ -222,7 +245,9 @@ def _build_asset_node(asset: DiscoveredAssetFunction) -> DiscoveredPythonNode:
     )
 
 
-def _build_check_node(check: DiscoveredCheckFunction) -> DiscoveredPythonNode:
+def _build_check_node(
+    check: DiscoveredCheckFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.CHECK,
         file_path=check.file_path,
@@ -235,8 +260,38 @@ def _build_check_node(check: DiscoveredCheckFunction) -> DiscoveredPythonNode:
         group=check.group,
         description=check.description,
         meta=check.meta,
+        provider_usages=_provider_usages(
+            function=check.function, provider_by_name=provider_by_name
+        ),
         check=DiscoveredPythonCheckMetadata(severity=check.severity),
     )
+
+
+def _provider_usages(
+    *, function: Callable[..., object], provider_by_name: dict[str, DiscoveredProvider]
+) -> tuple[PythonNodeProviderUsage, ...]:
+    usages: list[PythonNodeProviderUsage] = []
+    type_hints: dict[str, object] = get_type_hints(function)
+    parameter: inspect.Parameter
+    for parameter in inspect.signature(function).parameters.values():
+        discovered_provider: DiscoveredProvider | None = provider_by_name.get(parameter.name)
+        if discovered_provider is None:
+            continue
+        annotation: object = type_hints.get(parameter.name, parameter.annotation)
+        annotation_class_name: str | None = None
+        annotation_module: str | None = None
+        if isinstance(annotation, type) and issubclass(annotation, Provider):
+            annotation_class_name = annotation.__name__
+            annotation_module = annotation.__module__
+        usages.append(
+            PythonNodeProviderUsage(
+                provider_name=discovered_provider.name,
+                parameter_name=parameter.name,
+                annotation_class_name=annotation_class_name,
+                annotation_module=annotation_module,
+            )
+        )
+    return tuple(usages)
 
 
 def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:

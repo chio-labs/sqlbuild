@@ -52,6 +52,16 @@ class DiscoveredPythonCheckMetadata:
 
 
 @dataclass(frozen=True)
+class PythonNodeProviderUsage:
+    """Framework-owned metadata for a Python node's provider usage."""
+
+    provider_name: str
+    parameter_name: str
+    annotation_class_name: str | None = None
+    annotation_module: str | None = None
+
+
+@dataclass(frozen=True)
 class DiscoveredPythonNode:
     """Shared internal view of a discovered Python DAG node."""
 
@@ -66,6 +76,7 @@ class DiscoveredPythonNode:
     group: str | None = None
     description: str | None = None
     meta: dict[str, object] | None = None
+    provider_usages: tuple[PythonNodeProviderUsage, ...] = field(default_factory=tuple)
     loader: DiscoveredPythonLoaderMetadata | None = None
     task: DiscoveredPythonTaskMetadata | None = None
     asset: DiscoveredPythonAssetMetadata | None = None
