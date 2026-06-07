@@ -16,6 +16,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     ProviderCommandFailureE2ETestCase,
     ProviderCommandSideEffectE2ETestCase,
     ProviderCustomMaterializationE2ETestCase,
+    ProviderHookContextConflictE2ETestCase,
+    ProviderHookDiagnosticE2ETestCase,
+    ProviderHookE2ETestCase,
+    ProviderHookMaterializationE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
@@ -716,3 +720,800 @@ def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_
     assert marker_labels[3] == test_case.expected_marker_entries[3]
     assert len(marker_entries) == len(test_case.expected_marker_entries)
     assert len(marker_tokens) == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookE2ETestCase(
+            description="python hooks access providers through context and parameter injection",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_marker_entries=(
+                "setup",
+                "pre_ctx",
+                "pre_injected",
+                "post_ctx",
+                "post_injected",
+                "teardown",
+            ),
+            expected_exit_code=0,
+        )
+    ],
+    ids=["python hooks access providers through context and parameter injection"],
+)
+def test_given_python_hooks_with_provider_when_building_then_hooks_use_provider_session(
+    test_case: ProviderHookE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(ctx, marker_provider: MarkerProvider):
+                    ctx.providers.marker_provider.mark("pre_ctx")
+                    marker_provider.mark("pre_injected")
+
+
+                @hook
+                def mark_post(hook_context, marker_provider: MarkerProvider):
+                    hook_context.providers["marker_provider"].mark("post_ctx")
+                    marker_provider.mark("post_injected")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("mark_pre")],
+                  post_hooks [python("mark_post")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    assert marker_entries == test_case.expected_marker_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookE2ETestCase(
+            description="python hooks on view models use provider injection",
+            command=("--no-color", "build", "--select", "orders_view"),
+            expected_marker_entries=("setup", "view_pre", "view_post", "teardown"),
+            expected_exit_code=0,
+        )
+    ],
+    ids=["python hooks on view models use provider injection"],
+)
+def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_use_provider(
+    test_case: ProviderHookE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-view-hook-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_view_hook_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(ctx, marker_provider: MarkerProvider):
+                    marker_provider.mark("view_pre")
+
+
+                @hook
+                def mark_post(ctx, marker_provider: MarkerProvider):
+                    marker_provider.mark("view_post")
+                """
+            ).strip()
+            + "\n",
+            "models/orders_view.sql": dedent(
+                """
+                MODEL (
+                  materialized view,
+                  pre_hooks [python("mark_pre")],
+                  post_hooks [python("mark_post")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    assert marker_entries == test_case.expected_marker_entries
+
+
+PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETestCase] = [
+    ProviderHookMaterializationE2ETestCase(
+        description="incremental python hooks use provider injection",
+        command=("--no-color", "build", "--select", "incremental_orders"),
+        model_relative_path="models/incremental_orders.sql",
+        model_sql=dedent(
+            """
+                MODEL (
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor order_id,
+                  cursor_type integer,
+                  pre_hooks [python("mark_hook")],
+                  post_hooks [python("mark_hook")]
+                );
+
+                SELECT 1 AS order_id
+                """
+        ).strip()
+        + "\n",
+        extra_repo_files={},
+        expected_marker_entries=(
+            "setup",
+            "incremental_orders:pre_hooks",
+            "incremental_orders:post_hooks",
+            "teardown",
+        ),
+        expected_exit_code=0,
+    ),
+    ProviderHookMaterializationE2ETestCase(
+        description="microbatch python hooks use provider injection",
+        command=("--no-color", "build", "--select", "+hourly_activity"),
+        model_relative_path="models/hourly_activity.sql",
+        model_sql=dedent(
+            """
+                MODEL (
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  cursor activity_hour,
+                  cursor_type timestamp,
+                  cursor_grain hour,
+                  cursor_inputs (
+                    fact_orders ordered_at,
+                  ),
+                  incremental_mode microbatch,
+                  batch_size 1d,
+                  pre_hooks [python("mark_hook")],
+                  post_hooks [python("mark_hook")]
+                );
+
+                SELECT DATE_TRUNC('hour', ordered_at) AS activity_hour, COUNT(*) AS orders_placed
+                FROM __ref("fact_orders")
+                GROUP BY DATE_TRUNC('hour', ordered_at)
+                """
+        ).strip()
+        + "\n",
+        extra_repo_files={
+            "models/fact_orders.sql": dedent(
+                """
+                    MODEL (materialized table);
+
+                    SELECT 1 AS order_id, TIMESTAMP '2026-01-01 00:00:00' AS ordered_at
+                    """
+            ).strip()
+            + "\n",
+        },
+        expected_marker_entries=(
+            "setup",
+            "hourly_activity:pre_hooks",
+            "hourly_activity:post_hooks",
+            "teardown",
+        ),
+        expected_exit_code=0,
+    ),
+    ProviderHookMaterializationE2ETestCase(
+        description="snapshot python hooks use provider injection",
+        command=("--no-color", "build", "--select", "customer_snapshot"),
+        model_relative_path="models/customer_snapshot.sql",
+        model_sql=dedent(
+            """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [customer_id],
+                  snapshot_strategy timestamp,
+                  updated_at updated_at,
+                  pre_hooks [python("mark_hook")],
+                  post_hooks [python("mark_hook")]
+                );
+
+                SELECT 1 AS customer_id, 'basic' AS plan,
+                  TIMESTAMP '2026-01-01 00:00:00' AS updated_at
+                """
+        ).strip()
+        + "\n",
+        extra_repo_files={},
+        expected_marker_entries=(
+            "setup",
+            "customer_snapshot:pre_hooks",
+            "customer_snapshot:post_hooks",
+            "teardown",
+        ),
+        expected_exit_code=0,
+    ),
+    ProviderHookMaterializationE2ETestCase(
+        description="custom materialization python hooks use provider injection",
+        command=("--no-color", "build", "--select", "custom_orders"),
+        model_relative_path="models/custom_orders.sql",
+        model_sql=dedent(
+            """
+                MODEL (
+                  materialized copy_table,
+                  pre_hooks [python("mark_hook")],
+                  post_hooks [python("mark_hook")]
+                );
+
+                SELECT 1 AS order_id
+                """
+        ).strip()
+        + "\n",
+        extra_repo_files={
+            "materializations/copy_table.py": dedent(
+                """
+                    from sqlbuild.executor.custom.models import (
+                        MaterializationContext,
+                        MaterializationResult,
+                    )
+
+
+                    def materialize(ctx: MaterializationContext) -> MaterializationResult:
+                        ctx.execute_sql(f"CREATE TABLE {ctx.destination} AS {ctx.sql}")
+                        return MaterializationResult(relation=ctx.destination)
+                    """
+            ).strip()
+            + "\n",
+        },
+        expected_marker_entries=(
+            "setup",
+            "custom_orders:pre_hooks",
+            "custom_orders:post_hooks",
+            "teardown",
+        ),
+        expected_exit_code=0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PROVIDER_HOOK_MATERIALIZATION_TEST_CASES,
+    ids=[case.description for case in PROVIDER_HOOK_MATERIALIZATION_TEST_CASES],
+)
+def test_given_materialization_hooks_with_provider_when_building_then_hooks_use_provider(
+    test_case: ProviderHookMaterializationE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-materialization-marker.log"
+    repo_files: dict[str, str] = {
+        "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+        "providers/marker.py": PROVIDER_MARKER_FILE,
+        "hooks/marker_hooks.py": dedent(
+            """
+            from providers.marker import MarkerProvider
+            from sqlbuild.hooks import hook
+
+
+            @hook
+            def mark_hook(ctx, marker_provider: MarkerProvider):
+                marker_provider.mark(f"{ctx.model_name}:{ctx.phase}")
+            """
+        ).strip()
+        + "\n",
+        test_case.model_relative_path: test_case.model_sql,
+    }
+    repo_files.update(test_case.extra_repo_files)
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_materialization_project",
+        repo_files=repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    assert marker_entries == test_case.expected_marker_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookE2ETestCase(
+            description="untyped python hook parameter named like provider is injected by name",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_marker_entries=("setup", "untyped", "teardown"),
+            expected_exit_code=0,
+        )
+    ],
+    ids=["untyped python hook parameter named like provider is injected by name"],
+)
+def test_given_untyped_python_hook_provider_parameter_when_building_then_provider_is_injected(
+    test_case: ProviderHookE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-untyped-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_untyped_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(ctx, marker_provider):
+                    marker_provider.mark("untyped")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("mark_pre")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    assert marker_entries == test_case.expected_marker_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookE2ETestCase(
+            description="python hook failure still tears down provider",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_marker_entries=("setup", "pre", "teardown"),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["python hook failure still tears down provider"],
+)
+def test_given_python_hook_with_provider_when_hook_fails_then_provider_tears_down(
+    test_case: ProviderHookE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-failure-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_failure_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def failing_pre_hook(ctx, marker_provider: MarkerProvider):
+                    marker_provider.mark("pre")
+                    raise RuntimeError("intentional provider hook failure")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("failing_pre_hook")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    assert marker_entries == test_case.expected_marker_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookE2ETestCase(
+            description="python post hook failure still tears down provider",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_marker_entries=("setup", "post", "teardown"),
+            expected_exit_code=1,
+        )
+    ],
+    ids=["python post hook failure still tears down provider"],
+)
+def test_given_python_post_hook_with_provider_when_hook_fails_then_provider_tears_down(
+    test_case: ProviderHookE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-post-hook-failure-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_post_hook_failure_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def failing_post_hook(ctx, marker_provider: MarkerProvider):
+                    marker_provider.mark("post")
+                    raise RuntimeError("intentional provider post hook failure")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  post_hooks [python("failing_post_hook")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
+    assert marker_entries == test_case.expected_marker_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookDiagnosticE2ETestCase(
+            description="alias-imported hook provider annotation gets CLI diagnostic",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_error_fragment=("annotated with MarkerProvider imported as 'alias_marker'"),
+        )
+    ],
+    ids=["alias-imported hook provider annotation gets CLI diagnostic"],
+)
+def test_given_alias_imported_provider_annotation_on_hook_when_building_then_cli_prints_guidance(
+    test_case: ProviderHookDiagnosticE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-alias-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_alias_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/alias_hooks.py": dedent(
+                """
+                import importlib.util
+                import sys
+                from pathlib import Path
+
+                from sqlbuild.hooks import hook
+
+                provider_path = Path(__file__).parents[1] / "providers" / "marker.py"
+                spec = importlib.util.spec_from_file_location("alias_marker", provider_path)
+                alias_marker = importlib.util.module_from_spec(spec)
+                sys.modules["alias_marker"] = alias_marker
+                assert spec.loader is not None
+                spec.loader.exec_module(alias_marker)
+                AliasMarkerProvider = alias_marker.MarkerProvider
+
+
+                @hook
+                def mark_pre(ctx, marker_provider: AliasMarkerProvider):
+                    marker_provider.mark("pre")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("mark_pre")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookDiagnosticE2ETestCase(
+            description="hook provider annotation mismatch gets CLI diagnostic",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_error_fragment=("Provider parameter 'marker_provider' expected OtherProvider"),
+        )
+    ],
+    ids=["hook provider annotation mismatch gets CLI diagnostic"],
+)
+def test_given_provider_annotation_mismatch_on_hook_when_building_then_cli_prints_mismatch(
+    test_case: ProviderHookDiagnosticE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-mismatch-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_mismatch_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "providers/other.py": dedent(
+                """
+                from sqlbuild.providers import Provider
+
+
+                class OtherProvider(Provider):
+                    pass
+                """
+            ).strip()
+            + "\n",
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.other import OtherProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(ctx, marker_provider: OtherProvider):
+                    marker_provider.mark("pre")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("mark_pre")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookDiagnosticE2ETestCase(
+            description="python hook argument cannot shadow provider injection",
+            command=("--no-color", "build", "--select", "orders"),
+            expected_error_fragment=(
+                "argument 'marker_provider' conflicts with provider injection for "
+                "parameter 'marker_provider'"
+            ),
+        )
+    ],
+    ids=["python hook argument cannot shadow provider injection"],
+)
+def test_given_python_hook_kwarg_matches_provider_when_building_then_cli_prints_conflict(
+    test_case: ProviderHookDiagnosticE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-conflict-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_conflict_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(ctx, marker_provider: MarkerProvider):
+                    marker_provider.mark("pre")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("mark_pre", marker_provider: "literal")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in result.stdout + result.stderr
+
+
+PROVIDER_HOOK_CONTEXT_CONFLICT_TEST_CASES: list[ProviderHookContextConflictE2ETestCase] = [
+    ProviderHookContextConflictE2ETestCase(
+        description="python hook argument cannot shadow ctx injection",
+        command=("--no-color", "build", "--select", "orders"),
+        context_parameter_name="ctx",
+        expected_error_fragment=("argument 'ctx' conflicts with reserved context parameter 'ctx'"),
+    ),
+    ProviderHookContextConflictE2ETestCase(
+        description="python hook argument cannot shadow context injection",
+        command=("--no-color", "build", "--select", "orders"),
+        context_parameter_name="context",
+        expected_error_fragment=(
+            "argument 'context' conflicts with reserved context parameter 'context'"
+        ),
+    ),
+    ProviderHookContextConflictE2ETestCase(
+        description="python hook argument cannot shadow _ctx injection",
+        command=("--no-color", "build", "--select", "orders"),
+        context_parameter_name="_ctx",
+        expected_error_fragment=(
+            "argument '_ctx' conflicts with reserved context parameter '_ctx'"
+        ),
+    ),
+    ProviderHookContextConflictE2ETestCase(
+        description="python hook argument cannot shadow hook_context injection",
+        command=("--no-color", "build", "--select", "orders"),
+        context_parameter_name="hook_context",
+        expected_error_fragment=(
+            "argument 'hook_context' conflicts with reserved context parameter 'hook_context'"
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    PROVIDER_HOOK_CONTEXT_CONFLICT_TEST_CASES,
+    ids=[case.description for case in PROVIDER_HOOK_CONTEXT_CONFLICT_TEST_CASES],
+)
+def test_given_python_hook_kwarg_matches_context_when_building_then_cli_prints_conflict(
+    test_case: ProviderHookContextConflictE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    marker_path: Path = tmp_path / "provider-hook-context-conflict-marker.log"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="provider_hook_context_conflict_project",
+        repo_files={
+            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+            "providers/marker.py": PROVIDER_MARKER_FILE,
+            "hooks/marker_hooks.py": dedent(
+                """
+                from providers.marker import MarkerProvider
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def mark_pre(ctx, marker_provider: MarkerProvider):
+                    marker_provider.mark("pre")
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                f"""
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("mark_pre", {test_case.context_parameter_name}: "literal")]
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+        env={"MARKER_PATH": str(marker_path)},
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert test_case.expected_error_fragment in result.stdout + result.stderr

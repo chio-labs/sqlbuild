@@ -88,6 +88,7 @@ def execute_custom_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(
@@ -235,6 +236,7 @@ def execute_custom_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         _cleanup_relations(

@@ -19,6 +19,7 @@ from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
@@ -38,6 +39,7 @@ def execute_view_entry(
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
     effective_target_name: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> ModelExecutionResult:
     """Execute one view model through its full materialization lifecycle."""
 
@@ -69,6 +71,7 @@ def execute_view_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(
@@ -156,6 +159,7 @@ def execute_view_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(

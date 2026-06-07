@@ -14,6 +14,7 @@ def invoke_with_providers(
     function: Callable[..., object],
     context: object,
     providers: ProviderContainer | None = None,
+    supplied_kwargs: dict[str, object] | None = None,
 ) -> object:
     """Call a Python node function with optional provider injection."""
 
@@ -21,6 +22,7 @@ def invoke_with_providers(
         function=function,
         context=context,
         providers=providers,
+        supplied_kwargs=supplied_kwargs,
     )
 
 

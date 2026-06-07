@@ -868,6 +868,7 @@ def _dispatch_model(
             hook_functions=plan.hook_functions,
             effective_target_name=target,
             effective_vars=effective_vars,
+            providers=providers,
         )
     if is_full_refresh_microbatch:
         return execute_microbatch_entry(
@@ -885,6 +886,7 @@ def _dispatch_model(
             hook_functions=plan.hook_functions,
             effective_target_name=target,
             effective_vars=effective_vars,
+            providers=providers,
         )
     if entry.action in INCREMENTAL_ACTIONS:
         return execute_incremental_entry(
@@ -901,6 +903,7 @@ def _dispatch_model(
             hook_functions=plan.hook_functions,
             effective_target_name=target,
             effective_vars=effective_vars,
+            providers=providers,
         )
     if entry.action == PlanAction.CREATE_VIEW:
         return execute_view_entry(
@@ -916,6 +919,7 @@ def _dispatch_model(
             hook_functions=plan.hook_functions,
             effective_target_name=target,
             effective_vars=effective_vars,
+            providers=providers,
         )
     if entry.action == PlanAction.SNAPSHOT:
         return execute_snapshot_entry(
@@ -933,6 +937,7 @@ def _dispatch_model(
             hook_functions=plan.hook_functions,
             effective_target_name=target,
             effective_vars=effective_vars,
+            providers=providers,
         )
     return execute_table_entry(
         entry=entry,
@@ -949,6 +954,7 @@ def _dispatch_model(
         hook_functions=plan.hook_functions,
         effective_target_name=target,
         effective_vars=effective_vars,
+        providers=providers,
     )
 
 
