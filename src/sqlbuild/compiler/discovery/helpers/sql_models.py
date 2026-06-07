@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,6 +71,7 @@ def model_header_column_locations(
     header: str = header_match.group("header")
     header_start: int = header_match.start("header")
     tokens: list[_ModelHeaderToken] = _tokenize_model_header(header)
+    line_starts: tuple[int, ...] | None = None
     locations: dict[str, SourceLocation] = {}
     depth: int = 0
     in_columns: bool = False
@@ -83,11 +85,14 @@ def model_header_column_locations(
             if next_token.kind == _SYMBOL_TOKEN and next_token.value == "(":
                 in_columns = True
         elif in_columns and token.kind == _WORD_TOKEN and depth == 1:
+            if line_starts is None:
+                line_starts = _line_starts(contents)
             locations[token.value] = _location_for_header_token(
                 contents=contents,
                 header_start=header_start,
                 token=token,
                 relative_path=relative_path,
+                line_starts=line_starts,
             )
         if token.kind == _SYMBOL_TOKEN and token.value == "(":
             depth += 1
@@ -118,6 +123,7 @@ def model_output_column_locations(
         relative_path=relative_path,
         projection_ranges=projection_ranges,
         sqlglot_enabled=sqlglot_enabled,
+        line_starts=_line_starts(contents),
     )
 
 
@@ -192,6 +198,7 @@ def _scanner_output_column_locations(
     relative_path: Path,
     projection_ranges: tuple[tuple[int, int], ...],
     sqlglot_enabled: bool,
+    line_starts: tuple[int, ...],
 ) -> dict[str, SourceLocation]:
     locations: dict[str, SourceLocation] = {}
     item_start: int
@@ -208,6 +215,7 @@ def _scanner_output_column_locations(
             sql_start=sql_start,
             relative_path=relative_path,
             projection_range=(item_start, item_end),
+            line_starts=line_starts,
         )
         if location is not None:
             locations[output_name] = location
@@ -215,7 +223,12 @@ def _scanner_output_column_locations(
 
 
 def _location_for_projection_range(
-    *, contents: str, sql_start: int, relative_path: Path, projection_range: tuple[int, int]
+    *,
+    contents: str,
+    sql_start: int,
+    relative_path: Path,
+    projection_range: tuple[int, int],
+    line_starts: tuple[int, ...],
 ) -> SourceLocation | None:
     item_start: int = projection_range[0]
     item_end: int = projection_range[1]
@@ -229,11 +242,17 @@ def _location_for_projection_range(
         start=sql_start + start_offset,
         end=sql_start + end_offset,
         relative_path=relative_path,
+        line_starts=line_starts,
     )
 
 
 def _location_for_header_token(
-    *, contents: str, header_start: int, token: _ModelHeaderToken, relative_path: Path
+    *,
+    contents: str,
+    header_start: int,
+    token: _ModelHeaderToken,
+    relative_path: Path,
+    line_starts: tuple[int, ...],
 ) -> SourceLocation:
     absolute_position: int = header_start + token.position
     return _location_for_absolute_span(
@@ -241,19 +260,22 @@ def _location_for_header_token(
         start=absolute_position,
         end=absolute_position + len(token.value),
         relative_path=relative_path,
+        line_starts=line_starts,
     )
 
 
 def _location_for_absolute_span(
-    *, contents: str, start: int, end: int, relative_path: Path
+    *, contents: str, start: int, end: int, relative_path: Path, line_starts: tuple[int, ...]
 ) -> SourceLocation:
     end = max(start, end)
     end_position: int = max(start, end - 1)
-    line: int = contents.count("\n", 0, start) + 1
-    line_start: int = contents.rfind("\n", 0, start) + 1
+    line_index: int = bisect_right(line_starts, start) - 1
+    line: int = line_index + 1
+    line_start: int = line_starts[line_index]
     column: int = start - line_start + 1
-    end_line: int = contents.count("\n", 0, end_position) + 1
-    end_line_start: int = contents.rfind("\n", 0, end_position) + 1
+    end_line_index: int = bisect_right(line_starts, end_position) - 1
+    end_line: int = end_line_index + 1
+    end_line_start: int = line_starts[end_line_index]
     end_column: int = end_position - end_line_start + 2
     return SourceLocation(
         path=relative_path,
@@ -262,6 +284,15 @@ def _location_for_absolute_span(
         end_line=end_line,
         end_column=end_column,
     )
+
+
+def _line_starts(contents: str) -> tuple[int, ...]:
+    starts: list[int] = [0]
+    index: int = contents.find("\n")
+    while index != -1:
+        starts.append(index + 1)
+        index = contents.find("\n", index + 1)
+    return tuple(starts)
 
 
 def _find_top_level_keyword(sql: str, keyword: str, *, start: int) -> int | None:
