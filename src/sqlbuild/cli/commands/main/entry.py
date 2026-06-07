@@ -73,6 +73,30 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default=CompileLineageMode.FAST.value,
         help="Column lineage mode: fast (default), rich (slower), or none",
     )
+    compile_parser.add_argument(
+        "--profile-skip-discovery-sqlglot",
+        action="store_true",
+        default=False,
+        help="Diagnostic: skip SQLGlot-assisted discovery parsing",
+    )
+    compile_parser.add_argument(
+        "--profile-skip-column-inference",
+        action="store_true",
+        default=False,
+        help="Diagnostic: skip compile-time column inference",
+    )
+    compile_parser.add_argument(
+        "--profile-skip-contracts",
+        action="store_true",
+        default=False,
+        help="Diagnostic: skip offline contract validation",
+    )
+    compile_parser.add_argument(
+        "--profile-skip-write",
+        action="store_true",
+        default=False,
+        help="Diagnostic: skip writing target/compiled artifacts",
+    )
     add_vars_args(compile_parser)
     add_dbt_config_args(compile_parser)
 
@@ -547,6 +571,10 @@ def _main_with_dependencies(
                 args.no_color,
                 CompileLineageMode(args.compile_lineage_mode),
                 args.vars,
+                args.profile_skip_discovery_sqlglot,
+                args.profile_skip_column_inference,
+                args.profile_skip_contracts,
+                args.profile_skip_write,
             )
         if args.command == CliCommand.DAG:
             return handlers.run_dag(

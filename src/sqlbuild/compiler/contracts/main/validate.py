@@ -16,6 +16,13 @@ def validate_model_contracts(
 ) -> ContractValidationResult:
     """Validate model header column contracts against inferred output columns."""
 
+    if not any(
+        model.config.values.get("contract") == "enforced"
+        or (model.schema_entry is not None and model.schema_entry.columns)
+        for model in project.models
+    ):
+        return ContractValidationResult(diagnostics=())
+
     diagnostics: list[CompilerDiagnostic] = []
     for model in project.models:
         diagnostics.extend(validate_model_column_contracts(model, dialect=dialect))

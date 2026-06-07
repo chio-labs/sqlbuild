@@ -13,10 +13,15 @@ from sqlbuild.compiler.compile.helpers.deps import (
     sql_test_scope_deps,
 )
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros, find_macro_call_names
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import infer_columns_with_sqlglot
+from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+    analyze_columns_and_lineage_with_polyglot,
+    infer_columns_with_sqlglot,
+)
+from sqlbuild.compiler.compile.helpers.sqlglot_validation import validate_sql_syntax
 from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
+    CompiledLineageColumnFact,
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
@@ -65,10 +70,11 @@ def assemble_compiled_project(
     inputs: CompileProjectInputs,
     *,
     inference_profile: ExpressionInferenceProfile | None = None,
+    skip_column_inference: bool = False,
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
-    sqlglot_enabled: bool = inputs.effective_settings.sqlglot
+    sqlglot_enabled: bool = inputs.effective_settings.sqlglot and not skip_column_inference
     seed_names: frozenset[str] = frozenset(
         seed_input.schema_entry.name for seed_input in inputs.seed_inputs
     )
@@ -148,6 +154,8 @@ def _assemble_compiled_model(
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
+    fast_lineage_columns: tuple[CompiledLineageColumnFact, ...] | None = None
+    fast_lineage_has_star: bool = False
     raw_placeholders: object | None = model_input.config.values.get("placeholders")
     placeholders: dict[str, str] | None = (
         {str(k): str(v) for k, v in raw_placeholders.items()}
@@ -155,11 +163,41 @@ def _assemble_compiled_model(
         else None
     )
     if sqlglot_enabled:
-        inferred_columns = infer_columns_with_sqlglot(
+        profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
+        polyglot_analysis = analyze_columns_and_lineage_with_polyglot(
             query_sql=model_input.query_sql,
+            references=model_input.references,
             placeholders=placeholders,
             column_nullability_by_table=column_nullability_by_table,
-            inference_profile=inference_profile,
+            inference_profile=profile,
+        )
+        if isinstance(polyglot_analysis, tuple):
+            inferred_columns = polyglot_analysis[0]
+            fast_lineage_columns = polyglot_analysis[1]
+            fast_lineage_has_star = polyglot_analysis[2]
+        else:
+            if model_input.sql_validation_enabled:
+                validate_sql_syntax(
+                    query_sql=model_input.query_sql,
+                    model_name=model_name,
+                    file_path=model_input.model_file.file_path,
+                    placeholders=placeholders,
+                    dialect=profile.sqlglot_dialect,
+                )
+            inferred_columns = infer_columns_with_sqlglot(
+                query_sql=model_input.query_sql,
+                placeholders=placeholders,
+                column_nullability_by_table=column_nullability_by_table,
+                inference_profile=profile,
+            )
+    elif model_input.sql_validation_enabled:
+        profile = inference_profile or ExpressionInferenceProfile()
+        validate_sql_syntax(
+            query_sql=model_input.query_sql,
+            model_name=model_name,
+            file_path=model_input.model_file.file_path,
+            placeholders=placeholders,
+            dialect=profile.sqlglot_dialect,
         )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
@@ -172,6 +210,8 @@ def _assemble_compiled_model(
         references=model_input.references,
         schema_entry=model_input.schema_entry,
         inferred_columns=inferred_columns,
+        fast_lineage_columns=fast_lineage_columns,
+        fast_lineage_has_star=fast_lineage_has_star,
         authored_sql=model_input.model_file.contents,
         output_column_locations=model_input.model_file.output_column_locations,
         macro_deps=find_macro_call_names(model_input.macro_source_sql),
