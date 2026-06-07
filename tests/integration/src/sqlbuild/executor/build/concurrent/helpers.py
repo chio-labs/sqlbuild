@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.provider.main.session import build_provider_session
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
     ConcurrentBuildTestCase,
 )
@@ -41,6 +42,9 @@ def run_concurrent_build(
         adapter.close(setup_connection)
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    provider_session: Any | None = (
+        build_provider_session(discovered.providers) if test_case.use_provider_session else None
+    )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
@@ -66,8 +70,12 @@ def run_concurrent_build(
             query_change_tracking=True,
             run_audits=test_case.run_audits,
             fail_fast=test_case.fail_fast,
+            loader_functions=discovered.loader_functions,
+            providers=provider_session.providers if provider_session is not None else None,
         )
     finally:
+        if provider_session is not None:
+            provider_session.close()
         conn: Any
         for conn in worker_connections:
             adapter.close(conn)

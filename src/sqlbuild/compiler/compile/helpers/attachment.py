@@ -119,7 +119,9 @@ from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "hook_context"})
+_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
+    {"ctx", "context", "_ctx", "hook_context"}
+)
 
 
 def build_model_inputs(
@@ -169,6 +171,7 @@ def build_model_inputs(
             values=effective_config.values,
             model_name=model_file.file_path.stem,
             hook_functions=discovered_inputs.hook_functions,
+            provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
         )
         # Keep the interpolated-but-unexpanded form for SQL test macro mocks.
         var_substituted_sql: str = substitute_sql_vars(
@@ -2447,6 +2450,7 @@ def validate_python_hook_config(
     values: dict[str, object],
     model_name: str,
     hook_functions: tuple[DiscoveredHookFunction, ...],
+    provider_names: frozenset[str] = frozenset(),
 ) -> None:
     """Validate Python lifecycle hook references and explicit kwargs."""
 
@@ -2476,6 +2480,7 @@ def validate_python_hook_config(
                 model_name=model_name,
                 hook_key=hook_key,
                 hook_index=hook_index,
+                provider_names=provider_names,
             )
 
 
@@ -2486,6 +2491,7 @@ def validate_python_hook_signature(
     model_name: str,
     hook_key: str,
     hook_index: int,
+    provider_names: frozenset[str] = frozenset(),
 ) -> None:
     signature: Signature = inspect.signature(hook_function.function)
     parameters: tuple[Parameter, ...] = tuple(signature.parameters.values())
@@ -2498,6 +2504,33 @@ def validate_python_hook_signature(
         if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
         and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
     )
+
+    context_conflicts: tuple[str, ...] = tuple(
+        sorted(
+            kwarg_name
+            for kwarg_name in hook_entry.kwargs
+            if kwarg_name in _HOOK_CONTEXT_PARAMETER_NAMES
+        )
+    )
+    if context_conflicts:
+        conflict: str = context_conflicts[0]
+        raise CompileInputError(
+            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
+            f"argument '{conflict}' conflicts with reserved context parameter '{conflict}'. "
+            "Rename the hook argument; context parameters are injected by SQLBuild."
+        )
+
+    provider_conflicts: tuple[str, ...] = tuple(
+        sorted(kwarg_name for kwarg_name in hook_entry.kwargs if kwarg_name in provider_names)
+    )
+    if provider_conflicts:
+        conflict = provider_conflicts[0]
+        raise CompileInputError(
+            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
+            f"argument '{conflict}' conflicts with provider injection for parameter "
+            f"'{conflict}'. Rename the hook argument or remove it to let SQLBuild inject "
+            "the provider."
+        )
 
     unknown_kwargs: tuple[str, ...] = tuple(
         sorted(
@@ -2535,6 +2568,7 @@ def validate_python_hook_signature(
         if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
         and parameter.default is Parameter.empty
         and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
+        and parameter.name not in provider_names
         and parameter.name not in hook_entry.kwargs
     )
     if missing_kwargs:

@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.virtual.executor.helpers.build import run_virtual_build as _run_virtual_build
@@ -53,6 +54,7 @@ def run_virtual_build(
     on_connection_error: Callable[[int, float], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    providers: ProviderContainer | None = None,
 ) -> VirtualBuildPipelineResult:
     """Execute a virtual-mode build."""
 
@@ -88,4 +90,5 @@ def run_virtual_build(
         on_connection_error=on_connection_error,
         on_progress=on_progress,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        providers=providers,
     )

@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
+    PlanProviderUsage,
     PlanWarning,
     SchemaFinding,
     SourceLoadPlanEntry,
@@ -112,6 +113,13 @@ def format_plan(
         plan,
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
+    )
+    _format_provider_usages(
+        lines,
+        plan=plan,
+        python_plan_entries=python_plan_entries,
+        display_options=resolved_display_options,
+        section_header_style=resolved_section_header_style,
     )
 
     _format_python_plan_entries(
@@ -250,6 +258,14 @@ def _format_full_refresh(
             )
         )
 
+    _format_provider_usages(
+        lines,
+        plan=plan,
+        python_plan_entries=python_plan_entries,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+
     _format_python_plan_entries(
         lines,
         entries=_python_plan_entries_for_phase(python_plan_entries, PythonRunPhase.PRE_SQL_INGRESS),
@@ -340,6 +356,89 @@ def _python_plan_entries_for_phase(
     entries: tuple[PythonPlanEntry, ...], phase: PythonRunPhase
 ) -> tuple[PythonPlanEntry, ...]:
     return tuple(entry for entry in entries if entry.phase == phase)
+
+
+def _format_provider_usages(
+    lines: list[str],
+    *,
+    plan: PlanOutput,
+    python_plan_entries: tuple[PythonPlanEntry, ...],
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    usages: tuple[PlanProviderUsage, ...] = _all_provider_usages(
+        plan=plan,
+        python_plan_entries=python_plan_entries,
+    )
+    if not usages:
+        return
+    usage_by_provider: dict[str, list[PlanProviderUsage]] = {}
+    usage: PlanProviderUsage
+    for usage in usages:
+        usage_by_provider.setdefault(usage.provider_name, []).append(usage)
+    lines.append("")
+    lines.append(section_header_style("Providers"))
+    verbose: bool = display_options.max_entries_per_section is None
+    provider_names: list[str] = sorted(usage_by_provider)
+    style: CliStyle = CliStyle(use_color=True)
+    if not verbose:
+        provider_width: int = max(len(name) for name in provider_names)
+        for provider_name in provider_names:
+            count: int = len(usage_by_provider[provider_name])
+            surface_word: str = "surface" if count == 1 else "surfaces"
+            padding: str = " " * max(0, provider_width - len(provider_name))
+            lines.append(
+                f"  {style.object_name(provider_name)}{padding}  "
+                f"{style.muted(f'used by {count} selected Python {surface_word}')}"
+            )
+        return
+    for provider_name in provider_names:
+        lines.append(f"  {style.object_name(provider_name)}")
+        provider_usages: list[PlanProviderUsage] = sorted(
+            usage_by_provider[provider_name],
+            key=lambda item: (item.consumer_kind, item.consumer_name, item.parameter_name),
+        )
+        visible: Sequence[PlanProviderUsage] = visible_entries(
+            provider_usages,
+            options=display_options,
+        )
+        for usage in visible:
+            annotation: str = (
+                f" ({usage.annotation_class_name})"
+                if usage.annotation_class_name is not None
+                else ""
+            )
+            lines.append(
+                f"    {style.muted(usage.consumer_kind)} "
+                f"{style.object_name(usage.consumer_name)}{annotation}"
+            )
+        append_overflow_line(
+            lines,
+            total_count=len(provider_usages),
+            visible_count=len(visible),
+            indent="    ",
+            options=display_options,
+        )
+
+
+def _all_provider_usages(
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...]
+) -> tuple[PlanProviderUsage, ...]:
+    usages: list[PlanProviderUsage] = list(plan.provider_usages)
+    python_entry: PythonPlanEntry
+    for python_entry in python_plan_entries:
+        usages.extend(
+            PlanProviderUsage(
+                provider_name=provider_usage.provider_name,
+                consumer_kind=python_entry.kind.value,
+                consumer_name=python_entry.name,
+                parameter_name=provider_usage.parameter_name,
+                annotation_class_name=provider_usage.annotation_class_name,
+                annotation_module=provider_usage.annotation_module,
+            )
+            for provider_usage in python_entry.provider_usages
+        )
+    return tuple(usages)
 
 
 def _format_python_plan_entries(

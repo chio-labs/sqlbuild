@@ -6,8 +6,15 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
-from sqlbuild.compiler.discovery.helpers.filesystem import discover_hook_functions
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.discovery.helpers.filesystem import (
+    discover_hook_functions,
+    discover_provider_classes,
+)
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredHookFunction,
+    DiscoveredProvider,
+    DiscoveredProviderUsage,
+)
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     DiscoverHookFunctionsErrorTestCase,
     DiscoverHookFunctionsTestCase,
@@ -193,6 +200,61 @@ def test_given_hook_files_when_discovering_then_returns_decorated_hooks(
     assert (
         tmp_path / "hooks" / "executed.marker"
     ).is_file() is test_case.expected_marker_file_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverHookFunctionsTestCase(
+            description="records hook provider usage metadata",
+            repo_files={
+                "providers/marker.py": """
+from sqlbuild.providers import Provider
+
+
+class MarkerProvider(Provider):
+    pass
+""".strip()
+                + "\n",
+                "hooks/marker.py": """
+from providers.marker import MarkerProvider
+from sqlbuild.hooks import hook
+
+
+@hook
+def mark(ctx, marker_provider: MarkerProvider):
+    return None
+""".strip()
+                + "\n",
+            },
+            expected_hook_names=("mark",),
+            expected_hook_paths=("hooks/marker.py",),
+            expected_hook_descriptions=(None,),
+            expected_function_names=("mark",),
+        )
+    ],
+    ids=["records hook provider usage metadata"],
+)
+def test_given_hook_provider_parameter_when_discovering_then_records_provider_usage(
+    test_case: DiscoverHookFunctionsTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+    providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(project_dir=tmp_path)
+
+    hooks: tuple[DiscoveredHookFunction, ...] = discover_hook_functions(
+        project_dir=tmp_path,
+        providers=providers,
+    )
+
+    assert tuple(hook.name for hook in hooks) == test_case.expected_hook_names
+    assert len(hooks[0].provider_usages) == 1
+    usage: DiscoveredProviderUsage = hooks[0].provider_usages[0]
+    assert usage.provider_name == "marker_provider"
+    assert usage.parameter_name == "marker_provider"
+    assert usage.annotation_class_name == "MarkerProvider"
+    assert usage.annotation_module == "providers.marker"
 
 
 ERROR_TEST_CASES: tuple[DiscoverHookFunctionsErrorTestCase, ...] = (

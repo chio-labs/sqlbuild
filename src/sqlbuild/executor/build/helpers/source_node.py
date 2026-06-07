@@ -15,6 +15,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -39,6 +40,7 @@ def execute_build_source_node(
     on_progress: Callable[[str], None] | None,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     use_color: bool = False,
+    providers: ProviderContainer | None = None,
 ) -> LoadExecutionResult:
     """Execute one source-load node from the build scheduler."""
 
@@ -76,6 +78,7 @@ def execute_build_source_node(
         use_color=use_color,
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
+        providers=providers,
     )
     duration: int = int((time.monotonic() - start) * 1000)
     return dataclasses.replace(result, duration_ms=duration)

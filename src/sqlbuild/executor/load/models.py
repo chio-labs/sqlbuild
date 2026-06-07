@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -100,6 +101,7 @@ class LoaderContext:
     end_cursor_int: int | None = None
     loader_refs: Mapping[Callable[..., object], LoaderRelationRef] = field(default_factory=dict)
     source_refs: Mapping[str, LoaderRelationRef] = field(default_factory=dict)
+    providers: ProviderContainer = field(default_factory=_empty_provider_container)
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)

@@ -38,6 +38,39 @@ FORMAT_CODED_ERROR_TEST_CASES: list[FormatCodedErrorTestCase] = [
             "  \033[2m= help:\033[0m fix failing audit rows"
         ),
     ),
+    FormatCodedErrorTestCase(
+        description="renders multiline coded error without color unchanged",
+        code="D012",
+        message=(
+            "Provider 'slack_provider' in providers/slack.py has invalid settings:\n"
+            "1 validation error for SlackProvider\n"
+            "SLACK_TOKEN"
+        ),
+        help=None,
+        use_color=False,
+        expected_rendered=(
+            "error[D012]: Provider 'slack_provider' in providers/slack.py has invalid settings:\n"
+            "1 validation error for SlackProvider\n"
+            "SLACK_TOKEN"
+        ),
+    ),
+    FormatCodedErrorTestCase(
+        description="renders multiline coded error with muted continuation lines",
+        code="D012",
+        message=(
+            "Provider 'slack_provider' in providers/slack.py has invalid settings:\n"
+            "1 validation error for SlackProvider\n"
+            "SLACK_TOKEN"
+        ),
+        help=None,
+        use_color=True,
+        expected_rendered=(
+            "\033[31m\033[1merror[D012]:\033[0m "
+            "Provider 'slack_provider' in providers/slack.py has invalid settings:\n"
+            "\033[2m1 validation error for SlackProvider\033[0m\n"
+            "\033[2mSLACK_TOKEN\033[0m"
+        ),
+    ),
 ]
 
 

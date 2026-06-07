@@ -31,8 +31,18 @@ def format_coded_error(
 
     style: CliStyle = CliStyle(use_color=use_color)
     prefix: str = style.error_strong(f"error[{code}]:")
-    rendered: str = f"{prefix} {message}"
+    rendered_message: str = _format_error_message(message=message, style=style)
+    rendered: str = f"{prefix} {rendered_message}"
     if help is not None:
         help_label: str = style.muted("= help:")
         rendered = f"{rendered}\n  {help_label} {help}"
     return rendered
+
+
+def _format_error_message(*, message: str, style: CliStyle) -> str:
+    lines: list[str] = message.split("\n")
+    if len(lines) == 1:
+        return message
+    first_line: str = lines[0]
+    continuation_lines: list[str] = [style.muted(line) for line in lines[1:]]
+    return "\n".join([first_line, *continuation_lines])

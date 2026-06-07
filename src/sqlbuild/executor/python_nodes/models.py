@@ -19,6 +19,7 @@ from sqlbuild.compiler.python_nodes.types import (
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
@@ -202,6 +203,7 @@ class BasePythonNodeContext:
     default_schema: str | None = None
     relation_targets: dict[SqlResourceRef, str] = field(default_factory=dict)
     allowed_sql_refs: frozenset[SqlResourceRef] = frozenset()
+    providers: ProviderContainer = field(default_factory=_empty_provider_container)
     use_color: bool = False
     start_cursor_ts: datetime | None = None
     end_cursor_ts: datetime | None = None

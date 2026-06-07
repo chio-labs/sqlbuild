@@ -27,6 +27,8 @@ class ConcurrentBuildTestCase:
     setup_sql: tuple[str, ...] = field(default_factory=tuple)
     run_audits: bool = True
     fail_fast: bool = False
+    use_provider_session: bool = False
+    expected_marker_entries: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

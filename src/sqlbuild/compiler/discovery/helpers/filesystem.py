@@ -10,11 +10,15 @@ from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
+from typing import get_type_hints
+
+from pydantic import ValidationError
 
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import (
     LoaderDiscoveryError,
+    ProviderDiscoveryError,
     PythonNodeDiscoveryError,
     SchemaParseError,
 )
@@ -39,6 +43,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
+    DiscoveredProvider,
+    DiscoveredProviderUsage,
     DiscoveredPythonFunctionFile,
     DiscoveredPythonNodeFunctions,
     DiscoveredSchemaFile,
@@ -58,6 +64,8 @@ from sqlbuild.compiler.shared.constants import (
 from sqlbuild.factories import get_factory_definition
 from sqlbuild.hooks import get_hook_definition
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
+from sqlbuild.provider.exceptions import ProviderInputError
+from sqlbuild.providers import Provider
 from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
@@ -344,7 +352,7 @@ def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...
 
 
 def discover_materialization_files(
-    *, project_dir: Path
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
 ) -> tuple[DiscoveredMaterializationFile, ...]:
     """Discover custom materialization Python files under materializations/."""
 
@@ -352,45 +360,80 @@ def discover_materialization_files(
     if not materializations_root.is_dir():
         return ()
 
-    return tuple(
-        DiscoveredMaterializationFile(
+    provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
+    discovered_files: list[DiscoveredMaterializationFile] = []
+    file_path: Path
+    for file_path in sorted(materializations_root.rglob("*.py")):
+        if file_path.stem == "__init__":
+            continue
+        materialize_fn: Callable[..., object] | None = _load_materialize_function(
             file_path=file_path,
-            relative_path=file_path.relative_to(project_dir),
-            name=file_path.stem,
+            project_dir=project_dir,
         )
-        for file_path in sorted(materializations_root.rglob("*.py"))
-        if file_path.stem != "__init__"
+        discovered_files.append(
+            DiscoveredMaterializationFile(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                name=file_path.stem,
+                provider_usages=(
+                    _provider_usages(function=materialize_fn, provider_by_name=provider_by_name)
+                    if materialize_fn is not None
+                    else ()
+                ),
+            )
+        )
+    return tuple(discovered_files)
+
+
+def discover_loader_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> tuple[DiscoveredLoaderFunction, ...]:
+    """Discover decorated source loader functions under loaders/."""
+
+    return tuple(
+        _discover_python_node_functions(project_dir=project_dir, providers=providers).loaders
     )
 
 
-def discover_loader_functions(*, project_dir: Path) -> tuple[DiscoveredLoaderFunction, ...]:
-    """Discover decorated source loader functions under loaders/."""
-
-    return tuple(_discover_python_node_functions(project_dir=project_dir).loaders)
-
-
-def discover_task_functions(*, project_dir: Path) -> tuple[DiscoveredTaskFunction, ...]:
+def discover_task_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> tuple[DiscoveredTaskFunction, ...]:
     """Discover decorated task functions under tasks/."""
 
-    return tuple(_discover_python_node_functions(project_dir=project_dir).tasks)
+    return tuple(
+        _discover_python_node_functions(project_dir=project_dir, providers=providers).tasks
+    )
 
 
-def discover_asset_functions(*, project_dir: Path) -> tuple[DiscoveredAssetFunction, ...]:
+def discover_asset_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> tuple[DiscoveredAssetFunction, ...]:
     """Discover decorated asset functions under assets/."""
 
-    return tuple(_discover_python_node_functions(project_dir=project_dir).assets)
+    return tuple(
+        _discover_python_node_functions(project_dir=project_dir, providers=providers).assets
+    )
 
 
-def discover_check_functions(*, project_dir: Path) -> tuple[DiscoveredCheckFunction, ...]:
+def discover_check_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> tuple[DiscoveredCheckFunction, ...]:
     """Discover decorated check functions under checks/."""
 
-    return tuple(_discover_python_node_functions(project_dir=project_dir).checks)
+    return tuple(
+        _discover_python_node_functions(project_dir=project_dir, providers=providers).checks
+    )
 
 
-def discover_python_node_functions(*, project_dir: Path) -> DiscoveredPythonNodeFunctions:
+def discover_python_node_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> DiscoveredPythonNodeFunctions:
     """Discover decorated Python DAG node functions under node folders."""
 
-    bucket: _PythonNodeDiscoveryBucket = _discover_python_node_functions(project_dir=project_dir)
+    bucket: _PythonNodeDiscoveryBucket = _discover_python_node_functions(
+        project_dir=project_dir,
+        providers=providers,
+    )
     return DiscoveredPythonNodeFunctions(
         loaders=tuple(bucket.loaders),
         tasks=tuple(bucket.tasks),
@@ -399,7 +442,9 @@ def discover_python_node_functions(*, project_dir: Path) -> DiscoveredPythonNode
     )
 
 
-def discover_hook_functions(*, project_dir: Path) -> tuple[DiscoveredHookFunction, ...]:
+def discover_hook_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> tuple[DiscoveredHookFunction, ...]:
     """Discover decorated model lifecycle hook functions under hooks/."""
 
     hooks_root: Path = project_dir / "hooks"
@@ -408,6 +453,7 @@ def discover_hook_functions(*, project_dir: Path) -> tuple[DiscoveredHookFunctio
 
     discovered_hooks: list[DiscoveredHookFunction] = []
     seen_names: dict[str, Path] = {}
+    provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
     file_path: Path
     for file_path in sorted(hooks_root.rglob("*.py")):
         if file_path.stem == "__init__" or file_path.name.startswith("_"):
@@ -438,13 +484,149 @@ def discover_hook_functions(*, project_dir: Path) -> tuple[DiscoveredHookFunctio
                     name=hook_definition.name,
                     function=value,
                     description=hook_definition.description,
+                    provider_usages=_provider_usages(
+                        function=value,
+                        provider_by_name=provider_by_name,
+                    ),
                 )
             )
     return tuple(discovered_hooks)
 
 
-def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscoveryBucket:
+def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:
+    """Discover provider classes under providers/."""
+
+    providers_root: Path = project_dir / "providers"
+    if not providers_root.is_dir():
+        return ()
+
+    discovered_providers: list[DiscoveredProvider] = []
+    seen_names: dict[str, Path] = {}
+    file_path: Path
+    for file_path in sorted(providers_root.rglob("*.py")):
+        if file_path.stem == "__init__" or file_path.name.startswith("_"):
+            continue
+        module: ModuleType = _load_provider_module(file_path=file_path, project_dir=project_dir)
+        for _, value in inspect.getmembers(module, inspect.isclass):
+            if value.__module__ != module.__name__:
+                continue
+            if value is Provider or not issubclass(value, Provider) or inspect.isabstract(value):
+                continue
+            provider_class: type[Provider] = value
+            provider_name: str = _provider_name(
+                provider_class=provider_class,
+                file_path=file_path,
+                project_dir=project_dir,
+            )
+            existing_path: Path | None = seen_names.get(provider_name)
+            if existing_path is not None:
+                raise ProviderDiscoveryError(
+                    f"Duplicate provider name '{provider_name}' found in "
+                    f"{existing_path.relative_to(project_dir)} and "
+                    f"{file_path.relative_to(project_dir)}"
+                )
+            seen_names[provider_name] = file_path
+            discovered_providers.append(
+                DiscoveredProvider(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=provider_name,
+                    provider_class=provider_class,
+                    settings=_provider_instance(
+                        provider_class=provider_class,
+                        provider_name=provider_name,
+                        file_path=file_path,
+                        project_dir=project_dir,
+                    ),
+                )
+            )
+    return tuple(discovered_providers)
+
+
+def _provider_name(*, provider_class: type[Provider], file_path: Path, project_dir: Path) -> str:
+    try:
+        return provider_class.name()
+    except ProviderInputError as error:
+        raise ProviderDiscoveryError(
+            f"Provider class {provider_class.__name__} in {file_path.relative_to(project_dir)} "
+            f"has an invalid provider name: {error}"
+        ) from error
+
+
+def _provider_instance(
+    *, provider_class: type[Provider], provider_name: str, file_path: Path, project_dir: Path
+) -> Provider:
+    try:
+        return provider_class()
+    except ValidationError as error:
+        relative_path: Path = file_path.relative_to(project_dir)
+        raise ProviderDiscoveryError(
+            f"Provider '{provider_name}' in {relative_path} has invalid settings:\n"
+            f"{_format_provider_validation_error(error)}"
+        ) from error
+
+
+def _format_provider_validation_error(error: ValidationError) -> str:
+    details: list[str] = []
+    for item in error.errors(include_input=False):
+        location: object = item.get("loc", ())
+        location_text: str = ".".join(str(part) for part in location) if location else "<root>"
+        message: object = item.get("msg", "invalid value")
+        error_type: object = item.get("type", "validation_error")
+        details.append(f"{location_text}: {message} [{error_type}]")
+    return "\n".join(details) or "invalid provider settings"
+
+
+def _provider_by_name(providers: tuple[DiscoveredProvider, ...]) -> dict[str, DiscoveredProvider]:
+    return {provider.name: provider for provider in providers}
+
+
+def _provider_usages(
+    *, function: Callable[..., object], provider_by_name: dict[str, DiscoveredProvider]
+) -> tuple[DiscoveredProviderUsage, ...]:
+    try:
+        type_hints: dict[str, object] = get_type_hints(function)
+    except TypeError:
+        type_hints = {}
+    usages: list[DiscoveredProviderUsage] = []
+    parameter: inspect.Parameter
+    for parameter in inspect.signature(function).parameters.values():
+        discovered_provider: DiscoveredProvider | None = provider_by_name.get(parameter.name)
+        if discovered_provider is None:
+            continue
+        annotation: object = type_hints.get(parameter.name, parameter.annotation)
+        annotation_class_name: str | None = None
+        annotation_module: str | None = None
+        if isinstance(annotation, type) and issubclass(annotation, Provider):
+            annotation_class_name = annotation.__name__
+            annotation_module = annotation.__module__
+        usages.append(
+            DiscoveredProviderUsage(
+                provider_name=discovered_provider.name,
+                parameter_name=parameter.name,
+                annotation_class_name=annotation_class_name,
+                annotation_module=annotation_module,
+            )
+        )
+    return tuple(usages)
+
+
+def _load_materialize_function(
+    *, file_path: Path, project_dir: Path
+) -> Callable[..., object] | None:
+    module: ModuleType = _load_materialization_module(
+        file_path=file_path,
+        project_dir=project_dir,
+    )
+    materialize_fn: object = getattr(module, "materialize", None)
+    return materialize_fn if callable(materialize_fn) else None
+
+
+def _discover_python_node_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> _PythonNodeDiscoveryBucket:
     bucket: _PythonNodeDiscoveryBucket = _PythonNodeDiscoveryBucket()
+    provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
     node_folder: str
     for node_folder in _PYTHON_NODE_FACTORY_FOLDERS:
         node_root: Path = project_dir / node_folder
@@ -469,6 +651,7 @@ def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscover
                 file_path=file_path,
                 project_dir=project_dir,
                 node_folder=node_folder,
+                provider_by_name=provider_by_name,
             )
     return bucket
 
@@ -480,6 +663,7 @@ def _append_module_python_nodes(
     file_path: Path,
     project_dir: Path,
     node_folder: str,
+    provider_by_name: dict[str, DiscoveredProvider],
 ) -> None:
     if node_folder != "factories":
         for _, value in inspect.getmembers(module, inspect.isfunction):
@@ -491,6 +675,7 @@ def _append_module_python_nodes(
                 file_path=file_path,
                 project_dir=project_dir,
                 expected_kind=_PYTHON_NODE_KIND_BY_FOLDER.get(node_folder),
+                provider_by_name=provider_by_name,
             )
     for _, value in inspect.getmembers(module, inspect.isfunction):
         if value.__module__ != module.__name__:
@@ -514,6 +699,7 @@ def _append_module_python_nodes(
                 project_dir=project_dir,
                 expected_kind=_PYTHON_NODE_KIND_BY_FOLDER.get(node_folder),
                 factory_definition=factory_definition,
+                provider_by_name=provider_by_name,
             ):
                 raise PythonNodeDiscoveryError(
                     f"Factory '{factory_definition.name}' in "
@@ -530,7 +716,9 @@ def _append_python_node_function(
     project_dir: Path,
     expected_kind: str | None = None,
     factory_definition: FactoryDefinition | None = None,
+    provider_by_name: dict[str, DiscoveredProvider] | None = None,
 ) -> bool:
+    resolved_provider_by_name: dict[str, DiscoveredProvider] = provider_by_name or {}
     loader_definition: LoaderDefinition | None = get_loader_definition(function)
     if loader_definition is not None:
         _validate_python_node_kind(
@@ -554,6 +742,10 @@ def _append_python_node_function(
                 unique_key=loader_definition.unique_key,
                 columns=loader_definition.columns,
                 contract=loader_definition.contract,
+                provider_usages=_provider_usages(
+                    function=function,
+                    provider_by_name=resolved_provider_by_name,
+                ),
             )
         )
         return True
@@ -579,6 +771,10 @@ def _append_python_node_function(
                 description=task_definition.description,
                 meta=task_definition.meta,
                 retry=task_definition.retry,
+                provider_usages=_provider_usages(
+                    function=function,
+                    provider_by_name=resolved_provider_by_name,
+                ),
             )
         )
         return True
@@ -606,6 +802,10 @@ def _append_python_node_function(
                 columns=asset_definition.columns,
                 column_lineage=asset_definition.column_lineage,
                 retry=asset_definition.retry,
+                provider_usages=_provider_usages(
+                    function=function,
+                    provider_by_name=resolved_provider_by_name,
+                ),
             )
         )
         return True
@@ -631,6 +831,10 @@ def _append_python_node_function(
                 group=check_definition.group,
                 description=check_definition.description,
                 meta=check_definition.meta,
+                provider_usages=_provider_usages(
+                    function=function,
+                    provider_by_name=resolved_provider_by_name,
+                ),
             )
         )
         return True
@@ -757,6 +961,80 @@ def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder:
     except Exception as error:
         raise PythonNodeDiscoveryError(
             f"Failed to import Python node file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return module
+
+
+def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    _evict_stale_project_package_modules(
+        root_module=module_name.split(".", maxsplit=1)[0],
+        project_dir=project_dir,
+    )
+    existing_module: ModuleType | None = sys.modules.get(module_name)
+    if existing_module is not None:
+        existing_file: object = getattr(existing_module, "__file__", None)
+        if isinstance(existing_file, str) and Path(existing_file).resolve() == file_path.resolve():
+            return existing_module
+        sys.modules.pop(module_name, None)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ProviderDiscoveryError(f"Could not load provider file {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise ProviderDiscoveryError(
+            f"Failed to import provider file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return module
+
+
+def _evict_stale_project_package_modules(*, root_module: str, project_dir: Path) -> None:
+    root_path: Path = (project_dir / root_module).resolve()
+    module_name: str
+    module: ModuleType
+    for module_name, module in tuple(sys.modules.items()):
+        if module_name != root_module and not module_name.startswith(f"{root_module}."):
+            continue
+        module_file: object = getattr(module, "__file__", None)
+        if isinstance(module_file, str):
+            try:
+                Path(module_file).resolve().relative_to(project_dir.resolve())
+                continue
+            except ValueError:
+                sys.modules.pop(module_name, None)
+                continue
+        module_paths: object = getattr(module, "__path__", None)
+        if module_paths is None:
+            sys.modules.pop(module_name, None)
+            continue
+        if any(Path(path).resolve() == root_path for path in module_paths):
+            continue
+        sys.modules.pop(module_name, None)
+
+
+def _load_materialization_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise PythonNodeDiscoveryError(f"Could not load materialization file {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise PythonNodeDiscoveryError(
+            f"Failed to import materialization file {file_path.relative_to(project_dir)}: {error}"
         ) from error
     finally:
         sys.path = old_path

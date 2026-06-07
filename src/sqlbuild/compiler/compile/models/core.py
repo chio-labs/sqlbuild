@@ -18,6 +18,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
+    DiscoveredMaterializationFile,
     DiscoveredProjectInputs,
     DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
@@ -398,5 +399,6 @@ class CompiledProject:
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None

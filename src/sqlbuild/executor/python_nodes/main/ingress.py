@@ -13,6 +13,7 @@ from sqlbuild.executor.python_nodes.helpers.ingress_execution import (
     execute_ingress_python_loader_nodes,
 )
 from sqlbuild.executor.python_nodes.models import PythonIngressLoaderExecutorResult
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -41,6 +42,7 @@ def run_ingress_python_loader_nodes(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     relation_targets: dict[SqlResourceRef, str] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> PythonIngressLoaderExecutorResult:
     """Execute Python ingress task/asset/loader nodes in lifecycle order."""
 
@@ -66,4 +68,5 @@ def run_ingress_python_loader_nodes(
         on_node_start=on_node_start,
         on_node_complete=on_node_complete,
         relation_targets=relation_targets,
+        providers=providers,
     )

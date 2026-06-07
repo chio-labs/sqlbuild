@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
@@ -22,6 +22,11 @@ from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
@@ -46,6 +51,7 @@ def execute_custom_entry(
     on_progress: Callable[[str], None] | None = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
     effective_target_name: str | None = None,
+    providers: ProviderContainer | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
@@ -82,6 +88,7 @@ def execute_custom_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(
@@ -96,6 +103,7 @@ def execute_custom_entry(
 
     config_dict: dict[str, Any] = dict(entry.custom_config)
     placeholders_dict: dict[str, str] = dict(entry.custom_placeholders)
+    context_providers: ProviderContainer = providers or _empty_provider_container()
 
     run_audits_fn: Callable[[str], tuple[AuditExecutionResult, ...]] = _build_run_audits(
         model_audits=model_audits,
@@ -136,11 +144,17 @@ def execute_custom_entry(
         on_progress=on_progress,
         logger=logging.getLogger(f"sqlbuild.materialization.{entry.name}"),
         statement_recorder=statement_recorder,
+        providers=context_providers,
     )
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="custom"):
-            result: MaterializationResult = materialize_fn(ctx)
+            result: object = invoke_with_providers(
+                function=materialize_fn,
+                context=ctx,
+                providers=providers,
+            )
+            materialization_result: MaterializationResult = cast(MaterializationResult, result)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -151,21 +165,23 @@ def execute_custom_entry(
             statement_recorder=statement_recorder,
         )
 
-    if result.failed:
+    if materialization_result.failed:
         user_audit_results: list[AuditExecutionResult] = (
-            list(result.audit_results) if result.audit_results is not None else []
+            list(materialization_result.audit_results)
+            if materialization_result.audit_results is not None
+            else []
         )
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-            error=result.error or "custom materialization reported failure",
+            error=materialization_result.error or "custom materialization reported failure",
             warnings=warnings,
             audit_results=user_audit_results,
             statement_recorder=statement_recorder,
         )
 
-    if result.audit_results is not None:
-        audit_results.extend(result.audit_results)
+    if materialization_result.audit_results is not None:
+        audit_results.extend(materialization_result.audit_results)
     else:
         audit_error: bool = False
         audit: AuditPlanEntry
@@ -188,7 +204,7 @@ def execute_custom_entry(
             _cleanup_relations(
                 adapter=adapter,
                 connection=connection,
-                relations=result.cleanup_relations,
+                relations=materialization_result.cleanup_relations,
                 keep=True,
                 statement_recorder=statement_recorder,
             )
@@ -199,7 +215,7 @@ def execute_custom_entry(
                     f"final audit for '{entry.name}' failed after materialization "
                     "with severity level: error"
                 ),
-                promoted_relation=result.relation,
+                promoted_relation=materialization_result.relation,
                 warnings=warnings,
                 audit_results=audit_results,
                 statement_recorder=statement_recorder,
@@ -220,12 +236,13 @@ def execute_custom_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         _cleanup_relations(
             adapter=adapter,
             connection=connection,
-            relations=result.cleanup_relations,
+            relations=materialization_result.cleanup_relations,
             keep=True,
             statement_recorder=statement_recorder,
         )
@@ -233,7 +250,7 @@ def execute_custom_entry(
             entry=entry,
             phase=ExecutionPhase.POST_HOOK,
             error=str(exc),
-            promoted_relation=result.relation,
+            promoted_relation=materialization_result.relation,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -252,7 +269,7 @@ def execute_custom_entry(
     _cleanup_relations(
         adapter=adapter,
         connection=connection,
-        relations=result.cleanup_relations,
+        relations=materialization_result.cleanup_relations,
         keep=False,
         statement_recorder=statement_recorder,
     )
@@ -260,7 +277,7 @@ def execute_custom_entry(
     return ModelExecutionResult(
         model_name=entry.name,
         status=ExecutionStatus.SUCCESS,
-        promoted_relation=result.relation,
+        promoted_relation=materialization_result.relation,
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),

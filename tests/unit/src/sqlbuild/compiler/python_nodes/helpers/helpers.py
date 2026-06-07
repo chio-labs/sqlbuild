@@ -25,6 +25,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.providers import Provider
 from sqlbuild.refs import model, source
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
@@ -68,6 +69,14 @@ def export_orders(_ctx: object) -> None:
 
 def check_orders_export(_ctx: object) -> bool:
     return True
+
+
+class SlackProvider(Provider):
+    channel: str = "#alerts"
+
+
+def notify_orders(_ctx: object, slack_provider: SlackProvider) -> None:
+    return None
 
 
 def check_loaded_orders(_ctx: object) -> bool:

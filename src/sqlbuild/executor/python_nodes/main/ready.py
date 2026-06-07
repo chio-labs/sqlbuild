@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.executor.python_nodes.helpers.execution import execute_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 
 
@@ -33,6 +34,7 @@ def run_ready_python_node(
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
+    providers: ProviderContainer | None = None,
 ) -> PythonNodeExecutionResult:
     """Execute one scheduler-ready task/asset Python node."""
 
@@ -55,4 +57,5 @@ def run_ready_python_node(
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
+        providers=providers,
     )

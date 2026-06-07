@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -14,6 +13,11 @@ from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookR
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
@@ -32,6 +36,7 @@ def execute_hooks(
     effective_vars: Mapping[str, object] | None = None,
     statement_recorder: StatementRecorder | None = None,
     hook_results: list[HookExecutionResult] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> None:
     """Execute pre/post lifecycle hook entries."""
 
@@ -72,6 +77,7 @@ def execute_hooks(
             effective_vars=effective_vars,
             statement_recorder=statement_recorder,
             hook_results=hook_results,
+            providers=providers,
         )
         return
     if isinstance(hooks, list | tuple):
@@ -111,6 +117,7 @@ def execute_hooks(
                     effective_vars=effective_vars,
                     statement_recorder=statement_recorder,
                     hook_results=hook_results,
+                    providers=providers,
                 )
             else:
                 raise ExecutorInputError(
@@ -139,6 +146,7 @@ def invoke_python_hook(
     effective_vars: Mapping[str, object] | None,
     statement_recorder: StatementRecorder | None,
     hook_results: list[HookExecutionResult] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> None:
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
     hook_function: Callable[..., object] | None = _find_hook_function(
@@ -182,13 +190,15 @@ def invoke_python_hook(
         environment=environment,
         effective_vars=effective_vars or {},
         statement_recorder=statement_recorder or StatementRecorder(),
+        providers=providers or _empty_provider_container(),
     )
-    kwargs: dict[str, object] = dict(hook_entry.kwargs)
-    context_parameter_name: str | None = _context_parameter_name(hook_function)
-    if context_parameter_name is not None:
-        kwargs[context_parameter_name] = context
     try:
-        hook_function(**kwargs)
+        invoke_with_providers(
+            function=hook_function,
+            context=context,
+            providers=providers,
+            supplied_kwargs=dict(hook_entry.kwargs),
+        )
     except Exception as exc:
         error_message: str = f"{hook_label} failed: {exc}"
         _record_hook_result(
@@ -287,6 +297,7 @@ def build_hook_context(
     environment: str | None,
     effective_vars: Mapping[str, object],
     statement_recorder: StatementRecorder,
+    providers: ProviderContainer,
 ) -> HookContext:
     relation: HookRelation = HookRelation(
         name=destination.name,
@@ -308,6 +319,7 @@ def build_hook_context(
         adapter=adapter,
         connection=connection,
         statement_recorder=statement_recorder,
+        providers=providers,
     )
 
 
@@ -318,15 +330,6 @@ def _find_hook_function(
     for hook_function in hook_functions:
         if hook_function.name == name:
             return hook_function.function
-    return None
-
-
-def _context_parameter_name(hook_function: Callable[..., object]) -> str | None:
-    parameters: Mapping[str, inspect.Parameter] = inspect.signature(hook_function).parameters
-    context_parameter_name: str
-    for context_parameter_name in ("ctx", "context", "hook_context"):
-        if context_parameter_name in parameters:
-            return context_parameter_name
     return None
 
 

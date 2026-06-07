@@ -43,6 +43,7 @@ from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResu
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
     resolve_destination_qualified_name,
@@ -67,6 +68,7 @@ def execute_table_entry(
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
     effective_target_name: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> ModelExecutionResult:
     """Execute one table model through its full materialization lifecycle."""
 
@@ -146,6 +148,7 @@ def execute_table_entry(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(
@@ -184,6 +187,7 @@ def execute_table_entry(
             hook_functions=hook_functions,
             effective_target_name=effective_target_name,
             effective_vars=effective_vars,
+            providers=providers,
         )
 
     if entry.contract_enforced:
@@ -221,6 +225,7 @@ def execute_table_entry(
         hook_functions=hook_functions,
         effective_target_name=effective_target_name,
         effective_vars=effective_vars,
+        providers=providers,
     )
 
 
@@ -250,6 +255,7 @@ def _staged_lifecycle(
     hook_functions: tuple[DiscoveredHookFunction, ...],
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
+    providers: ProviderContainer | None,
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
@@ -445,6 +451,7 @@ def _staged_lifecycle(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(
@@ -499,6 +506,7 @@ def _direct_lifecycle(
     hook_functions: tuple[DiscoveredHookFunction, ...],
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
+    providers: ProviderContainer | None,
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
@@ -586,6 +594,7 @@ def _direct_lifecycle(
                 effective_vars=effective_vars,
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
+                providers=providers,
             )
     except Exception as exc:
         return build_failed_result(

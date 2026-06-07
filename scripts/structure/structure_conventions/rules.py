@@ -161,7 +161,9 @@ def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> l
         "models.py",
         "types.py",
         "constants.py",
+        "exceptions.py",
         "helpers.py",
+        "providers.py",
     }:
         return []
 
@@ -176,6 +178,54 @@ def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> l
             ),
         )
     ]
+
+
+def check_public_provider_module_shape(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Keep the public sqlbuild.providers module intentionally tiny."""
+
+    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if relative_parts != ("src", "sqlbuild", "providers.py"):
+        return []
+
+    violations: list[Violation] = []
+    public_class_names: list[str] = []
+    for node in _non_docstring_body(module):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        if isinstance(node, ast.ClassDef):
+            if node.name == "Provider":
+                public_class_names.append(node.name)
+                continue
+            violations.append(
+                Violation(
+                    code="SC042",
+                    path=file_path,
+                    line=node.lineno,
+                    message="src/sqlbuild/providers.py may only define the public Provider class",
+                )
+            )
+            continue
+        violations.append(
+            Violation(
+                code="SC042",
+                path=file_path,
+                line=getattr(node, "lineno", 1),
+                message="src/sqlbuild/providers.py may contain only imports and class Provider",
+            )
+        )
+
+    if public_class_names != ["Provider"]:
+        violations.append(
+            Violation(
+                code="SC042",
+                path=file_path,
+                line=1,
+                message="src/sqlbuild/providers.py must define exactly one public Provider class",
+            )
+        )
+    return violations
 
 
 def check_nested_runtime_package_direct_modules(
@@ -377,6 +427,32 @@ def check_classes_module_name(file_path: Path) -> list[Violation]:
             path=file_path,
             line=None,
             message="use a classes/ package instead of classes.py",
+        )
+    ]
+
+
+def check_classes_package_module_shape(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Require runtime classes/ modules to define exactly one class."""
+
+    relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if len(relative_parts) < 5 or relative_parts[:2] != ("src", "sqlbuild"):
+        return []
+    if "classes" not in relative_parts[2:-1] or file_path.name == "__init__.py":
+        return []
+
+    class_nodes: list[ast.ClassDef] = [
+        node for node in module.body if isinstance(node, ast.ClassDef)
+    ]
+    if len(class_nodes) == 1:
+        return []
+    return [
+        Violation(
+            code="SC043",
+            path=file_path,
+            line=1,
+            message="runtime classes/ modules must define exactly one class",
         )
     ]
 

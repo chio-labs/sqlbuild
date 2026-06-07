@@ -15,6 +15,7 @@ from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 
 
@@ -40,6 +41,7 @@ class ReadSidePythonExecutionTracker:
         end_cursor_ts: datetime | None = None,
         start_cursor_int: int | None = None,
         end_cursor_int: int | None = None,
+        providers: ProviderContainer | None = None,
     ) -> None:
         self._python_graph: PythonNodeGraph = python_graph
         self._selected_python_names: frozenset[str] = selected_python_names
@@ -59,6 +61,7 @@ class ReadSidePythonExecutionTracker:
         self._end_cursor_ts: datetime | None = end_cursor_ts
         self._start_cursor_int: int | None = start_cursor_int
         self._end_cursor_int: int | None = end_cursor_int
+        self._providers: ProviderContainer | None = providers
         self._completed_sql_names: set[str] = set()
         self._failed_sql_names: set[str] = set()
         self._completed_python_names: set[str] = set()
@@ -166,6 +169,7 @@ class ReadSidePythonExecutionTracker:
             end_cursor_ts=self._end_cursor_ts,
             start_cursor_int=self._start_cursor_int,
             end_cursor_int=self._end_cursor_int,
+            providers=self._providers,
         )
         self._run_state.record_result(node_function=node.function, result=result)
         self._results_by_name[node.name] = result

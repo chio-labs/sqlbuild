@@ -94,6 +94,12 @@ from sqlbuild.hooks import hook
 def notify_success(ctx):
     return None
 """,
+                "providers/slack.py": """
+from sqlbuild.providers import Provider
+
+class SlackProvider(Provider):
+    channel: str = "#alerts"
+""",
                 "target/manifest.json": '{"metadata": {"dbt_schema_version": "v12"}}\n',
                 "adapter.py": "class ExampleAdapter:\n    pass\n",
                 "sqlbuild_local.toml": 'target = "dev"\n',
@@ -130,6 +136,9 @@ def notify_success(ctx):
             expected_asset_names=("export_customers",),
             expected_check_names=("export_customers_exists",),
             expected_hook_names=("notify success",),
+            expected_provider_names=("slack_provider",),
+            expected_provider_paths=("providers/slack.py",),
+            expected_provider_class_names=("SlackProvider",),
         )
     ],
     ids=["discovers raw project inputs across authored project surfaces"],
@@ -261,6 +270,21 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert (
         tuple(hook_function.name for hook_function in discovered_inputs.hook_functions)
         == test_case.expected_hook_names
+    )
+    assert (
+        tuple(provider.name for provider in discovered_inputs.providers)
+        == test_case.expected_provider_names
+    )
+    assert (
+        tuple(str(provider.relative_path) for provider in discovered_inputs.providers)
+        == test_case.expected_provider_paths
+    )
+    assert (
+        tuple(provider.provider_class.__name__ for provider in discovered_inputs.providers)
+        == test_case.expected_provider_class_names
+    )
+    assert tuple(provider.settings.__class__ for provider in discovered_inputs.providers) == tuple(
+        provider.provider_class for provider in discovered_inputs.providers
     )
     assert (
         None

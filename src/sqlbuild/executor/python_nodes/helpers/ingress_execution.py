@@ -38,6 +38,7 @@ from sqlbuild.executor.shared.models.lifecycle_scheduler import (
     LifecycleSchedulerResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus, LifecycleNodeStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -66,6 +67,7 @@ def execute_ingress_python_loader_nodes(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
     on_node_complete: Callable[[object], None] | None = None,
     relation_targets: dict[SqlResourceRef, str] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> PythonIngressLoaderExecutorResult:
     """Execute Python ingress task/asset/loader nodes in lifecycle topological order."""
 
@@ -123,6 +125,7 @@ def execute_ingress_python_loader_nodes(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
             relation_targets=resolved_relation_targets,
+            providers=providers,
         ),
     )
     _record_scheduler_skips(
@@ -166,6 +169,7 @@ def _execute_ingress_lifecycle_node(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
     relation_targets: dict[SqlResourceRef, str],
+    providers: ProviderContainer | None,
 ) -> LifecycleNodeResult:
     discovered_node: DiscoveredPythonNode = python_graph.nodes_by_name[node.name]
     if discovered_node.kind == PythonNodeKind.LOADER:
@@ -189,6 +193,7 @@ def _execute_ingress_lifecycle_node(
             load_results_by_name=load_results_by_name,
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
+            providers=providers,
         )
     return _execute_ingress_python_node(
         node=discovered_node,
@@ -209,6 +214,7 @@ def _execute_ingress_lifecycle_node(
         run_state=run_state,
         python_results_by_name=python_results_by_name,
         relation_targets=relation_targets,
+        providers=providers,
     )
 
 
@@ -232,6 +238,7 @@ def _execute_ingress_python_node(
     run_state: PythonNodeRunState,
     python_results_by_name: dict[str, PythonNodeExecutionResult],
     relation_targets: dict[SqlResourceRef, str],
+    providers: ProviderContainer | None,
 ) -> LifecycleNodeResult:
     executable_node: ExecutablePythonNode = _to_executable_python_node(node)
     upstream_results: tuple[PythonNodeExecutionResult, ...] = tuple(
@@ -258,6 +265,7 @@ def _execute_ingress_python_node(
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
+        providers=providers,
     )
     run_state.record_result(node_function=executable_node.function, result=result)
     python_results_by_name[node.name] = result
@@ -285,6 +293,7 @@ def _execute_ingress_loader(
     load_results_by_name: dict[str, LoadExecutionResult],
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
+    providers: ProviderContainer | None,
 ) -> LifecycleNodeResult:
     loader: DiscoveredLoaderFunction | None = loader_by_name.get(node.name)
     if loader is None:
@@ -317,6 +326,7 @@ def _execute_ingress_loader(
             source_by_loader_name=source_by_loader_name,
         ),
         source_ref_entries=source_map,
+        providers=providers,
     )
     load_results_by_name[node.name] = result
     if on_node_complete is not None:
