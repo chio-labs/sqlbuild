@@ -152,6 +152,7 @@ def _build_polyglot_fast_model_column_lineage(
         parsed,
         physical_resources=physical_resources,
     )
+    unqualified_resource: _PhysicalResource | None = _single_alias_resource(alias_map)
     lineages: list[ColumnLineage] = []
     has_star: bool = False
     projections: tuple[Any, ...] = tuple(getattr(parsed, "expressions", ()))
@@ -176,6 +177,7 @@ def _build_polyglot_fast_model_column_lineage(
         upstream_columns, confidence = _polyglot_projection_upstream_columns(
             projection,
             alias_map=alias_map,
+            unqualified_resource=unqualified_resource,
         )
         transform_kind: ColumnTransformKind = _polyglot_classify_transform(
             inner,
@@ -252,6 +254,7 @@ def _polyglot_projection_upstream_columns(
     projection: Any,
     *,
     alias_map: dict[str, _PhysicalResource],
+    unqualified_resource: _PhysicalResource | None,
 ) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
     columns: list[ColumnLineageSource] = []
     seen: set[tuple[CompiledResourceType, str, str]] = set()
@@ -263,8 +266,8 @@ def _polyglot_projection_upstream_columns(
         resource: _PhysicalResource | None = None
         if table_name:
             resource = alias_map.get(table_name)
-        elif len({resource.resource_name for resource in alias_map.values()}) == 1:
-            resource = next(iter(alias_map.values()))
+        elif unqualified_resource is not None:
+            resource = unqualified_resource
             confidence = ColumnLineageConfidence.MEDIUM
         else:
             confidence = ColumnLineageConfidence.UNKNOWN
@@ -286,6 +289,17 @@ def _polyglot_projection_upstream_columns(
             )
         )
     return tuple(columns), confidence
+
+
+def _single_alias_resource(alias_map: dict[str, _PhysicalResource]) -> _PhysicalResource | None:
+    resource: _PhysicalResource | None = None
+    for candidate in alias_map.values():
+        if resource is None:
+            resource = candidate
+            continue
+        if candidate.resource_name != resource.resource_name:
+            return None
+    return resource
 
 
 def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str], ...]:
@@ -435,6 +449,7 @@ def _build_fast_model_column_lineage(
         physical_resources=physical_resources,
         exp=exp,
     )
+    unqualified_resource: _PhysicalResource | None = _single_alias_resource(alias_map)
     lineages: list[ColumnLineage] = []
     has_star: bool = False
     projections: tuple[Any, ...] = tuple(parsed.expressions)
@@ -457,6 +472,7 @@ def _build_fast_model_column_lineage(
         upstream_columns, confidence = _projection_upstream_columns(
             projection,
             alias_map=alias_map,
+            unqualified_resource=unqualified_resource,
             exp=exp,
         )
         transform_kind: ColumnTransformKind = _classify_fast_transform(
@@ -531,6 +547,7 @@ def _projection_upstream_columns(
     projection: Any,
     *,
     alias_map: dict[str, _PhysicalResource],
+    unqualified_resource: _PhysicalResource | None,
     exp: Any,
 ) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
     columns: list[ColumnLineageSource] = []
@@ -543,8 +560,8 @@ def _projection_upstream_columns(
         table_name: str = str(column.table or "")
         if table_name:
             resource = alias_map.get(table_name)
-        elif len({resource.resource_name for resource in alias_map.values()}) == 1:
-            resource = next(iter(alias_map.values()))
+        elif unqualified_resource is not None:
+            resource = unqualified_resource
             confidence = ColumnLineageConfidence.MEDIUM
         else:
             confidence = ColumnLineageConfidence.UNKNOWN

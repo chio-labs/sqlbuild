@@ -136,6 +136,7 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
     select_list_end: int | None = None
     in_quote: str | None = None
     length: int = len(sql)
+    has_union_candidate: bool = "union" in sql.lower()
     while index < length:
         character: str = sql[index]
         if in_quote is not None:
@@ -176,6 +177,8 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
                 and _keyword_at(sql, "FROM", index)
             ):
                 select_list_end = index
+                if not has_union_candidate:
+                    return select_list_start, select_list_end
         index += 1
     if select_list_start is None:
         return None
