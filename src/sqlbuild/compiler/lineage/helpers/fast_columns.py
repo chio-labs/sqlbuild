@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -63,11 +63,11 @@ def build_fast_project_column_lineage(
         )
         if result is None:
             result = _build_fast_model_column_lineage(
-            model,
-            schema=schema,
-            dialect=dialect,
-            sqlglot=sqlglot,
-            exp=exp,
+                model,
+                schema=schema,
+                dialect=dialect,
+                sqlglot=sqlglot,
+                exp=exp,
             )
         if result is None:
             continue
@@ -160,7 +160,9 @@ def _build_polyglot_fast_model_column_lineage(
         if bool(getattr(projection, "is_star", False)):
             has_star = True
             continue
-        inner: Any = projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+        inner: Any = (
+            projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+        )
         if bool(getattr(inner, "is_star", False)):
             has_star = True
             continue
@@ -254,18 +256,10 @@ def _polyglot_projection_upstream_columns(
     columns: list[ColumnLineageSource] = []
     seen: set[tuple[CompiledResourceType, str, str]] = set()
     confidence: ColumnLineageConfidence = ColumnLineageConfidence.HIGH
-    try:
-        column_nodes: tuple[Any, ...] = tuple(projection.find_all("column"))
-    except Exception:
-        return (), ColumnLineageConfidence.UNKNOWN
-    column: Any
-    for column in column_nodes:
-        if bool(getattr(column, "is_star", False)):
-            continue
-        column_name: str = str(getattr(column, "name", "") or "")
+    column_refs: tuple[tuple[str, str], ...] = _polyglot_column_refs_in_expression(projection)
+    for column_name, table_name in column_refs:
         if not column_name:
             continue
-        table_name: str = _polyglot_column_table_name(column)
         resource: _PhysicalResource | None = None
         if table_name:
             resource = alias_map.get(table_name)
@@ -294,6 +288,48 @@ def _polyglot_projection_upstream_columns(
     return tuple(columns), confidence
 
 
+def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str], ...]:
+    try:
+        payload: object = expression.to_dict()
+    except Exception:
+        return ()
+    refs: list[tuple[str, str]] = []
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            node_dict: dict[str, object] = cast(dict[str, object], node)
+            column_payload: object = node_dict.get("column")
+            if isinstance(column_payload, dict):
+                column_dict: dict[str, object] = cast(dict[str, object], column_payload)
+                column_name: str = _polyglot_name_payload_value(column_dict.get("name"))
+                table_payload: object = column_dict.get("table")
+                table_name: str = ""
+                if isinstance(table_payload, dict):
+                    table_dict: dict[str, object] = cast(dict[str, object], table_payload)
+                    table_name = _polyglot_name_payload_value(table_dict.get("name"))
+                refs.append((column_name, table_name))
+                return
+            for value in node_dict.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(payload)
+    return tuple(refs)
+
+
+def _polyglot_name_payload_value(payload: object) -> str:
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, dict):
+        payload_dict: dict[str, object] = cast(dict[str, object], payload)
+        name: object = payload_dict.get("name")
+        if isinstance(name, str):
+            return name
+    return ""
+
+
 def _polyglot_column_table_name(column: Any) -> str:
     try:
         payload: object = column.to_dict().get("column", {})
@@ -306,6 +342,39 @@ def _polyglot_column_table_name(column: Any) -> str:
         return ""
     raw_name: object = table_payload.get("name")
     return raw_name if isinstance(raw_name, str) else ""
+
+
+def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
+    if str(getattr(expression, "kind", "")) == "column":
+        return (expression,)
+    columns: list[Any] = []
+    seen: set[int] = set()
+
+    def visit(node: Any) -> None:
+        node_id: int = id(node)
+        if node_id in seen:
+            return
+        seen.add(node_id)
+        if str(getattr(node, "kind", "")) == "column":
+            columns.append(node)
+            return
+        for child in _polyglot_child_expressions(node):
+            visit(child)
+
+    visit(expression)
+    return tuple(columns)
+
+
+def _polyglot_child_expressions(expression: Any) -> tuple[Any, ...]:
+    children: list[Any] = []
+    for attr_name in ("this", "expression", "left", "right"):
+        child: Any | None = getattr(expression, attr_name, None)
+        if child is not None and str(getattr(child, "kind", "")):
+            children.append(child)
+    for child in getattr(expression, "expressions", ()) or ():
+        if str(getattr(child, "kind", "")):
+            children.append(child)
+    return tuple(children)
 
 
 def _polyglot_classify_transform(

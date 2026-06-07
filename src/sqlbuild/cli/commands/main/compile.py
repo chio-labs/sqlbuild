@@ -89,6 +89,7 @@ def run_compile(
     )
     lineage_ms: int = _elapsed_ms(lineage_start)
     contracts_start: float = time.monotonic()
+    contract_result: ContractValidationResult
     if profile_skip_contracts:
         contract_result = ContractValidationResult(diagnostics=())
     else:
@@ -135,6 +136,7 @@ def run_compile(
 
     write_start: float = time.monotonic()
     target_dir: Path = effective_project_dir / "target"
+    written: WrittenTarget
     if profile_skip_write:
         written = WrittenTarget(
             model_count=0,

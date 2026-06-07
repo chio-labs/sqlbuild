@@ -63,9 +63,7 @@ def validate_sql_syntax(
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
 
-    polyglot_error: str | None | bool = _validate_sql_with_polyglot(
-        cleaned_sql, dialect=dialect
-    )
+    polyglot_error: str | None | bool = _validate_sql_with_polyglot(cleaned_sql, dialect=dialect)
     if polyglot_error is None:
         return
     if isinstance(polyglot_error, str):
