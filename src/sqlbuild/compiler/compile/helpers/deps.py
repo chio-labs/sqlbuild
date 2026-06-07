@@ -22,6 +22,10 @@ def model_build_deps(
 ) -> tuple[CompiledObjectKey, ...]:
     """Return build graph dependencies implied by model SQL references."""
 
+    if not references:
+        return ()
+    if len(references) == 1:
+        return (_reference_dep(reference=references[0], seed_names=seed_names),)
     return _dedupe_object_keys(
         _reference_dep(reference=reference, seed_names=seed_names) for reference in references
     )
@@ -34,6 +38,10 @@ def function_build_deps(
 ) -> tuple[CompiledObjectKey, ...]:
     """Return build graph dependencies implied by function SQL references."""
 
+    if not references:
+        return ()
+    if len(references) == 1:
+        return (_reference_dep(reference=references[0], seed_names=seed_names),)
     return _dedupe_object_keys(
         _reference_dep(reference=reference, seed_names=seed_names) for reference in references
     )
@@ -72,6 +80,14 @@ def audit_scope_deps(
 def sql_test_scope_deps(*, expected_model_names: tuple[str, ...]) -> tuple[CompiledObjectKey, ...]:
     """Return model targets that select a SQL-native unit test."""
 
+    if not expected_model_names:
+        return ()
+    if len(expected_model_names) == 1:
+        return (
+            CompiledObjectKey(
+                resource_type=CompiledResourceType.MODEL, name=expected_model_names[0]
+            ),
+        )
     return _dedupe_object_keys(
         CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name)
         for model_name in expected_model_names
