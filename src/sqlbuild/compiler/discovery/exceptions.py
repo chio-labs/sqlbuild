@@ -85,3 +85,9 @@ class PythonNodeDiscoveryError(DiscoveryError):
     """Raised when project Python nodes cannot be discovered."""
 
     code: str = "D011"
+
+
+class ProviderDiscoveryError(DiscoveryError):
+    """Raised when project providers cannot be discovered."""
+
+    code: str = "D012"

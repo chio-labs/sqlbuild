@@ -112,6 +112,44 @@ class DiscoverHookFunctionsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverProviderClassesTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_provider_names: tuple[str, ...]
+    expected_provider_paths: tuple[str, ...]
+    expected_provider_class_names: tuple[str, ...]
+    expected_marker_file_exists: bool = False
+
+
+@dataclass(frozen=True)
+class DiscoverProviderClassesErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DiscoverProviderEnvSettingsTestCase:
+    description: str
+    repo_files: dict[str, str]
+    env_name: str
+    env_value: str
+    expected_provider_name: str
+    expected_field_name: str
+    expected_field_value: object
+
+
+@dataclass(frozen=True)
+class DiscoverProviderSecretErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    env_name: str
+    env_value: str
+    expected_error_fragment: str
+    expected_raw_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ParseModelSqlHeaderTestCase:
     description: str
     contents: str
