@@ -98,6 +98,31 @@ def provider_check(ctx: CheckContext, slack_provider: ExecutionSlackProvider) ->
     return ctx.target == "dev" and slack_provider.label == "slack"
 
 
+def context_provider_task(ctx: TaskContext) -> dict[str, object]:
+    return {
+        "attr": cast(ExecutionSlackProvider, ctx.providers.slack_provider).label,
+        "item": cast(ExecutionSlackProvider, ctx.providers["slack_provider"]).label,
+    }
+
+
+def context_provider_asset(ctx: AssetContext) -> dict[str, object]:
+    return {
+        "attr": cast(ExecutionSlackProvider, ctx.providers.slack_provider).label,
+        "item": cast(ExecutionSlackProvider, ctx.providers["slack_provider"]).label,
+    }
+
+
+def context_provider_check(ctx: CheckContext) -> bool:
+    return (
+        cast(ExecutionSlackProvider, ctx.providers.slack_provider).label == "slack"
+        and cast(ExecutionSlackProvider, ctx.providers["slack_provider"]).label == "slack"
+    )
+
+
+def missing_context_provider_task(ctx: TaskContext) -> object:
+    return ctx.providers["slack_provider"]
+
+
 def build_task_context(
     *,
     adapter: PythonNodeContextTestAdapter,

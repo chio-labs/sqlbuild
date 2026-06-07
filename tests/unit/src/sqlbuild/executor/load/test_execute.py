@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -202,6 +203,81 @@ def test_given_provider_parameter_when_executing_source_loader_then_provider_is_
     "test_case",
     [
         SourceLoadExecutionContextTestCase(
+            description="exposes providers on source loader context",
+            source_name="raw_orders",
+            loader_name="raw_orders_loader",
+            target_table="orders",
+            database=None,
+            schema=None,
+            run_id="run-123",
+            target="dev",
+            vars={},
+            is_reload=False,
+            start_cursor_ts=None,
+            end_cursor_ts=None,
+            start_cursor_int=None,
+            end_cursor_int=None,
+            expected_target="orders",
+            expected_current_cursor_value=None,
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_rows_loaded=0,
+        )
+    ],
+    ids=["exposes providers on source loader context"],
+)
+def test_given_provider_container_when_executing_source_loader_then_context_exposes_providers(
+    test_case: SourceLoadExecutionContextTestCase,
+) -> None:
+    observed_labels: list[str] = []
+
+    def raw_orders_loader(ctx: LoaderContext) -> None:
+        attr_provider: ExecutionSlackProvider = cast(
+            ExecutionSlackProvider, ctx.providers.slack_provider
+        )
+        item_provider: ExecutionSlackProvider = cast(
+            ExecutionSlackProvider, ctx.providers["slack_provider"]
+        )
+        observed_labels.append(f"{attr_provider.label}:{item_provider.label}")
+        return None
+
+    providers: ProviderContainer = ProviderSession(
+        {"slack_provider": ExecutionSlackProvider(label="slack")}
+    ).providers
+
+    result: LoadExecutionResult = execute_source_load(
+        source_entry=SourceEntry(
+            name=test_case.source_name,
+            table="__loader__raw_orders",
+            loader=test_case.loader_name,
+            meta={"sqlbuild_loader_node": True},
+        ),
+        loader_function=DiscoveredLoaderFunction(
+            file_path=Path("loaders/raw.py"),
+            relative_path=Path("loaders/raw.py"),
+            name=test_case.loader_name,
+            function=raw_orders_loader,
+            destination="staging_raw_orders",
+        ),
+        adapter=LoaderContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id=test_case.run_id,
+        target=test_case.target,
+        vars=test_case.vars,
+        is_reload=test_case.is_reload,
+        statement_recorder=StatementRecorder(),
+        providers=providers,
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.rows_loaded == test_case.expected_rows_loaded
+    assert tuple(observed_labels) == ("slack:slack",)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceLoadExecutionContextTestCase(
             description="normalizes missing provider container as source loader failure",
             source_name="raw_orders",
             loader_name="raw_orders_loader",
@@ -337,6 +413,84 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
     assert result.status == test_case.expected_status
     assert result.rows_loaded == test_case.expected_rows_loaded
     assert tuple(observed_labels) == ("None:analytics.raw.orders:slack",)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceLoadExecutionContextTestCase(
+            description="exposes providers on external source loader context",
+            source_name="raw_orders",
+            loader_name="raw_orders_loader",
+            target_table="orders",
+            database="analytics",
+            schema="raw",
+            run_id="run-123",
+            target="dev",
+            vars={},
+            is_reload=False,
+            start_cursor_ts=None,
+            end_cursor_ts=None,
+            start_cursor_int=None,
+            end_cursor_int=None,
+            expected_target="analytics.raw.orders",
+            expected_current_cursor_value=None,
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_rows_loaded=0,
+        )
+    ],
+    ids=["exposes providers on external source loader context"],
+)
+def test_given_provider_container_when_executing_external_loader_then_context_exposes_providers(
+    test_case: SourceLoadExecutionContextTestCase,
+) -> None:
+    observed_labels: list[str] = []
+
+    def raw_orders_loader(ctx: LoaderContext) -> None:
+        attr_provider: ExecutionSlackProvider = cast(
+            ExecutionSlackProvider, ctx.providers.slack_provider
+        )
+        item_provider: ExecutionSlackProvider = cast(
+            ExecutionSlackProvider, ctx.providers["slack_provider"]
+        )
+        observed_labels.append(
+            f"{ctx.connection}:{ctx.destination}:{attr_provider.label}:{item_provider.label}"
+        )
+        return None
+
+    providers: ProviderContainer = ProviderSession(
+        {"slack_provider": ExecutionSlackProvider(label="slack")}
+    ).providers
+
+    result: LoadExecutionResult = execute_source_load(
+        source_entry=SourceEntry(
+            name=test_case.source_name,
+            database=test_case.database,
+            schema=test_case.schema,
+            table=test_case.target_table,
+            loader=test_case.loader_name,
+        ),
+        loader_function=DiscoveredLoaderFunction(
+            file_path=Path("loaders/raw.py"),
+            relative_path=Path("loaders/raw.py"),
+            name=test_case.loader_name,
+            function=raw_orders_loader,
+            connection_mode=LoaderConnectionMode.EXTERNAL,
+        ),
+        adapter=LoaderContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id=test_case.run_id,
+        target=test_case.target,
+        vars=test_case.vars,
+        is_reload=test_case.is_reload,
+        statement_recorder=StatementRecorder(),
+        providers=providers,
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.rows_loaded == test_case.expected_rows_loaded
+    assert tuple(observed_labels) == ("None:analytics.raw.orders:slack:slack",)
 
 
 @pytest.mark.parametrize(

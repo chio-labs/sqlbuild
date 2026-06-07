@@ -26,6 +26,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     PythonNodeContextTestAdapter,
     build_python_check_graph,
     check_upstream_task,
+    context_provider_check,
     provider_check,
     python_check_function_for_case,
 )
@@ -141,6 +142,56 @@ def test_given_provider_parameter_when_executing_python_check_then_provider_is_i
         relative_path=Path(Path(__file__).name),
         name="provider_check",
         function=provider_check,
+        depends_on=(),
+    )
+    graph: PythonNodeGraph = build_python_check_graph(check_function=check_function)
+    providers: ProviderContainer = ProviderSession(
+        {"slack_provider": ExecutionSlackProvider(label="slack")}
+    ).providers
+
+    results: tuple[PythonCheckExecutionResult, ...] = execute_python_check_nodes(
+        check_functions=(check_function,),
+        python_graph=graph,
+        upstream_python_results=(),
+        upstream_load_results=(),
+        adapter=PythonNodeContextTestAdapter(),
+        connection_config={},
+        connection=object(),
+        run_id="run_1",
+        target="dev",
+        vars={},
+        is_reload=False,
+        run_state=PythonNodeRunState(),
+        providers=providers,
+    )
+
+    assert len(results) == 1
+    result: PythonCheckExecutionResult = results[0]
+    assert result.passed == test_case.expected_passed
+    assert result.severity == test_case.expected_severity
+    assert result.message == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonCheckExecutorTestCase(
+            description="exposes providers on check context",
+            expected_passed=True,
+            expected_severity=PythonCheckSeverity.ERROR,
+            expected_message=None,
+        )
+    ],
+    ids=["exposes providers on check context"],
+)
+def test_given_provider_container_when_executing_python_check_then_context_exposes_providers(
+    test_case: PythonCheckExecutorTestCase,
+) -> None:
+    check_function: DiscoveredCheckFunction = DiscoveredCheckFunction(
+        file_path=Path(__file__),
+        relative_path=Path(Path(__file__).name),
+        name="context_provider_check",
+        function=context_provider_check,
         depends_on=(),
     )
     graph: PythonNodeGraph = build_python_check_graph(check_function=check_function)

@@ -31,7 +31,11 @@ from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -165,6 +169,7 @@ def execute_source_load(
                 entries=source_ref_entries or {},
                 statement_recorder=statement_recorder,
             ),
+            providers=providers if providers is not None else _empty_provider_container(),
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,

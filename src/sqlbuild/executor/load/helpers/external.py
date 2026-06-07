@@ -12,7 +12,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.load.models import LoaderContext, LoaderSkipResult, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
+from sqlbuild.provider.main.runtime import (
+    ProviderContainer,
+    _empty_provider_container,
+    invoke_with_providers,
+)
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -62,6 +66,7 @@ def execute_external_source_load(
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
+            providers=providers if providers is not None else _empty_provider_container(),
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
