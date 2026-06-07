@@ -15,3 +15,7 @@ class ProviderSetupError(RuntimeError):
 
 class ProviderTeardownError(RuntimeError):
     """Raised when provider teardown fails."""
+
+
+class ProviderInjectionError(RuntimeError):
+    """Raised when a provider cannot be injected into a Python node call."""

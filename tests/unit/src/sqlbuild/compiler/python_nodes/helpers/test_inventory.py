@@ -11,6 +11,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredProvider,
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
@@ -24,10 +25,12 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers._test_types import (
     PythonNodeGraphInventoryTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
+    SlackProvider,
     check_orders_export,
     export_orders,
     imported_prepare_orders,
     load_events,
+    notify_orders,
     prepare_orders,
 )
 
@@ -41,11 +44,13 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
                 "load_events",
                 "prepare_orders",
                 "export_orders",
+                "notify_orders",
                 "check_orders_export",
             ),
             expected_kinds=(
                 PythonNodeKind.LOADER,
                 PythonNodeKind.TASK,
+                PythonNodeKind.ASSET,
                 PythonNodeKind.ASSET,
                 PythonNodeKind.CHECK,
             ),
@@ -53,6 +58,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
                 "loader:load_events",
                 "task:prepare_orders",
                 "asset:export_orders",
+                "asset:notify_orders",
                 "check:check_orders_export",
             ),
             expected_dependency_edges=(
@@ -63,6 +69,10 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
             expected_task_tags=("orders", "daily"),
             expected_asset_column_names=("order_id", "export_uri"),
             expected_check_severity="warn",
+            expected_provider_usage_names=("slack_provider",),
+            expected_provider_usage_parameters=("slack_provider",),
+            expected_provider_usage_annotation_classes=("SlackProvider",),
+            expected_provider_usage_annotation_modules=(SlackProvider.__module__,),
         )
     ],
     ids=["builds graph inventory across all executable Python node kinds"],
@@ -109,6 +119,13 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
                 ),
                 retry=retry,
             ),
+            DiscoveredAssetFunction(
+                file_path=Path("/project/assets/notifications.py"),
+                relative_path=Path("assets/notifications.py"),
+                name="notify_orders",
+                function=notify_orders,
+                meta={"provider_usages": "user-owned"},
+            ),
         ),
         check_functions=(
             DiscoveredCheckFunction(
@@ -118,6 +135,15 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
                 function=check_orders_export,
                 depends_on=(export_orders,),
                 severity=PythonCheckSeverity.WARN,
+            ),
+        ),
+        providers=(
+            DiscoveredProvider(
+                file_path=Path("/project/providers/slack.py"),
+                relative_path=Path("providers/slack.py"),
+                name="slack_provider",
+                provider_class=SlackProvider,
+                settings=SlackProvider(),
             ),
         ),
     )
@@ -151,3 +177,34 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
     check_node: DiscoveredPythonNode = graph.nodes_by_typed_selector["check:check_orders_export"]
     assert check_node.check is not None
     assert check_node.check.severity.value == test_case.expected_check_severity
+
+    notify_node: DiscoveredPythonNode = graph.nodes_by_name["notify_orders"]
+    assert notify_node.meta == {"provider_usages": "user-owned"}
+    assert tuple(usage.provider_name for usage in notify_node.provider_usages) == (
+        test_case.expected_provider_usage_names
+    )
+    assert tuple(usage.parameter_name for usage in notify_node.provider_usages) == (
+        test_case.expected_provider_usage_parameters
+    )
+    assert tuple(usage.annotation_class_name for usage in notify_node.provider_usages) == (
+        test_case.expected_provider_usage_annotation_classes
+    )
+    assert tuple(usage.annotation_module for usage in notify_node.provider_usages) == (
+        test_case.expected_provider_usage_annotation_modules
+    )
+    assert tuple(vars(usage) for usage in notify_node.provider_usages) == (
+        {
+            "provider_name": "slack_provider",
+            "parameter_name": "slack_provider",
+            "annotation_class_name": "SlackProvider",
+            "annotation_module": SlackProvider.__module__,
+        },
+    )
+    assert (
+        tuple(
+            (edge.upstream_name, edge.downstream_name)
+            for edge in graph.dependency_edges
+            if edge.downstream_name == "notify_orders"
+        )
+        == ()
+    )

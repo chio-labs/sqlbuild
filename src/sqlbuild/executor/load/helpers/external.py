@@ -12,6 +12,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.load.models import LoaderContext, LoaderSkipResult, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -36,6 +37,7 @@ def execute_external_source_load(
     use_color: bool,
     resource_kind: ExecutionResourceKind,
     start: float,
+    providers: ProviderContainer | None = None,
 ) -> LoadExecutionResult:
     """Run one external writer while SQLBuild holds no destination connection."""
 
@@ -61,7 +63,11 @@ def execute_external_source_load(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
         )
-        raw_rows: object = loader_function.function(context)
+        raw_rows: object = invoke_with_providers(
+            function=loader_function.function,
+            context=context,
+            providers=providers,
+        )
         if isinstance(raw_rows, LoaderSkipResult):
             return LoadExecutionResult(
                 source_name=source_entry.name,

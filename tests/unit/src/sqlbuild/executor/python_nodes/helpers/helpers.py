@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
@@ -33,6 +33,7 @@ from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.executor.shared.helpers.python_node_scheduler import unlock_downstream_python_nodes
 from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
+from sqlbuild.providers import Provider
 from sqlbuild.refs import model
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
@@ -42,6 +43,11 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     build_intermediate_loader_asset_dependency_python_node_graph,
     build_orders_python_node_graph,
 )
+
+
+class ExecutionSlackProvider(Provider):
+    provider_name: ClassVar[str] = "slack_provider"
+    label: str = "slack"
 
 
 def apply_completion_order(
@@ -78,6 +84,18 @@ class PythonNodeContextTestAdapter(BaseAdapter):
         del connection
         self.executed_sql.append(sql)
         return f"result:{sql}"
+
+
+def provider_task(ctx: TaskContext, slack_provider: ExecutionSlackProvider) -> dict[str, object]:
+    return {"target": ctx.target, "provider": slack_provider.label}
+
+
+def provider_asset(ctx: AssetContext, slack_provider: ExecutionSlackProvider) -> dict[str, object]:
+    return {"target": ctx.target, "provider": slack_provider.label}
+
+
+def provider_check(ctx: CheckContext, slack_provider: ExecutionSlackProvider) -> bool:
+    return ctx.target == "dev" and slack_provider.label == "slack"
 
 
 def build_task_context(

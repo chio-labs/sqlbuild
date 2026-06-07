@@ -38,6 +38,7 @@ from sqlbuild.executor.shared.helpers.python_node_scheduler import (
     build_python_node_ready_queue,
     unlock_downstream_python_nodes,
 )
+from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
 from sqlbuild.shared.models import AssetDefinition, RetryPolicy, SqlResourceRef, TaskDefinition
 from sqlbuild.tasks import get_task_definition
 
@@ -62,6 +63,7 @@ def execute_python_nodes(
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
+    providers: ProviderContainer | None = None,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutorResult:
@@ -118,6 +120,7 @@ def execute_python_nodes(
             end_cursor_int=end_cursor_int,
             logger=logger,
             run_state=resolved_run_state,
+            providers=providers,
             sleep=sleep,
             monotonic=monotonic,
         )
@@ -160,6 +163,7 @@ def execute_ready_python_node(
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
+    providers: ProviderContainer | None = None,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutionResult:
@@ -185,6 +189,7 @@ def execute_ready_python_node(
         end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state if run_state is not None else PythonNodeRunState(),
+        providers=providers,
         sleep=sleep,
         monotonic=monotonic,
     )
@@ -211,6 +216,7 @@ def _execute_ready_node(
     end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
+    providers: ProviderContainer | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> PythonNodeExecutionResult:
@@ -258,6 +264,7 @@ def _execute_ready_node(
         returned: object = _call_node_with_retry(
             node=node,
             context=context,
+            providers=providers,
             retry_policy=node.retry,
             sleep=sleep,
             monotonic=monotonic,
@@ -279,17 +286,26 @@ def _call_node_with_retry(
     *,
     node: ExecutablePythonNode,
     context: TaskContext | AssetContext,
+    providers: ProviderContainer | None,
     retry_policy: RetryPolicy | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> object:
     if retry_policy is None:
-        return node.function(context)
+        return invoke_with_providers(
+            function=node.function,
+            context=context,
+            providers=providers,
+        )
     start_time: float = monotonic()
     attempt: int = 1
     while True:
         try:
-            return node.function(context)
+            return invoke_with_providers(
+                function=node.function,
+                context=context,
+                providers=providers,
+            )
         except retry_policy.retry_on:
             if attempt >= retry_policy.max_attempts:
                 raise

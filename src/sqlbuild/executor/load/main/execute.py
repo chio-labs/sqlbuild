@@ -31,6 +31,7 @@ from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -56,6 +57,7 @@ def execute_source_load(
     use_color: bool = False,
     loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None,
     source_ref_entries: Mapping[str, SourceEntry] | None = None,
+    providers: ProviderContainer | None = None,
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
 
@@ -98,6 +100,7 @@ def execute_source_load(
                 use_color=use_color,
                 resource_kind=resource_kind,
                 start=start,
+                providers=providers,
             )
         supported_write_strategies: frozenset[SourceWriteStrategy] = frozenset(
             {
@@ -163,7 +166,11 @@ def execute_source_load(
                 statement_recorder=statement_recorder,
             ),
         )
-        raw_rows: object = loader_function.function(context)
+        raw_rows: object = invoke_with_providers(
+            function=loader_function.function,
+            context=context,
+            providers=providers,
+        )
         if isinstance(raw_rows, LoaderSkipResult):
             return LoadExecutionResult(
                 source_name=source_entry.name,
