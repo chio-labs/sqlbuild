@@ -54,6 +54,13 @@ class CompileTextColorTestCase:
 
 
 @dataclass(frozen=True)
+class CompileJsonExecutionLayersTestCase:
+    description: str
+    model_count: int
+    expected_execution_layers: int
+
+
+@dataclass(frozen=True)
 class CompileJsonDiagnosticsTestCase:
     description: str
     model_sql: str

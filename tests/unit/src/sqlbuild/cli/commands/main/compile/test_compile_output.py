@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
-from sqlbuild.cli.commands.main.helpers.compile.output import format_compile_text
+from sqlbuild.cli.commands.main.helpers.compile.output import (
+    format_compile_json,
+    format_compile_text,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    CompileJsonExecutionLayersTestCase,
     CompileTextColorTestCase,
     CompileTextOutputTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_compile_output_graph,
     build_compile_output_model_names,
+    build_linear_compile_output_graph,
 )
 
 TEST_CASES: tuple[CompileTextOutputTestCase, ...] = (
@@ -68,6 +75,44 @@ def test_given_compiled_project_when_formatting_compile_text_then_matches_expect
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output
     assert "\033[" not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileJsonExecutionLayersTestCase(
+            description="counts deep linear graph layers without recursion",
+            model_count=1100,
+            expected_execution_layers=1100,
+        )
+    ],
+    ids=["counts deep linear graph layers without recursion"],
+)
+def test_given_deep_linear_project_when_formatting_compile_json_then_counts_execution_layers(
+    test_case: CompileJsonExecutionLayersTestCase,
+) -> None:
+    graph: ProjectGraph = build_linear_compile_output_graph(model_count=test_case.model_count)
+
+    output: str = format_compile_json(
+        graph=graph,
+        written=WrittenTarget(
+            model_count=test_case.model_count,
+            seed_count=0,
+            function_count=0,
+            audit_count=0,
+            test_count=0,
+            target_dir=graph.project.models[0].relative_path.parent.parent / "target",
+        ),
+        manifest=False,
+        timings_ms={},
+        lineage=None,
+        diagnostics=(),
+    )
+    payload: dict[str, object] = json.loads(output)
+    summary: object = payload["summary"]
+
+    assert isinstance(summary, dict)
+    assert summary["execution_layers"] == test_case.expected_execution_layers
 
 
 @pytest.mark.parametrize(

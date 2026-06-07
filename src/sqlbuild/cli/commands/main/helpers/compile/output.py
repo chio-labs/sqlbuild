@@ -487,22 +487,34 @@ def _execution_layer_count(graph: ProjectGraph) -> int:
     model_keys: set[CompiledObjectKey] = {model.key for model in graph.project.models}
     if not model_keys:
         return 0
-    cache: dict[CompiledObjectKey, int] = {}
-
-    def layer_for(key: CompiledObjectKey, visiting: frozenset[CompiledObjectKey]) -> int:
-        if key in cache:
-            return cache[key]
-        if key in visiting:
-            return 1
-        dep_layers: list[int] = []
-        for dep in graph.upstream_deps.get(key, ()):
-            if dep in model_keys:
-                dep_layers.append(layer_for(dep, visiting | {key}))
-        layer: int = 1 + max(dep_layers, default=0)
-        cache[key] = layer
-        return layer
-
-    return max(layer_for(key, frozenset()) for key in model_keys)
+    remaining_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {
+        key: {dep for dep in graph.upstream_deps.get(key, ()) if dep in model_keys}
+        for key in model_keys
+    }
+    downstream_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {
+        key: {dep for dep in graph.downstream_deps.get(key, ()) if dep in model_keys}
+        for key in model_keys
+    }
+    current_layer: set[CompiledObjectKey] = {
+        key for key, deps in remaining_model_deps.items() if not deps
+    }
+    visited: set[CompiledObjectKey] = set()
+    layer_count: int = 0
+    while current_layer:
+        layer_count += 1
+        next_layer: set[CompiledObjectKey] = set()
+        for key in current_layer:
+            visited.add(key)
+            for downstream_key in downstream_model_deps.get(key, set()):
+                if downstream_key in visited:
+                    continue
+                remaining_model_deps[downstream_key].discard(key)
+                if not remaining_model_deps[downstream_key]:
+                    next_layer.add(downstream_key)
+        current_layer = next_layer
+    if len(visited) != len(model_keys):
+        return max(layer_count, 1)
+    return layer_count
 
 
 def _relative_target_path(path: Path) -> str:
