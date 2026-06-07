@@ -25,10 +25,7 @@ class Provider(BaseSettings):
 
         raw_name: str | None = cls.provider_name
         if raw_name is None:
-            class_name: str = cls.__name__
-            if class_name.endswith("Provider"):
-                class_name = class_name[: -len("Provider")]
-            raw_name = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
+            raw_name = re.sub(r"(?<!^)(?=[A-Z])", "_", cls.__name__).lower()
 
         if not raw_name:
             raise ProviderInputError(f"provider {cls.__name__} resolved to an empty name")

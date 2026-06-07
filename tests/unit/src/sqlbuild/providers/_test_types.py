@@ -37,13 +37,6 @@ class ExplicitProviderNameTestCase:
 
 
 @dataclass(frozen=True)
-class InvalidDefaultProviderNameTestCase:
-    description: str
-    provider_class_name: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class InvalidExplicitProviderNameTestCase:
     description: str
     provider_class_name: str
