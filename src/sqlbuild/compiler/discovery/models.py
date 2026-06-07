@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.providers import Provider
 from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
@@ -241,6 +242,17 @@ class DiscoveredHookFunction:
 
 
 @dataclass(frozen=True)
+class DiscoveredProvider:
+    """A discovered project provider class and configured settings instance."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    provider_class: type[Provider]
+    instance: Provider
+
+
+@dataclass(frozen=True)
 class DiscoveredPythonNodeFunctions:
     """Discovered project Python DAG node functions grouped by kind."""
 
@@ -272,4 +284,5 @@ class DiscoveredProjectInputs:
     asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None

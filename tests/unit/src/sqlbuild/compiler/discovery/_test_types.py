@@ -33,6 +33,9 @@ class DiscoverProjectInputsTestCase:
     expected_asset_names: tuple[str, ...] = ()
     expected_check_names: tuple[str, ...] = ()
     expected_hook_names: tuple[str, ...] = ()
+    expected_provider_names: tuple[str, ...] = ()
+    expected_provider_paths: tuple[str, ...] = ()
+    expected_provider_class_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

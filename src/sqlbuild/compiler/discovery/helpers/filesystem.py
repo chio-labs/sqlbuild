@@ -11,10 +11,13 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
+from pydantic import ValidationError
+
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import (
     LoaderDiscoveryError,
+    ProviderDiscoveryError,
     PythonNodeDiscoveryError,
     SchemaParseError,
 )
@@ -39,6 +42,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
+    DiscoveredProvider,
     DiscoveredPythonFunctionFile,
     DiscoveredPythonNodeFunctions,
     DiscoveredSchemaFile,
@@ -58,6 +62,8 @@ from sqlbuild.compiler.shared.constants import (
 from sqlbuild.factories import get_factory_definition
 from sqlbuild.hooks import get_hook_definition
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
+from sqlbuild.provider.exceptions import ProviderInputError
+from sqlbuild.providers import Provider
 from sqlbuild.shared.models import (
     AssetDefinition,
     CheckDefinition,
@@ -443,6 +449,78 @@ def discover_hook_functions(*, project_dir: Path) -> tuple[DiscoveredHookFunctio
     return tuple(discovered_hooks)
 
 
+def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:
+    """Discover provider classes under providers/."""
+
+    providers_root: Path = project_dir / "providers"
+    if not providers_root.is_dir():
+        return ()
+
+    discovered_providers: list[DiscoveredProvider] = []
+    seen_names: dict[str, Path] = {}
+    file_path: Path
+    for file_path in sorted(providers_root.rglob("*.py")):
+        if file_path.stem == "__init__" or file_path.name.startswith("_"):
+            continue
+        module: ModuleType = _load_provider_module(file_path=file_path, project_dir=project_dir)
+        for _, value in inspect.getmembers(module, inspect.isclass):
+            if value.__module__ != module.__name__:
+                continue
+            if value is Provider or not issubclass(value, Provider) or inspect.isabstract(value):
+                continue
+            provider_class: type[Provider] = value
+            provider_name: str = _provider_name(
+                provider_class=provider_class,
+                file_path=file_path,
+                project_dir=project_dir,
+            )
+            existing_path: Path | None = seen_names.get(provider_name)
+            if existing_path is not None:
+                raise ProviderDiscoveryError(
+                    f"Duplicate provider name '{provider_name}' found in "
+                    f"{existing_path.relative_to(project_dir)} and "
+                    f"{file_path.relative_to(project_dir)}"
+                )
+            seen_names[provider_name] = file_path
+            discovered_providers.append(
+                DiscoveredProvider(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=provider_name,
+                    provider_class=provider_class,
+                    instance=_provider_instance(
+                        provider_class=provider_class,
+                        provider_name=provider_name,
+                        file_path=file_path,
+                        project_dir=project_dir,
+                    ),
+                )
+            )
+    return tuple(discovered_providers)
+
+
+def _provider_name(*, provider_class: type[Provider], file_path: Path, project_dir: Path) -> str:
+    try:
+        return provider_class.name()
+    except ProviderInputError as error:
+        raise ProviderDiscoveryError(
+            f"Provider class {provider_class.__name__} in {file_path.relative_to(project_dir)} "
+            f"has an invalid provider name: {error}"
+        ) from error
+
+
+def _provider_instance(
+    *, provider_class: type[Provider], provider_name: str, file_path: Path, project_dir: Path
+) -> Provider:
+    try:
+        return provider_class()
+    except ValidationError as error:
+        relative_path: Path = file_path.relative_to(project_dir)
+        raise ProviderDiscoveryError(
+            f"Provider '{provider_name}' in {relative_path} has invalid settings:\n{error}"
+        ) from error
+
+
 def _discover_python_node_functions(*, project_dir: Path) -> _PythonNodeDiscoveryBucket:
     bucket: _PythonNodeDiscoveryBucket = _PythonNodeDiscoveryBucket()
     node_folder: str
@@ -757,6 +835,28 @@ def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder:
     except Exception as error:
         raise PythonNodeDiscoveryError(
             f"Failed to import Python node file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return module
+
+
+def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    module_name: str = "sqlbuild_project_provider_" + "_".join(
+        file_path.relative_to(project_dir).with_suffix("").parts
+    )
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ProviderDiscoveryError(f"Could not load provider file {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise ProviderDiscoveryError(
+            f"Failed to import provider file {file_path.relative_to(project_dir)}: {error}"
         ) from error
     finally:
         sys.path = old_path
