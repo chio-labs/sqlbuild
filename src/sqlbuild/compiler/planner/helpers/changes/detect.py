@@ -46,10 +46,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
-from sqlbuild.shared.helpers.hashing import (
-    compute_ast_hash,
-    compute_query_hash,
-)
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
 def detect_changes(
@@ -75,7 +72,7 @@ def detect_changes(
         model_changes[model.name] = detect_model_changes(
             model=model,
             snapshot=snapshot,
-            sqlglot_enabled=project.settings.sqlglot,
+            sql_analysis_enabled=project.settings.sql_analysis,
             query_change_tracking=project.settings.query_change_tracking,
             full_refresh=full_refresh,
             function_local_hashes=function_local_hashes,
@@ -112,7 +109,7 @@ def detect_model_changes(
     *,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
     query_change_tracking: bool,
     full_refresh: bool,
     function_local_hashes: dict[str, str] | None = None,
@@ -154,14 +151,9 @@ def detect_model_changes(
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
         compiled_query_hash: str = compute_query_hash(model.query_sql)
-        compiled_ast_hash: str | None = (
-            compute_ast_hash(model.query_sql) if sqlglot_enabled else None
-        )
         query_changed = detect_query_change(
             compiled_query_hash=compiled_query_hash,
-            compiled_ast_hash=compiled_ast_hash,
             fingerprint=fingerprint,
-            sqlglot_enabled=sqlglot_enabled,
         )
         log_debug_event(
             debug_logger,
@@ -169,8 +161,6 @@ def detect_model_changes(
                 "fingerprint comparison"
                 f" compiled_query_hash={compiled_query_hash}"
                 f" fingerprint_query_hash={fingerprint.query_hash}"
-                f" compiled_ast_hash={compiled_ast_hash}"
-                f" fingerprint_ast_hash={fingerprint.ast_hash}"
                 f" query_changed={query_changed}"
             ),
             sqlbuild_subject="model",

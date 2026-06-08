@@ -70,7 +70,7 @@ class SqlServerAdapter(BaseAdapter):
     """Microsoft SQL Server adapter backed by pymssql."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.SQLSERVER.value
-    sqlglot_dialect_name: ClassVar[str | None] = "tsql"
+    sql_analysis_dialect_name: ClassVar[str | None] = "tsql"
     max_identifier_length: ClassVar[int] = 128
 
     def supports_table_freshness_metadata(self) -> bool:
@@ -909,7 +909,7 @@ class SqlServerAdapter(BaseAdapter):
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         """Return portable static expression inference behavior by default."""
 
-        return ExpressionInferenceProfile(sqlglot_dialect=self.sqlglot_dialect())
+        return ExpressionInferenceProfile(sql_analysis_dialect=self.sql_analysis_dialect())
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
@@ -1023,7 +1023,7 @@ class SqlServerAdapter(BaseAdapter):
             return "decimal"
         if "INT" in normalized:
             return "integer"
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def persists_python_functions(self) -> bool:
         return True
@@ -1964,10 +1964,10 @@ class SqlServerAdapter(BaseAdapter):
         cursor: Any = self.execute(connection, query)
         return cursor.fetchone() is not None
 
-    def sqlglot_dialect(self) -> str | None:
-        """Return the configured SQLGlot dialect name, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the configured SQL analysis dialect name, if any."""
 
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""

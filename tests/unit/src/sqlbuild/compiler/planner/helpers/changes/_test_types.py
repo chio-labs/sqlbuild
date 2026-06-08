@@ -15,9 +15,8 @@ class DetectModelChangesTestCase:
     schema_columns: tuple[tuple[str, str | None], ...]
     relation_exists: bool
     fingerprint_query_hash: str | None
-    fingerprint_ast_hash: str | None
     warehouse_column_names: tuple[tuple[str, str], ...]
-    sqlglot_enabled: bool
+    sql_analysis_enabled: bool
     query_change_tracking: bool
     full_refresh: bool
     expected_change_kind: ChangeKind
@@ -41,10 +40,7 @@ class DetectModelMetadataTestCase:
 class DetectQueryChangeTestCase:
     description: str
     compiled_query_hash: str
-    compiled_ast_hash: str | None
     fingerprint_query_hash: str
-    fingerprint_ast_hash: str | None
-    sqlglot_enabled: bool
     expected_changed: bool
 
 

@@ -374,8 +374,8 @@ class ScenarioCheckSqlResolutionTestCase:
     description: str
     sql: str
     expected_sql: str
-    sqlglot_enabled: bool = True
-    sqlglot_dialect: str | None = None
+    sql_analysis_enabled: bool = True
+    sql_analysis_dialect: str | None = None
 
 
 @dataclass(frozen=True)
@@ -392,8 +392,8 @@ class ScenarioFixturePlanTestCase:
     expected_fixture_sql: dict[str, str]
     expected_fixture_targets: dict[str, str]
     fixture_sql_body: str | None = None
-    sqlglot_enabled: bool = True
-    sqlglot_dialect: str | None = None
+    sql_analysis_enabled: bool = True
+    sql_analysis_dialect: str | None = None
 
 
 @dataclass(frozen=True)
@@ -508,7 +508,7 @@ class CursorTypeCheckTestCase:
     cursor_column: str | None
     cursor_type: str | None
     warehouse_columns: tuple[tuple[str, str], ...]
-    sqlglot_enabled: bool
+    sql_analysis_enabled: bool
     expected_warning: bool
     expected_severity: WarningSeverity | None = None
     expected_message_fragment: str | None = None

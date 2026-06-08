@@ -157,7 +157,9 @@ def build_project_from_test_case(
         effective_connection=test_case.effective_connection,
         effective_vars={},
         settings=SettingsConfig(
-            sqlglot=_settings_bool(test_case.effective_connection, "sqlglot", default=False)
+            sql_analysis=_settings_bool(
+                test_case.effective_connection, "sql_analysis", default=False
+            )
         ),
         models=tuple(models),
         seeds=tuple(seeds),
@@ -273,7 +275,6 @@ def write_previous_function_fingerprints(
                 target_name=function.destination.name,
                 run_id="previous_run",
                 query_hash=compute_query_hash(fingerprint_sql),
-                ast_hash=None,
                 schema_fingerprint=compute_query_hash(""),
                 query_sql=fingerprint_sql,
                 ts=datetime.now(tz=UTC),

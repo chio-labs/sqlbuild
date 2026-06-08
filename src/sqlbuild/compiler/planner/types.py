@@ -56,7 +56,7 @@ class SchemaChangeBackfillKey(StrEnum):
 
 class SchemaColumnSource(StrEnum):
     YML = "yml"
-    SQLGLOT = "sqlglot"
+    SQLGLOT = "sql_analysis"
 
 
 class PlanAction(StrEnum):

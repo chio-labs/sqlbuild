@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class InferredColumn:
-    """One output column inferred from query SQL via sqlglot parsing."""
+    """One output column inferred from query SQL via sql_analysis parsing."""
 
     name: str
     type: str | None = None
@@ -83,7 +83,7 @@ class MacroContext:
     """Compile-time context passed to adapter-aware SQL macros."""
 
     adapter_name: str
-    sqlglot_enabled: bool
+    sql_analysis_enabled: bool
     target_name: str | None
     vars: dict[str, object] = field(default_factory=dict)
 

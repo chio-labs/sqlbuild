@@ -43,15 +43,6 @@ class LatestResolutionTestCase:
 
 
 @dataclass(frozen=True)
-class NullAstHashTestCase:
-    description: str
-    database: str | None
-    schema: str
-    fingerprint: Fingerprint
-    expected_ast_hash_is_none: bool
-
-
-@dataclass(frozen=True)
 class InvalidQuerySqlStorageTestCase:
     description: str
     schema: str

@@ -1,4 +1,4 @@
-"""Optional SQLGlot-backed SQL syntax validation for model queries."""
+"""Optional Polyglot-backed SQL syntax validation for model queries."""
 
 from __future__ import annotations
 
@@ -6,12 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
     _replace_refs_with_stubs,
     substitute_placeholder_defaults,
 )
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 _VALID_HOOK_ROOT_KEYS: frozenset[str] = frozenset(
@@ -53,54 +52,33 @@ def validate_sql_syntax(
     placeholders: dict[str, str] | None = None,
     dialect: str | None = None,
 ) -> None:
-    """Validate that the model query SQL is parseable by SQLGlot.
-
-    Raises CompileInputError if the SQL cannot be parsed. Silently returns
-    if SQLGlot is not installed.
-    """
+    """Validate that the model query SQL is parseable by Polyglot."""
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
 
-    polyglot_error: str | None | bool = _validate_sql_with_polyglot(cleaned_sql, dialect=dialect)
-    if polyglot_error is None:
+    error_message: str | None = _validate_sql_with_polyglot(cleaned_sql, dialect=dialect)
+    if error_message is None:
         return
-    if isinstance(polyglot_error, str):
-        raise CompileInputError(
-            f"SQL syntax error in model '{model_name}' ({file_path}): {polyglot_error}\n\n"
-            f"To skip SQL validation for this model, add `sql_validation: false` "
-            f"to the MODEL header.\n"
-            f"To disable project-wide, set `settings.sql_validation: false` "
-            f"in sqlbuild_project.toml.\n"
-            f"To skip for this run, use `--no-sql-validation`."
-        ) from None
-
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
-        return
-
-    try:
-        sqlglot_module.parse_one(cleaned_sql)
-    except Exception as exc:
-        raise CompileInputError(
-            f"SQL syntax error in model '{model_name}' ({file_path}): {exc}\n\n"
-            f"To skip SQL validation for this model, add `sql_validation: false` "
-            f"to the MODEL header.\n"
-            f"To disable project-wide, set `settings.sql_validation: false` "
-            f"in sqlbuild_project.toml.\n"
-            f"To skip for this run, use `--no-sql-validation`."
-        ) from None
+    raise CompileInputError(
+        f"SQL syntax error in model '{model_name}' ({file_path}): {error_message}\n\n"
+        f"To skip SQL validation for this model, add `sql_validation: false` "
+        f"to the MODEL header.\n"
+        f"To disable project-wide, set `settings.sql_validation: false` "
+        f"in sqlbuild_project.toml.\n"
+        f"To skip for this run, use `--no-sql-validation`."
+    ) from None
 
 
-def _validate_sql_with_polyglot(sql: str, *, dialect: str | None) -> str | None | bool:
+def _validate_sql_with_polyglot(sql: str, *, dialect: str | None) -> str | None:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
-        return False
+        return "Polyglot SQL is not installed"
     try:
         result: Any = polyglot_module.validate(sql, dialect=dialect or "generic")
-    except Exception:
-        return False
+    except Exception as error:
+        return str(error)
     if result:
         return None
     error_message: str = "invalid SQL"
@@ -117,7 +95,7 @@ def validate_function_sql_syntax(
     file_path: Path,
     placeholders: dict[str, str] | None = None,
 ) -> None:
-    """Validate that a SQL function body is parseable by SQLGlot when available."""
+    """Validate that a SQL function body is parseable by Polyglot."""
 
     _validate_sql_syntax_with_message(
         query_sql=body_sql,
@@ -200,31 +178,38 @@ def _validate_sql_syntax_with_message(
     placeholders: dict[str, str] | None = None,
     require_hook_statement: bool = False,
 ) -> None:
-    """Parse SQL with SQLGlot and raise CompileInputError with a custom message."""
-
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
-        return
+    """Parse SQL with Polyglot and raise CompileInputError with a custom message."""
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
 
-    try:
-        parsed: Any = sqlglot_module.parse_one(cleaned_sql)
-    except Exception as exc:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        parsed_error: str = "Polyglot SQL is not installed"
+        parsed: Any | None = None
+    else:
+        parsed_error = ""
+        parsed = None
+        try:
+            parsed = polyglot_module.parse_one(cleaned_sql, dialect="generic")
+        except Exception as exc:
+            parsed_error = str(exc)
+    if parsed is None:
         raise CompileInputError(
-            f"{error_prefix}: {exc}\n\n"
+            f"{error_prefix}: {parsed_error}\n\n"
             f"To skip SQL validation for this model, add `sql_validation: false` "
             f"to the MODEL header.\n"
             f"To disable project-wide, set `settings.sql_validation: false` "
             f"in sqlbuild_project.toml.\n"
             f"To skip for this run, use `--no-sql-validation`."
         ) from None
-    if require_hook_statement and parsed.key not in _VALID_HOOK_ROOT_KEYS:
+
+    parsed_kind: str = str(getattr(parsed, "kind", ""))
+    if require_hook_statement and parsed_kind not in _VALID_HOOK_ROOT_KEYS:
         raise CompileInputError(
             f"{error_prefix}: hook SQL must be a valid executable SQL statement, "
-            f"but this parsed as a non-statement expression ('{parsed.key}')\n\n"
+            f"but this parsed as a non-statement expression ('{parsed_kind}')\n\n"
             f"To skip SQL validation for this model, add `sql_validation: false` "
             f"to the MODEL header.\n"
             f"To disable project-wide, set `settings.sql_validation: false` "

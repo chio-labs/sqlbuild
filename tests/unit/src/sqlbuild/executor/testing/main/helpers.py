@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestAssertionStep, SqlTestPlanEntry
 
 
-def build_comparison_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEntry:
+def build_comparison_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestPlanEntry:
     return SqlTestPlanEntry(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
@@ -21,12 +21,12 @@ def build_comparison_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanE
                 expected_cte_sql="SELECT 2 AS order_id",
             ),
         ),
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
 
 
 def build_comparison_test_entry_with_helper_ctes(
-    *, sqlglot_enabled: bool = True
+    *, sql_analysis_enabled: bool = True
 ) -> SqlTestPlanEntry:
     helper_with_sql: str = "WITH input_values AS (SELECT 1 AS order_id)"
     expected_helper_with_sql: str = "WITH INPUT_VALUES AS (SELECT 1 AS order_id)"
@@ -43,11 +43,11 @@ def build_comparison_test_entry_with_helper_ctes(
                 expected_cte_sql=f"{expected_helper_with_sql} SELECT order_id FROM INPUT_VALUES",
             ),
         ),
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
 
 
-def build_table_function_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEntry:
+def build_table_function_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestPlanEntry:
     return SqlTestPlanEntry(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
@@ -61,11 +61,11 @@ def build_table_function_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestP
                 expected_cte_sql="SELECT 1 AS order_id",
             ),
         ),
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
 
 
-def build_assertion_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEntry:
+def build_assertion_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestPlanEntry:
     return SqlTestPlanEntry(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
@@ -84,7 +84,7 @@ def build_assertion_test_entry(*, sqlglot_enabled: bool = True) -> SqlTestPlanEn
                 resolved_sql="SELECT * FROM __actual__orders WHERE amount < 0",
             ),
         ),
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
 
 

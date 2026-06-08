@@ -26,7 +26,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
     string_type: str = ctx.adapter.render_framework_type(FrameworkType.STRING)
     timestamp_type: str = ctx.adapter.render_framework_type(FrameworkType.TIMESTAMP)
     built_at_default: str = ""
-    if ctx.adapter.sqlglot_dialect() != "databricks":
+    if ctx.adapter.sql_analysis_dialect() != "databricks":
         built_at_default = " DEFAULT CURRENT_TIMESTAMP"
 
     ctx.execute_sql(

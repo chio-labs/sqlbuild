@@ -121,7 +121,7 @@ def _resolve_source_reference(
             declared_columns=source_entry.columns,
             available_columns=warehouse_cols,
             contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
-            dialect=adapter.sqlglot_dialect_name,
+            dialect=adapter.sql_analysis_dialect_name,
         )
     if (
         source_entry.expression is not None
@@ -133,7 +133,7 @@ def _resolve_source_reference(
             declared_columns=source_entry.columns,
             available_columns=warehouse_cols,
             contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
-            dialect=adapter.sqlglot_dialect_name,
+            dialect=adapter.sql_analysis_dialect_name,
         )
     if source_entry.type_enforcement:
         if source_entry.expression is not None:

@@ -91,7 +91,7 @@ SCENARIO_CAPTURE_SAFETY_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
     "test_case",
     [
         ScenarioCliE2ETestCase(
-            description="capture rejects disabled sqlglot",
+            description="capture rejects disabled sql_analysis",
             command=(
                 "--no-color",
                 "scenario",
@@ -100,20 +100,20 @@ SCENARIO_CAPTURE_SAFETY_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
             ),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[C455]: scenario capture requires SQLGlot and SQL validation",
-                "= help: Enable settings.sqlglot and settings.sql_validation when capturing "
+                "error[C455]: scenario capture requires SQL analysis and SQL validation",
+                "= help: Enable settings.sql_analysis and settings.sql_validation when capturing "
                 "snapshots for local scenario replay.",
             ),
         ),
     ],
-    ids=["capture rejects disabled sqlglot"],
+    ids=["capture rejects disabled sql_analysis"],
 )
 def test_given_capture_command_when_sql_validation_disabled_then_fails_clearly(
     test_case: ScenarioCliE2ETestCase,
     tmp_path: Path,
 ) -> None:
     repo_files: dict[str, str] = build_scenario_project_files()
-    repo_files["sqlbuild_project.toml"] += "\n[settings]\nsqlglot = false\n"
+    repo_files["sqlbuild_project.toml"] += "\n[settings]\nsql_analysis = false\n"
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="scenario_project",

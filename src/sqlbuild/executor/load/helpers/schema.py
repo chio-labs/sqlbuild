@@ -39,7 +39,7 @@ def validate_and_evolve_existing_target(
         if types_equal(
             left=target_column.type,
             right=staging_column.type,
-            dialect=adapter.sqlglot_dialect_name,
+            dialect=adapter.sql_analysis_dialect_name,
         ):
             continue
         raise ExecutorInputError(

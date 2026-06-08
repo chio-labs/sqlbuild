@@ -4,14 +4,11 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.shared.helpers.hashing import (
-    compute_ast_hash,
     compute_query_hash,
     compute_schema_fingerprint,
     normalize_query_sql,
 )
 from tests.unit.src.sqlbuild.compiler.shared.helpers._test_types import (
-    ComputeAstHashStabilityTestCase,
-    ComputeAstHashTestCase,
     ComputeQueryHashStabilityTestCase,
     ComputeQueryHashTestCase,
     ComputeSchemaFingerprintStabilityTestCase,
@@ -190,60 +187,3 @@ def test_given_two_column_sets_when_computing_fingerprints_then_stability_matche
     fp_b: str = compute_schema_fingerprint(test_case.columns_b)
 
     assert (fp_a == fp_b) == test_case.expected_same_fingerprint
-
-
-AST_HASH_STABILITY_TEST_CASES: list[ComputeAstHashStabilityTestCase] = [
-    ComputeAstHashStabilityTestCase(
-        description="whitespace differences produce the same ast hash",
-        query_a="SELECT  id,  name  FROM  orders",
-        query_b="SELECT id, name FROM orders",
-        expected_same_hash=True,
-    ),
-    ComputeAstHashStabilityTestCase(
-        description="casing differences produce the same ast hash",
-        query_a="SELECT id FROM orders",
-        query_b="select id from orders",
-        expected_same_hash=True,
-    ),
-    ComputeAstHashStabilityTestCase(
-        description="different queries produce different ast hashes",
-        query_a="SELECT id FROM orders",
-        query_b="SELECT id FROM customers",
-        expected_same_hash=False,
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    AST_HASH_STABILITY_TEST_CASES,
-    ids=[case.description for case in AST_HASH_STABILITY_TEST_CASES],
-)
-def test_given_two_queries_when_computing_ast_hashes_then_stability_matches_expected(
-    test_case: ComputeAstHashStabilityTestCase,
-) -> None:
-    hash_a: str | None = compute_ast_hash(test_case.query_a)
-    hash_b: str | None = compute_ast_hash(test_case.query_b)
-
-    assert hash_a is not None
-    assert hash_b is not None
-    assert (hash_a == hash_b) == test_case.expected_same_hash
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ComputeAstHashTestCase(
-            description="returns expected hash for valid sql",
-            query_sql="SELECT id FROM orders",
-            expected_hash="5b5272870e591c96a399663ffecae8b4317de7611d81428af05344b41ddff0e1",
-        ),
-    ],
-    ids=["returns expected hash for valid sql"],
-)
-def test_given_valid_sql_when_computing_ast_hash_then_returns_expected_hash(
-    test_case: ComputeAstHashTestCase,
-) -> None:
-    result: str | None = compute_ast_hash(test_case.query_sql)
-
-    assert result == test_case.expected_hash

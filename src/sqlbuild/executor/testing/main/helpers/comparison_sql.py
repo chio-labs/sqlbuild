@@ -1,12 +1,13 @@
-"""SQLGlot-backed formatting helpers for SQL unit-test comparison SQL."""
+"""Polyglot-backed formatting helpers for SQL unit-test comparison SQL."""
 
 from __future__ import annotations
 
 import re
 from collections import OrderedDict
+from copy import deepcopy
 from typing import Any
 
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 
 _IDENTIFIER_CHAR_PATTERN: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9_]+")
 _DATABRICKS_BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
@@ -15,11 +16,11 @@ _DATABRICKS_BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
 
 
 def lift_step_ctes(
-    sql: str, lifted_ctes: OrderedDict[str, str], *, sqlglot_enabled: bool = True
+    sql: str, lifted_ctes: OrderedDict[str, str], *, sql_analysis_enabled: bool = True
 ) -> str:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
-    if not sqlglot_enabled:
+    if not sql_analysis_enabled:
         return sql
     split_sql: tuple[tuple[tuple[str, str], ...], str] | None = _split_top_level_with(sql)
     if split_sql is None:
@@ -42,31 +43,29 @@ def lift_step_ctes(
 
 
 def format_sql(
-    sql: str, *, sqlglot_dialect: str | None = None, sqlglot_enabled: bool = True
+    sql: str, *, sql_analysis_dialect: str | None = None, sql_analysis_enabled: bool = True
 ) -> str:
-    """Format generated comparison SQL when SQLGlot is available."""
+    """Format generated comparison SQL when Polyglot is available."""
 
-    if not sqlglot_enabled:
+    if not sql_analysis_enabled:
         return sql
     protected_sql: str = sql
     protected_identifiers: dict[str, str] = {}
-    if sqlglot_dialect == "databricks" and "`" in sql:
+    if sql_analysis_dialect == "databricks" and "`" in sql:
         protected_sql, protected_identifiers = _protect_databricks_backtick_identifiers(sql)
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
         return sql
     try:
-        if sqlglot_dialect is None:
-            formatted_sql: str = sqlglot_module.parse_one(protected_sql).sql(pretty=True)
-            return _restore_protected_identifiers(
-                sql=formatted_sql, protected_identifiers=protected_identifiers
+        formatted_sql: str = str(
+            polyglot_module.format(
+                protected_sql,
+                dialect=sql_analysis_dialect or "generic",
             )
-        formatted_sql = sqlglot_module.parse_one(protected_sql, read=sqlglot_dialect).sql(
-            pretty=True,
-            dialect=sqlglot_dialect,
         )
         return _restore_protected_identifiers(
-            sql=formatted_sql, protected_identifiers=protected_identifiers
+            sql=formatted_sql,
+            protected_identifiers=protected_identifiers,
         )
     except Exception:
         return sql
@@ -84,10 +83,10 @@ def unique_cte_suffix(*, model_name: str, cte_name_counts: dict[str, int]) -> st
 
 
 def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:
-    """Split top-level WITH CTEs from a SQL statement with SQLGlot if available."""
+    """Split top-level WITH CTEs from a SQL statement with Polyglot if available."""
 
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
         return None
     protected_sql: str = sql
     protected_identifiers: dict[str, str] = {}
@@ -95,36 +94,50 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
         protected_sql, protected_identifiers = _protect_databricks_backtick_identifiers(sql)
 
     try:
-        parsed: Any = sqlglot_module.parse_one(protected_sql)
+        parsed: Any = polyglot_module.parse_one(protected_sql, dialect="generic")
     except Exception:
         return None
 
-    parsed_with: Any | None = parsed.args.get("with_")
+    parsed_dict: dict[str, Any] = parsed.to_dict()
+    select_dict: dict[str, Any] | None = parsed_dict.get("select")
+    if select_dict is None:
+        return None
+    parsed_with: dict[str, Any] | None = select_dict.get("with")
     if parsed_with is None:
         return None
 
     cte_parts: list[tuple[str, str]] = []
-    cte: Any
-    for cte in parsed_with.expressions:
-        alias: Any | None = getattr(cte, "alias", None)
-        if alias is None:
+    cte: dict[str, Any]
+    for cte in parsed_with.get("ctes", ()):
+        alias: Any | None = cte.get("alias")
+        if not isinstance(alias, dict):
+            return None
+        name: Any | None = alias.get("name")
+        body: Any | None = cte.get("this")
+        if name is None or body is None:
+            return None
+        cte_sql: str | None = _generate_one(polyglot_module=polyglot_module, expression=body)
+        if cte_sql is None:
             return None
         cte_parts.append(
             (
-                str(alias),
+                str(name),
                 _restore_protected_identifiers(
-                    sql=cte.this.sql(pretty=False),
+                    sql=cte_sql,
                     protected_identifiers=protected_identifiers,
                 ),
             )
         )
 
-    parsed_without_with: Any = parsed.copy()
-    parsed_without_with.set("with_", None)
+    without_with: dict[str, Any] = deepcopy(parsed_dict)
+    without_with["select"]["with"] = None
+    body_sql: str | None = _generate_one(polyglot_module=polyglot_module, expression=without_with)
+    if body_sql is None:
+        return None
     return (
         tuple(cte_parts),
         _restore_protected_identifiers(
-            sql=parsed_without_with.sql(pretty=False),
+            sql=body_sql,
             protected_identifiers=protected_identifiers,
         ),
     )
@@ -148,6 +161,16 @@ def _existing_cte_name(*, lifted_ctes: OrderedDict[str, str], cte_name: str) -> 
         if existing_name.lower() == normalized_name:
             return existing_name
     return None
+
+
+def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
+    try:
+        generated: list[str] = polyglot_module.generate(expression, dialect="generic")
+    except Exception:
+        return None
+    if len(generated) != 1:
+        return None
+    return generated[0]
 
 
 def _protect_databricks_backtick_identifiers(sql: str) -> tuple[str, dict[str, str]]:

@@ -750,7 +750,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
     "test_case",
     [
         PlanTestChainTestCase(
-            description="sqlglot path lifts refs and sources into readable top-level ctes",
+            description="sql_analysis path lifts refs and sources into readable top-level ctes",
             model_queries={
                 "stg_orders": 'SELECT id, amount FROM __source("raw")',
                 "fact_orders": (
@@ -770,9 +770,9 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
             },
         )
     ],
-    ids=["sqlglot path lifts refs and sources into readable top-level ctes"],
+    ids=["sql_analysis path lifts refs and sources into readable top-level ctes"],
 )
-def test_given_sqlglot_enabled_when_planning_test_then_it_uses_top_level_generated_ctes(
+def test_given_sql_analysis_enabled_when_planning_test_then_it_uses_top_level_generated_ctes(
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
@@ -785,7 +785,7 @@ def test_given_sqlglot_enabled_when_planning_test_then_it_uses_top_level_generat
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),
-        sqlglot_enabled=True,
+        sql_analysis_enabled=True,
     )
 
     assert not warnings
@@ -810,7 +810,7 @@ def test_given_sqlglot_enabled_when_planning_test_then_it_uses_top_level_generat
     "test_case",
     [
         PlanTestChainTestCase(
-            description="sqlglot path errors on generated cte name collision",
+            description="sql_analysis path errors on generated cte name collision",
             model_queries={
                 "orders": 'WITH __source__raw AS (SELECT 9 AS id) SELECT id FROM __source("raw")',
             },
@@ -823,9 +823,9 @@ def test_given_sqlglot_enabled_when_planning_test_then_it_uses_top_level_generat
             expected_cte_bodies={"orders": "SELECT 1 AS id"},
         )
     ],
-    ids=["sqlglot path errors on generated cte name collision"],
+    ids=["sql_analysis path errors on generated cte name collision"],
 )
-def test_given_sqlglot_enabled_when_generated_cte_name_conflicts_then_it_raises_clear_error(
+def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_raises_clear_error(
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
@@ -838,5 +838,5 @@ def test_given_sqlglot_enabled_when_generated_cte_name_conflicts_then_it_raises_
             test=compiled_test,
             project=project,
             adapter=DuckDbAdapter(),
-            sqlglot_enabled=True,
+            sql_analysis_enabled=True,
         )

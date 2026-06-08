@@ -22,7 +22,7 @@ from sqlbuild.executor.functions.constants import (
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
-from sqlbuild.shared.helpers.hashing import compute_ast_hash, compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
 def execute_function(
@@ -145,7 +145,6 @@ def _try_write_function_fingerprint(
             target_name=entry.destination.name,
             run_id=run_id,
             query_hash=compute_query_hash(entry.fingerprint_query_sql),
-            ast_hash=compute_ast_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
             query_sql=entry.fingerprint_query_sql,
             metadata_json="{}",

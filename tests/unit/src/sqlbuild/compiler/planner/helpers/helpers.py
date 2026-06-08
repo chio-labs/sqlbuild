@@ -1088,7 +1088,6 @@ def build_fingerprint(*, query_sql: str) -> Fingerprint:
         target_name="is_completed_order",
         run_id="run-1",
         query_hash=compute_query_hash(query_sql),
-        ast_hash=None,
         schema_fingerprint="",
         query_sql=query_sql,
         ts=datetime(2026, 1, 1, tzinfo=UTC),

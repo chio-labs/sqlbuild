@@ -197,7 +197,7 @@ def _write_tests(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOut
             sql=build_sql_test_comparison_sql(
                 entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
-                sqlglot_dialect=adapter.sqlglot_dialect(),
+                sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
         )
 
@@ -212,7 +212,7 @@ def _write_static_tests(
             test=test,
             project=project,
             adapter=adapter,
-            sqlglot_enabled=project.settings.sqlglot,
+            sql_analysis_enabled=project.settings.sql_analysis,
         )
         test_path: Path = (
             target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
@@ -222,7 +222,7 @@ def _write_static_tests(
             sql=build_sql_test_comparison_sql(
                 entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
-                sqlglot_dialect=adapter.sqlglot_dialect(),
+                sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
         )
 

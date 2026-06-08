@@ -43,19 +43,19 @@ from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
 def discover_project_inputs(
-    *, project_dir: Path, sqlglot_enabled_override: bool | None = None
+    *, project_dir: Path, sql_analysis_enabled_override: bool | None = None
 ) -> DiscoveredProjectInputs:
     """Load all raw project inputs from disk before semantic resolution."""
 
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
-    sqlglot_enabled: bool = (
-        sqlglot_enabled_override
-        if sqlglot_enabled_override is not None
+    sql_analysis_enabled: bool = (
+        sql_analysis_enabled_override
+        if sql_analysis_enabled_override is not None
         else (
-            local_config.settings.sqlglot
-            if "sqlglot" in local_config.setting_overrides
-            else project_config.settings.sqlglot
+            local_config.settings.sql_analysis
+            if "sql_analysis" in local_config.setting_overrides
+            else project_config.settings.sql_analysis
         )
     )
 
@@ -76,7 +76,7 @@ def discover_project_inputs(
         local_config=local_config,
         model_files=discover_model_files(
             project_dir=project_dir,
-            sqlglot_enabled=sqlglot_enabled,
+            sql_analysis_enabled=sql_analysis_enabled,
         ),
         sql_function_files=discover_sql_function_files(project_dir=project_dir),
         python_function_files=discover_python_function_files(project_dir=project_dir),

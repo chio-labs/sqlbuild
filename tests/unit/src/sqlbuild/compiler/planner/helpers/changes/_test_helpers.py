@@ -98,7 +98,6 @@ def build_snapshot_for_metadata_test_case(
                 target_name="orders",
                 run_id="run_001",
                 query_hash=compute_query_hash("SELECT 1 AS order_id"),
-                ast_hash=None,
                 schema_fingerprint="schema_a",
                 query_sql="SELECT 1 AS order_id",
                 metadata_json=test_case.previous_metadata_json,
@@ -236,7 +235,6 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
             target_name=test_case.model_name,
             run_id="run_001",
             query_hash=test_case.fingerprint_query_hash,
-            ast_hash=test_case.fingerprint_ast_hash,
             schema_fingerprint="schema_a",
             query_sql="SELECT 1",
             metadata_json=build_version_identity_metadata_json(

@@ -35,7 +35,7 @@ class CliNamespace:
     manifest: bool = False
     dag: str | None = None
     compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
-    profile_skip_discovery_sqlglot: bool = False
+    profile_skip_discovery_sql_analysis: bool = False
     profile_skip_column_inference: bool = False
     profile_skip_contracts: bool = False
     profile_skip_write: bool = False

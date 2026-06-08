@@ -35,15 +35,15 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
 )
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.helpers.scenarios import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile.helpers.sql_vars import (
-    expand_authored_sql,
-    substitute_sql_vars,
-)
-from sqlbuild.compiler.compile.helpers.sqlglot_validation import (
+from sqlbuild.compiler.compile.helpers.sql_analysis_validation import (
     validate_function_sql_syntax,
     validate_hook_sql_syntax,
     validate_source_expression_syntax,
     validate_sql_syntax,
+)
+from sqlbuild.compiler.compile.helpers.sql_vars import (
+    expand_authored_sql,
+    substitute_sql_vars,
 )
 from sqlbuild.compiler.compile.helpers.templating import (
     expand_effective_vars,
@@ -193,7 +193,7 @@ def build_model_inputs(
             else None
         )
         sql_validation_enabled: bool = (
-            effective_settings.sqlglot
+            effective_settings.sql_analysis
             and not no_sql_validation
             and _is_sql_validation_enabled(
                 project_setting=effective_settings.sql_validation,
@@ -267,7 +267,7 @@ def build_model_inputs(
             logical_database=effective_config.logical_database,
         )
         if (
-            effective_settings.sqlglot
+            effective_settings.sql_analysis
             and not no_sql_validation
             and _is_sql_validation_enabled(
                 project_setting=effective_settings.sql_validation,
@@ -449,7 +449,7 @@ def build_sql_function_inputs(
             macro_context=macro_context,
         )
         if (
-            effective_settings.sqlglot
+            effective_settings.sql_analysis
             and not no_sql_validation
             and effective_settings.sql_validation
         ):
@@ -577,7 +577,7 @@ def build_sql_function_inputs(
         )
         fingerprint_schema: str | None = function_schema if isinstance(raw_schema, str) else schema
         if (
-            effective_settings.sqlglot
+            effective_settings.sql_analysis
             and not no_sql_validation
             and effective_settings.sql_validation
         ):
@@ -803,7 +803,7 @@ def _expand_function_header_value(
 
 
 def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> None:
-    """Validate an adapter-native type string with SQLGlot when a dialect is known."""
+    """Validate an adapter-native type string with SQL analysis when a dialect is known."""
 
     dialect_by_adapter: dict[str, str] = {
         "duckdb": "duckdb",
@@ -825,7 +825,7 @@ def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> N
     except Exception as error:
         raise CompileInputError(
             f"{context} type '{type_sql}' is not valid for adapter '{adapter_name}' "
-            f"SQLGlot dialect '{dialect}': {error}"
+            f"SQL analysis dialect '{dialect}': {error}"
         ) from error
 
 
@@ -884,7 +884,9 @@ def build_source_inputs(
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     source_inputs: list[CompileSourceInput] = []
     sql_validation_enabled: bool = (
-        effective_settings.sqlglot and effective_settings.sql_validation and not no_sql_validation
+        effective_settings.sql_analysis
+        and effective_settings.sql_validation
+        and not no_sql_validation
     )
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:

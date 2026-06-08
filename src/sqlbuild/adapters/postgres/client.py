@@ -82,7 +82,7 @@ class PostgresAdapter(BaseAdapter):
     """
 
     adapter_name: ClassVar[str] = BuiltinAdapter.POSTGRES.value
-    sqlglot_dialect_name: ClassVar[str | None] = "postgres"
+    sql_analysis_dialect_name: ClassVar[str | None] = "postgres"
     max_identifier_length: ClassVar[int] = 63
 
     def supports_zero_copy_clone(self) -> bool:
@@ -1245,15 +1245,15 @@ class PostgresAdapter(BaseAdapter):
             render_framework_type=self.render_framework_type,
         )
 
-    def sqlglot_dialect(self) -> str | None:
-        """Return the configured SQLGlot dialect name, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the configured SQL analysis dialect name, if any."""
 
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         """Return portable static expression inference behavior by default."""
 
-        return ExpressionInferenceProfile(sqlglot_dialect=self.sqlglot_dialect())
+        return ExpressionInferenceProfile(sql_analysis_dialect=self.sql_analysis_dialect())
 
     def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
         """Render one generic cursor bound literal from a normalized string value."""
@@ -1627,7 +1627,7 @@ class PostgresAdapter(BaseAdapter):
             if col_name not in left_map:
                 added.append(ColumnInfo(name=col_name, type=col_type))
             elif not types_equal(
-                left=left_map[col_name], right=col_type, dialect=self.sqlglot_dialect()
+                left=left_map[col_name], right=col_type, dialect=self.sql_analysis_dialect()
             ):
                 type_changed.append(
                     (
@@ -1885,7 +1885,7 @@ class PostgresAdapter(BaseAdapter):
         return tuple(tuple((k, row[i]) for i, k in enumerate(keys)) for row in rows)
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
-        return normalize_numeric_family(type_sql=column_type, dialect=self.sqlglot_dialect())
+        return normalize_numeric_family(type_sql=column_type, dialect=self.sql_analysis_dialect())
 
     def _normalize_seed_csv_value(
         self,

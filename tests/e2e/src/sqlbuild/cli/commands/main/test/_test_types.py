@@ -17,10 +17,10 @@ class SqlTestE2ETestCase:
 
 
 @dataclass(frozen=True)
-class SqlglotChainSqlTestE2ETestCase:
-    """Test case for SQLGlot SQL unit-test chain execution and artifacts."""
+class SqlAnalysisChainSqlTestE2ETestCase:
+    """Test case for SQL analysis SQL unit-test chain execution and artifacts."""
 
     description: str
-    sqlglot_enabled: bool
+    sql_analysis_enabled: bool
     expected_artifact_fragments: tuple[str, ...]
     unexpected_artifact_fragments: tuple[str, ...]

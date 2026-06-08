@@ -95,7 +95,7 @@ def format_compile_text(
         lines.append(f"  {style.muted('Wrote:')} target/manifest.json")
     if (
         lineage is None
-        and graph.project.settings.sqlglot
+        and graph.project.settings.sql_analysis
         and lineage_mode != CompileLineageMode.NONE
     ):
         lines.append(f"  {style.warning('Column lineage:')} unavailable")

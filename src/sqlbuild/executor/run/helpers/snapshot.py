@@ -171,7 +171,7 @@ def execute_snapshot_entry(
             validate_runtime_contract(
                 entry=entry,
                 actual_columns=delta_columns,
-                dialect=adapter.sqlglot_dialect_name,
+                dialect=adapter.sql_analysis_dialect_name,
             )
     except Exception as exc:
         return build_failed_result(
@@ -763,7 +763,7 @@ def _apply_snapshot_schema_change(
         and not _snapshot_types_compatible(
             target_type=target_map[column.name.lower()].type,
             delta_type=column.type,
-            dialect=adapter.sqlglot_dialect(),
+            dialect=adapter.sql_analysis_dialect(),
         )
     )
 
