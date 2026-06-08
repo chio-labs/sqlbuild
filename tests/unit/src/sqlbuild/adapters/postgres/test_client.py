@@ -251,7 +251,7 @@ def test_given_relation_when_describing_then_postgres_queries_information_schema
             description="returns expected Postgres adapter defaults and dialect settings",
             expected_default_schema="public",
             expected_default_database=None,
-            expected_sqlglot_dialect="postgres",
+            expected_sql_analysis_dialect="postgres",
             expected_identifier_length=63,
         )
     ],
@@ -264,7 +264,7 @@ def test_given_postgres_adapter_when_checking_defaults_then_returns_expected_val
 
     assert adapter.default_schema() == test_case.expected_default_schema
     assert adapter.default_database() == test_case.expected_default_database
-    assert adapter.sqlglot_dialect() == test_case.expected_sqlglot_dialect
+    assert adapter.sql_analysis_dialect() == test_case.expected_sql_analysis_dialect
     assert adapter.maximum_identifier_length() == test_case.expected_identifier_length
 
 

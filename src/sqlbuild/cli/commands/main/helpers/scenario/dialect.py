@@ -8,15 +8,15 @@ from sqlbuild.shared.constants import SCENARIO_CLI_CAPTURE_DIALECT_REQUIRED
 
 
 def require_scenario_capture_dialect(*, adapter: BaseAdapter, adapter_name: str) -> str:
-    """Return the SQLGlot dialect required for scenario snapshot compatibility."""
+    """Return the SQL analysis dialect required for scenario snapshot compatibility."""
 
-    dialect: str | None = adapter.sqlglot_dialect()
+    dialect: str | None = adapter.sql_analysis_dialect()
     if dialect is None:
         raise CliUserError(
-            f"Adapter '{adapter_name}' must define a SQLGlot dialect for scenario snapshots",
+            f"Adapter '{adapter_name}' must define a SQL analysis dialect for scenario snapshots",
             code=SCENARIO_CLI_CAPTURE_DIALECT_REQUIRED,
             help=(
-                "Set sqlglot_dialect_name on the adapter so captured snapshots can be "
+                "Set sql_analysis_dialect_name on the adapter so captured snapshots can be "
                 "validated and replayed locally."
             ),
         )

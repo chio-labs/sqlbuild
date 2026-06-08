@@ -54,7 +54,7 @@ class PostgresAdapterDefaultsTestCase:
     description: str
     expected_default_schema: str
     expected_default_database: str | None
-    expected_sqlglot_dialect: str | None
+    expected_sql_analysis_dialect: str | None
     expected_identifier_length: int
 
 

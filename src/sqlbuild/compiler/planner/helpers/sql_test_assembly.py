@@ -31,13 +31,13 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_table_function_references,
     resolve_udf_references,
 )
-from sqlbuild.compiler.planner.helpers.sqlglot_sql_test_assembly import (
-    try_resolve_test_model_sql_with_sqlglot,
+from sqlbuild.compiler.planner.helpers.sql_analysis_sql_test_assembly import (
+    try_resolve_test_model_sql_with_sql_analysis,
 )
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     PlanWarning,
-    SqlglotResolvedTestSql,
+    SqlAnalysisResolvedTestSql,
     SqlTestAssertionStep,
     SqlTestPlanEntry,
 )
@@ -62,7 +62,7 @@ def plan_test(
     test: CompiledSqlTest,
     project: CompiledProject,
     adapter: BaseAdapter,
-    sqlglot_enabled: bool = False,
+    sql_analysis_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
@@ -75,7 +75,7 @@ def plan_test(
                 test=test,
                 function_targets=function_targets,
                 adapter=adapter,
-                sqlglot_enabled=sqlglot_enabled,
+                sql_analysis_enabled=sql_analysis_enabled,
             ),
             (),
         )
@@ -108,7 +108,7 @@ def plan_test(
     warnings: list[PlanWarning] = []
     reachable_mocks: set[str] = set()
     resolved: dict[str, str] = {}
-    sqlglot_resolved: dict[str, SqlglotResolvedTestSql] = {}
+    sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql] = {}
     function_deps: list[CompiledObjectKey] = []
 
     chain_steps: list[ChainStep] = []
@@ -144,27 +144,29 @@ def plan_test(
             adapter=adapter,
         )
         resolved_value: str = f"({step_sql})"
-        if sqlglot_enabled:
-            sqlglot_sql: SqlglotResolvedTestSql | None = try_resolve_test_model_sql_with_sqlglot(
-                query_sql=query_sql,
-                mock_refs=mock_refs,
-                mock_sources=mock_sources,
-                mock_seeds=mock_seeds,
-                mock_dbt_refs=mock_dbt_refs,
-                function_targets={
-                    name: target.qualified_name
-                    for name, target in function_targets.items()
-                    if target.qualified_name is not None
-                },
-                helper_ctes=helper_ctes,
-                resolved_chain=sqlglot_resolved,
-                reachable_mocks=reachable_mocks,
-                file_label=str(test.test_file.relative_path),
+        if sql_analysis_enabled:
+            sql_analysis_sql: SqlAnalysisResolvedTestSql | None = (
+                try_resolve_test_model_sql_with_sql_analysis(
+                    query_sql=query_sql,
+                    mock_refs=mock_refs,
+                    mock_sources=mock_sources,
+                    mock_seeds=mock_seeds,
+                    mock_dbt_refs=mock_dbt_refs,
+                    function_targets={
+                        name: target.qualified_name
+                        for name, target in function_targets.items()
+                        if target.qualified_name is not None
+                    },
+                    helper_ctes=helper_ctes,
+                    resolved_chain=sql_analysis_resolved,
+                    reachable_mocks=reachable_mocks,
+                    file_label=str(test.test_file.relative_path),
+                )
             )
-            if sqlglot_sql is not None:
-                step_sql = sqlglot_sql.resolved_sql
-                resolved_value = sqlglot_sql.resolved_sql
-                sqlglot_resolved[model_name] = sqlglot_sql
+            if sql_analysis_sql is not None:
+                step_sql = sql_analysis_sql.resolved_sql
+                resolved_value = sql_analysis_sql.resolved_sql
+                sql_analysis_resolved[model_name] = sql_analysis_sql
 
         unresolved_warnings: tuple[PlanWarning, ...] = _validate_resolved_sql(
             resolved_sql=step_sql,
@@ -258,7 +260,7 @@ def plan_test(
         assertions=tuple(assertion_steps),
         scope_deps=test.scope_deps,
         function_deps=_dedupe_function_deps(function_deps),
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
     return entry, tuple(warnings)
 
@@ -268,7 +270,7 @@ def _plan_direct_logic_test(
     test: CompiledSqlTest,
     function_targets: dict[str, CompiledRelationDestination],
     adapter: BaseAdapter,
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
     if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
         raise PlannerInputError(f"test '{test.name}' is not a direct-logic SQL test")
@@ -305,7 +307,7 @@ def _plan_direct_logic_test(
             ),
         ),
         scope_deps=test.scope_deps,
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
 
 

@@ -114,7 +114,7 @@ TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
         expected_assertion_names=(),
     ),
     ExtractSqlScenarioCtesTestCase(
-        description="extracts scenario ctes with sqlglot fallback syntax",
+        description="extracts scenario ctes with sql_analysis fallback syntax",
         sql="""
         WITH
         "__source__raw__orders" AS MATERIALIZED (SELECT 1 AS order_id),
@@ -338,7 +338,9 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs,
         effective_vars=test_case.effective_vars,
-        macro_context=MacroContext(adapter_name="duckdb", sqlglot_enabled=True, target_name=None),
+        macro_context=MacroContext(
+            adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
+        ),
     )
 
     assert len(scenario_inputs) == 1
@@ -388,6 +390,6 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
             discovered_inputs,
             effective_vars={},
             macro_context=MacroContext(
-                adapter_name="duckdb", sqlglot_enabled=True, target_name=None
+                adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
             ),
         )

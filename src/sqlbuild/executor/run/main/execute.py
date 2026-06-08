@@ -326,7 +326,7 @@ def _staged_lifecycle(
             validate_runtime_contract(
                 entry=entry,
                 actual_columns=staging_columns,
-                dialect=adapter.sqlglot_dialect_name,
+                dialect=adapter.sql_analysis_dialect_name,
             )
     except Exception as exc:
         return build_failed_result(

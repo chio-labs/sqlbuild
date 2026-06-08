@@ -22,7 +22,7 @@ LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
         expected_target=None,
         expected_adapter=None,
         expected_connection={},
-        expected_sqlglot=True,
+        expected_sql_analysis=True,
         expected_sql_validation=True,
         expected_max_concurrency=1,
         expected_setting_overrides=frozenset(),
@@ -39,7 +39,7 @@ adapter = "snowflake"
 database = "local.duckdb"
 
 [settings]
-sqlglot = false
+sql_analysis = false
 sql_validation = false
 concurrency = 4
 auto_load_sources = false
@@ -61,12 +61,12 @@ max_total_bytes = 78
         expected_target="dev",
         expected_adapter="snowflake",
         expected_connection={"database": "local.duckdb"},
-        expected_sqlglot=False,
+        expected_sql_analysis=False,
         expected_sql_validation=False,
         expected_max_concurrency=4,
         expected_auto_load_sources=False,
         expected_setting_overrides=frozenset(
-            {"sqlglot", "sql_validation", "concurrency", "auto_load_sources"}
+            {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources"}
         ),
         expected_vars={"user": "kevin"},
         expected_scenario_local_type_overrides={
@@ -93,7 +93,7 @@ max_concurrency = 4
         expected_target=None,
         expected_adapter=None,
         expected_connection={},
-        expected_sqlglot=True,
+        expected_sql_analysis=True,
         expected_sql_validation=True,
         expected_max_concurrency=4,
         expected_setting_overrides=frozenset({"concurrency"}),
@@ -118,7 +118,7 @@ database = "local.duckdb"
         expected_target=None,
         expected_adapter=None,
         expected_connection={"database": "local.duckdb"},
-        expected_sqlglot=True,
+        expected_sql_analysis=True,
         expected_sql_validation=True,
         expected_max_concurrency=1,
         expected_setting_overrides=frozenset(),
@@ -154,7 +154,7 @@ allow_as_target = false
         expected_target="dev",
         expected_adapter=None,
         expected_connection={},
-        expected_sqlglot=True,
+        expected_sql_analysis=True,
         expected_sql_validation=True,
         expected_max_concurrency=1,
         expected_setting_overrides=frozenset(),
@@ -186,15 +186,15 @@ virtual_environments = "yes"
         expected_error_fragment="Expected 'virtual_environments' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when settings sqlglot is not a boolean",
+        description="raises when settings sql_analysis is not a boolean",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
 [settings]
-sqlglot = 123
+sql_analysis = 123
 """.strip(),
-        expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
+        expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings concurrency is not an integer",
@@ -529,12 +529,12 @@ user = 123
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
     ),
     LoadLocalConfigErrorTestCase(
-        description="raises when local settings sqlglot is not a boolean",
+        description="raises when local settings sql_analysis is not a boolean",
         local_file_contents="""
 [settings]
-sqlglot = "no thanks"
+sql_analysis = "no thanks"
 """.strip(),
-        expected_error_fragment="Expected 'sqlglot' to be a boolean when provided",
+        expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
     ),
     LoadLocalConfigErrorTestCase(
         description="raises when local settings concurrency is not an integer",
@@ -567,7 +567,7 @@ default_target = "dev"
         expected_adapter="duckdb",
         expected_default_target="dev",
         expected_connection={},
-        expected_sqlglot=True,
+        expected_sql_analysis=True,
         expected_max_concurrency=1,
         expected_materialized=None,
         expected_row_diff_exclude_columns=(),
@@ -594,7 +594,7 @@ path = "data.db"
 
 [settings]
 virtual_environments = true
-sqlglot = false
+sql_analysis = false
 query_change_tracking = true
 concurrency = 8
 auto_load_sources = false
@@ -668,7 +668,7 @@ target_path = "target/dbt"
         expected_virtual_environments=True,
         expected_default_target="dev",
         expected_connection={"path": "data.db"},
-        expected_sqlglot=False,
+        expected_sql_analysis=False,
         expected_max_concurrency=8,
         expected_auto_load_sources=False,
         expected_materialized="table",
@@ -744,7 +744,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.settings.virtual_environments is test_case.expected_virtual_environments
     assert config.default_target == test_case.expected_default_target
     assert config.connection == test_case.expected_connection
-    assert config.settings.sqlglot is test_case.expected_sqlglot
+    assert config.settings.sql_analysis is test_case.expected_sql_analysis
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.defaults.materialized == test_case.expected_materialized
@@ -813,7 +813,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.target == test_case.expected_target
     assert config.adapter == test_case.expected_adapter
     assert config.connection == test_case.expected_connection
-    assert config.settings.sqlglot is test_case.expected_sqlglot
+    assert config.settings.sql_analysis is test_case.expected_sql_analysis
     assert config.settings.sql_validation is test_case.expected_sql_validation
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources

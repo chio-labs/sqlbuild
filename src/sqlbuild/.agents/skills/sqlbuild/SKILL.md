@@ -759,7 +759,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Blocking audits | Block promotion from staging table | Tests run after materialization | Block during plan (production untouched); during run, data already written |
 | Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
 | **Compilation** | | | |
-| SQL validation | SQLGlot-based, offline | dbt Fusion (proprietary license) | SQLGlot-based |
+| SQL validation | Polyglot-backed, offline | dbt Fusion (proprietary license) | SQLGlot-based |
 | Column-level lineage | Compile-time, fast and rich modes | Post-hoc via docs | Compile-time |
 | Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
@@ -998,7 +998,7 @@ Global feature toggles:
 
 ```toml
 [settings]
-sqlglot = true
+sql_analysis = true
 query_change_tracking = true
 sql_validation = true
 concurrency = 1
@@ -1010,7 +1010,7 @@ default_audit_run_scope = "final"
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `sqlglot` | `true` | Enable SQLGlot-based SQL validation and static analysis at compile time |
+| `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
 | `virtual_environments` | `false` | Enable [virtual environments](/concepts/advanced/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
@@ -1231,7 +1231,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 
 class MyDatabaseAdapter(BaseAdapter):
     adapter_name = "my_database"
-    sqlglot_dialect_name = "postgres"  # SQLGlot dialect for SQL validation and lineage
+    sql_analysis_dialect_name = "postgres"  # SQL analysis dialect for SQL validation and lineage
 
     def connect(self, config):
         ...
@@ -1243,7 +1243,7 @@ class MyDatabaseAdapter(BaseAdapter):
         ...
 ```
 
-Set `sqlglot_dialect_name` to the [SQLGlot dialect](https://github.com/tobymao/sqlglot/tree/main/sqlglot/dialects) that matches your engine's SQL syntax. This enables compile-time SQL validation, column inference, column lineage, and local scenario replay for your adapter. If omitted, SQLBuild uses generic SQL parsing.
+Set `sql_analysis_dialect_name` to the SQL dialect name that matches your engine's SQL syntax. This enables compile-time SQL validation, column inference, column lineage, and local scenario replay for your adapter. If omitted, SQLBuild uses generic SQL parsing.
 
 For full control with no inherited defaults, subclass `StrictAdapter` instead. Every method is abstract and must be implemented explicitly. SQLBuild raises a clear error listing any unimplemented methods.
 
@@ -2351,7 +2351,7 @@ MODEL (
 );
 ```
 
-SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time using SQLGlot.
+SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time using SQL analysis.
 
 Available context variables in hooks:
 
@@ -2647,7 +2647,7 @@ def timestamp_trunc(ctx, grain: str, expr: str) -> str:
     return f"DATE_TRUNC('{grain}', {expr})"
 ```
 
-The macro context provides `adapter_name`, `sqlglot_enabled`, `target_name`, and `vars`.
+The macro context provides `adapter_name`, `sql_analysis_enabled`, `target_name`, and `vars`.
 
 ### Deferred placeholders
 
@@ -2677,13 +2677,13 @@ SQLBuild processes authored SQL in this order:
 1. **Config templates** (`${CTX:...}`, `${ENV:...}`) in TOML/YAML config values are resolved during config compilation
 2. **Project variables** (`@@name`), **environment variables** (`@@ENV:NAME`), and **context variables** (`@@CTX:name` in SQL hooks) are substituted
 3. **Macro calls** (`@name(args)`) are expanded
-4. **SQLGlot validation** runs against the fully expanded SQL
+4. **SQL analysis validation** runs against the fully expanded SQL
 
 This means:
 - Config templates resolve first, before any SQL processing
 - Macros see already-substituted variable values in the SQL
 - `@@CTX:destination.qualified` in SQL hooks sees the final target-overridden destination name because hooks are expanded after destination naming is fully resolved
-- SQLGlot validates the final expanded SQL, catching syntax errors from both vars and macros
+- SQL analysis validates the final expanded SQL, catching syntax errors from both vars and macros
 
 ## Python Macros
 
@@ -2781,7 +2781,7 @@ MODEL (
 SELECT 1 AS id
 ```
 
-Hook SQL is validated at compile time using SQLGlot, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
+Hook SQL is validated at compile time using SQL analysis, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
 
 For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models#hooks) for the full Python hook API.
 
@@ -2802,7 +2802,7 @@ The macro context provides:
 | Field | Description |
 |-------|-------------|
 | `adapter_name` | The active adapter (e.g. `duckdb`, `snowflake`) |
-| `sqlglot_enabled` | Whether SQLGlot analysis is enabled |
+| `sql_analysis_enabled` | Whether SQL analysis is enabled |
 | `target_name` | The active target name, if any |
 | `vars` | Effective project variables as a dict (merged from project config, target, local config, and CLI `--vars`) |
 
@@ -4571,7 +4571,7 @@ This:
 1. Checks snapshot freshness via the input fingerprint (missing/stale snapshots are skipped by default)
 2. Creates a temporary DuckDB database at `target/run/scenarios/<scenario_name>/local.duckdb`
 3. Loads JSONL snapshots into typed DuckDB tables using column metadata from `scenario.json`
-4. Transpiles model and check SQL from the project adapter dialect to DuckDB via SQLGlot
+4. Transpiles model and check SQL from the project adapter dialect to DuckDB via SQL analysis
 5. Builds functions, models, and runs expected/assertion checks in DuckDB
 6. Keeps the local DuckDB file for inspection (it lives under `target/`, so it's always retained)
 
@@ -4599,7 +4599,7 @@ sqb scenario test --local --strict
 
 #### Local type overrides
 
-When SQLGlot's automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
+When automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
 
 ```toml
 [scenario.local_type_overrides.snowflake]
@@ -4630,7 +4630,7 @@ See the [CLI reference](/cli/scenario) for full command documentation.
 ### Limitations
 
 - Custom materializations are not supported in scenarios yet. Scenario models using custom materializations will fail with a clear error.
-- Local replay transpiles SQL from the project adapter dialect to DuckDB via SQLGlot. Adapter-specific SQL that SQLGlot cannot translate will produce a clear error with the failing resource name and reason.
+- Local replay transpiles SQL from the project adapter dialect to DuckDB via SQL analysis. Adapter-specific SQL that SQL analysis cannot translate will produce a clear error with the failing resource name and reason.
 
 ## Selectors
 
@@ -4796,9 +4796,9 @@ Trace individual columns through your SQL pipeline - understand where data comes
 
 ### How it works
 
-SQLBuild analyzes column lineage statically at compile time using [SQLGlot](https://github.com/tobymao/sqlglot). No warehouse connection is needed. The analyzer parses each model's SQL, resolves `ref()` and `source()` calls, and traces columns through `SELECT` lists, CTEs, JOINs, subqueries, and expressions.
+SQLBuild analyzes column lineage statically at compile time using SQL analysis. No warehouse connection is needed. The analyzer parses each model's SQL, resolves `ref()` and `source()` calls, and traces columns through `SELECT` lists, CTEs, JOINs, subqueries, and expressions.
 
-Column lineage requires SQLGlot to be enabled in project settings (it is by default).
+Column lineage requires SQL analysis to be enabled in project settings (it is by default).
 
 ### Transform types
 
@@ -4829,7 +4829,7 @@ Each edge also carries a confidence level indicating how certain the analyzer is
 
 Column lineage supports two analysis modes that trade off speed against depth of analysis.
 
-**Rich mode** uses SQLGlot's lineage module and optimizer to resolve columns through CTEs, subqueries, and multi-level nesting with full transform classification. Thorough, but slower because the optimizer runs per column per model.
+**Rich mode** uses SQL analysis to resolve columns through CTEs, subqueries, and multi-level nesting with full transform classification. Thorough, but slower on large projects.
 
 **Fast mode** parses the SQL AST directly to extract column mappings, resolve CTE references, and classify transforms. It handles the same SQL patterns that most column lineage tools support and is fast enough to run on every compile.
 
@@ -4897,7 +4897,7 @@ These checks run automatically during `sqb compile` and report diagnostics with 
 
 ### Limitations
 
-- Column lineage requires SQLGlot to be enabled (`sqlglot = true` in settings, which is the default)
+- Column lineage requires SQL analysis to be enabled (`sql_analysis = true` in settings, which is the default)
 - Complex SQL patterns (deeply nested correlated subqueries, dynamic SQL, adapter-specific functions) may reduce accuracy or confidence
 - `SELECT *` is tracked as a `star` transform - the analyzer knows the column passes through but the mapping is less precise than explicit column references
 - Column lineage is computed statically from SQL text. Runtime-only column additions (e.g. from dynamic UDFs) are not tracked
@@ -8601,14 +8601,14 @@ sqb --project-dir <path> compile [flags]
 
 1. **Discovery** - finds `sqlbuild_project.toml`, scans for models, sources, seeds, functions, audits, tests, and macros
 2. **Graph resolution** - resolves `ref()` and `source()` calls, expands macros, orders models by dependency
-3. **SQL validation** - validates SQL syntax using SQLGlot (when enabled)
+3. **SQL validation** - validates SQL syntax using SQL analysis (when enabled)
 4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
 5. **Contract validation** - checks declared column contracts against inferred query output
 6. **Artifact write** - writes compiled SQL to `target/compiled/`
 
 ### Static analysis
 
-When SQLGlot is enabled (default), compile performs static analysis on your models without connecting to the warehouse:
+When SQL analysis is enabled (default), compile performs static analysis on your models without connecting to the warehouse:
 
 - **Column inference**: Infers output columns from each model's SQL, including through CTEs, subqueries, and JOINs
 - **Column contract validation**: If a model declares columns in its `MODEL()` header, compile checks that every declared column exists in the query output. If a column declares a type and `type_enforcement` is enabled, compile also verifies the inferred type matches the declared type
@@ -8684,7 +8684,7 @@ The `--lineage-mode` flag controls how column lineage is computed during compile
 | Mode | Description |
 |------|-------------|
 | `fast` | Default. Lightweight column extraction using SQL model metadata. |
-| `rich` | Full SQLGlot-based analysis with transform classification and deeper tracing. Slower on large projects. |
+| `rich` | Full SQL analysis with transform classification and deeper tracing. Slower on large projects. |
 | `none` | Skip column lineage entirely. |
 
 Column lineage results are included in the JSON compile report under each model's `lineage` field. See [Column Lineage](/concepts/column-lineage) for details on analysis modes and transform types.
@@ -9723,7 +9723,7 @@ sqb lineage fact_orders.total_cents
 sqb lineage fact_orders.order_id --direction downstream
 ```
 
-Column lineage supports `upstream` and `downstream` directions (not `both`). The `--mode` flag selects the analysis mode: `rich` (default, full SQLGlot analysis) or `fast` (lightweight, faster on large projects).
+Column lineage supports `upstream` and `downstream` directions (not `both`). The `--mode` flag selects the analysis mode: `rich` (default, full SQL analysis) or `fast` (lightweight, faster on large projects).
 
 #### Tree
 

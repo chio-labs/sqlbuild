@@ -290,7 +290,7 @@ def maybe_corrupt_scenario_snapshot_dialect(
     )
     manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert isinstance(manifest_data, dict)
-    manifest_data["capture_dialect"] = "not_a_sqlglot_dialect"
+    manifest_data["capture_dialect"] = "not_a_sql_analysis_dialect"
     manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
 
 

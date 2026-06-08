@@ -48,7 +48,7 @@ from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settin
 class DuckDbBackedAdapter(BaseAdapter):
     """Shared adapter implementation for DuckDB-backed connections."""
 
-    sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
+    sql_analysis_dialect_name: ClassVar[str | None] = "duckdb"
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -206,10 +206,10 @@ class DuckDbBackedAdapter(BaseAdapter):
 
         return "EXCLUDE"
 
-    def sqlglot_dialect(self) -> str | None:
-        """Return the SQLGlot dialect name for this adapter, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the SQL analysis dialect name for this adapter, if any."""
 
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def default_table_promotion_mode(self) -> TablePromotionMode:
         """Return staged as the generic default promotion mode."""
@@ -823,7 +823,7 @@ class DuckDbBackedAdapter(BaseAdapter):
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
-            sqlglot_dialect=self.sqlglot_dialect(),
+            sql_analysis_dialect=self.sql_analysis_dialect(),
             function_nullability_rules={
                 "LOWER": first_arg_nullability,
                 "UPPER": first_arg_nullability,
@@ -1654,7 +1654,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             elif not types_equal(
                 left=left_map[col_name],
                 right=col_type,
-                dialect=self.sqlglot_dialect(),
+                dialect=self.sql_analysis_dialect(),
             ):
                 type_changed.append(
                     (
@@ -2072,7 +2072,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             )
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
-        return normalize_numeric_family(type_sql=column_type, dialect=self.sqlglot_dialect())
+        return normalize_numeric_family(type_sql=column_type, dialect=self.sql_analysis_dialect())
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")

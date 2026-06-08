@@ -50,7 +50,7 @@ class NormalizedType:
 class ExpressionInferenceProfile:
     """Static SQL expression inference behavior exposed by an adapter."""
 
-    sqlglot_dialect: str | None = None
+    sql_analysis_dialect: str | None = None
     function_nullability_rules: Mapping[str, FunctionNullabilityRule] = field(default_factory=dict)
 
     def function_nullability_rule(self, function_name: str) -> FunctionNullabilityRule | None:

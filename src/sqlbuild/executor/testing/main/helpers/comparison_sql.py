@@ -16,11 +16,11 @@ _DATABRICKS_BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
 
 
 def lift_step_ctes(
-    sql: str, lifted_ctes: OrderedDict[str, str], *, sqlglot_enabled: bool = True
+    sql: str, lifted_ctes: OrderedDict[str, str], *, sql_analysis_enabled: bool = True
 ) -> str:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
-    if not sqlglot_enabled:
+    if not sql_analysis_enabled:
         return sql
     split_sql: tuple[tuple[tuple[str, str], ...], str] | None = _split_top_level_with(sql)
     if split_sql is None:
@@ -43,15 +43,15 @@ def lift_step_ctes(
 
 
 def format_sql(
-    sql: str, *, sqlglot_dialect: str | None = None, sqlglot_enabled: bool = True
+    sql: str, *, sql_analysis_dialect: str | None = None, sql_analysis_enabled: bool = True
 ) -> str:
     """Format generated comparison SQL when Polyglot is available."""
 
-    if not sqlglot_enabled:
+    if not sql_analysis_enabled:
         return sql
     protected_sql: str = sql
     protected_identifiers: dict[str, str] = {}
-    if sqlglot_dialect == "databricks" and "`" in sql:
+    if sql_analysis_dialect == "databricks" and "`" in sql:
         protected_sql, protected_identifiers = _protect_databricks_backtick_identifiers(sql)
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -60,7 +60,7 @@ def format_sql(
         formatted_sql: str = str(
             polyglot_module.format(
                 protected_sql,
-                dialect=sqlglot_dialect or "generic",
+                dialect=sql_analysis_dialect or "generic",
             )
         )
         return _restore_protected_identifiers(

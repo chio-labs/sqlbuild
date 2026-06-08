@@ -99,7 +99,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
         expected_warning_count=1,
     ),
     BuildModelWarningsTestCase(
-        description="sqlglot type change produces info warning",
+        description="sql_analysis type change produces info warning",
         model_name="orders",
         materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,
@@ -155,7 +155,7 @@ BUILD_WARNINGS_TEST_CASES: list[BuildModelWarningsTestCase] = [
         expected_warning_count=0,
     ),
     BuildModelWarningsTestCase(
-        description="sqlglot added column produces info warning",
+        description="sql_analysis added column produces info warning",
         model_name="orders",
         materialization_type=MaterializationType.INCREMENTAL,
         change_kind=ChangeKind.SCHEMA_CHANGED,

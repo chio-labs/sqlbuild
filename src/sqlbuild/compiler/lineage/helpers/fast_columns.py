@@ -49,7 +49,7 @@ def build_fast_project_column_lineage(
 ) -> ProjectColumnLineage | None:
     """Build a fast, partial project column lineage graph for compiled models."""
 
-    if not project.settings.sqlglot:
+    if not project.settings.sql_analysis:
         return None
 
     schema: dict[str, dict[str, str]] = _build_schema_mapping(project)

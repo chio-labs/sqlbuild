@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 
 
-def extract_top_level_ctes_with_sqlglot(
+def extract_top_level_ctes_with_sql_analysis(
     *, sql: str, file_label: str, context_label: str
 ) -> tuple[tuple[str, str], ...] | None:
     """Extract top-level CTE aliases and rendered bodies with Polyglot when available."""

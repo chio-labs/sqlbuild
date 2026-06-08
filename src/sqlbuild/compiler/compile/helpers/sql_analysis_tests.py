@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 
 
-def extract_expected_branch_column_names_with_sqlglot(
+def extract_expected_branch_column_names_with_sql_analysis(
     *, sql: str, file_label: str
 ) -> tuple[tuple[str, ...], ...] | None:
     """Return expected SELECT branch names using Polyglot when it is installed."""

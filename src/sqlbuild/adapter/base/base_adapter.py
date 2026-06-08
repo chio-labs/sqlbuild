@@ -44,7 +44,7 @@ class BaseAdapter(StrictAdapter):
     """
 
     adapter_name: ClassVar[str]
-    sqlglot_dialect_name: ClassVar[str | None] = None
+    sql_analysis_dialect_name: ClassVar[str | None] = None
     max_identifier_length: ClassVar[int] = 63
 
     def supports_zero_copy_clone(self) -> bool:
@@ -1454,14 +1454,14 @@ class BaseAdapter(StrictAdapter):
             return "decimal"
         if "INT" in normalized:
             return "integer"
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
 
     def default_schema(self) -> str | None:
         """Return None — most adapters require explicit schema configuration."""
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def default_database(self) -> str | None:
         """Return None — most adapters require explicit database configuration."""
@@ -1679,15 +1679,15 @@ class BaseAdapter(StrictAdapter):
             render_framework_type=self.render_framework_type,
         )
 
-    def sqlglot_dialect(self) -> str | None:
-        """Return the configured SQLGlot dialect name, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the configured SQL analysis dialect name, if any."""
 
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         """Return portable static expression inference behavior by default."""
 
-        return ExpressionInferenceProfile(sqlglot_dialect=self.sqlglot_dialect())
+        return ExpressionInferenceProfile(sql_analysis_dialect=self.sql_analysis_dialect())
 
     def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
         """Render one generic cursor bound literal from a normalized string value."""

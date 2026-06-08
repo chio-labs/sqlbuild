@@ -118,7 +118,7 @@ def run_scenario(
         project_dir=effective_project_dir
     )
     if local:
-        _validate_local_scenario_sqlglot_enabled(
+        _validate_local_scenario_sql_analysis_enabled(
             discovered_inputs=discovered_inputs,
             no_sql_validation=no_sql_validation,
         )
@@ -307,37 +307,37 @@ def run_scenario(
     return exit_code
 
 
-def _validate_local_scenario_sqlglot_enabled(
+def _validate_local_scenario_sql_analysis_enabled(
     *, discovered_inputs: DiscoveredProjectInputs, no_sql_validation: bool
 ) -> None:
-    if no_sql_validation or not _effective_sqlglot_and_validation_enabled(
+    if no_sql_validation or not _effective_sql_analysis_and_validation_enabled(
         discovered_inputs=discovered_inputs
     ):
         raise CliUserError(
-            "scenario test --local requires SQLGlot and SQL validation",
+            "scenario test --local requires SQL analysis and SQL validation",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
             help=(
-                "Enable settings.sqlglot and settings.sql_validation when running local "
+                "Enable settings.sql_analysis and settings.sql_validation when running local "
                 "scenario replay, snapshot sync, or snapshot refresh."
             ),
         )
 
 
-def _effective_sqlglot_and_validation_enabled(
+def _effective_sql_analysis_and_validation_enabled(
     *, discovered_inputs: DiscoveredProjectInputs
 ) -> bool:
     setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
-    sqlglot_enabled: bool = (
-        discovered_inputs.local_config.settings.sqlglot
-        if "sqlglot" in setting_overrides
-        else discovered_inputs.project_config.settings.sqlglot
+    sql_analysis_enabled: bool = (
+        discovered_inputs.local_config.settings.sql_analysis
+        if "sql_analysis" in setting_overrides
+        else discovered_inputs.project_config.settings.sql_analysis
     )
     sql_validation_enabled: bool = (
         discovered_inputs.local_config.settings.sql_validation
         if "sql_validation" in setting_overrides
         else discovered_inputs.project_config.settings.sql_validation
     )
-    return sqlglot_enabled and sql_validation_enabled
+    return sql_analysis_enabled and sql_validation_enabled
 
 
 def _sync_local_snapshots(

@@ -244,7 +244,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         raise ProjectConfigError(
             "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
         )
-    sqlglot: bool = _optional_bool(mapping=mapping, key="sqlglot", default=True)
+    sql_analysis: bool = _optional_bool(mapping=mapping, key="sql_analysis", default=True)
     query_change_tracking: bool = _optional_bool(
         mapping=mapping,
         key="query_change_tracking",
@@ -267,7 +267,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         payload=mapping, key="default_audit_run_scope"
     )
     return SettingsConfig(
-        sqlglot=sqlglot,
+        sql_analysis=sql_analysis,
         query_change_tracking=query_change_tracking,
         sql_validation=sql_validation,
         concurrency=concurrency,

@@ -34,8 +34,8 @@ def plan_scenario_graph(
     *,
     scenario: CompiledSqlScenario,
     project: CompiledProject,
-    sqlglot_enabled: bool = True,
-    sqlglot_dialect: str | None = None,
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
 ) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]:
     """Infer scenario target models, build closure, and required fixtures."""
 
@@ -45,8 +45,8 @@ def plan_scenario_graph(
     assertion_target_names, assertion_warnings = _extract_assertion_target_names(
         scenario.assertion_ctes,
         scenario_name=scenario.name,
-        sqlglot_enabled=sqlglot_enabled,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_enabled=sql_analysis_enabled,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     target_model_names: tuple[str, ...] = _dedupe_names(
         (*scenario.expected_model_names, *assertion_target_names)
@@ -144,19 +144,19 @@ def _extract_assertion_target_names(
     assertion_ctes: tuple[CompileSqlScenarioCte, ...],
     *,
     scenario_name: str,
-    sqlglot_enabled: bool,
-    sqlglot_dialect: str | None,
+    sql_analysis_enabled: bool,
+    sql_analysis_dialect: str | None,
 ) -> tuple[tuple[str, ...], tuple[PlanWarning, ...]]:
     names: list[str] = []
     warnings: list[PlanWarning] = []
     cte: CompileSqlScenarioCte
     for cte in assertion_ctes:
-        if sqlglot_enabled:
+        if sql_analysis_enabled:
             try:
                 names.extend(
-                    _extract_assertion_target_names_with_sqlglot(
+                    _extract_assertion_target_names_with_sql_analysis(
                         cte.sql_body,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_dialect=sql_analysis_dialect,
                     )
                 )
             except ValueError as error:
@@ -174,8 +174,8 @@ def _extract_assertion_target_names(
     return _dedupe_names(tuple(names)), tuple(warnings)
 
 
-def _extract_assertion_target_names_with_sqlglot(
-    sql: str, *, sqlglot_dialect: str | None
+def _extract_assertion_target_names_with_sql_analysis(
+    sql: str, *, sql_analysis_dialect: str | None
 ) -> tuple[str, ...]:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -184,8 +184,8 @@ def _extract_assertion_target_names_with_sqlglot(
         raise error
     try:
         parsed: Any = (
-            polyglot_module.parse_one(sql, dialect=sqlglot_dialect)
-            if sqlglot_dialect is not None
+            polyglot_module.parse_one(sql, dialect=sql_analysis_dialect)
+            if sql_analysis_dialect is not None
             else polyglot_module.parse_one(sql, dialect="generic")
         )
     except Exception as error:

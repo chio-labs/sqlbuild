@@ -14,7 +14,7 @@ from tests.unit.src.sqlbuild.adapter.base._test_types import (
     BaseAdapterExpressionInferenceProfileTestCase,
     BaseAdapterIdentifierLimitTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
-    BaseAdapterSqlglotDialectTestCase,
+    BaseAdapterSqlAnalysisDialectTestCase,
 )
 
 
@@ -31,17 +31,17 @@ class ConcreteBaseAdapter(BaseAdapter):
 
 
 class PostgresLikeBaseAdapter(ConcreteBaseAdapter):
-    sqlglot_dialect_name: ClassVar[str | None] = "postgres"
+    sql_analysis_dialect_name: ClassVar[str | None] = "postgres"
 
 
-BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES: list[BaseAdapterSqlglotDialectTestCase] = [
-    BaseAdapterSqlglotDialectTestCase(
+BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES: list[BaseAdapterSqlAnalysisDialectTestCase] = [
+    BaseAdapterSqlAnalysisDialectTestCase(
         description="returns none by default",
-        expected_sqlglot_dialect=None,
+        expected_sql_analysis_dialect=None,
     ),
-    BaseAdapterSqlglotDialectTestCase(
+    BaseAdapterSqlAnalysisDialectTestCase(
         description="returns class configured dialect",
-        expected_sqlglot_dialect="postgres",
+        expected_sql_analysis_dialect="postgres",
     ),
 ]
 
@@ -80,7 +80,7 @@ def test_given_python_function_when_rendering_with_base_adapter_then_raises_clea
     [
         BaseAdapterExpressionInferenceProfileTestCase(
             description="returns portable inference profile by default",
-            expected_sqlglot_dialect=None,
+            expected_sql_analysis_dialect=None,
             expected_function_rules_count=0,
         )
     ],
@@ -93,7 +93,7 @@ def test_given_base_adapter_when_getting_inference_profile_then_returns_portable
 
     profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
 
-    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    assert profile.sql_analysis_dialect == test_case.expected_sql_analysis_dialect
     assert len(profile.function_nullability_rules) == test_case.expected_function_rules_count
 
 
@@ -102,18 +102,18 @@ def test_given_base_adapter_when_getting_inference_profile_then_returns_portable
     BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES,
     ids=[case.description for case in BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES],
 )
-def test_given_base_adapter_subclass_when_getting_sqlglot_dialect_then_uses_class_setting(
-    test_case: BaseAdapterSqlglotDialectTestCase,
+def test_given_base_adapter_subclass_when_getting_sql_analysis_dialect_then_uses_class_setting(
+    test_case: BaseAdapterSqlAnalysisDialectTestCase,
 ) -> None:
     adapter: BaseAdapter = (
         PostgresLikeBaseAdapter()
-        if test_case.expected_sqlglot_dialect is not None
+        if test_case.expected_sql_analysis_dialect is not None
         else ConcreteBaseAdapter()
     )
 
-    assert adapter.sqlglot_dialect() == test_case.expected_sqlglot_dialect
-    assert adapter.expression_inference_profile().sqlglot_dialect == (
-        test_case.expected_sqlglot_dialect
+    assert adapter.sql_analysis_dialect() == test_case.expected_sql_analysis_dialect
+    assert adapter.expression_inference_profile().sql_analysis_dialect == (
+        test_case.expected_sql_analysis_dialect
     )
 
 

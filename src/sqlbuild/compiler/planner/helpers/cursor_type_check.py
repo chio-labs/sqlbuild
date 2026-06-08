@@ -71,13 +71,13 @@ def check_cursor_type_consistency(
     cursor_column: str | None,
     cursor_type: str | None,
     warehouse_columns: tuple[ColumnInfo, ...],
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
 ) -> PlanWarning | None:
     """Check whether the warehouse column type is consistent with cursor_type.
 
     Returns a warning or error if a mismatch is detected, None otherwise.
-    With sqlglot enabled, uses parsed type classification for a hard error on
-    clear mismatches. Without sqlglot, uses heuristic substring matching for a
+    With sql_analysis enabled, uses parsed type classification for a hard error on
+    clear mismatches. Without sql_analysis, uses heuristic substring matching for a
     softer warning.
     """
 
@@ -94,7 +94,7 @@ def check_cursor_type_consistency(
     if declared is None:
         return None
 
-    if sqlglot_enabled:
+    if sql_analysis_enabled:
         return _check_with_sqlglot(
             model_name=model_name,
             cursor_column=cursor_column,
@@ -140,7 +140,7 @@ def _check_with_sqlglot(
     declared: CursorType,
     warehouse_type: str,
 ) -> PlanWarning | None:
-    """Classify warehouse type via sqlglot and return error on clear mismatch."""
+    """Classify warehouse type via sql_analysis and return error on clear mismatch."""
 
     detected: CursorType | None = _classify_type_with_sqlglot(warehouse_type)
     if detected is None:
@@ -208,9 +208,9 @@ def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
 
 
 def _classify_type_with_sqlglot(warehouse_type: str) -> CursorType | None:
-    """Classify a warehouse type string using sqlglot type parsing.
+    """Classify a warehouse type string using sql_analysis type parsing.
 
-    Returns the matching CursorType or None if sqlglot is unavailable or the
+    Returns the matching CursorType or None if sql_analysis is unavailable or the
     type cannot be classified.
     """
 

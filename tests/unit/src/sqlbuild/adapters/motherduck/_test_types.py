@@ -14,4 +14,4 @@ class MotherDuckConnectionDatabaseTestCase:
 class MotherDuckAdapterDefaultsTestCase:
     description: str
     expected_default_schema: str
-    expected_sqlglot_dialect: str | None
+    expected_sql_analysis_dialect: str | None

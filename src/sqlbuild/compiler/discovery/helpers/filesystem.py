@@ -96,7 +96,7 @@ class _PythonNodeDiscoveryBucket:
 
 
 def discover_model_files(
-    *, project_dir: Path, sqlglot_enabled: bool = True
+    *, project_dir: Path, sql_analysis_enabled: bool = True
 ) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover SQL model files under models/."""
 
@@ -125,7 +125,7 @@ def discover_model_files(
                 output_column_locations=model_output_column_locations(
                     contents=contents,
                     relative_path=relative_path,
-                    sqlglot_enabled=sqlglot_enabled,
+                    sql_analysis_enabled=sql_analysis_enabled,
                 ),
                 query_sql=query_sql,
             )

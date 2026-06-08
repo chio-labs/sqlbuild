@@ -102,7 +102,7 @@ class BigQueryAdapter(BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
-    sqlglot_dialect_name: ClassVar[str | None] = "bigquery"
+    sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
 
     def supports_relation_age_metadata(self) -> bool:
@@ -434,10 +434,10 @@ class BigQueryAdapter(BaseAdapter):
                 f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 
-    def sqlglot_dialect(self) -> str | None:
-        """Return the SQLGlot dialect name for this adapter, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the SQL analysis dialect name for this adapter, if any."""
 
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
@@ -1209,7 +1209,7 @@ class BigQueryAdapter(BaseAdapter):
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
-            sqlglot_dialect=self.sqlglot_dialect(),
+            sql_analysis_dialect=self.sql_analysis_dialect(),
             function_nullability_rules={
                 "IF": conditional_result_nullability,
                 "LOWER": first_arg_nullability,
@@ -1846,7 +1846,7 @@ class BigQueryAdapter(BaseAdapter):
         )
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
-        return normalize_numeric_family(type_sql=column_type, dialect=self.sqlglot_dialect())
+        return normalize_numeric_family(type_sql=column_type, dialect=self.sql_analysis_dialect())
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
@@ -1874,7 +1874,7 @@ class BigQueryAdapter(BaseAdapter):
             elif not types_equal(
                 left=left_map[col_name],
                 right=col_type,
-                dialect=self.sqlglot_dialect(),
+                dialect=self.sql_analysis_dialect(),
             ):
                 type_changed.append(
                     (

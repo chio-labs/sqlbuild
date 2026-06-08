@@ -12,7 +12,9 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sqlglot_ctes import extract_top_level_ctes_with_sqlglot
+from sqlbuild.compiler.compile.helpers.sql_analysis_ctes import (
+    extract_top_level_ctes_with_sql_analysis,
+)
 from sqlbuild.compiler.compile.helpers.tests import (
     _consume_keyword,
     _read_identifier,
@@ -39,7 +41,7 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
             file_label=file_label,
         )
     except CompileInputError as scanner_error:
-        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sqlglot(
+        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
             sql=sql,
             file_label=file_label,
             context_label="SQL scenario",

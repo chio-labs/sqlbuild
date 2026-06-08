@@ -14,8 +14,10 @@ def build_sql_test_plan_entry(
     test: CompiledSqlTest,
     project: CompiledProject,
     adapter: BaseAdapter,
-    sqlglot_enabled: bool = False,
+    sql_analysis_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a SQL test plan entry without warehouse state."""
 
-    return plan_test(test=test, project=project, adapter=adapter, sqlglot_enabled=sqlglot_enabled)
+    return plan_test(
+        test=test, project=project, adapter=adapter, sql_analysis_enabled=sql_analysis_enabled
+    )

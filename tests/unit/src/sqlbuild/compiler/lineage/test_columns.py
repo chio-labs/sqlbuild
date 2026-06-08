@@ -439,7 +439,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
     [
         SqlAnalysisDisabledLineageTestCase(
             description="returns no lineage when SQL analysis is disabled",
-            sqlglot_enabled=False,
+            sql_analysis_enabled=False,
             expected_result_is_none=True,
         )
     ],
@@ -456,7 +456,7 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
                 inferred_columns=("order_id",),
             ),
         ),
-        sqlglot_enabled=test_case.sqlglot_enabled,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
     result: ProjectColumnLineage | None = build_project_column_lineage(project)

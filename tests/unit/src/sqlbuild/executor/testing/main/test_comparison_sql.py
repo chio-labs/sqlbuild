@@ -60,7 +60,7 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     comparison_sql: str = build_sql_test_comparison_sql(
         build_comparison_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
-        sqlglot_dialect=adapter.sqlglot_dialect(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
     expected_fragment: str
@@ -72,13 +72,13 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     "test_case",
     [
         BuildComparisonSqlTestCase(
-            description="disabled sqlglot builds comparison sql without importing sqlglot",
+            description="disabled SQL analysis avoids parser formatting",
             adapter_name="duckdb",
             expected_fragments=(
                 "SELECT 1 AS order_id",
                 "SELECT 2 AS order_id",
             ),
-            sqlglot_enabled=False,
+            sql_analysis_enabled=False,
         )
     ],
     ids=["disabled formatting builds comparison sql without importing polyglot"],
@@ -95,9 +95,9 @@ def test_given_formatting_disabled_when_building_comparison_sql_then_it_does_not
     )
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_comparison_test_entry(sqlglot_enabled=test_case.sqlglot_enabled),
+        build_comparison_test_entry(sql_analysis_enabled=test_case.sql_analysis_enabled),
         set_difference_operator=adapter.render_set_difference_operator(),
-        sqlglot_dialect=adapter.sqlglot_dialect(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
     expected_fragment: str
@@ -129,7 +129,7 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
     comparison_sql: str = build_sql_test_comparison_sql(
         build_assertion_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
-        sqlglot_dialect=adapter.sqlglot_dialect(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
     expected_fragment: str
@@ -160,7 +160,7 @@ def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once
     comparison_sql: str = build_sql_test_comparison_sql(
         build_comparison_test_entry_with_helper_ctes(),
         set_difference_operator=adapter.render_set_difference_operator(),
-        sqlglot_dialect=adapter.sqlglot_dialect(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
     expected_fragment: str
@@ -188,7 +188,7 @@ def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_c
     comparison_sql: str = build_sql_test_comparison_sql(
         build_table_function_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
-        sqlglot_dialect=adapter.sqlglot_dialect(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
     expected_fragment: str

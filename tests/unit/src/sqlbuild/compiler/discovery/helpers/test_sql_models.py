@@ -610,24 +610,24 @@ OUTPUT_LOCATION_TEST_CASES: tuple[ModelOutputColumnLocationTestCase, ...] = (
         expected_locations={},
     ),
     ModelOutputColumnLocationTestCase(
-        description="locates alias without AS using sqlglot projection identity",
+        description="locates alias without AS using sql_analysis projection identity",
         contents=("MODEL ();\n\nSELECT\n  CAST(amount AS VARCHAR) amount_text\nFROM raw_orders\n"),
         expected_locations={
             "amount_text": (Path("models/orders.sql"), 4, 3, 4, 38),
         },
     ),
     ModelOutputColumnLocationTestCase(
-        description="locates select without from using sqlglot projection identity",
+        description="locates select without from using sql_analysis projection identity",
         contents="MODEL ();\n\nSELECT 1 AS one\n",
         expected_locations={
             "one": (Path("models/orders.sql"), 3, 8, 3, 16),
         },
     ),
     ModelOutputColumnLocationTestCase(
-        description="skips sqlglot-only aliases when sqlglot is disabled",
+        description="skips sql_analysis-only aliases when sql_analysis is disabled",
         contents=("MODEL ();\n\nSELECT\n  CAST(amount AS VARCHAR) amount_text\nFROM raw_orders\n"),
         expected_locations={},
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
     ),
     ModelOutputColumnLocationTestCase(
         description="skips union query after first branch because it is ambiguous",
@@ -648,7 +648,7 @@ def test_given_model_select_outputs_when_locating_then_returns_expected_location
     locations: dict[str, SourceLocation] = model_output_column_locations(
         contents=test_case.contents,
         relative_path=Path("models/orders.sql"),
-        sqlglot_enabled=test_case.sqlglot_enabled,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
     assert {

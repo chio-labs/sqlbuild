@@ -61,7 +61,7 @@ PLAN_TEST_CASES: list[PlanScenarioGraphTestCase] = [
         ),
     ),
     PlanScenarioGraphTestCase(
-        description="sqlglot assertion target inference ignores strings and comments",
+        description="sql_analysis assertion target inference ignores strings and comments",
         model_deps={"daily_revenue": ("raw__orders",)},
         source_names=("raw__orders",),
         seed_names=(),
