@@ -46,7 +46,7 @@ class ColumnLineageSource:
 
 @dataclass(frozen=True)
 class ColumnLineageNode:
-    """One internal SQLGlot lineage graph node."""
+    """One internal SQL analysis lineage graph node."""
 
     id: str
     name: str
@@ -63,7 +63,7 @@ class ColumnLineageNode:
 
 @dataclass(frozen=True)
 class InternalColumnLineageEdge:
-    """One edge in the internal SQLGlot lineage graph."""
+    """One edge in the internal SQL analysis lineage graph."""
 
     upstream_node_id: str
     downstream_node_id: str

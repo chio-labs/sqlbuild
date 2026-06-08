@@ -21,14 +21,14 @@ def make_compiled_project(
     *,
     models: tuple[CompiledModel, ...],
     seeds: tuple[CompiledSeed, ...] = (),
-    sqlglot_enabled: bool = True,
+    sql_analysis_enabled: bool = True,
 ) -> CompiledProject:
     return CompiledProject(
         run_id="test-run",
         effective_target_name=None,
         effective_connection={},
         effective_vars={},
-        settings=SettingsConfig(sqlglot=sqlglot_enabled),
+        settings=SettingsConfig(sql_analysis=sql_analysis_enabled),
         models=models,
         seeds=seeds,
     )

@@ -49,7 +49,7 @@ def run_compile(
     no_color: bool = False,
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     cli_vars: dict[str, object] | None = None,
-    profile_skip_discovery_sqlglot: bool = False,
+    profile_skip_discovery_sql_analysis: bool = False,
     profile_skip_column_inference: bool = False,
     profile_skip_contracts: bool = False,
     profile_skip_write: bool = False,
@@ -62,7 +62,7 @@ def run_compile(
     discover_start: float = time.monotonic()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir,
-        sqlglot_enabled_override=False if profile_skip_discovery_sqlglot else None,
+        sql_analysis_enabled_override=False if profile_skip_discovery_sql_analysis else None,
     )
     discover_ms: int = _elapsed_ms(discover_start)
     adapter: BaseAdapter = resolve_adapter(
@@ -84,7 +84,7 @@ def run_compile(
     lineage_start: float = time.monotonic()
     lineage: ProjectColumnLineage | None = _build_compile_lineage(
         graph=graph,
-        dialect=adapter.sqlglot_dialect(),
+        dialect=adapter.sql_analysis_dialect(),
         mode=lineage_mode,
     )
     lineage_ms: int = _elapsed_ms(lineage_start)
@@ -95,7 +95,7 @@ def run_compile(
     else:
         contract_result = validate_model_contracts(
             graph.project,
-            dialect=adapter.sqlglot_dialect(),
+            dialect=adapter.sql_analysis_dialect(),
         )
     contract_ms: int = _elapsed_ms(contracts_start)
     diagnostics: tuple[CompilerDiagnostic, ...] = (

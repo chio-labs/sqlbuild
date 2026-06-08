@@ -222,7 +222,7 @@ def run_scenario_capture_pipeline(
                     retain=retain,
                     local_type_overrides=scenario_local_type_overrides_for_dialect(
                         scenario_config=pipeline_result.project.scenario,
-                        sqlglot_dialect=adapter.sqlglot_dialect(),
+                        sql_analysis_dialect=adapter.sql_analysis_dialect(),
                     ),
                     limits=capture_limits,
                 )

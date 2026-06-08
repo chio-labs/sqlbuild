@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 
-def build_chain_test_project_files(*, sqlglot_enabled: bool) -> dict[str, str]:
+def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, str]:
     """Build an inline project with a two-model SQL unit-test chain."""
 
-    sqlglot_value: str = "true" if sqlglot_enabled else "false"
+    sql_analysis_value: str = "true" if sql_analysis_enabled else "false"
     return {
         "sqlbuild_project.toml": (
             'name = "demo"\n'
@@ -14,7 +14,7 @@ def build_chain_test_project_files(*, sqlglot_enabled: bool) -> dict[str, str]:
             "[connection]\n"
             'database = "demo.duckdb"\n\n'
             "[settings]\n"
-            f"sqlglot = {sqlglot_value}\n"
+            f"sql_analysis = {sql_analysis_value}\n"
         ),
         "models/stg_orders.sql": (
             "MODEL (materialized table);\n\n"

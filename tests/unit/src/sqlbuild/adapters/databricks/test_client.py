@@ -27,7 +27,7 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     [
         DatabricksExpressionInferenceProfileTestCase(
             description="returns Databricks inference rules",
-            expected_sqlglot_dialect="databricks",
+            expected_sql_analysis_dialect="databricks",
             expected_identifier_limit=255,
             expected_rule_results={
                 "IF": InferredNullability.NON_NULL,
@@ -44,7 +44,7 @@ def test_given_databricks_adapter_when_getting_inference_profile_then_returns_ex
 
     profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
 
-    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    assert profile.sql_analysis_dialect == test_case.expected_sql_analysis_dialect
     assert adapter.maximum_identifier_length() == test_case.expected_identifier_limit
     if_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IF")
     lower_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("LOWER")

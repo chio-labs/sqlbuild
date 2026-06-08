@@ -13,12 +13,12 @@ from tests.unit.src.sqlbuild.shared.helpers.sqlglot.helpers import raise_import_
     "test_case",
     [
         SqlglotImportTestCase(
-            description="reports unavailable when sqlglot import fails",
+            description="reports unavailable when SQLGlot import fails",
             missing_module_name="sqlglot",
             expected_available=False,
         )
     ],
-    ids=["reports unavailable when sqlglot import fails"],
+    ids=["reports unavailable when SQLGlot import fails"],
 )
 def test_given_missing_sqlglot_when_checking_availability_then_returns_false(
     test_case: SqlglotImportTestCase,

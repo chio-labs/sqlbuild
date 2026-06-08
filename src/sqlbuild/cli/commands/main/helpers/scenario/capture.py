@@ -72,10 +72,10 @@ def run_scenario_capture(
 
     if no_sql_validation:
         raise CliUserError(
-            "scenario capture requires SQLGlot and SQL validation",
+            "scenario capture requires SQL analysis and SQL validation",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
             help=(
-                "Enable settings.sqlglot and settings.sql_validation when capturing snapshots "
+                "Enable settings.sql_analysis and settings.sql_validation when capturing snapshots "
                 "for local scenario replay."
             ),
         )
@@ -84,7 +84,7 @@ def run_scenario_capture(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    _validate_capture_sqlglot_enabled(discovered_inputs=discovered_inputs)
+    _validate_capture_sql_analysis_enabled(discovered_inputs=discovered_inputs)
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -210,33 +210,33 @@ def run_scenario_capture(
     return 0 if fail_count == 0 else 1
 
 
-def _validate_capture_sqlglot_enabled(*, discovered_inputs: DiscoveredProjectInputs) -> None:
-    if not _effective_sqlglot_and_validation_enabled(discovered_inputs=discovered_inputs):
+def _validate_capture_sql_analysis_enabled(*, discovered_inputs: DiscoveredProjectInputs) -> None:
+    if not _effective_sql_analysis_and_validation_enabled(discovered_inputs=discovered_inputs):
         raise CliUserError(
-            "scenario capture requires SQLGlot and SQL validation",
+            "scenario capture requires SQL analysis and SQL validation",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
             help=(
-                "Enable settings.sqlglot and settings.sql_validation when capturing snapshots "
+                "Enable settings.sql_analysis and settings.sql_validation when capturing snapshots "
                 "for local scenario replay."
             ),
         )
 
 
-def _effective_sqlglot_and_validation_enabled(
+def _effective_sql_analysis_and_validation_enabled(
     *, discovered_inputs: DiscoveredProjectInputs
 ) -> bool:
     setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
-    sqlglot_enabled: bool = (
-        discovered_inputs.local_config.settings.sqlglot
-        if "sqlglot" in setting_overrides
-        else discovered_inputs.project_config.settings.sqlglot
+    sql_analysis_enabled: bool = (
+        discovered_inputs.local_config.settings.sql_analysis
+        if "sql_analysis" in setting_overrides
+        else discovered_inputs.project_config.settings.sql_analysis
     )
     sql_validation_enabled: bool = (
         discovered_inputs.local_config.settings.sql_validation
         if "sql_validation" in setting_overrides
         else discovered_inputs.project_config.settings.sql_validation
     )
-    return sqlglot_enabled and sql_validation_enabled
+    return sql_analysis_enabled and sql_validation_enabled
 
 
 def _complete_capture_run(

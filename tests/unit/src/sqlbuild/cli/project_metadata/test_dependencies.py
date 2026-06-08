@@ -14,13 +14,13 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[6]
     "test_case",
     [
         ProjectDependencyTestCase(
-            description="sqlglot is a core dependency instead of an optional extra",
-            dependency_name="sqlglot",
+            description="polyglot-sql is a core dependency instead of an optional extra",
+            dependency_name="polyglot-sql",
             expected_in_core_dependencies=True,
             expected_optional_extra_absent=True,
         )
     ],
-    ids=["sqlglot is a core dependency instead of an optional extra"],
+    ids=["polyglot-sql is a core dependency instead of an optional extra"],
 )
 def test_given_project_metadata_when_reading_dependencies_then_required_packages_are_core(
     test_case: ProjectDependencyTestCase,

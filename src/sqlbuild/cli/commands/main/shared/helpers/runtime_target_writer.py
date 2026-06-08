@@ -110,7 +110,7 @@ def write_test_runtime_target(
             sql=build_sql_test_comparison_sql(
                 entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
-                sqlglot_dialect=adapter.sqlglot_dialect(),
+                sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
         )
 

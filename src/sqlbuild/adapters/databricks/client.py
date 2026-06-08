@@ -69,7 +69,7 @@ class DatabricksAdapter(BaseAdapter):
     """Databricks adapter backed by databricks-sql-connector."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.DATABRICKS.value
-    sqlglot_dialect_name: ClassVar[str | None] = "databricks"
+    sql_analysis_dialect_name: ClassVar[str | None] = "databricks"
     max_identifier_length: ClassVar[int] = 255
 
     def supports_table_freshness_metadata(self) -> bool:
@@ -212,10 +212,10 @@ class DatabricksAdapter(BaseAdapter):
     def render_current_timestamp(self) -> str:
         return "CURRENT_TIMESTAMP"
 
-    def sqlglot_dialect(self) -> str | None:
-        """Return the SQLGlot dialect name for this adapter, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the SQL analysis dialect name for this adapter, if any."""
 
-        return self.sqlglot_dialect_name
+        return self.sql_analysis_dialect_name
 
     def render_identifier(self, name: str) -> str:
         return "`" + name.replace("`", "``") + "`"
@@ -1064,7 +1064,7 @@ class DatabricksAdapter(BaseAdapter):
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
-            sqlglot_dialect=self.sqlglot_dialect(),
+            sql_analysis_dialect=self.sql_analysis_dialect(),
             function_nullability_rules={
                 "IF": conditional_result_nullability,
                 "LOWER": first_arg_nullability,
@@ -1772,7 +1772,7 @@ class DatabricksAdapter(BaseAdapter):
             elif not types_equal(
                 left=left_map[col_name],
                 right=col_type,
-                dialect=self.sqlglot_dialect(),
+                dialect=self.sql_analysis_dialect(),
             ):
                 type_changed.append(
                     (
@@ -2144,7 +2144,7 @@ class DatabricksAdapter(BaseAdapter):
         )
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
-        return normalize_numeric_family(type_sql=column_type, dialect=self.sqlglot_dialect())
+        return normalize_numeric_family(type_sql=column_type, dialect=self.sql_analysis_dialect())
 
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")

@@ -74,10 +74,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         help="Column lineage mode: fast (default), rich (slower), or none",
     )
     compile_parser.add_argument(
-        "--profile-skip-discovery-sqlglot",
+        "--profile-skip-discovery-sql-analysis",
         action="store_true",
         default=False,
-        help="Diagnostic: skip SQLGlot-assisted discovery parsing",
+        help="Diagnostic: skip SQL analysis-assisted discovery parsing",
     )
     compile_parser.add_argument(
         "--profile-skip-column-inference",
@@ -571,7 +571,7 @@ def _main_with_dependencies(
                 args.no_color,
                 CompileLineageMode(args.compile_lineage_mode),
                 args.vars,
-                args.profile_skip_discovery_sqlglot,
+                args.profile_skip_discovery_sql_analysis,
                 args.profile_skip_column_inference,
                 args.profile_skip_contracts,
                 args.profile_skip_write,

@@ -18,7 +18,7 @@ class LoadProjectConfigTestCase:
     expected_adapter: str
     expected_default_target: str
     expected_connection: dict[str, str]
-    expected_sqlglot: bool
+    expected_sql_analysis: bool
     expected_max_concurrency: int
     expected_materialized: str | None
     expected_row_diff_exclude_columns: tuple[str, ...]
@@ -60,7 +60,7 @@ class LoadLocalConfigTestCase:
     expected_target: str | None
     expected_adapter: str | None
     expected_connection: dict[str, object]
-    expected_sqlglot: bool
+    expected_sql_analysis: bool
     expected_sql_validation: bool
     expected_max_concurrency: int
     expected_setting_overrides: frozenset[str]
@@ -185,7 +185,7 @@ class ModelOutputColumnLocationTestCase:
     description: str
     contents: str
     expected_locations: dict[str, tuple[Path, int, int, int | None, int | None]]
-    sqlglot_enabled: bool = True
+    sql_analysis_enabled: bool = True
 
 
 @dataclass(frozen=True)

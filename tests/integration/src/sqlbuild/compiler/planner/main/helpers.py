@@ -157,7 +157,9 @@ def build_project_from_test_case(
         effective_connection=test_case.effective_connection,
         effective_vars={},
         settings=SettingsConfig(
-            sqlglot=_settings_bool(test_case.effective_connection, "sqlglot", default=False)
+            sql_analysis=_settings_bool(
+                test_case.effective_connection, "sql_analysis", default=False
+            )
         ),
         models=tuple(models),
         seeds=tuple(seeds),

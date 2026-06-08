@@ -10,14 +10,14 @@ class BaseAdapterPythonFunctionSupportTestCase:
 @dataclass(frozen=True)
 class BaseAdapterExpressionInferenceProfileTestCase:
     description: str
-    expected_sqlglot_dialect: str | None
+    expected_sql_analysis_dialect: str | None
     expected_function_rules_count: int
 
 
 @dataclass(frozen=True)
-class BaseAdapterSqlglotDialectTestCase:
+class BaseAdapterSqlAnalysisDialectTestCase:
     description: str
-    expected_sqlglot_dialect: str | None
+    expected_sql_analysis_dialect: str | None
 
 
 @dataclass(frozen=True)

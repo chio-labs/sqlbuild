@@ -94,7 +94,7 @@ target = "dev"
 path = "local.db"
 
 [settings]
-sqlglot = false
+sql_analysis = false
 sql_validation = false
 concurrency = 4
 
@@ -183,7 +183,7 @@ sources:
             "local_only": "present",
             "cli_only": "present",
         },
-        expected_effective_sqlglot=False,
+        expected_effective_sql_analysis=False,
         expected_effective_sql_validation=False,
         expected_effective_max_concurrency=4,
         expected_model_references=((), ()),
@@ -2211,7 +2211,7 @@ sql_validation = false
         expected_audit_references=(),
     ),
     BuildCompileInputsTestCase(
-        description="allows invalid sql when sqlglot is disabled",
+        description="allows invalid sql when sql_analysis is disabled",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
@@ -2219,7 +2219,7 @@ name = "demo"
 adapter = "duckdb"
 
 [settings]
-sqlglot = false
+sql_analysis = false
 """.strip()
             + "\n",
             "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
@@ -2236,7 +2236,7 @@ sqlglot = false
         expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
-        expected_effective_sqlglot=False,
+        expected_effective_sql_analysis=False,
         expected_model_references=((),),
         expected_audit_references=(),
     ),
@@ -2561,7 +2561,9 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     )
     assert compile_inputs.effective_target_name == test_case.expected_effective_target_name
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
-    assert compile_inputs.effective_settings.sqlglot is test_case.expected_effective_sqlglot
+    assert (
+        compile_inputs.effective_settings.sql_analysis is test_case.expected_effective_sql_analysis
+    )
     assert (
         compile_inputs.effective_settings.sql_validation
         is test_case.expected_effective_sql_validation

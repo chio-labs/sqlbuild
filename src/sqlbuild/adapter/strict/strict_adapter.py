@@ -679,8 +679,8 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def sqlglot_dialect(self) -> str | None:
-        """Return the SQLGlot dialect name for this adapter, if any."""
+    def sql_analysis_dialect(self) -> str | None:
+        """Return the SQL analysis dialect name for this adapter, if any."""
         ...
 
     @abstractmethod

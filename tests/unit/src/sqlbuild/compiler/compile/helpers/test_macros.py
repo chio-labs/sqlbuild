@@ -17,7 +17,7 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers.helpers import build_loade
 
 _MACRO_CONTEXT: MacroContext = MacroContext(
     adapter_name="bigquery",
-    sqlglot_enabled=True,
+    sql_analysis_enabled=True,
     target_name="dev",
     vars={"project_name": "demo"},
 )
@@ -182,7 +182,7 @@ def adapter_name(ctx) -> str:
         macro_file_contents="""
 def context_summary(ctx) -> str:
     summary = (
-        f"{ctx.adapter_name}|{ctx.sqlglot_enabled}|"
+        f"{ctx.adapter_name}|{ctx.sql_analysis_enabled}|"
         f"{ctx.target_name}|{ctx.vars['project_name']}"
     )
     return f"SELECT '{summary}'"

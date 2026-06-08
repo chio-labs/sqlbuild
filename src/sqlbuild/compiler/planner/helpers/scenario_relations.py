@@ -195,16 +195,16 @@ def resolve_scenario_check_sql(
     *,
     sql: str,
     relation_plan: ScenarioRelationPlan,
-    sqlglot_enabled: bool = True,
-    sqlglot_dialect: str | None = None,
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
 ) -> str:
     """Resolve refs, seeds, and sources in scenario expected/assertion SQL."""
 
-    if sqlglot_enabled:
-        return _resolve_scenario_check_sql_with_sqlglot(
+    if sql_analysis_enabled:
+        return _resolve_scenario_check_sql_with_sql_analysis(
             sql=sql,
             relation_plan=relation_plan,
-            sqlglot_dialect=sqlglot_dialect,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
 
     def _replace_ref(match: re.Match[str]) -> str:
@@ -252,8 +252,8 @@ def build_scenario_execution_plan(
     relation_plan: ScenarioRelationPlan,
     snapshot: WarehouseSnapshot | None = None,
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
-    sqlglot_enabled: bool = True,
-    sqlglot_dialect: str | None = None,
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
 ) -> tuple[ScenarioExecutionPlan, tuple[PlanWarning, ...]]:
     """Build a dry-run execution plan for one SQL scenario."""
 
@@ -281,8 +281,8 @@ def build_scenario_execution_plan(
         scenario=scenario,
         graph_plan=graph_plan,
         relation_plan=relation_plan,
-        sqlglot_enabled=sqlglot_enabled,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_enabled=sql_analysis_enabled,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     seed_entries: tuple[SeedPlanEntry, ...] = build_scenario_seed_entries(
         project=project,
@@ -328,7 +328,7 @@ def build_scenario_execution_plan(
             source_map=relation_plan.source_map,
             source_warehouse_columns=effective_source_warehouse_columns,
             star_exclude_keyword=adapter.star_exclude_keyword(),
-            sqlglot_enabled=sqlglot_enabled,
+            sql_analysis_enabled=sql_analysis_enabled,
             query_change_tracking=False,
             full_refresh=True,
             start_cursor_override=None,
@@ -341,8 +341,8 @@ def build_scenario_execution_plan(
         _build_expected_check_plan(
             expected_cte=expected_cte,
             relation_plan=relation_plan,
-            sqlglot_enabled=sqlglot_enabled,
-            sqlglot_dialect=sqlglot_dialect,
+            sql_analysis_enabled=sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
         for expected_cte in scenario.expected_ctes
     )
@@ -352,8 +352,8 @@ def build_scenario_execution_plan(
             sql=resolve_scenario_check_sql(
                 sql=assertion_cte.sql_body,
                 relation_plan=relation_plan,
-                sqlglot_enabled=sqlglot_enabled,
-                sqlglot_dialect=sqlglot_dialect,
+                sql_analysis_enabled=sql_analysis_enabled,
+                sql_analysis_dialect=sql_analysis_dialect,
             ),
         )
         for assertion_cte in scenario.assertion_ctes
@@ -418,8 +418,8 @@ def build_scenario_fixture_plans(
     scenario: CompiledSqlScenario,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
-    sqlglot_enabled: bool = True,
-    sqlglot_dialect: str | None = None,
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
 ) -> tuple[ScenarioFixturePlan, ...]:
     """Build self-contained fixture SQL plans, including shared helper CTEs."""
 
@@ -430,8 +430,8 @@ def build_scenario_fixture_plans(
             sql_body=_resolve_project_source_refs(
                 sql=helper_cte.sql_body,
                 source_map=relation_plan.project_source_map,
-                sqlglot_enabled=sqlglot_enabled,
-                sqlglot_dialect=sqlglot_dialect,
+                sql_analysis_enabled=sql_analysis_enabled,
+                sql_analysis_dialect=sql_analysis_dialect,
             ),
         )
         for helper_cte in helper_ctes
@@ -469,8 +469,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(source_ctes, source_name, kind="source"),
                         source_map=relation_plan.project_source_map,
-                        sqlglot_enabled=sqlglot_enabled,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_enabled=sql_analysis_enabled,
+                        sql_analysis_dialect=sql_analysis_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -492,8 +492,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(ref_ctes, ref_name, kind="ref"),
                         source_map=relation_plan.project_source_map,
-                        sqlglot_enabled=sqlglot_enabled,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_enabled=sql_analysis_enabled,
+                        sql_analysis_dialect=sql_analysis_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -515,8 +515,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(seed_ctes, seed_name, kind="seed"),
                         source_map=relation_plan.project_source_map,
-                        sqlglot_enabled=sqlglot_enabled,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_enabled=sql_analysis_enabled,
+                        sql_analysis_dialect=sql_analysis_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -538,8 +538,8 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(dbt_ref_ctes, dbt_ref_name, kind="dbt_ref"),
                         source_map=relation_plan.project_source_map,
-                        sqlglot_enabled=sqlglot_enabled,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_enabled=sql_analysis_enabled,
+                        sql_analysis_dialect=sql_analysis_dialect,
                     ),
                     helper_ctes=resolved_helper_ctes,
                 ),
@@ -587,8 +587,8 @@ def build_scenario_seed_entries(
     return tuple(seed_entries)
 
 
-def _resolve_scenario_check_sql_with_sqlglot(
-    *, sql: str, relation_plan: ScenarioRelationPlan, sqlglot_dialect: str | None
+def _resolve_scenario_check_sql_with_sql_analysis(
+    *, sql: str, relation_plan: ScenarioRelationPlan, sql_analysis_dialect: str | None
 ) -> str:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -598,7 +598,7 @@ def _resolve_scenario_check_sql_with_sqlglot(
             help="Install SQLBuild with Polyglot SQL or run with SQL validation disabled.",
         )
     try:
-        parsed: Any = polyglot_module.parse_one(sql, dialect=sqlglot_dialect or "generic")
+        parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
     except Exception as error:
         raise PlannerInputError(
             f"Scenario SQL could not be parsed with Polyglot: {error}",
@@ -609,7 +609,7 @@ def _resolve_scenario_check_sql_with_sqlglot(
     replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
         parsed_dict,
         polyglot_module=polyglot_module,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_dialect=sql_analysis_dialect,
         target_for_marker=lambda function_name, referenced_name: _scenario_target_name_for_marker(
             function_name=function_name,
             referenced_name=referenced_name,
@@ -620,7 +620,7 @@ def _resolve_scenario_check_sql_with_sqlglot(
         return sql
     generated: list[str] = polyglot_module.generate(
         parsed_dict,
-        dialect=sqlglot_dialect or "generic",
+        dialect=sql_analysis_dialect or "generic",
     )
     if len(generated) != 1:
         return sql
@@ -631,8 +631,8 @@ def _build_expected_check_plan(
     *,
     expected_cte: CompileSqlScenarioCte,
     relation_plan: ScenarioRelationPlan,
-    sqlglot_enabled: bool,
-    sqlglot_dialect: str | None,
+    sql_analysis_enabled: bool,
+    sql_analysis_dialect: str | None,
 ) -> ScenarioExpectedExpectationPlan:
     model_name: str = expected_cte.name.removeprefix("__expected__")
     actual_destination: CompiledRelationDestination = _required_target(
@@ -646,8 +646,8 @@ def _build_expected_check_plan(
         expected_sql=resolve_scenario_check_sql(
             sql=expected_cte.sql_body,
             relation_plan=relation_plan,
-            sqlglot_enabled=sqlglot_enabled,
-            sqlglot_dialect=sqlglot_dialect,
+            sql_analysis_enabled=sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
         ),
     )
 
@@ -691,17 +691,17 @@ def _resolve_project_source_refs(
     *,
     sql: str,
     source_map: dict[str, SourceEntry],
-    sqlglot_enabled: bool,
-    sqlglot_dialect: str | None,
+    sql_analysis_enabled: bool,
+    sql_analysis_dialect: str | None,
 ) -> str:
-    if sqlglot_enabled:
-        sqlglot_result: str | None = _try_resolve_project_source_refs_with_sqlglot(
+    if sql_analysis_enabled:
+        sql_analysis_result: str | None = _try_resolve_project_source_refs_with_sql_analysis(
             sql=sql,
             source_map=source_map,
-            sqlglot_dialect=sqlglot_dialect,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
-        if sqlglot_result is not None:
-            return sqlglot_result
+        if sql_analysis_result is not None:
+            return sql_analysis_result
 
     def _replace_source(match: re.Match[str]) -> str:
         source: SourceEntry | None = source_map.get(match.group("name"))
@@ -712,8 +712,8 @@ def _resolve_project_source_refs(
     return _SOURCE_PATTERN.sub(_replace_source, sql)
 
 
-def _try_resolve_project_source_refs_with_sqlglot(
-    *, sql: str, source_map: dict[str, SourceEntry], sqlglot_dialect: str | None
+def _try_resolve_project_source_refs_with_sql_analysis(
+    *, sql: str, source_map: dict[str, SourceEntry], sql_analysis_dialect: str | None
 ) -> str | None:
     if SqlReferenceKind.SOURCE.function_name not in sql.lower():
         return None
@@ -721,7 +721,7 @@ def _try_resolve_project_source_refs_with_sqlglot(
     if polyglot_module is None:
         return None
     try:
-        parsed: Any = polyglot_module.parse_one(sql, dialect=sqlglot_dialect or "generic")
+        parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
     except Exception:
         return None
     parsed_dict: dict[str, Any] = parsed.to_dict()
@@ -741,14 +741,14 @@ def _try_resolve_project_source_refs_with_sqlglot(
     replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
         parsed_dict,
         polyglot_module=polyglot_module,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_dialect=sql_analysis_dialect,
         target_for_marker=_target_for_source,
     )
     if expression_source_names or not replacement_result:
         return None
     generated: list[str] = polyglot_module.generate(
         parsed_dict,
-        dialect=sqlglot_dialect or "generic",
+        dialect=sql_analysis_dialect or "generic",
     )
     if len(generated) != 1:
         return None
@@ -759,7 +759,7 @@ def _replace_relation_markers_in_polyglot_dict(
     node: Any,
     *,
     polyglot_module: Any,
-    sqlglot_dialect: str | None,
+    sql_analysis_dialect: str | None,
     target_for_marker: Any,
 ) -> bool:
     changed: bool = False
@@ -772,7 +772,7 @@ def _replace_relation_markers_in_polyglot_dict(
                     replacement: dict[str, Any] | None = _replacement_relation_expression(
                         expression,
                         polyglot_module=polyglot_module,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
                     )
                     if replacement is not None:
@@ -787,7 +787,7 @@ def _replace_relation_markers_in_polyglot_dict(
                 replacement = _replacement_relation_expression(
                     join.get("this"),
                     polyglot_module=polyglot_module,
-                    sqlglot_dialect=sqlglot_dialect,
+                    sql_analysis_dialect=sql_analysis_dialect,
                     target_for_marker=target_for_marker,
                 )
                 if replacement is not None:
@@ -800,7 +800,7 @@ def _replace_relation_markers_in_polyglot_dict(
                     _replace_relation_markers_in_polyglot_dict(
                         value,
                         polyglot_module=polyglot_module,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
                     )
                     or changed
@@ -813,7 +813,7 @@ def _replace_relation_markers_in_polyglot_dict(
                     _replace_relation_markers_in_polyglot_dict(
                         item,
                         polyglot_module=polyglot_module,
-                        sqlglot_dialect=sqlglot_dialect,
+                        sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
                     )
                     or changed
@@ -825,7 +825,7 @@ def _replacement_relation_expression(
     expression: Any,
     *,
     polyglot_module: Any,
-    sqlglot_dialect: str | None,
+    sql_analysis_dialect: str | None,
     target_for_marker: Any,
 ) -> dict[str, Any] | None:
     if not isinstance(expression, dict):
@@ -835,7 +835,7 @@ def _replacement_relation_expression(
         inner_replacement: dict[str, Any] | None = _replacement_relation_expression(
             alias_payload.get("this"),
             polyglot_module=polyglot_module,
-            sqlglot_dialect=sqlglot_dialect,
+            sql_analysis_dialect=sql_analysis_dialect,
             target_for_marker=target_for_marker,
         )
         if inner_replacement is None:
@@ -859,7 +859,7 @@ def _replacement_relation_expression(
     return _polyglot_relation_dict(
         target_name=target_name,
         polyglot_module=polyglot_module,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
 
 
@@ -898,12 +898,12 @@ def _polyglot_column_arg_name(argument: Any) -> str | None:
 
 
 def _polyglot_relation_dict(
-    *, target_name: str, polyglot_module: Any, sqlglot_dialect: str | None
+    *, target_name: str, polyglot_module: Any, sql_analysis_dialect: str | None
 ) -> dict[str, Any] | None:
     try:
         parsed: Any = polyglot_module.parse_one(
             f"SELECT * FROM {target_name}",
-            dialect=sqlglot_dialect or "generic",
+            dialect=sql_analysis_dialect or "generic",
         )
     except Exception:
         return None

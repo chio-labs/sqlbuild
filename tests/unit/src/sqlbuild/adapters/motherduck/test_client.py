@@ -64,7 +64,7 @@ def test_given_connection_config_when_connecting_then_uses_motherduck_database(
         MotherDuckAdapterDefaultsTestCase(
             description="returns MotherDuck adapter defaults",
             expected_default_schema="main",
-            expected_sqlglot_dialect="duckdb",
+            expected_sql_analysis_dialect="duckdb",
         )
     ],
     ids=["returns MotherDuck adapter defaults"],
@@ -75,4 +75,4 @@ def test_given_motherduck_adapter_when_checking_defaults_then_returns_duckdb_def
     adapter: MotherDuckAdapter = MotherDuckAdapter()
 
     assert adapter.default_schema() == test_case.expected_default_schema
-    assert adapter.sqlglot_dialect() == test_case.expected_sqlglot_dialect
+    assert adapter.sql_analysis_dialect() == test_case.expected_sql_analysis_dialect

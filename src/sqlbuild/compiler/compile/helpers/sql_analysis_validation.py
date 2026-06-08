@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
     _replace_refs_with_stubs,
     substitute_placeholder_defaults,
 )

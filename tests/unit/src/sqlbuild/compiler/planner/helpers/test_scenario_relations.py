@@ -213,7 +213,7 @@ PROJECT_SOURCE_REF_FIXTURE_TEST_CASES: list[ScenarioFixturePlanTestCase] = [
         ),
     ),
     ScenarioFixturePlanTestCase(
-        description="falls back to regex source resolution when sqlglot is disabled",
+        description="falls back to regex source resolution when sql_analysis is disabled",
         graph_plan=ScenarioGraphPlan(
             key=build_scenario_relation_test_project().models[0].key,
             name=SCENARIO_NAME,
@@ -228,7 +228,7 @@ PROJECT_SOURCE_REF_FIXTURE_TEST_CASES: list[ScenarioFixturePlanTestCase] = [
             "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
         },
         fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
     ),
 ]
 
@@ -265,8 +265,8 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         scenario=scenario,
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
-        sqlglot_enabled=test_case.sqlglot_enabled,
-        sqlglot_dialect=test_case.sqlglot_dialect,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
+        sql_analysis_dialect=test_case.sql_analysis_dialect,
     )
 
     assert {
@@ -543,7 +543,7 @@ CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [
         ),
     ),
     ScenarioCheckSqlResolutionTestCase(
-        description="regex fallback resolves markers when sqlglot is disabled",
+        description="regex fallback resolves markers when sql_analysis is disabled",
         sql=(
             "SELECT * FROM __seed(country_codes) c "
             "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
@@ -553,7 +553,7 @@ CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [
             "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders o "
             "ON c.country_code = o.country_code"
         ),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
     ),
 ]
 
@@ -586,8 +586,8 @@ def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
     result: str = resolve_scenario_check_sql(
         sql=test_case.sql,
         relation_plan=relation_plan,
-        sqlglot_enabled=test_case.sqlglot_enabled,
-        sqlglot_dialect=test_case.sqlglot_dialect,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
+        sql_analysis_dialect=test_case.sql_analysis_dialect,
     )
 
     assert result == test_case.expected_sql
@@ -632,7 +632,7 @@ def test_given_missing_scenario_artifact_when_building_relation_plan_then_raises
     ],
     ids=["raises on polyglot parse failure without regex fallback"],
 )
-def test_given_invalid_check_sql_when_sqlglot_enabled_then_raises_without_regex_fallback(
+def test_given_invalid_check_sql_when_sql_analysis_enabled_then_raises_without_regex_fallback(
     test_case: ScenarioCheckSqlResolutionTestCase,
 ) -> None:
     relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
@@ -651,5 +651,5 @@ def test_given_invalid_check_sql_when_sqlglot_enabled_then_raises_without_regex_
         resolve_scenario_check_sql(
             sql=test_case.sql,
             relation_plan=relation_plan,
-            sqlglot_enabled=True,
+            sql_analysis_enabled=True,
         )

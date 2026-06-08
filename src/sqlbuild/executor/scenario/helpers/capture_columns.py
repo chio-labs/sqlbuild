@@ -103,7 +103,7 @@ def build_scenario_snapshot_columns(
             warehouse_type=column.type,
             local_type=local_type_for_warehouse_type(
                 column.type,
-                sqlglot_dialect=adapter.sqlglot_dialect(),
+                sql_analysis_dialect=adapter.sql_analysis_dialect(),
                 local_type_overrides=local_type_overrides,
             ),
         )
@@ -114,7 +114,7 @@ def build_scenario_snapshot_columns(
 def local_type_for_warehouse_type(
     warehouse_type: str,
     *,
-    sqlglot_dialect: str | None = None,
+    sql_analysis_dialect: str | None = None,
     local_type_overrides: dict[str, str] | None = None,
 ) -> str:
     """Map a warehouse type string to a DuckDB-compatible local replay type."""
@@ -126,14 +126,14 @@ def local_type_for_warehouse_type(
     if override_type is not None:
         return override_type
 
-    if sqlglot_dialect == "postgres":
+    if sql_analysis_dialect == "postgres":
         postgres_type: str | None = _postgres_pre_local_type(warehouse_type)
         if postgres_type is not None:
             return postgres_type
 
     sqlglot_local_type: str | None = _local_type_with_sqlglot(
         warehouse_type=warehouse_type,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     if sqlglot_local_type is not None:
         return sqlglot_local_type
@@ -204,7 +204,9 @@ def _postgres_pre_local_type(warehouse_type: str) -> str | None:
     return None
 
 
-def _local_type_with_sqlglot(*, warehouse_type: str, sqlglot_dialect: str | None) -> str | None:
+def _local_type_with_sqlglot(
+    *, warehouse_type: str, sql_analysis_dialect: str | None
+) -> str | None:
     expressions_module: Any | None = import_sqlglot_expressions()
     if expressions_module is None:
         return None
@@ -212,7 +214,7 @@ def _local_type_with_sqlglot(*, warehouse_type: str, sqlglot_dialect: str | None
     try:
         data_type: Any = expressions_module.DataType.build(
             warehouse_type,
-            dialect=sqlglot_dialect,
+            dialect=sql_analysis_dialect,
         )
     except Exception:
         return None
@@ -234,13 +236,13 @@ def _local_type_with_sqlglot(*, warehouse_type: str, sqlglot_dialect: str | None
         return data_type.expressions[0].sql(dialect="duckdb").strip() + "[]"
     if type_name in {"GEOGRAPHY", "GEOMETRY", "MONEY"}:
         return "VARCHAR"
-    if sqlglot_dialect == "postgres" and base_type in _POSTGRES_VARCHAR_TYPES:
+    if sql_analysis_dialect == "postgres" and base_type in _POSTGRES_VARCHAR_TYPES:
         return "VARCHAR"
-    if sqlglot_dialect == "postgres" and base_type in _POSTGRES_SERIAL_TYPES:
+    if sql_analysis_dialect == "postgres" and base_type in _POSTGRES_SERIAL_TYPES:
         return _postgres_serial_local_type(base_type)
-    if sqlglot_dialect == "bigquery" and base_type == "BYTES" and data_type.expressions:
+    if sql_analysis_dialect == "bigquery" and base_type == "BYTES" and data_type.expressions:
         return "VARCHAR"
-    if sqlglot_dialect == "snowflake" and base_type == "VECTOR":
+    if sql_analysis_dialect == "snowflake" and base_type == "VECTOR":
         return "JSON"
 
     local_type: str = data_type.sql(dialect="duckdb").strip()
@@ -252,14 +254,14 @@ def _local_type_with_sqlglot(*, warehouse_type: str, sqlglot_dialect: str | None
         return "TIMESTAMPTZ"
     if local_type == "REAL" and _should_widen_real_to_double(
         warehouse_type=warehouse_type,
-        sqlglot_dialect=sqlglot_dialect,
+        sql_analysis_dialect=sql_analysis_dialect,
     ):
         return "DOUBLE"
     return local_type
 
 
 def _fallback_local_type_for_warehouse_type(warehouse_type: str) -> str:
-    """Return a conservative local type when SQLGlot cannot classify a type."""
+    """Return a conservative local type when SQL analysis cannot classify a type."""
 
     normalized_type: str = warehouse_type.strip().upper()
     base_type: str = normalized_type.split("(", 1)[0].strip()
@@ -406,11 +408,11 @@ def _sqlglot_type_name(data_type: Any) -> str:
     return str(getattr(data_type_kind, "name", "")).upper()
 
 
-def _should_widen_real_to_double(*, warehouse_type: str, sqlglot_dialect: str | None) -> bool:
+def _should_widen_real_to_double(*, warehouse_type: str, sql_analysis_dialect: str | None) -> bool:
     normalized_type: str = warehouse_type.strip().upper()
     base_type: str = normalized_type.split("(", 1)[0].strip()
-    if sqlglot_dialect == "snowflake":
+    if sql_analysis_dialect == "snowflake":
         return base_type in {"FLOAT", "FLOAT8", "DOUBLE", "DOUBLE PRECISION"}
-    if sqlglot_dialect == "bigquery":
+    if sql_analysis_dialect == "bigquery":
         return base_type in {"FLOAT64"}
     return base_type in {"DOUBLE", "DOUBLE PRECISION", "FLOAT8"}

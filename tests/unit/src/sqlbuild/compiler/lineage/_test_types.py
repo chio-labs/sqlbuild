@@ -30,5 +30,5 @@ class ProjectLineageGraphTestCase:
 @dataclass(frozen=True)
 class SqlAnalysisDisabledLineageTestCase:
     description: str
-    sqlglot_enabled: bool
+    sql_analysis_enabled: bool
     expected_result_is_none: bool

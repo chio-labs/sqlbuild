@@ -14,11 +14,11 @@ from sqlbuild.compiler.compile.helpers.deps import (
     sql_test_scope_deps,
 )
 from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros, find_macro_call_names
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
     analyze_columns_and_lineage_with_polyglot,
-    infer_columns_with_sqlglot,
+    infer_columns_with_sql_analysis,
 )
-from sqlbuild.compiler.compile.helpers.sqlglot_validation import validate_sql_syntax
+from sqlbuild.compiler.compile.helpers.sql_analysis_validation import validate_sql_syntax
 from sqlbuild.compiler.compile.helpers.templating import expand_template_data
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
@@ -86,7 +86,9 @@ def assemble_compiled_project(
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
-    sqlglot_enabled: bool = inputs.effective_settings.sqlglot and not skip_column_inference
+    sql_analysis_enabled: bool = (
+        inputs.effective_settings.sql_analysis and not skip_column_inference
+    )
     seed_names: frozenset[str] = frozenset(
         seed_input.schema_entry.name for seed_input in inputs.seed_inputs
     )
@@ -95,7 +97,7 @@ def assemble_compiled_project(
     )
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
-    if sqlglot_enabled:
+    if sql_analysis_enabled:
         model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
             model_inputs=inputs.model_inputs,
             column_nullability_by_table=column_nullability_by_table,
@@ -120,7 +122,7 @@ def assemble_compiled_project(
         models=tuple(
             _assemble_compiled_model(
                 model_input,
-                sqlglot_enabled=sqlglot_enabled,
+                sql_analysis_enabled=sql_analysis_enabled,
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
@@ -168,7 +170,7 @@ def assemble_compiled_project(
 def _assemble_compiled_model(
     model_input: CompileModelInput,
     *,
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
@@ -181,7 +183,7 @@ def _assemble_compiled_model(
     placeholders: dict[str, str] | None = (
         sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
     )
-    if sqlglot_enabled:
+    if sql_analysis_enabled:
         profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
         polyglot_analysis: (
             tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool]
@@ -208,9 +210,9 @@ def _assemble_compiled_model(
                     model_name=model_name,
                     file_path=model_input.model_file.file_path,
                     placeholders=placeholders,
-                    dialect=profile.sqlglot_dialect,
+                    dialect=profile.sql_analysis_dialect,
                 )
-            inferred_columns = infer_columns_with_sqlglot(
+            inferred_columns = infer_columns_with_sql_analysis(
                 query_sql=model_input.query_sql,
                 placeholders=placeholders,
                 column_nullability_by_table=column_nullability_by_table,
@@ -223,7 +225,7 @@ def _assemble_compiled_model(
             model_name=model_name,
             file_path=model_input.model_file.file_path,
             placeholders=placeholders,
-            dialect=profile.sqlglot_dialect,
+            dialect=profile.sql_analysis_dialect,
         )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
@@ -635,7 +637,7 @@ def _build_test_model_query_overrides(
             project_config=inputs.project_config,
             local_config=inputs.local_config,
         ),
-        sqlglot_enabled=inputs.effective_settings.sqlglot,
+        sql_analysis_enabled=inputs.effective_settings.sql_analysis,
         target_name=inputs.effective_target_name,
         vars=inputs.effective_vars,
     )

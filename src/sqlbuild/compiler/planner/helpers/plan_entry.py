@@ -155,7 +155,7 @@ def plan_model(
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
     query_change_tracking: bool,
     full_refresh: bool,
     start_cursor_override: str | None,
@@ -168,7 +168,7 @@ def plan_model(
     change_result: ChangeDetectionResult = detect_model_changes(
         model=model,
         snapshot=snapshot,
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
         query_change_tracking=query_change_tracking,
         full_refresh=full_refresh,
     )
@@ -184,7 +184,7 @@ def plan_model(
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -243,7 +243,7 @@ def build_plan_entries(
             source_map=relations.source_read_map,
             source_warehouse_columns=relations.source_warehouse_columns,
             star_exclude_keyword=relations.star_exclude_keyword,
-            sqlglot_enabled=project.settings.sqlglot,
+            sql_analysis_enabled=project.settings.sql_analysis,
             full_refresh=full_refresh,
             start_cursor_override=resolved_start,
             end_cursor_override=resolved_end,
@@ -270,7 +270,7 @@ def plan_model_from_change(
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
@@ -378,7 +378,7 @@ def plan_model_from_change(
         cursor_column=cursor_column,
         cursor_type=cursor_type,
         warehouse_columns=warehouse_columns,
-        sqlglot_enabled=sqlglot_enabled,
+        sql_analysis_enabled=sql_analysis_enabled,
     )
     if cursor_type_warning is not None:
         warnings = (*warnings, cursor_type_warning)

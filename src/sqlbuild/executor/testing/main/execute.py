@@ -30,7 +30,7 @@ def execute_sql_test(
     comparison_sql: str = build_sql_test_comparison_sql(
         test_entry,
         set_difference_operator=adapter.render_set_difference_operator(),
-        sqlglot_dialect=adapter.sqlglot_dialect(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
     error_model_name: str = test_entry.chain[0].model_name if test_entry.chain else test_entry.name
     try:

@@ -638,7 +638,7 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
 
 SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
     ScenarioCliE2ETestCase(
-        description="local replay rejects disabled sqlglot",
+        description="local replay rejects disabled sql_analysis",
         command=(
             "--no-color",
             "scenario",
@@ -648,8 +648,8 @@ SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES: tuple[ScenarioCliE2ETestCase,
         ),
         expected_exit_code=1,
         expected_stderr_fragments=(
-            "error[C455]: scenario test --local requires SQLGlot and SQL validation",
-            "= help: Enable settings.sqlglot and settings.sql_validation when running local "
+            "error[C455]: scenario test --local requires SQL analysis and SQL validation",
+            "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
             "scenario replay, snapshot sync, or snapshot refresh.",
         ),
     ),
@@ -665,8 +665,8 @@ SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES: tuple[ScenarioCliE2ETestCase,
         ),
         expected_exit_code=1,
         expected_stderr_fragments=(
-            "error[C455]: scenario test --local requires SQLGlot and SQL validation",
-            "= help: Enable settings.sqlglot and settings.sql_validation when running local "
+            "error[C455]: scenario test --local requires SQL analysis and SQL validation",
+            "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
             "scenario replay, snapshot sync, or snapshot refresh.",
         ),
     ),
@@ -1330,7 +1330,9 @@ def test_given_local_scenario_command_when_sql_validation_disabled_then_fails_cl
     tmp_path: Path,
 ) -> None:
     repo_files: dict[str, str] = build_scenario_project_files()
-    disabled_setting: str = "sqlglot" if "sqlglot" in test_case.description else "sql_validation"
+    disabled_setting: str = (
+        "sql_analysis" if "sql_analysis" in test_case.description else "sql_validation"
+    )
     repo_files["sqlbuild_project.toml"] += f"\n[settings]\n{disabled_setting} = false\n"
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,

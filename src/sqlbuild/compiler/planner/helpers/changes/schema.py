@@ -161,7 +161,7 @@ def _compare_inferred_columns(
     warehouse_map: dict[str, str],
     seen_names: set[str],
 ) -> list[SchemaFinding]:
-    """Compare sqlglot-inferred columns against warehouse state, skipping yml-covered names."""
+    """Compare sql_analysis-inferred columns against warehouse state, skipping yml-covered names."""
 
     findings: list[SchemaFinding] = []
     col: InferredColumn

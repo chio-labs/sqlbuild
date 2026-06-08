@@ -59,7 +59,7 @@ from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
     [
         BigQueryExpressionInferenceProfileTestCase(
             description="returns BigQuery inference rules",
-            expected_sqlglot_dialect="bigquery",
+            expected_sql_analysis_dialect="bigquery",
             expected_identifier_limit=1024,
             expected_rule_results={
                 "IF": InferredNullability.NON_NULL,
@@ -76,7 +76,7 @@ def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expe
 
     profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
 
-    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    assert profile.sql_analysis_dialect == test_case.expected_sql_analysis_dialect
     assert adapter.maximum_identifier_length() == test_case.expected_identifier_limit
     if_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("IF")
     lower_rule: FunctionNullabilityRule | None = profile.function_nullability_rule("LOWER")

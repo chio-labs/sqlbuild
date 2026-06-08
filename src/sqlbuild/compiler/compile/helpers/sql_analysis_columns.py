@@ -1,4 +1,4 @@
-"""Optional SQLGlot-backed output column inference from model query SQL."""
+"""Optional SQL analysis-backed output column inference from model query SQL."""
 
 from __future__ import annotations
 
@@ -131,16 +131,16 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 
 
-def infer_columns_with_sqlglot(
+def infer_columns_with_sql_analysis(
     *,
     query_sql: str,
     placeholders: dict[str, str] | None = None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
 ) -> tuple[InferredColumn, ...] | None:
-    """Infer output columns from model query SQL using SQLGlot.
+    """Infer output columns from model query SQL using SQL analysis.
 
-    Returns None if SQLGlot is not available or the SQL cannot be parsed.
+    Returns None if SQL analysis is not available or the SQL cannot be parsed.
     Returns an empty tuple if the outermost SELECT uses SELECT * with no
     extractable column names.
     """
@@ -153,7 +153,7 @@ def infer_columns_with_sqlglot(
 
     polyglot_columns: tuple[InferredColumn, ...] | None | bool = _infer_columns_with_polyglot(
         cleaned_sql=cleaned_sql,
-        dialect=profile.sqlglot_dialect,
+        dialect=profile.sql_analysis_dialect,
         column_nullability_by_table=column_nullability_by_table or {},
         inference_profile=profile,
     )
@@ -177,7 +177,7 @@ def analyze_columns_with_polyglot(
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
     return _infer_columns_with_polyglot(
         cleaned_sql=cleaned_sql,
-        dialect=profile.sqlglot_dialect,
+        dialect=profile.sql_analysis_dialect,
         column_nullability_by_table=column_nullability_by_table or {},
         inference_profile=profile,
     )
@@ -203,7 +203,7 @@ def analyze_columns_and_lineage_with_polyglot(
     try:
         parsed: Any = polyglot_module.parse_one(
             cleaned_sql,
-            dialect=profile.sqlglot_dialect or "generic",
+            dialect=profile.sql_analysis_dialect or "generic",
         )
     except Exception:
         return False
@@ -947,7 +947,7 @@ def _polyglot_name_payload_value(payload: object) -> str:
 
 
 def substitute_placeholder_defaults(query_sql: str, placeholders: dict[str, str]) -> str:
-    """Replace @@@name tokens with their default values for SQLGlot parsing."""
+    """Replace @@@name tokens with their default values for SQL analysis parsing."""
 
     if not placeholders:
         return query_sql

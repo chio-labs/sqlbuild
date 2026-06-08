@@ -17,12 +17,12 @@ from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestCte
 from sqlbuild.compiler.planner.helpers.scenario_relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
-from sqlbuild.compiler.planner.models import SqlglotResolvedTestSql
+from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.types import SqlReferenceKind
 
 
-def try_resolve_test_model_sql_with_sqlglot(
+def try_resolve_test_model_sql_with_sql_analysis(
     *,
     query_sql: str,
     mock_refs: dict[str, str],
@@ -31,10 +31,10 @@ def try_resolve_test_model_sql_with_sqlglot(
     mock_dbt_refs: dict[str, str],
     function_targets: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
-    resolved_chain: dict[str, SqlglotResolvedTestSql],
+    resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
     reachable_mocks: set[str],
     file_label: str,
-) -> SqlglotResolvedTestSql | None:
+) -> SqlAnalysisResolvedTestSql | None:
     """Return Polyglot-backed readable test SQL or None on import/parse failure."""
 
     polyglot_module: Any | None = import_polyglot_sql()
@@ -89,7 +89,7 @@ def try_resolve_test_model_sql_with_sqlglot(
             generated_name: str = f"{REF_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in resolved_chain:
                 _ensure_available(generated_name, referenced_name, "ref")
-                chain_sql: SqlglotResolvedTestSql = resolved_chain[referenced_name]
+                chain_sql: SqlAnalysisResolvedTestSql = resolved_chain[referenced_name]
                 dependency_name: str
                 dependency_sql: str
                 for dependency_name, dependency_sql in chain_sql.generated_ctes.items():
@@ -153,7 +153,7 @@ def try_resolve_test_model_sql_with_sqlglot(
     _replace_relation_markers_in_polyglot_dict(
         parsed_dict,
         polyglot_module=polyglot_module,
-        sqlglot_dialect=None,
+        sql_analysis_dialect=None,
         target_for_marker=_target_for_marker,
     )
     transformed_without_with: dict[str, Any] = deepcopy(parsed_dict)
@@ -187,12 +187,12 @@ def try_resolve_test_model_sql_with_sqlglot(
     if cte_body_sql is None:
         return None
     if not cte_parts:
-        return SqlglotResolvedTestSql(
+        return SqlAnalysisResolvedTestSql(
             resolved_sql=cte_body_sql,
             cte_body_sql=cte_body_sql,
             generated_ctes=generated_ctes,
         )
-    return SqlglotResolvedTestSql(
+    return SqlAnalysisResolvedTestSql(
         resolved_sql=f"WITH {', '.join(cte_parts)} {outer_sql}",
         cte_body_sql=cte_body_sql,
         generated_ctes=generated_ctes,

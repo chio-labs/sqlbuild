@@ -72,7 +72,7 @@ def detect_changes(
         model_changes[model.name] = detect_model_changes(
             model=model,
             snapshot=snapshot,
-            sqlglot_enabled=project.settings.sqlglot,
+            sql_analysis_enabled=project.settings.sql_analysis,
             query_change_tracking=project.settings.query_change_tracking,
             full_refresh=full_refresh,
             function_local_hashes=function_local_hashes,
@@ -109,7 +109,7 @@ def detect_model_changes(
     *,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    sqlglot_enabled: bool,
+    sql_analysis_enabled: bool,
     query_change_tracking: bool,
     full_refresh: bool,
     function_local_hashes: dict[str, str] | None = None,
