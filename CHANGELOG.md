@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.30.1](https://github.com/chio-labs/sqlbuild/compare/v0.30.0...v0.30.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* avoid recursive compile layer counting ([312090f](https://github.com/chio-labs/sqlbuild/commit/312090f894f3284ab2a962f0d8ef3760fe74466d))
+* restore compile analysis parity ([f3bdf6e](https://github.com/chio-labs/sqlbuild/commit/f3bdf6ed9495bdc485e97b619232274b609bb25b))
+
+
+### Performance Improvements
+
+* fuse compact sql analysis ([07982a5](https://github.com/chio-labs/sqlbuild/commit/07982a588e10a76f16a13093e2b4c550894a8dbc))
+* parallelize compile sql analysis ([703550f](https://github.com/chio-labs/sqlbuild/commit/703550fe0db48373c0135a840bbb5674dd4c72c3))
+* reduce compile discovery overhead ([64375cf](https://github.com/chio-labs/sqlbuild/commit/64375cf8996e0ec52afa197884cfc228a1612442))
+* reduce compile scanner overhead ([d4f2d75](https://github.com/chio-labs/sqlbuild/commit/d4f2d750a3a6daaf941dd0bab813e5cc9b187ea2))
+* speed up compile analysis ([507b61d](https://github.com/chio-labs/sqlbuild/commit/507b61da545fb30a245d3e2143e23a0a8977f640))
+* speed up compile analysis ([e33eedc](https://github.com/chio-labs/sqlbuild/commit/e33eedca6cbb90c6402920168e7f8e4401067a30))
+
 ## [0.30.0](https://github.com/chio-labs/sqlbuild/compare/v0.29.0...v0.30.0) (2026-06-07)
 
 
