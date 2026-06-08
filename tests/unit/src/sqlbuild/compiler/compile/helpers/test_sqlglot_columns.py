@@ -4,13 +4,26 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+    analyze_columns_and_lineage_with_polyglot,
     infer_columns_with_sqlglot,
     substitute_placeholder_defaults,
 )
-from sqlbuild.compiler.compile.models.core import InferredColumn
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.compile.models.core import (
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
+    CompileSqlReference,
+    InferredColumn,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    InferredNullability,
+)
+from sqlbuild.shared.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     InferColumnsTestCase,
+    PolyglotAnalysisTestCase,
     SubstitutePlaceholderDefaultsTestCase,
 )
 
@@ -267,6 +280,50 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
     )
 
     assert result == test_case.expected_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="extracts compact direct lineage facts from unqualified refs",
+            query_sql='SELECT order_id FROM __ref("orders")',
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            expected_columns=(InferredColumn(name="order_id"),),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="order_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="order_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.MEDIUM,
+                ),
+            ),
+            expected_has_star=False,
+        )
+    ],
+    ids=["extracts compact direct lineage facts from unqualified refs"],
+)
+def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact_facts(
+    test_case: PolyglotAnalysisTestCase,
+) -> None:
+    result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+    )
+
+    assert isinstance(result, tuple)
+    columns, lineage_columns, has_star = result
+    assert columns == test_case.expected_columns
+    assert lineage_columns == test_case.expected_lineage_columns
+    assert has_star is test_case.expected_has_star
 
 
 SUBSTITUTE_PLACEHOLDER_TEST_CASES: list[SubstitutePlaceholderDefaultsTestCase] = [

@@ -114,6 +114,9 @@ def expand_sql_macros(
 def find_macro_call_names(sql: str) -> tuple[str, ...]:
     """Return unique authored macro call names in encounter order."""
 
+    if "@" not in sql:
+        return ()
+
     names: list[str] = []
     seen: set[str] = set()
     cursor: int = 0

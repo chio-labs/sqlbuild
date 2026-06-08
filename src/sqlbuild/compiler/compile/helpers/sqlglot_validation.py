@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
     _replace_refs_with_stubs,
     substitute_placeholder_defaults,
 )
+from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
@@ -50,6 +51,7 @@ def validate_sql_syntax(
     model_name: str,
     file_path: Path,
     placeholders: dict[str, str] | None = None,
+    dialect: str | None = None,
 ) -> None:
     """Validate that the model query SQL is parseable by SQLGlot.
 
@@ -57,13 +59,26 @@ def validate_sql_syntax(
     if SQLGlot is not installed.
     """
 
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
-        return
-
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+
+    polyglot_error: str | None | bool = _validate_sql_with_polyglot(cleaned_sql, dialect=dialect)
+    if polyglot_error is None:
+        return
+    if isinstance(polyglot_error, str):
+        raise CompileInputError(
+            f"SQL syntax error in model '{model_name}' ({file_path}): {polyglot_error}\n\n"
+            f"To skip SQL validation for this model, add `sql_validation: false` "
+            f"to the MODEL header.\n"
+            f"To disable project-wide, set `settings.sql_validation: false` "
+            f"in sqlbuild_project.toml.\n"
+            f"To skip for this run, use `--no-sql-validation`."
+        ) from None
+
+    sqlglot_module: Any | None = import_sqlglot()
+    if sqlglot_module is None:
+        return
 
     try:
         sqlglot_module.parse_one(cleaned_sql)
@@ -76,6 +91,23 @@ def validate_sql_syntax(
             f"in sqlbuild_project.toml.\n"
             f"To skip for this run, use `--no-sql-validation`."
         ) from None
+
+
+def _validate_sql_with_polyglot(sql: str, *, dialect: str | None) -> str | None | bool:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        return False
+    try:
+        result: Any = polyglot_module.validate(sql, dialect=dialect or "generic")
+    except Exception:
+        return False
+    if result:
+        return None
+    error_message: str = "invalid SQL"
+    errors: object = getattr(result, "errors", ())
+    if isinstance(errors, list) and errors:
+        error_message = str(getattr(errors[0], "message", error_message))
+    return error_message
 
 
 def validate_function_sql_syntax(

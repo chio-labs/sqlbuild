@@ -28,6 +28,7 @@ def build_project_graph(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     on_progress: Callable[[str], None] | None = None,
@@ -41,6 +42,7 @@ def build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        skip_column_inference=skip_column_inference,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )

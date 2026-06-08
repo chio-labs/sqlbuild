@@ -49,6 +49,10 @@ def run_compile(
     no_color: bool = False,
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     cli_vars: dict[str, object] | None = None,
+    profile_skip_discovery_sqlglot: bool = False,
+    profile_skip_column_inference: bool = False,
+    profile_skip_contracts: bool = False,
+    profile_skip_write: bool = False,
 ) -> int:
     """Execute the compile command."""
 
@@ -57,7 +61,8 @@ def run_compile(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discover_start: float = time.monotonic()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=effective_project_dir
+        project_dir=effective_project_dir,
+        sqlglot_enabled_override=False if profile_skip_discovery_sqlglot else None,
     )
     discover_ms: int = _elapsed_ms(discover_start)
     adapter: BaseAdapter = resolve_adapter(
@@ -72,6 +77,7 @@ def run_compile(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        skip_column_inference=profile_skip_column_inference,
         cli_vars=cli_vars,
     )
     graph_ms: int = _elapsed_ms(graph_start)
@@ -83,10 +89,14 @@ def run_compile(
     )
     lineage_ms: int = _elapsed_ms(lineage_start)
     contracts_start: float = time.monotonic()
-    contract_result: ContractValidationResult = validate_model_contracts(
-        graph.project,
-        dialect=adapter.sqlglot_dialect(),
-    )
+    contract_result: ContractValidationResult
+    if profile_skip_contracts:
+        contract_result = ContractValidationResult(diagnostics=())
+    else:
+        contract_result = validate_model_contracts(
+            graph.project,
+            dialect=adapter.sqlglot_dialect(),
+        )
     contract_ms: int = _elapsed_ms(contracts_start)
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *graph.project.diagnostics,
@@ -125,12 +135,24 @@ def run_compile(
         )
 
     write_start: float = time.monotonic()
-    written: WrittenTarget = write_static_compile_target(
-        target_dir=effective_project_dir / "target",
-        adapter=adapter,
-        project=graph.project,
-        manifest=manifest_payload,
-    )
+    target_dir: Path = effective_project_dir / "target"
+    written: WrittenTarget
+    if profile_skip_write:
+        written = WrittenTarget(
+            model_count=0,
+            seed_count=0,
+            function_count=0,
+            audit_count=0,
+            test_count=0,
+            target_dir=target_dir,
+        )
+    else:
+        written = write_static_compile_target(
+            target_dir=target_dir,
+            adapter=adapter,
+            project=graph.project,
+            manifest=manifest_payload,
+        )
     write_ms: int = _elapsed_ms(write_start)
     timings_ms: dict[str, int] = {
         "discover_ms": discover_ms,

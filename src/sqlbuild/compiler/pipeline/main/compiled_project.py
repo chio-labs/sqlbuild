@@ -22,6 +22,7 @@ def build_compiled_project(
     adapter: BaseAdapter,
     selected_target: str | None = None,
     no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompiledProject:
@@ -31,6 +32,7 @@ def build_compiled_project(
         discovered_inputs,
         selected_target=selected_target,
         no_sql_validation=no_sql_validation,
+        defer_model_sql_validation=True,
         cli_vars=cli_vars,
         python_functions_inherit_default_namespace=(
             adapter.python_functions_inherit_default_namespace()
@@ -41,6 +43,7 @@ def build_compiled_project(
         assemble_project(
             compile_inputs,
             inference_profile=adapter.expression_inference_profile(),
+            skip_column_inference=skip_column_inference,
         ),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),

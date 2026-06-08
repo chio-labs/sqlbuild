@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models.core import (
+    CompiledLineageColumnFact,
     CompiledObjectKey,
     CompileSqlReference,
     InferredColumn,
@@ -174,6 +175,16 @@ class InferColumnsTestCase:
         default_factory=dict
     )
     inference_profile: ExpressionInferenceProfile | None = None
+
+
+@dataclass(frozen=True)
+class PolyglotAnalysisTestCase:
+    description: str
+    query_sql: str
+    references: tuple[CompileSqlReference, ...]
+    expected_columns: tuple[InferredColumn, ...] | None
+    expected_lineage_columns: tuple[CompiledLineageColumnFact, ...]
+    expected_has_star: bool
 
 
 @dataclass(frozen=True)

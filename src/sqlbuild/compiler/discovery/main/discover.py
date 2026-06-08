@@ -42,15 +42,21 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
-def discover_project_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
+def discover_project_inputs(
+    *, project_dir: Path, sqlglot_enabled_override: bool | None = None
+) -> DiscoveredProjectInputs:
     """Load all raw project inputs from disk before semantic resolution."""
 
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
     sqlglot_enabled: bool = (
-        local_config.settings.sqlglot
-        if "sqlglot" in local_config.setting_overrides
-        else project_config.settings.sqlglot
+        sqlglot_enabled_override
+        if sqlglot_enabled_override is not None
+        else (
+            local_config.settings.sqlglot
+            if "sqlglot" in local_config.setting_overrides
+            else project_config.settings.sqlglot
+        )
     )
 
     source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(project_dir=project_dir)

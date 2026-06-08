@@ -1895,6 +1895,10 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             bool,
             CompileLineageMode,
             dict[str, object],
+            bool,
+            bool,
+            bool,
+            bool,
         ]
     ] = []
 
@@ -1908,6 +1912,10 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         no_color: bool,
         lineage_mode: CompileLineageMode,
         cli_vars: dict[str, object],
+        profile_skip_discovery_sqlglot: bool,
+        profile_skip_column_inference: bool,
+        profile_skip_contracts: bool,
+        profile_skip_write: bool,
     ) -> int:
         received_args.append(
             (
@@ -1920,6 +1928,10 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
                 no_color,
                 lineage_mode,
                 cli_vars,
+                profile_skip_discovery_sqlglot,
+                profile_skip_column_inference,
+                profile_skip_contracts,
+                profile_skip_write,
             )
         )
         return test_case.expected_exit_code
@@ -1941,6 +1953,10 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             False,
             test_case.expected_compile_lineage_mode,
             {} if test_case.expected_vars is None else test_case.expected_vars,
+            False,
+            False,
+            False,
+            False,
         )
     ]
 
@@ -2598,6 +2614,10 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         no_color: bool,
         lineage_mode: CompileLineageMode,
         cli_vars: dict[str, object],
+        profile_skip_discovery_sqlglot: bool,
+        profile_skip_column_inference: bool,
+        profile_skip_contracts: bool,
+        profile_skip_write: bool,
     ) -> int:
         del no_sql_validation
         del defer_to
@@ -2607,6 +2627,10 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         del no_color
         del lineage_mode
         del cli_vars
+        del profile_skip_discovery_sqlglot
+        del profile_skip_column_inference
+        del profile_skip_contracts
+        del profile_skip_write
         assert project_dir is not None
         raise test_case.error_factory(project_dir)
 

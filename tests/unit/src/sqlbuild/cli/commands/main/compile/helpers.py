@@ -372,6 +372,34 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
     )
 
 
+def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
+    """Build a static project graph with one model depending on the previous model."""
+
+    graph: ProjectGraph = build_compile_output_graph(
+        model_names=tuple(f"model_{index:05d}" for index in range(model_count))
+    )
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        model.key: () for model in graph.project.models
+    }
+    previous_key: CompiledObjectKey | None = None
+    for model in graph.project.models:
+        if previous_key is None:
+            upstream_deps[model.key] = ()
+        else:
+            upstream_deps[model.key] = (previous_key,)
+            downstream_deps[previous_key] = (*downstream_deps[previous_key], model.key)
+        previous_key = model.key
+    return ProjectGraph(
+        project=graph.project,
+        upstream_deps=upstream_deps,
+        downstream_deps=downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+        all_keys=graph.all_keys,
+    )
+
+
 def build_compile_output_model_names(model_count: int) -> tuple[str, ...]:
     """Build model names for compile output formatter cases."""
 
