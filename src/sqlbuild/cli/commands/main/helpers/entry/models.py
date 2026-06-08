@@ -35,6 +35,10 @@ class CliNamespace:
     manifest: bool = False
     dag: str | None = None
     compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
+    profile_skip_discovery_sqlglot: bool = False
+    profile_skip_column_inference: bool = False
+    profile_skip_contracts: bool = False
+    profile_skip_write: bool = False
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
@@ -126,6 +130,10 @@ class CliEntrypointHandlers:
             bool,
             CompileLineageMode,
             dict[str, object],
+            bool,
+            bool,
+            bool,
+            bool,
         ],
         int,
     ]

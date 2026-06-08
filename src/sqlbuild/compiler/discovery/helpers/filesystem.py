@@ -108,22 +108,23 @@ def discover_model_files(
     file_path: Path
     for file_path in sorted(model_root.rglob("*.sql")):
         contents: str = file_path.read_text(encoding="utf-8")
+        relative_path: Path = file_path.relative_to(project_dir)
         header_values: dict[str, object]
         query_sql: str
         header_values, query_sql = parse_model_sql(contents, file_path)
         discovered_model_files.append(
             DiscoveredSqlModelFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=relative_path,
                 contents=contents,
                 header_values=header_values,
                 header_column_locations=model_header_column_locations(
                     contents=contents,
-                    relative_path=file_path.relative_to(project_dir),
+                    relative_path=relative_path,
                 ),
                 output_column_locations=model_output_column_locations(
                     contents=contents,
-                    relative_path=file_path.relative_to(project_dir),
+                    relative_path=relative_path,
                     sqlglot_enabled=sqlglot_enabled,
                 ),
                 query_sql=query_sql,

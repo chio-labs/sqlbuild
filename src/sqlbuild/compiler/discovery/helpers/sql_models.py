@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
 from sqlbuild.compiler.discovery.helpers.constants import MODEL_HEADER_PATTERN
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SourceLocation
@@ -72,6 +71,7 @@ def model_header_column_locations(
     header: str = header_match.group("header")
     header_start: int = header_match.start("header")
     tokens: list[_ModelHeaderToken] = _tokenize_model_header(header)
+    line_starts: tuple[int, ...] | None = None
     locations: dict[str, SourceLocation] = {}
     depth: int = 0
     in_columns: bool = False
@@ -85,11 +85,14 @@ def model_header_column_locations(
             if next_token.kind == _SYMBOL_TOKEN and next_token.value == "(":
                 in_columns = True
         elif in_columns and token.kind == _WORD_TOKEN and depth == 1:
+            if line_starts is None:
+                line_starts = _line_starts(contents)
             locations[token.value] = _location_for_header_token(
                 contents=contents,
                 header_start=header_start,
                 token=token,
                 relative_path=relative_path,
+                line_starts=line_starts,
             )
         if token.kind == _SYMBOL_TOKEN and token.value == "(":
             depth += 1
@@ -111,42 +114,81 @@ def model_output_column_locations(
         return {}
     sql_start: int = header_match.start("sql")
     sql: str = header_match.group("sql")
-    sqlglot_output_names: tuple[str | None, ...] | None = (
-        _sqlglot_projection_output_names(sql) if sqlglot_enabled else None
-    )
-    if sqlglot_output_names == ():
-        return {}
     projection_ranges: tuple[tuple[int, int], ...] | None = _top_level_select_projection_ranges(sql)
     if projection_ranges is None:
         return {}
-    if sqlglot_output_names is not None:
-        if len(sqlglot_output_names) != len(projection_ranges):
-            return {}
-        return _locations_from_projection_names(
-            contents=contents,
-            sql_start=sql_start,
-            relative_path=relative_path,
-            projection_ranges=projection_ranges,
-            output_names=sqlglot_output_names,
-        )
     return _scanner_output_column_locations(
         contents=contents,
         sql_start=sql_start,
         relative_path=relative_path,
         projection_ranges=projection_ranges,
+        sqlglot_enabled=sqlglot_enabled,
+        line_starts=_line_starts(contents),
     )
 
 
 def _top_level_select_projection_ranges(sql: str) -> tuple[tuple[int, int], ...] | None:
-    select_start: int | None = _find_top_level_keyword(sql, "SELECT", start=0)
-    if select_start is None:
+    bounds: tuple[int, int] | None = _top_level_select_list_bounds(sql)
+    if bounds is None:
         return None
-    select_list_start: int = select_start + len("SELECT")
-    if _find_top_level_keyword(sql, "UNION", start=select_list_start) is not None:
-        return None
-    from_start: int | None = _find_top_level_keyword(sql, "FROM", start=select_list_start)
-    select_list_end: int = from_start if from_start is not None else len(sql)
+    select_list_start, select_list_end = bounds
     return _split_top_level_select_items(sql, start=select_list_start, end=select_list_end)
+
+
+def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
+    depth: int = 0
+    index: int = 0
+    select_list_start: int | None = None
+    select_list_end: int | None = None
+    in_quote: str | None = None
+    length: int = len(sql)
+    has_union_candidate: bool = "union" in sql.lower()
+    while index < length:
+        character: str = sql[index]
+        if in_quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == in_quote:
+                in_quote = None
+            index += 1
+            continue
+        if character in _QUOTE_NAMES:
+            in_quote = character
+            index += 1
+            continue
+        if character == "(":
+            depth += 1
+            index += 1
+            continue
+        if character == ")":
+            depth = max(0, depth - 1)
+            index += 1
+            continue
+        if depth != 0:
+            index += 1
+            continue
+        upper_character: str = character.upper()
+        if select_list_start is None:
+            if upper_character == "S" and _keyword_at(sql, "SELECT", index):
+                select_list_start = index + len("SELECT")
+                index = select_list_start
+                continue
+        else:
+            if upper_character == "U" and _keyword_at(sql, "UNION", index):
+                return None
+            if (
+                select_list_end is None
+                and upper_character == "F"
+                and _keyword_at(sql, "FROM", index)
+            ):
+                select_list_end = index
+                if not has_union_candidate:
+                    return select_list_start, select_list_end
+        index += 1
+    if select_list_start is None:
+        return None
+    return select_list_start, select_list_end if select_list_end is not None else length
 
 
 def _scanner_output_column_locations(
@@ -155,13 +197,16 @@ def _scanner_output_column_locations(
     sql_start: int,
     relative_path: Path,
     projection_ranges: tuple[tuple[int, int], ...],
+    sqlglot_enabled: bool,
+    line_starts: tuple[int, ...],
 ) -> dict[str, SourceLocation]:
     locations: dict[str, SourceLocation] = {}
     item_start: int
     item_end: int
     for item_start, item_end in projection_ranges:
         output_name: str | None = _select_item_output_name(
-            contents[sql_start + item_start : sql_start + item_end]
+            contents[sql_start + item_start : sql_start + item_end],
+            sqlglot_enabled=sqlglot_enabled,
         )
         if output_name is None:
             continue
@@ -170,29 +215,7 @@ def _scanner_output_column_locations(
             sql_start=sql_start,
             relative_path=relative_path,
             projection_range=(item_start, item_end),
-        )
-        if location is not None:
-            locations[output_name] = location
-    return locations
-
-
-def _locations_from_projection_names(
-    *,
-    contents: str,
-    sql_start: int,
-    relative_path: Path,
-    projection_ranges: tuple[tuple[int, int], ...],
-    output_names: tuple[str | None, ...],
-) -> dict[str, SourceLocation]:
-    locations: dict[str, SourceLocation] = {}
-    for output_name, projection_range in zip(output_names, projection_ranges, strict=True):
-        if output_name is None or output_name == "*":
-            continue
-        location: SourceLocation | None = _location_for_projection_range(
-            contents=contents,
-            sql_start=sql_start,
-            relative_path=relative_path,
-            projection_range=projection_range,
+            line_starts=line_starts,
         )
         if location is not None:
             locations[output_name] = location
@@ -200,7 +223,12 @@ def _locations_from_projection_names(
 
 
 def _location_for_projection_range(
-    *, contents: str, sql_start: int, relative_path: Path, projection_range: tuple[int, int]
+    *,
+    contents: str,
+    sql_start: int,
+    relative_path: Path,
+    projection_range: tuple[int, int],
+    line_starts: tuple[int, ...],
 ) -> SourceLocation | None:
     item_start: int = projection_range[0]
     item_end: int = projection_range[1]
@@ -214,36 +242,17 @@ def _location_for_projection_range(
         start=sql_start + start_offset,
         end=sql_start + end_offset,
         relative_path=relative_path,
+        line_starts=line_starts,
     )
 
 
-def _sqlglot_projection_output_names(sql: str) -> tuple[str | None, ...] | None:
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
-        return None
-    try:
-        parsed: Any = sqlglot_module.parse_one(sql)
-    except Exception:
-        return None
-    if type(parsed).__name__ != "Select":
-        return ()
-    output_names: list[str | None] = []
-    projection: Any
-    for projection in parsed.expressions:
-        if "Star" in type(projection).__name__:
-            output_names.append(None)
-            continue
-        raw_name: object | None = getattr(projection, "alias_or_name", None)
-        if raw_name is None:
-            output_names.append(None)
-            continue
-        output_name: str = str(raw_name)
-        output_names.append(output_name if output_name and output_name != "*" else None)
-    return tuple(output_names)
-
-
 def _location_for_header_token(
-    *, contents: str, header_start: int, token: _ModelHeaderToken, relative_path: Path
+    *,
+    contents: str,
+    header_start: int,
+    token: _ModelHeaderToken,
+    relative_path: Path,
+    line_starts: tuple[int, ...],
 ) -> SourceLocation:
     absolute_position: int = header_start + token.position
     return _location_for_absolute_span(
@@ -251,19 +260,22 @@ def _location_for_header_token(
         start=absolute_position,
         end=absolute_position + len(token.value),
         relative_path=relative_path,
+        line_starts=line_starts,
     )
 
 
 def _location_for_absolute_span(
-    *, contents: str, start: int, end: int, relative_path: Path
+    *, contents: str, start: int, end: int, relative_path: Path, line_starts: tuple[int, ...]
 ) -> SourceLocation:
     end = max(start, end)
     end_position: int = max(start, end - 1)
-    line: int = contents.count("\n", 0, start) + 1
-    line_start: int = contents.rfind("\n", 0, start) + 1
+    line_index: int = bisect_right(line_starts, start) - 1
+    line: int = line_index + 1
+    line_start: int = line_starts[line_index]
     column: int = start - line_start + 1
-    end_line: int = contents.count("\n", 0, end_position) + 1
-    end_line_start: int = contents.rfind("\n", 0, end_position) + 1
+    end_line_index: int = bisect_right(line_starts, end_position) - 1
+    end_line: int = end_line_index + 1
+    end_line_start: int = line_starts[end_line_index]
     end_column: int = end_position - end_line_start + 2
     return SourceLocation(
         path=relative_path,
@@ -272,6 +284,15 @@ def _location_for_absolute_span(
         end_line=end_line,
         end_column=end_column,
     )
+
+
+def _line_starts(contents: str) -> tuple[int, ...]:
+    starts: list[int] = [0]
+    index: int = contents.find("\n")
+    while index != -1:
+        starts.append(index + 1)
+        index = contents.find("\n", index + 1)
+    return tuple(starts)
 
 
 def _find_top_level_keyword(sql: str, keyword: str, *, start: int) -> int | None:
@@ -338,7 +359,7 @@ def _split_top_level_select_items(sql: str, *, start: int, end: int) -> tuple[tu
     return tuple(items)
 
 
-def _select_item_output_name(item: str) -> str | None:
+def _select_item_output_name(item: str, *, sqlglot_enabled: bool) -> str | None:
     as_match: re.Match[str] | None = re.search(
         r"\s+AS\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",
         item,
@@ -352,7 +373,15 @@ def _select_item_output_name(item: str) -> str | None:
         item,
     )
     if bare_match is None:
-        return None
+        if not sqlglot_enabled:
+            return None
+        implicit_alias_match: re.Match[str] | None = re.search(
+            r"\)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",
+            item,
+        )
+        if implicit_alias_match is None:
+            return None
+        return implicit_alias_match.group("name").strip('"')
     return bare_match.group("name").strip('"')
 
 

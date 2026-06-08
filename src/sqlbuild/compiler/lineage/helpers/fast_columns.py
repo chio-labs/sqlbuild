@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -29,6 +29,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 
 
@@ -55,13 +56,19 @@ def build_fast_project_column_lineage(
     for model in project.models:
         if model_names is not None and model.name not in model_names:
             continue
-        result: ModelColumnLineage | None = _build_fast_model_column_lineage(
+        result: ModelColumnLineage | None = _build_polyglot_fast_model_column_lineage(
             model,
             schema=schema,
             dialect=dialect,
-            sqlglot=sqlglot,
-            exp=exp,
         )
+        if result is None:
+            result = _build_fast_model_column_lineage(
+                model,
+                schema=schema,
+                dialect=dialect,
+                sqlglot=sqlglot,
+                exp=exp,
+            )
         if result is None:
             continue
         model_results[model.name] = result
@@ -82,6 +89,340 @@ def build_fast_project_column_lineage(
                 )
 
     return ProjectColumnLineage(models=model_results, edges=tuple(collapsed_edges))
+
+
+def _build_polyglot_fast_model_column_lineage(
+    model: CompiledModel,
+    *,
+    schema: dict[str, dict[str, str]],
+    dialect: str | None,
+) -> ModelColumnLineage | None:
+    if model.fast_lineage_columns is not None:
+        lineages: list[ColumnLineage] = [
+            ColumnLineage(
+                output_column=fact.output_column,
+                transform_kind=fact.transform_kind,
+                expression_sql=None,
+                upstream_columns=tuple(
+                    ColumnLineageSource(
+                        resource_type=source.resource_type,
+                        resource_name=source.resource_name,
+                        column_name=source.column_name,
+                    )
+                    for source in fact.upstream_columns
+                ),
+                nullability=InferredNullability.UNKNOWN,
+                confidence=fact.confidence,
+            )
+            for fact in model.fast_lineage_columns
+        ]
+        if model.fast_lineage_has_star:
+            normalized_sql: str
+            physical_resources: tuple[_PhysicalResource, ...]
+            normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
+            del normalized_sql
+            lineages.extend(
+                _build_star_lineage(
+                    model=model,
+                    schema=schema,
+                    physical_resources=physical_resources,
+                    existing_columns={lineage.output_column for lineage in lineages},
+                )
+            )
+        return ModelColumnLineage(
+            model_name=model.name,
+            columns=tuple(lineages),
+            has_star=model.fast_lineage_has_star,
+        )
+
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        return None
+    normalized_sql: str
+    physical_resources: tuple[_PhysicalResource, ...]
+    normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
+    try:
+        parsed: Any = polyglot_module.parse_one(normalized_sql, dialect=dialect or "generic")
+    except Exception:
+        return None
+    if str(getattr(parsed, "kind", "")) != "select":
+        return None
+
+    alias_map: dict[str, _PhysicalResource] = _polyglot_table_alias_map(
+        parsed,
+        physical_resources=physical_resources,
+    )
+    unqualified_resource: _PhysicalResource | None = _single_alias_resource(alias_map)
+    lineages: list[ColumnLineage] = []
+    has_star: bool = False
+    projections: tuple[Any, ...] = tuple(getattr(parsed, "expressions", ()))
+    inferred_names: tuple[str, ...] = tuple(column.name for column in model.inferred_columns or ())
+    for index, projection in enumerate(projections):
+        if bool(getattr(projection, "is_star", False)):
+            has_star = True
+            continue
+        inner: Any = (
+            projection.this if str(getattr(projection, "kind", "")) == "alias" else projection
+        )
+        if bool(getattr(inner, "is_star", False)):
+            has_star = True
+            continue
+        output_column: str | None = _polyglot_projection_output_name(
+            projection,
+            index=index,
+            inferred_names=inferred_names,
+        )
+        if output_column is None:
+            continue
+        upstream_columns, confidence = _polyglot_projection_upstream_columns(
+            projection,
+            alias_map=alias_map,
+            unqualified_resource=unqualified_resource,
+        )
+        transform_kind: ColumnTransformKind = _polyglot_classify_transform(
+            inner,
+            upstream_columns=upstream_columns,
+        )
+        lineages.append(
+            ColumnLineage(
+                output_column=output_column,
+                transform_kind=transform_kind,
+                expression_sql=None,
+                upstream_columns=upstream_columns,
+                nullability=InferredNullability.UNKNOWN,
+                confidence=confidence
+                if upstream_columns or transform_kind == ColumnTransformKind.CONSTANT
+                else ColumnLineageConfidence.UNKNOWN,
+            )
+        )
+
+    if has_star:
+        lineages.extend(
+            _build_star_lineage(
+                model=model,
+                schema=schema,
+                physical_resources=physical_resources,
+                existing_columns={lineage.output_column for lineage in lineages},
+            )
+        )
+    return ModelColumnLineage(model_name=model.name, columns=tuple(lineages), has_star=has_star)
+
+
+def _polyglot_table_alias_map(
+    parsed: Any,
+    *,
+    physical_resources: tuple[_PhysicalResource, ...],
+) -> dict[str, _PhysicalResource]:
+    physical_resource_by_name: dict[str, _PhysicalResource] = {
+        resource.physical_name: resource for resource in physical_resources
+    }
+    physical_resource_by_name.update(
+        {resource.resource_name: resource for resource in physical_resources}
+    )
+    alias_map: dict[str, _PhysicalResource] = {}
+    try:
+        tables: tuple[Any, ...] = tuple(parsed.find_all("table"))
+    except Exception:
+        return alias_map
+    for table in tables:
+        table_name: str = str(getattr(table, "name", "") or "")
+        resource: _PhysicalResource | None = physical_resource_by_name.get(table_name)
+        if resource is None:
+            continue
+        alias_map[table_name] = resource
+        alias_or_name: str = str(getattr(table, "alias_or_name", "") or "")
+        if alias_or_name:
+            alias_map[alias_or_name] = resource
+    return alias_map
+
+
+def _polyglot_projection_output_name(
+    projection: Any, *, index: int, inferred_names: tuple[str, ...]
+) -> str | None:
+    raw_name: str = str(getattr(projection, "output_name", "") or "")
+    if raw_name and raw_name != "*":
+        return raw_name
+    raw_name = str(getattr(projection, "alias_or_name", "") or "")
+    if raw_name and raw_name != "*":
+        return raw_name
+    if index < len(inferred_names):
+        return inferred_names[index]
+    return None
+
+
+def _polyglot_projection_upstream_columns(
+    projection: Any,
+    *,
+    alias_map: dict[str, _PhysicalResource],
+    unqualified_resource: _PhysicalResource | None,
+) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
+    columns: list[ColumnLineageSource] = []
+    seen: set[tuple[CompiledResourceType, str, str]] = set()
+    confidence: ColumnLineageConfidence = ColumnLineageConfidence.HIGH
+    column_refs: tuple[tuple[str, str], ...] = _polyglot_column_refs_in_expression(projection)
+    for column_name, table_name in column_refs:
+        if not column_name:
+            continue
+        resource: _PhysicalResource | None = None
+        if table_name:
+            resource = alias_map.get(table_name)
+        elif unqualified_resource is not None:
+            resource = unqualified_resource
+            confidence = ColumnLineageConfidence.MEDIUM
+        else:
+            confidence = ColumnLineageConfidence.UNKNOWN
+        if resource is None:
+            continue
+        key: tuple[CompiledResourceType, str, str] = (
+            resource.resource_type,
+            resource.resource_name,
+            column_name,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        columns.append(
+            ColumnLineageSource(
+                resource_type=resource.resource_type,
+                resource_name=resource.resource_name,
+                column_name=column_name,
+            )
+        )
+    return tuple(columns), confidence
+
+
+def _single_alias_resource(alias_map: dict[str, _PhysicalResource]) -> _PhysicalResource | None:
+    resource: _PhysicalResource | None = None
+    for candidate in alias_map.values():
+        if resource is None:
+            resource = candidate
+            continue
+        if candidate.resource_name != resource.resource_name:
+            return None
+    return resource
+
+
+def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str], ...]:
+    if str(getattr(expression, "kind", "")) == "column":
+        return (
+            (str(getattr(expression, "name", "") or ""), _polyglot_column_table_name(expression)),
+        )
+    try:
+        payload: object = expression.to_dict()
+    except Exception:
+        return ()
+    refs: list[tuple[str, str]] = []
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            node_dict: dict[str, object] = cast(dict[str, object], node)
+            column_payload: object = node_dict.get("column")
+            if isinstance(column_payload, dict):
+                column_dict: dict[str, object] = cast(dict[str, object], column_payload)
+                column_name: str = _polyglot_name_payload_value(column_dict.get("name"))
+                table_payload: object = column_dict.get("table")
+                table_name: str = ""
+                if isinstance(table_payload, dict):
+                    table_dict: dict[str, object] = cast(dict[str, object], table_payload)
+                    table_name = _polyglot_name_payload_value(table_dict.get("name"))
+                refs.append((column_name, table_name))
+                return
+            for value in node_dict.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(payload)
+    return tuple(refs)
+
+
+def _polyglot_name_payload_value(payload: object) -> str:
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, dict):
+        payload_dict: dict[str, object] = cast(dict[str, object], payload)
+        name: object = payload_dict.get("name")
+        if isinstance(name, str):
+            return name
+    return ""
+
+
+def _polyglot_column_table_name(column: Any) -> str:
+    try:
+        payload: object = column.to_dict().get("column", {})
+    except Exception:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    table_payload: object = payload.get("table")
+    if not isinstance(table_payload, dict):
+        return ""
+    raw_name: object = table_payload.get("name")
+    return raw_name if isinstance(raw_name, str) else ""
+
+
+def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
+    if str(getattr(expression, "kind", "")) == "column":
+        return (expression,)
+    columns: list[Any] = []
+    seen: set[int] = set()
+
+    def visit(node: Any) -> None:
+        node_id: int = id(node)
+        if node_id in seen:
+            return
+        seen.add(node_id)
+        if str(getattr(node, "kind", "")) == "column":
+            columns.append(node)
+            return
+        for child in _polyglot_child_expressions(node):
+            visit(child)
+
+    visit(expression)
+    return tuple(columns)
+
+
+def _polyglot_child_expressions(expression: Any) -> tuple[Any, ...]:
+    children: list[Any] = []
+    for attr_name in ("this", "expression", "left", "right"):
+        child: Any | None = getattr(expression, attr_name, None)
+        if child is not None and str(getattr(child, "kind", "")):
+            children.append(child)
+    for child in getattr(expression, "expressions", ()) or ():
+        if str(getattr(child, "kind", "")):
+            children.append(child)
+    return tuple(children)
+
+
+def _polyglot_classify_transform(
+    expression: Any,
+    *,
+    upstream_columns: tuple[ColumnLineageSource, ...],
+) -> ColumnTransformKind:
+    kind: str = str(getattr(expression, "kind", ""))
+    if bool(getattr(expression, "is_star", False)):
+        return ColumnTransformKind.STAR
+    if kind in {"cast", "try_cast"}:
+        return ColumnTransformKind.CAST
+    if _polyglot_has_aggregation(expression):
+        return ColumnTransformKind.AGGREGATION
+    if not upstream_columns:
+        return ColumnTransformKind.CONSTANT
+    if kind == "column" and len(upstream_columns) == 1:
+        return ColumnTransformKind.DIRECT
+    return ColumnTransformKind.EXPRESSION
+
+
+def _polyglot_has_aggregation(expression: Any) -> bool:
+    aggregate_kinds: frozenset[str] = frozenset(
+        {"avg", "count", "max", "min", "sum", "array_agg", "string_agg"}
+    )
+    try:
+        nodes: tuple[Any, ...] = tuple(expression.walk())
+    except Exception:
+        return False
+    return any(str(getattr(node, "kind", "")) in aggregate_kinds for node in nodes)
 
 
 def _build_fast_model_column_lineage(
@@ -108,6 +449,7 @@ def _build_fast_model_column_lineage(
         physical_resources=physical_resources,
         exp=exp,
     )
+    unqualified_resource: _PhysicalResource | None = _single_alias_resource(alias_map)
     lineages: list[ColumnLineage] = []
     has_star: bool = False
     projections: tuple[Any, ...] = tuple(parsed.expressions)
@@ -130,6 +472,7 @@ def _build_fast_model_column_lineage(
         upstream_columns, confidence = _projection_upstream_columns(
             projection,
             alias_map=alias_map,
+            unqualified_resource=unqualified_resource,
             exp=exp,
         )
         transform_kind: ColumnTransformKind = _classify_fast_transform(
@@ -204,6 +547,7 @@ def _projection_upstream_columns(
     projection: Any,
     *,
     alias_map: dict[str, _PhysicalResource],
+    unqualified_resource: _PhysicalResource | None,
     exp: Any,
 ) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
     columns: list[ColumnLineageSource] = []
@@ -216,8 +560,8 @@ def _projection_upstream_columns(
         table_name: str = str(column.table or "")
         if table_name:
             resource = alias_map.get(table_name)
-        elif len({resource.resource_name for resource in alias_map.values()}) == 1:
-            resource = next(iter(alias_map.values()))
+        elif unqualified_resource is not None:
+            resource = unqualified_resource
             confidence = ColumnLineageConfidence.MEDIUM
         else:
             confidence = ColumnLineageConfidence.UNKNOWN

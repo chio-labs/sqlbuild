@@ -55,6 +55,7 @@ def build_compile_inputs(
     cli_vars: dict[str, object] | None = None,
     run_id: str | None = None,
     no_sql_validation: bool = False,
+    defer_model_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompileProjectInputs:
@@ -103,6 +104,7 @@ def build_compile_inputs(
         run_id=resolved_run_id,
         macro_context=macro_context,
         no_sql_validation=no_sql_validation,
+        defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
