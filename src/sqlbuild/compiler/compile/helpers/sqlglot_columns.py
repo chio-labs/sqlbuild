@@ -19,12 +19,101 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.shared.constants import (
+    POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_CAST_KINDS as _POLYGLOT_CAST_KINDS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_JOIN_FULL as _POLYGLOT_JOIN_FULL,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_JOIN_LEFT as _POLYGLOT_JOIN_LEFT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_JOIN_RIGHT as _POLYGLOT_JOIN_RIGHT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_ALIAS as _POLYGLOT_KIND_ALIAS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_CAST as _POLYGLOT_KIND_CAST,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_COALESCE as _POLYGLOT_KIND_COALESCE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_COLUMN as _POLYGLOT_KIND_COLUMN,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_COUNT as _POLYGLOT_KIND_COUNT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_LITERAL as _POLYGLOT_KIND_LITERAL,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_NULL as _POLYGLOT_KIND_NULL,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_SELECT as _POLYGLOT_KIND_SELECT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_TABLE as _POLYGLOT_KIND_TABLE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_KIND_TRY_CAST as _POLYGLOT_KIND_TRY_CAST,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_ALIAS as _POLYGLOT_PAYLOAD_ALIAS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_DATA_TYPE as _POLYGLOT_PAYLOAD_DATA_TYPE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_EXPRESSIONS as _POLYGLOT_PAYLOAD_EXPRESSIONS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_FROM as _POLYGLOT_PAYLOAD_FROM,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_JOINS as _POLYGLOT_PAYLOAD_JOINS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_KIND as _POLYGLOT_PAYLOAD_KIND,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_NAME as _POLYGLOT_PAYLOAD_NAME,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_PRECISION as _POLYGLOT_PAYLOAD_PRECISION,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_SCALE as _POLYGLOT_PAYLOAD_SCALE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_SELECT as _POLYGLOT_PAYLOAD_SELECT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_TABLE as _POLYGLOT_PAYLOAD_TABLE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_THIS as _POLYGLOT_PAYLOAD_THIS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_PAYLOAD_TO as _POLYGLOT_PAYLOAD_TO,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
+)
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,
     reference_call_prefix_pattern_text,
 )
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 from sqlbuild.shared.types import SqlReferenceKind
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
@@ -40,57 +129,6 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
-_POLYGLOT_KIND_ALIAS: str = "alias"
-_POLYGLOT_KIND_ARRAY_AGG: str = "array_agg"
-_POLYGLOT_KIND_AVG: str = "avg"
-_POLYGLOT_KIND_CAST: str = "cast"
-_POLYGLOT_KIND_COALESCE: str = "coalesce"
-_POLYGLOT_KIND_COLUMN: str = "column"
-_POLYGLOT_KIND_COUNT: str = "count"
-_POLYGLOT_KIND_EXCEPT: str = "except"
-_POLYGLOT_KIND_INTERSECT: str = "intersect"
-_POLYGLOT_KIND_LITERAL: str = "literal"
-_POLYGLOT_KIND_MAX: str = "max"
-_POLYGLOT_KIND_MIN: str = "min"
-_POLYGLOT_KIND_NULL: str = "null"
-_POLYGLOT_KIND_SELECT: str = "select"
-_POLYGLOT_KIND_STRING_AGG: str = "string_agg"
-_POLYGLOT_KIND_SUM: str = "sum"
-_POLYGLOT_KIND_TABLE: str = "table"
-_POLYGLOT_KIND_TRY_CAST: str = "try_cast"
-_POLYGLOT_KIND_UNION: str = "union"
-_POLYGLOT_SET_OPERATION_KINDS: frozenset[str] = frozenset(
-    {_POLYGLOT_KIND_UNION, _POLYGLOT_KIND_INTERSECT, _POLYGLOT_KIND_EXCEPT}
-)
-_POLYGLOT_CAST_KINDS: frozenset[str] = frozenset({_POLYGLOT_KIND_CAST, _POLYGLOT_KIND_TRY_CAST})
-_POLYGLOT_AGGREGATE_KINDS: frozenset[str] = frozenset(
-    {
-        _POLYGLOT_KIND_AVG,
-        _POLYGLOT_KIND_COUNT,
-        _POLYGLOT_KIND_MAX,
-        _POLYGLOT_KIND_MIN,
-        _POLYGLOT_KIND_SUM,
-        _POLYGLOT_KIND_ARRAY_AGG,
-        _POLYGLOT_KIND_STRING_AGG,
-    }
-)
-_POLYGLOT_PAYLOAD_ALIAS: str = "alias"
-_POLYGLOT_PAYLOAD_COLUMN: str = "column"
-_POLYGLOT_PAYLOAD_DATA_TYPE: str = "data_type"
-_POLYGLOT_PAYLOAD_FROM: str = "from"
-_POLYGLOT_PAYLOAD_EXPRESSIONS: str = "expressions"
-_POLYGLOT_PAYLOAD_JOINS: str = "joins"
-_POLYGLOT_PAYLOAD_KIND: str = "kind"
-_POLYGLOT_PAYLOAD_NAME: str = "name"
-_POLYGLOT_PAYLOAD_PRECISION: str = "precision"
-_POLYGLOT_PAYLOAD_SCALE: str = "scale"
-_POLYGLOT_PAYLOAD_SELECT: str = "select"
-_POLYGLOT_PAYLOAD_TABLE: str = "table"
-_POLYGLOT_PAYLOAD_THIS: str = "this"
-_POLYGLOT_PAYLOAD_TO: str = "to"
-_POLYGLOT_JOIN_FULL: str = "FULL"
-_POLYGLOT_JOIN_LEFT: str = "LEFT"
-_POLYGLOT_JOIN_RIGHT: str = "RIGHT"
 
 
 def infer_columns_with_sqlglot(
@@ -121,33 +159,7 @@ def infer_columns_with_sqlglot(
     )
     if isinstance(polyglot_columns, tuple):
         return polyglot_columns
-
-    sqlglot_module: Any | None = import_sqlglot()
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if sqlglot_module is None or expressions_module is None:
-        return None
-
-    try:
-        parsed: Any = sqlglot_module.parse_one(cleaned_sql, dialect=profile.sqlglot_dialect)
-    except Exception:
-        return None
-
-    infer_nullability: bool = not _is_set_operation(
-        parsed=parsed, expressions_module=expressions_module
-    )
-    select: Any | None = _find_outermost_select(
-        parsed=parsed, expressions_module=expressions_module
-    )
-    if select is None:
-        return None
-
-    return _extract_columns_from_select(
-        select=select,
-        expressions_module=expressions_module,
-        column_nullability_by_table=column_nullability_by_table or {},
-        infer_nullability=infer_nullability,
-        inference_profile=profile,
-    )
+    return None
 
 
 def analyze_columns_with_polyglot(

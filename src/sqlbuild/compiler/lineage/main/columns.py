@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.lineage.helpers.columns import (
-    build_project_column_lineage as _build_project_column_lineage,
-)
 from sqlbuild.compiler.lineage.helpers.fast_columns import (
     build_fast_project_column_lineage,
 )
@@ -30,7 +27,7 @@ def build_project_column_lineage(
                 model_names=model_names,
             )
         case ColumnLineageMode.RICH:
-            return _build_project_column_lineage(
+            return build_fast_project_column_lineage(
                 project,
                 dialect=dialect,
                 model_names=model_names,

@@ -273,7 +273,6 @@ def write_previous_function_fingerprints(
                 target_name=function.destination.name,
                 run_id="previous_run",
                 query_hash=compute_query_hash(fingerprint_sql),
-                ast_hash=None,
                 schema_fingerprint=compute_query_hash(""),
                 query_sql=fingerprint_sql,
                 ts=datetime.now(tz=UTC),

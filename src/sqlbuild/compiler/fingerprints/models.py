@@ -16,7 +16,6 @@ class Fingerprint:
     target_name: str | None
     run_id: str
     query_hash: str
-    ast_hash: str | None
     schema_fingerprint: str
     query_sql: str
     ts: datetime

@@ -17,7 +17,7 @@ from sqlbuild.compiler.lineage.types import (
 from tests.unit.src.sqlbuild.compiler.lineage._test_types import (
     ColumnLineageAnalyzerTestCase,
     ProjectLineageGraphTestCase,
-    SqlglotDisabledLineageTestCase,
+    SqlAnalysisDisabledLineageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
     edge_label,
@@ -100,7 +100,7 @@ ANALYZER_TEST_CASES: list[ColumnLineageAnalyzerTestCase] = [
         expected_transform_kind=ColumnTransformKind.AGGREGATION,
     ),
     ColumnLineageAnalyzerTestCase(
-        description="keeps CTE nodes internally while collapsing upstream dependency",
+        description="collapses CTE upstream dependency",
         model_name="payments_out",
         query_sql=(
             'WITH x AS (SELECT amount_cents FROM __ref("payments")) SELECT amount_cents FROM x'
@@ -111,7 +111,6 @@ ANALYZER_TEST_CASES: list[ColumnLineageAnalyzerTestCase] = [
         expected_column="amount_cents",
         expected_upstream_columns=("model:payments.amount_cents",),
         expected_transform_kind=ColumnTransformKind.DIRECT,
-        expected_internal_scope_names=("x",),
     ),
     ColumnLineageAnalyzerTestCase(
         description="infers both branches of a union",
@@ -438,16 +437,16 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
 @pytest.mark.parametrize(
     "test_case",
     [
-        SqlglotDisabledLineageTestCase(
-            description="returns no lineage when SQLGlot analysis is disabled",
+        SqlAnalysisDisabledLineageTestCase(
+            description="returns no lineage when SQL analysis is disabled",
             sqlglot_enabled=False,
             expected_result_is_none=True,
         )
     ],
-    ids=["returns no lineage when SQLGlot analysis is disabled"],
+    ids=["returns no lineage when SQL analysis is disabled"],
 )
-def test_given_sqlglot_disabled_when_building_column_lineage_then_returns_no_lineage(
-    test_case: SqlglotDisabledLineageTestCase,
+def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_no_lineage(
+    test_case: SqlAnalysisDisabledLineageTestCase,
 ) -> None:
     project: CompiledProject = make_compiled_project(
         models=(

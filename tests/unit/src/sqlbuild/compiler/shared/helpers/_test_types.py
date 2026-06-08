@@ -38,18 +38,3 @@ class ComputeSchemaFingerprintStabilityTestCase:
     columns_a: tuple[ColumnInfo, ...]
     columns_b: tuple[ColumnInfo, ...]
     expected_same_fingerprint: bool
-
-
-@dataclass(frozen=True)
-class ComputeAstHashStabilityTestCase:
-    description: str
-    query_a: str
-    query_b: str
-    expected_same_hash: bool
-
-
-@dataclass(frozen=True)
-class ComputeAstHashTestCase:
-    description: str
-    query_sql: str
-    expected_hash: str

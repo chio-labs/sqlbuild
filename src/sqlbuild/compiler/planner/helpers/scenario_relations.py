@@ -58,8 +58,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
     SCENARIO_PLAN_UNKNOWN_SEED,
 )
+from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -590,62 +590,41 @@ def build_scenario_seed_entries(
 def _resolve_scenario_check_sql_with_sqlglot(
     *, sql: str, relation_plan: ScenarioRelationPlan, sqlglot_dialect: str | None
 ) -> str:
-    sqlglot_module: Any | None = import_sqlglot()
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if sqlglot_module is None or expressions_module is None:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
         raise PlannerInputError(
-            "Scenario SQLGlot resolution is enabled but SQLGlot is unavailable",
+            "Scenario Polyglot resolution is enabled but Polyglot SQL is unavailable",
             code=SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
-            help="Install SQLBuild with the sqlglot extra or run with SQL validation disabled.",
+            help="Install SQLBuild with Polyglot SQL or run with SQL validation disabled.",
         )
     try:
-        parsed: Any = (
-            sqlglot_module.parse_one(sql, read=sqlglot_dialect)
-            if sqlglot_dialect is not None
-            else sqlglot_module.parse_one(sql)
-        )
+        parsed: Any = polyglot_module.parse_one(sql, dialect=sqlglot_dialect or "generic")
     except Exception as error:
         raise PlannerInputError(
-            f"Scenario SQL could not be parsed with SQLGlot: {error}",
+            f"Scenario SQL could not be parsed with Polyglot: {error}",
             code=SCENARIO_PLAN_SQLGLOT_PARSE,
         ) from None
 
-    table_type: type[Any] = expressions_module.Table
-    anonymous_type: type[Any] = expressions_module.Anonymous
-
-    def _replace_table(table: Any) -> Any:
-        if not isinstance(table, table_type):
-            return table
-        anonymous: Any = table.this
-        if not isinstance(anonymous, anonymous_type):
-            return table
-        function_name: str = str(anonymous.this).lower()
-        expressions: list[Any] = list(anonymous.expressions)
-        if len(expressions) not in {1, 2}:
-            return table
-        argument: Any = expressions[0]
-        if not hasattr(argument, "name"):
-            return table
-        referenced_name: str = str(argument.name)
-        if function_name == SqlReferenceKind.DBT_REF.function_name and len(expressions) == 2:
-            second_argument: Any = expressions[1]
-            if not hasattr(second_argument, "name"):
-                return table
-            referenced_name = f"{referenced_name}__{second_argument.name}"
-        target_name: str | None = _scenario_target_name_for_marker(
+    parsed_dict: dict[str, Any] = parsed.to_dict()
+    replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
+        parsed_dict,
+        polyglot_module=polyglot_module,
+        sqlglot_dialect=sqlglot_dialect,
+        target_for_marker=lambda function_name, referenced_name: _scenario_target_name_for_marker(
             function_name=function_name,
             referenced_name=referenced_name,
             relation_plan=relation_plan,
-        )
-        if target_name is None:
-            return table
-        replacement: Any = expressions_module.to_table(target_name)
-        alias: Any | None = table.args.get("alias")
-        if alias is not None:
-            replacement.set("alias", alias)
-        return replacement
-
-    return parsed.transform(_replace_table).sql(pretty=False)
+        ),
+    )
+    if not replacement_result:
+        return sql
+    generated: list[str] = polyglot_module.generate(
+        parsed_dict,
+        dialect=sqlglot_dialect or "generic",
+    )
+    if len(generated) != 1:
+        return sql
+    return generated[0]
 
 
 def _build_expected_check_plan(
@@ -738,72 +717,208 @@ def _try_resolve_project_source_refs_with_sqlglot(
 ) -> str | None:
     if SqlReferenceKind.SOURCE.function_name not in sql.lower():
         return None
-    sqlglot_module: Any | None = import_sqlglot()
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if sqlglot_module is None or expressions_module is None:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
         return None
     try:
-        parsed: Any = (
-            sqlglot_module.parse_one(sql, read=sqlglot_dialect)
-            if sqlglot_dialect is not None
-            else sqlglot_module.parse_one(sql)
+        parsed: Any = polyglot_module.parse_one(sql, dialect=sqlglot_dialect or "generic")
+    except Exception:
+        return None
+    parsed_dict: dict[str, Any] = parsed.to_dict()
+    expression_source_names: set[str] = set()
+
+    def _target_for_source(function_name: str, referenced_name: str) -> str | None:
+        if function_name != SqlReferenceKind.SOURCE.function_name:
+            return None
+        source: SourceEntry | None = source_map.get(referenced_name)
+        if source is None:
+            return None
+        if source.expression is not None:
+            expression_source_names.add(referenced_name)
+            return None
+        return render_source_relation(source)
+
+    replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
+        parsed_dict,
+        polyglot_module=polyglot_module,
+        sqlglot_dialect=sqlglot_dialect,
+        target_for_marker=_target_for_source,
+    )
+    if expression_source_names or not replacement_result:
+        return None
+    generated: list[str] = polyglot_module.generate(
+        parsed_dict,
+        dialect=sqlglot_dialect or "generic",
+    )
+    if len(generated) != 1:
+        return None
+    return generated[0]
+
+
+def _replace_relation_markers_in_polyglot_dict(
+    node: Any,
+    *,
+    polyglot_module: Any,
+    sqlglot_dialect: str | None,
+    target_for_marker: Any,
+) -> bool:
+    changed: bool = False
+    if isinstance(node, dict):
+        from_clause: Any | None = node.get("from")
+        if isinstance(from_clause, dict):
+            expressions: Any = from_clause.get("expressions")
+            if isinstance(expressions, list):
+                for index, expression in enumerate(expressions):
+                    replacement: dict[str, Any] | None = _replacement_relation_expression(
+                        expression,
+                        polyglot_module=polyglot_module,
+                        sqlglot_dialect=sqlglot_dialect,
+                        target_for_marker=target_for_marker,
+                    )
+                    if replacement is not None:
+                        expressions[index] = replacement
+                        changed = True
+        joins: Any | None = node.get("joins")
+        if isinstance(joins, list):
+            join: Any
+            for join in joins:
+                if not isinstance(join, dict):
+                    continue
+                replacement = _replacement_relation_expression(
+                    join.get("this"),
+                    polyglot_module=polyglot_module,
+                    sqlglot_dialect=sqlglot_dialect,
+                    target_for_marker=target_for_marker,
+                )
+                if replacement is not None:
+                    join["this"] = replacement
+                    changed = True
+        value: Any
+        for value in node.values():
+            if isinstance(value, dict | list):
+                changed = (
+                    _replace_relation_markers_in_polyglot_dict(
+                        value,
+                        polyglot_module=polyglot_module,
+                        sqlglot_dialect=sqlglot_dialect,
+                        target_for_marker=target_for_marker,
+                    )
+                    or changed
+                )
+    elif isinstance(node, list):
+        item: Any
+        for item in node:
+            if isinstance(item, dict | list):
+                changed = (
+                    _replace_relation_markers_in_polyglot_dict(
+                        item,
+                        polyglot_module=polyglot_module,
+                        sqlglot_dialect=sqlglot_dialect,
+                        target_for_marker=target_for_marker,
+                    )
+                    or changed
+                )
+    return changed
+
+
+def _replacement_relation_expression(
+    expression: Any,
+    *,
+    polyglot_module: Any,
+    sqlglot_dialect: str | None,
+    target_for_marker: Any,
+) -> dict[str, Any] | None:
+    if not isinstance(expression, dict):
+        return None
+    alias_payload: Any | None = expression.get("alias")
+    if isinstance(alias_payload, dict) and "this" in alias_payload:
+        inner_replacement: dict[str, Any] | None = _replacement_relation_expression(
+            alias_payload.get("this"),
+            polyglot_module=polyglot_module,
+            sqlglot_dialect=sqlglot_dialect,
+            target_for_marker=target_for_marker,
+        )
+        if inner_replacement is None:
+            return None
+        alias_payload["this"] = inner_replacement
+        return expression
+
+    function_payload: Any | None = expression.get("function")
+    if not isinstance(function_payload, dict):
+        return None
+    function_name: str = str(function_payload.get("name", "")).lower()
+    referenced_name: str | None = _polyglot_marker_reference_name(
+        function_name=function_name,
+        function_payload=function_payload,
+    )
+    if referenced_name is None:
+        return None
+    target_name: str | None = target_for_marker(function_name, referenced_name)
+    if target_name is None:
+        return None
+    return _polyglot_relation_dict(
+        target_name=target_name,
+        polyglot_module=polyglot_module,
+        sqlglot_dialect=sqlglot_dialect,
+    )
+
+
+def _polyglot_marker_reference_name(
+    *, function_name: str, function_payload: dict[str, Any]
+) -> str | None:
+    args: Any = function_payload.get("args")
+    if not isinstance(args, list):
+        return None
+    if function_name == SqlReferenceKind.DBT_REF.function_name:
+        if len(args) == 1:
+            return _polyglot_column_arg_name(args[0])
+        if len(args) == 2:
+            first: str | None = _polyglot_column_arg_name(args[0])
+            second: str | None = _polyglot_column_arg_name(args[1])
+            if first is None or second is None:
+                return None
+            return f"{first}__{second}"
+        return None
+    if len(args) != 1:
+        return None
+    return _polyglot_column_arg_name(args[0])
+
+
+def _polyglot_column_arg_name(argument: Any) -> str | None:
+    if not isinstance(argument, dict):
+        return None
+    column_payload: Any | None = argument.get("column")
+    if not isinstance(column_payload, dict):
+        return None
+    name_payload: Any | None = column_payload.get("name")
+    if isinstance(name_payload, dict):
+        raw_name: Any | None = name_payload.get("name")
+        return str(raw_name) if raw_name is not None else None
+    return str(name_payload) if name_payload is not None else None
+
+
+def _polyglot_relation_dict(
+    *, target_name: str, polyglot_module: Any, sqlglot_dialect: str | None
+) -> dict[str, Any] | None:
+    try:
+        parsed: Any = polyglot_module.parse_one(
+            f"SELECT * FROM {target_name}",
+            dialect=sqlglot_dialect or "generic",
         )
     except Exception:
         return None
-
-    table_type: type[Any] = expressions_module.Table
-    anonymous_type: type[Any] = expressions_module.Anonymous
-
-    for table in parsed.find_all(table_type):
-        source: SourceEntry | None = _source_for_sqlglot_table(
-            table=table,
-            source_map=source_map,
-            table_type=table_type,
-            anonymous_type=anonymous_type,
-        )
-        if source is not None and source.expression is not None:
-            return None
-
-    def _replace_source_table(table: Any) -> Any:
-        source: SourceEntry | None = _source_for_sqlglot_table(
-            table=table,
-            source_map=source_map,
-            table_type=table_type,
-            anonymous_type=anonymous_type,
-        )
-        if source is None:
-            return table
-        replacement: Any = expressions_module.to_table(render_source_relation(source))
-        alias: Any | None = table.args.get("alias")
-        if alias is not None:
-            replacement.set("alias", alias)
-        return replacement
-
-    return parsed.transform(_replace_source_table).sql(pretty=False)
-
-
-def _source_for_sqlglot_table(
-    *,
-    table: Any,
-    source_map: dict[str, SourceEntry],
-    table_type: type[Any],
-    anonymous_type: type[Any],
-) -> SourceEntry | None:
-    if not isinstance(table, table_type):
+    parsed_dict: dict[str, Any] = parsed.to_dict()
+    select_payload: Any | None = parsed_dict.get("select")
+    if not isinstance(select_payload, dict):
         return None
-    anonymous: Any = table.this
-    if not isinstance(anonymous, anonymous_type):
+    from_payload: Any | None = select_payload.get("from")
+    if not isinstance(from_payload, dict):
         return None
-    function_name: str = str(anonymous.this).lower()
-    if function_name != SqlReferenceKind.SOURCE.function_name:
+    expressions: Any | None = from_payload.get("expressions")
+    if not isinstance(expressions, list) or len(expressions) != 1:
         return None
-    expressions: list[Any] = list(anonymous.expressions)
-    if len(expressions) != 1:
-        return None
-    argument: Any = expressions[0]
-    if not hasattr(argument, "name"):
-        return None
-    return source_map.get(str(argument.name))
+    relation: Any = expressions[0]
+    return relation if isinstance(relation, dict) else None
 
 
 def _required_fixture_sql(fixture_sql: dict[str, str], logical_name: str, *, kind: str) -> str:

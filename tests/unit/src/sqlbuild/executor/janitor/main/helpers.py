@@ -80,7 +80,6 @@ class FakeJanitorAdapter(BaseAdapter):
                     tracked_relation[2],
                     "run_001",
                     "query_hash",
-                    None,
                     "schema_hash",
                     base64.b64encode(b"SELECT 1").decode("ascii"),
                     base64.b64encode(b"{}").decode("ascii"),

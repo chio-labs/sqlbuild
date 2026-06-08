@@ -191,7 +191,7 @@ PROJECT_SOURCE_REF_FIXTURE_TEST_CASES: list[ScenarioFixturePlanTestCase] = [
         fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
     ),
     ScenarioFixturePlanTestCase(
-        description="resolves project source refs with sqlglot without changing literals",
+        description="resolves project source refs with polyglot without changing literals",
         graph_plan=ScenarioGraphPlan(
             key=build_scenario_relation_test_project().models[0].key,
             name=SCENARIO_NAME,
@@ -201,8 +201,7 @@ PROJECT_SOURCE_REF_FIXTURE_TEST_CASES: list[ScenarioFixturePlanTestCase] = [
         ),
         expected_fixture_sql={
             "source:raw__orders": (
-                "SELECT '__source(\"raw__orders\")' AS marker_text "
-                'FROM public.raw__orders AS o /* __source("raw__orders") */'
+                "SELECT '__source(\"raw__orders\")' AS marker_text FROM public.raw__orders AS o"
             ),
         },
         expected_fixture_targets={
@@ -533,15 +532,14 @@ CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [
         ),
     ),
     ScenarioCheckSqlResolutionTestCase(
-        description="sqlglot check sql resolution ignores strings and comments",
+        description="polyglot check sql resolution ignores strings and comments",
         sql=(
             "SELECT '__ref(daily_revenue)' AS marker_text "
             "FROM __ref(daily_revenue) dr -- __source(raw__orders)"
         ),
         expected_sql=(
             "SELECT '__ref(daily_revenue)' AS marker_text "
-            "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr "
-            "/* __source(raw__orders) */"
+            "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr"
         ),
     ),
     ScenarioCheckSqlResolutionTestCase(
@@ -627,12 +625,12 @@ def test_given_missing_scenario_artifact_when_building_relation_plan_then_raises
     "test_case",
     [
         ScenarioCheckSqlResolutionTestCase(
-            description="raises on sqlglot parse failure without regex fallback",
+            description="raises on polyglot parse failure without regex fallback",
             sql="SELECT * FROM __ref(daily_revenue) WHERE (",
-            expected_sql="could not be parsed with SQLGlot",
+            expected_sql="could not be parsed with Polyglot",
         )
     ],
-    ids=["raises on sqlglot parse failure without regex fallback"],
+    ids=["raises on polyglot parse failure without regex fallback"],
 )
 def test_given_invalid_check_sql_when_sqlglot_enabled_then_raises_without_regex_fallback(
     test_case: ScenarioCheckSqlResolutionTestCase,

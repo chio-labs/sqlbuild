@@ -81,17 +81,17 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
             sqlglot_enabled=False,
         )
     ],
-    ids=["disabled sqlglot builds comparison sql without importing sqlglot"],
+    ids=["disabled formatting builds comparison sql without importing polyglot"],
 )
-def test_given_sqlglot_disabled_when_building_comparison_sql_then_it_does_not_import_sqlglot(
+def test_given_formatting_disabled_when_building_comparison_sql_then_it_does_not_import_polyglot(
     test_case: BuildComparisonSqlTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
     monkeypatch.setattr(
         comparison_sql_helpers,
-        "import_sqlglot",
-        lambda: pytest.fail("sqlglot should not be imported when disabled"),
+        "import_polyglot_sql",
+        lambda: pytest.fail("polyglot should not be imported when disabled"),
     )
 
     comparison_sql: str = build_sql_test_comparison_sql(
