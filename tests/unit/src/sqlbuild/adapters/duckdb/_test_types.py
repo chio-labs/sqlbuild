@@ -6,7 +6,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 @dataclass(frozen=True)
 class DuckDbExpressionInferenceProfileTestCase:
     description: str
-    expected_sqlglot_dialect: str
+    expected_sql_analysis_dialect: str
     expected_rule_results: dict[str, InferredNullability]
 
 

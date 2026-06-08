@@ -9,6 +9,58 @@ SCENARIO_HASH_PREFIX_LENGTH: int = 12
 SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH: int = 8
 SCENARIO_ARTIFACT_KINDS: tuple[str, ...] = ("source", "ref", "seed", "dbt_ref", "model")
 
+POLYGLOT_KIND_ALIAS: str = "alias"
+POLYGLOT_KIND_ARRAY_AGG: str = "array_agg"
+POLYGLOT_KIND_AVG: str = "avg"
+POLYGLOT_KIND_CAST: str = "cast"
+POLYGLOT_KIND_COALESCE: str = "coalesce"
+POLYGLOT_KIND_COLUMN: str = "column"
+POLYGLOT_KIND_COUNT: str = "count"
+POLYGLOT_KIND_EXCEPT: str = "except"
+POLYGLOT_KIND_INTERSECT: str = "intersect"
+POLYGLOT_KIND_LITERAL: str = "literal"
+POLYGLOT_KIND_MAX: str = "max"
+POLYGLOT_KIND_MIN: str = "min"
+POLYGLOT_KIND_NULL: str = "null"
+POLYGLOT_KIND_SELECT: str = "select"
+POLYGLOT_KIND_STRING_AGG: str = "string_agg"
+POLYGLOT_KIND_SUM: str = "sum"
+POLYGLOT_KIND_TABLE: str = "table"
+POLYGLOT_KIND_TRY_CAST: str = "try_cast"
+POLYGLOT_KIND_UNION: str = "union"
+POLYGLOT_SET_OPERATION_KINDS: frozenset[str] = frozenset(
+    {POLYGLOT_KIND_UNION, POLYGLOT_KIND_INTERSECT, POLYGLOT_KIND_EXCEPT}
+)
+POLYGLOT_CAST_KINDS: frozenset[str] = frozenset({POLYGLOT_KIND_CAST, POLYGLOT_KIND_TRY_CAST})
+POLYGLOT_AGGREGATE_KINDS: frozenset[str] = frozenset(
+    {
+        POLYGLOT_KIND_AVG,
+        POLYGLOT_KIND_COUNT,
+        POLYGLOT_KIND_MAX,
+        POLYGLOT_KIND_MIN,
+        POLYGLOT_KIND_SUM,
+        POLYGLOT_KIND_ARRAY_AGG,
+        POLYGLOT_KIND_STRING_AGG,
+    }
+)
+POLYGLOT_PAYLOAD_ALIAS: str = "alias"
+POLYGLOT_PAYLOAD_COLUMN: str = "column"
+POLYGLOT_PAYLOAD_DATA_TYPE: str = "data_type"
+POLYGLOT_PAYLOAD_FROM: str = "from"
+POLYGLOT_PAYLOAD_EXPRESSIONS: str = "expressions"
+POLYGLOT_PAYLOAD_JOINS: str = "joins"
+POLYGLOT_PAYLOAD_KIND: str = "kind"
+POLYGLOT_PAYLOAD_NAME: str = "name"
+POLYGLOT_PAYLOAD_PRECISION: str = "precision"
+POLYGLOT_PAYLOAD_SCALE: str = "scale"
+POLYGLOT_PAYLOAD_SELECT: str = "select"
+POLYGLOT_PAYLOAD_TABLE: str = "table"
+POLYGLOT_PAYLOAD_THIS: str = "this"
+POLYGLOT_PAYLOAD_TO: str = "to"
+POLYGLOT_JOIN_FULL: str = "FULL"
+POLYGLOT_JOIN_LEFT: str = "LEFT"
+POLYGLOT_JOIN_RIGHT: str = "RIGHT"
+
 # Scenario CLI codes use the existing C45x range.
 SCENARIO_CLI_MISSING_SUBCOMMAND: str = "C450"
 SCENARIO_CLI_NONE_DISCOVERED: str = "C451"

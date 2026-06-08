@@ -260,7 +260,7 @@ CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         ),
     ),
     BuildExecutionPlanTestCase(
-        description="sqlglot cursor type mismatch produces error",
+        description="sql_analysis cursor type mismatch produces error",
         setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
         model_targets={"events": "staging"},
         model_configs={
@@ -274,7 +274,7 @@ CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         },
         model_queries={"events": "SELECT 1 AS event_id, 100 AS event_time"},
         full_refresh=False,
-        effective_connection={"sqlglot": True},
+        effective_connection={"sql_analysis": True},
         expected_action={"events": PlanAction.INCREMENTAL_DELETE_INSERT},
         expected_reason={"events": PlanReason.NORMAL_INCREMENTAL},
         expected_warning_count=1,

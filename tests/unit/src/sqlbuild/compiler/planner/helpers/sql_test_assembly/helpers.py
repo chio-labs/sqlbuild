@@ -52,7 +52,7 @@ _STUB_TEST_BLOCK: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
 
 _MACRO_CONTEXT: MacroContext = MacroContext(
     adapter_name="duckdb",
-    sqlglot_enabled=True,
+    sql_analysis_enabled=True,
     target_name=None,
     vars={},
 )

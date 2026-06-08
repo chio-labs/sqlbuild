@@ -16,7 +16,7 @@ class MotherDuckAdapter(DuckDbBackedAdapter):
     """MotherDuck adapter backed by DuckDB's MotherDuck connection support."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.MOTHERDUCK.value
-    sqlglot_dialect_name: ClassVar[str | None] = "duckdb"
+    sql_analysis_dialect_name: ClassVar[str | None] = "duckdb"
 
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:

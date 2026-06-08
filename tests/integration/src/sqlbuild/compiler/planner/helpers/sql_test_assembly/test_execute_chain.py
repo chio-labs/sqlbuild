@@ -325,7 +325,7 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
     "test_case",
     [
         ExecuteChainTestCase(
-            description="sqlglot path produces executable planned chain step sql",
+            description="sql_analysis path produces executable planned chain step sql",
             model_queries={
                 "stg_orders": 'SELECT id, amount FROM __source("raw")',
                 "fact_orders": (
@@ -349,9 +349,9 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
             },
         )
     ],
-    ids=["sqlglot path produces executable planned chain step sql"],
+    ids=["sql_analysis path produces executable planned chain step sql"],
 )
-def test_given_sqlglot_enabled_when_planning_chain_then_step_sql_remains_executable(
+def test_given_sql_analysis_enabled_when_planning_chain_then_step_sql_remains_executable(
     test_case: ExecuteChainTestCase,
     connection: Any,
 ) -> None:
@@ -364,7 +364,7 @@ def test_given_sqlglot_enabled_when_planning_chain_then_step_sql_remains_executa
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),
-        sqlglot_enabled=True,
+        sql_analysis_enabled=True,
     )
 
     assert len(entry.chain) == test_case.expected_chain_length

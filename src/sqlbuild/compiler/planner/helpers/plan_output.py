@@ -383,7 +383,7 @@ def _build_test_entries(
             test=sql_test,
             project=project,
             adapter=adapter,
-            sqlglot_enabled=project.settings.sqlglot,
+            sql_analysis_enabled=project.settings.sql_analysis,
         )
         entries.append(test_entry)
         warnings.extend(test_warnings)

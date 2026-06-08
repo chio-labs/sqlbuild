@@ -449,8 +449,8 @@ class SqlTestAssertionStep:
 
 
 @dataclass(frozen=True)
-class SqlglotResolvedTestSql:
-    """SQLGlot-resolved test SQL plus reusable CTE state for downstream refs."""
+class SqlAnalysisResolvedTestSql:
+    """SQL analysis-resolved test SQL plus reusable CTE state for downstream refs."""
 
     resolved_sql: str
     cte_body_sql: str
@@ -467,7 +467,7 @@ class SqlTestPlanEntry:
     assertions: tuple[SqlTestAssertionStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
-    sqlglot_enabled: bool = True
+    sql_analysis_enabled: bool = True
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.helpers.sqlglot_columns import (
+from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
     analyze_columns_and_lineage_with_polyglot,
-    infer_columns_with_sqlglot,
+    infer_columns_with_sql_analysis,
     substitute_placeholder_defaults,
 )
 from sqlbuild.compiler.compile.models.core import (
@@ -273,7 +273,7 @@ INFER_COLUMNS_TEST_CASES: list[InferColumnsTestCase] = [
 def test_given_query_sql_when_inferring_columns_then_returns_expected(
     test_case: InferColumnsTestCase,
 ) -> None:
-    result: tuple[InferredColumn, ...] | None = infer_columns_with_sqlglot(
+    result: tuple[InferredColumn, ...] | None = infer_columns_with_sql_analysis(
         query_sql=test_case.query_sql,
         column_nullability_by_table=test_case.column_nullability_by_table,
         inference_profile=test_case.inference_profile,

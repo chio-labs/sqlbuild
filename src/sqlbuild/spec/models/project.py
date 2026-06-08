@@ -73,7 +73,7 @@ class LocalTargetConfig:
 class SettingsConfig:
     """Global feature toggles."""
 
-    sqlglot: bool = True
+    sql_analysis: bool = True
     query_change_tracking: bool = True
     sql_validation: bool = True
     concurrency: int = 1
@@ -246,11 +246,11 @@ def _resolve_optional_int_override(
 
 
 def scenario_local_type_overrides_for_dialect(
-    *, scenario_config: ScenarioConfig, sqlglot_dialect: str | None
+    *, scenario_config: ScenarioConfig, sql_analysis_dialect: str | None
 ) -> dict[str, str]:
     """Return global and dialect-specific scenario local type override rules."""
 
     overrides: dict[str, str] = dict(scenario_config.local_type_overrides.get("*", {}))
-    if sqlglot_dialect is not None:
-        overrides.update(scenario_config.local_type_overrides.get(sqlglot_dialect, {}))
+    if sql_analysis_dialect is not None:
+        overrides.update(scenario_config.local_type_overrides.get(sql_analysis_dialect, {}))
     return overrides

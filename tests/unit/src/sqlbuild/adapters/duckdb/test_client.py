@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     [
         DuckDbExpressionInferenceProfileTestCase(
             description="returns DuckDB inference rules",
-            expected_sqlglot_dialect="duckdb",
+            expected_sql_analysis_dialect="duckdb",
             expected_rule_results={"LOWER": InferredNullability.NON_NULL},
         )
     ],
@@ -36,7 +36,7 @@ def test_given_duckdb_adapter_when_getting_inference_profile_then_returns_expect
 
     profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
 
-    assert profile.sqlglot_dialect == test_case.expected_sqlglot_dialect
+    assert profile.sql_analysis_dialect == test_case.expected_sql_analysis_dialect
     for rule_name, expected in test_case.expected_rule_results.items():
         rule: FunctionNullabilityRule | None = profile.function_nullability_rule(rule_name)
         assert rule is not None

@@ -89,7 +89,7 @@ def build_compile_inputs(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
-        sqlglot_enabled=effective_settings.sqlglot,
+        sql_analysis_enabled=effective_settings.sql_analysis,
         target_name=effective_target_name,
         vars=effective_vars,
     )

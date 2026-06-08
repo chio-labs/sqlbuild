@@ -22,9 +22,11 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.macros import find_macro_call_names
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
-from sqlbuild.compiler.compile.helpers.sqlglot_ctes import extract_top_level_ctes_with_sqlglot
-from sqlbuild.compiler.compile.helpers.sqlglot_tests import (
-    extract_expected_branch_column_names_with_sqlglot,
+from sqlbuild.compiler.compile.helpers.sql_analysis_ctes import (
+    extract_top_level_ctes_with_sql_analysis,
+)
+from sqlbuild.compiler.compile.helpers.sql_analysis_tests import (
+    extract_expected_branch_column_names_with_sql_analysis,
 )
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.compiler.compile.models.sql_tests import (
@@ -58,7 +60,7 @@ def extract_sql_test_ctes(
             file_label=file_label,
         )
     except CompileInputError as scanner_error:
-        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sqlglot(
+        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
             sql=sql,
             file_label=file_label,
             context_label="SQL test",
@@ -648,11 +650,11 @@ def _validate_expected_cte_query(
 def _extract_expected_branch_column_names(
     *, sql: str, file_label: str
 ) -> tuple[tuple[str, ...], ...]:
-    sqlglot_column_names: tuple[tuple[str, ...], ...] | None = (
-        extract_expected_branch_column_names_with_sqlglot(sql=sql, file_label=file_label)
+    sql_analysis_column_names: tuple[tuple[str, ...], ...] | None = (
+        extract_expected_branch_column_names_with_sql_analysis(sql=sql, file_label=file_label)
     )
-    if sqlglot_column_names is not None:
-        return sqlglot_column_names
+    if sql_analysis_column_names is not None:
+        return sql_analysis_column_names
     branches: tuple[str, ...] = _split_set_operation_branches(sql)
     return tuple(
         _extract_expected_select_column_names(branch_sql=branch, file_label=file_label)

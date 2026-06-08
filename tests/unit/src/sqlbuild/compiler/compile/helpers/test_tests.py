@@ -230,7 +230,7 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         expected_expected_model_names=("orders",),
     ),
     ExtractSqlTestCtesTestCase(
-        description="extracts model test ctes with sqlglot fallback syntax",
+        description="extracts model test ctes with sql_analysis fallback syntax",
         sql="""
         WITH
         "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),

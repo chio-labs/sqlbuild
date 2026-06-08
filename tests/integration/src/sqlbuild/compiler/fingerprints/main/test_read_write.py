@@ -15,7 +15,6 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
     InvalidQuerySqlStorageTestCase,
     LatestResolutionTestCase,
-    NullAstHashTestCase,
     ReadNonExistentTableTestCase,
     WriteAndReadTestCase,
     WriteCreatesTableTestCase,
@@ -37,7 +36,6 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
-                ast_hash="ast_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT id FROM orders",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -59,7 +57,6 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
-                ast_hash="ast_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT id FROM orders",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -71,7 +68,6 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="customers",
                 run_id="run_001",
                 query_hash="hash_b",
-                ast_hash="ast_b",
                 schema_fingerprint="schema_b",
                 query_sql="SELECT id FROM customers",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -93,7 +89,6 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
-                ast_hash="ast_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -191,7 +186,6 @@ def test_given_no_table_when_reading_then_returns_empty_set(
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
-                ast_hash="ast_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT 1",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -246,7 +240,6 @@ def test_given_no_table_when_writing_then_creates_table(
                     target_name="orders",
                     run_id="run_002",
                     query_hash="new_hash",
-                    ast_hash="new_ast",
                     schema_fingerprint="new_schema",
                     query_sql="SELECT 2",
                     ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -258,7 +251,6 @@ def test_given_no_table_when_writing_then_creates_table(
                     target_name="orders",
                     run_id="run_001",
                     query_hash="old_hash",
-                    ast_hash="old_ast",
                     schema_fingerprint="old_schema",
                     query_sql="SELECT 1",
                     ts=datetime(2026, 1, 15, 10, 0, 0),
@@ -305,57 +297,6 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
 @pytest.mark.parametrize(
     "test_case",
     [
-        NullAstHashTestCase(
-            description="preserves null ast hash through write and read",
-            database=None,
-            schema="test_schema",
-            fingerprint=Fingerprint(
-                model_name="orders",
-                target_database=None,
-                target_schema=None,
-                target_name="orders",
-                run_id="run_001",
-                query_hash="hash_a",
-                ast_hash=None,
-                schema_fingerprint="schema_a",
-                query_sql="SELECT 1",
-                ts=datetime(2026, 1, 15, 12, 0, 0),
-            ),
-            expected_ast_hash_is_none=True,
-        ),
-    ],
-    ids=["preserves null ast hash through write and read"],
-)
-def test_given_null_ast_hash_when_writing_and_reading_then_ast_hash_is_none(
-    test_case: NullAstHashTestCase,
-    connection: Any,
-    execute: Any,
-) -> None:
-    write_fingerprint(
-        connection=connection,
-        execute=execute,
-        database=test_case.database,
-        schema=test_case.schema,
-        fingerprint=test_case.fingerprint,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-    )
-
-    result: FingerprintSet = read_latest_fingerprints(
-        connection=connection,
-        execute=execute,
-        database=test_case.database,
-        schema=test_case.schema,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-    )
-    latest: Fingerprint = result.fingerprints["orders"]
-
-    assert (latest.ast_hash is None) == test_case.expected_ast_hash_is_none
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         InvalidQuerySqlStorageTestCase(
             description="invalid query sql b64 storage raises contextual error",
             schema="test_schema",
@@ -385,7 +326,6 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
         "target_name VARCHAR, "
         "run_id VARCHAR NOT NULL, "
         "query_hash VARCHAR NOT NULL, "
-        "ast_hash VARCHAR, "
         "schema_fingerprint VARCHAR NOT NULL, "
         "query_sql_b64 VARCHAR NOT NULL, "
         "metadata_json_b64 VARCHAR NOT NULL, "
@@ -393,7 +333,7 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
     )
     connection.execute(
         f"INSERT INTO {test_case.schema}.{FINGERPRINT_TABLE_NAME} VALUES "
-        "(?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?)",
+        "(?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             test_case.model_name,
             test_case.schema,

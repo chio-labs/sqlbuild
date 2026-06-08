@@ -23,7 +23,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpectedModelEntry,
     RunCompilePipelineIntegrationTestCase,
     SnowflakeTargetValidationIntegrationTestCase,
-    SqlglotChainCompileTargetIntegrationTestCase,
+    SqlAnalysisChainCompileTargetIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     run_compile_pipeline_for_project,
@@ -476,7 +476,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
 @pytest.mark.parametrize(
     "test_case",
     [
-        SqlglotChainCompileTargetIntegrationTestCase(
+        SqlAnalysisChainCompileTargetIntegrationTestCase(
             description="chain test compile target uses flat generated ctes",
             project_files={
                 "sqlbuild_project.toml": (
@@ -485,7 +485,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
                     "[connection]\n"
                     'database = ":memory:"\n\n'
                     "[settings]\n"
-                    "sqlglot = true\n"
+                    "sql_analysis = true\n"
                 ),
                 "models/stg_orders.sql": (
                     'MODEL (materialized table);\n\nSELECT id, amount FROM __source("raw")'
@@ -532,8 +532,8 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
     ],
     ids=["chain test compile target uses flat generated ctes"],
 )
-def test_given_sqlglot_enabled_chain_test_when_writing_compile_target_then_uses_ctes(
-    test_case: SqlglotChainCompileTargetIntegrationTestCase,
+def test_given_sql_analysis_enabled_chain_test_when_writing_compile_target_then_uses_ctes(
+    test_case: SqlAnalysisChainCompileTargetIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:

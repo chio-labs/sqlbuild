@@ -7,7 +7,7 @@ from typing import Any
 
 
 def import_sqlglot() -> Any | None:
-    """Return the sqlglot module when installed, otherwise None."""
+    """Return the SQLGlot module when installed, otherwise None."""
 
     try:
         return import_module("sqlglot")
@@ -16,7 +16,7 @@ def import_sqlglot() -> Any | None:
 
 
 def import_sqlglot_expressions() -> Any | None:
-    """Return the sqlglot expressions module when installed, otherwise None."""
+    """Return the SQLGlot expressions module when installed, otherwise None."""
 
     try:
         return import_module("sqlglot.expressions")

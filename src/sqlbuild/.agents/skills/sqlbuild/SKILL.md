@@ -45,6 +45,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/python-nodes/assets`
 - `concepts/python-nodes/checks`
 - `concepts/python-nodes/factories`
+- `concepts/python-nodes/providers`
 - `concepts/python-nodes/sql-references`
 - `concepts/advanced/virtual-environments`
 - `concepts/advanced/virtual-environments/setup`
@@ -758,7 +759,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Blocking audits | Block promotion from staging table | Tests run after materialization | Block during plan (production untouched); during run, data already written |
 | Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
 | **Compilation** | | | |
-| SQL validation | SQLGlot-based, offline | dbt Fusion (proprietary license) | SQLGlot-based |
+| SQL validation | Polyglot-backed, offline | dbt Fusion (proprietary license) | SQLGlot-based |
 | Column-level lineage | Compile-time, fast and rich modes | Post-hoc via docs | Compile-time |
 | Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
@@ -769,21 +770,33 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
 | Stateful interval tracking | No - cursor-based (no external state) | No | Yes - tracks which intervals ran |
 | SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (limited) | Built-in |
+| **Planning and change detection** | | | |
+| Fingerprint-based change detection | Query, config, function, and schema change tracking | manifest.json comparison | Version hash comparison |
+| Source freshness | `sqb freshness` with adapter/column/sql strategies and lag tolerance | `dbt source freshness` | No |
+| Changes-only mode | `--changes-only` prunes unchanged models in both direct and virtual modes | `state:modified` selector (requires manifest) | VDE-based stale detection only |
+| Cascade propagation | Topological walk with backfill policy inheritance and override | No cascade control | Cascades through version hashes |
 | **Environments** | | | |
-| Virtual environments | Pointer swaps with hash-based version reuse | No | Pointer swaps, no compute cost |
-| Environment diffs | Full row-level data comparison | No | Table diff |
+| Virtual environments | Pointer swaps with hash-based version reuse (opt-in) | No | Pointer swaps, no compute cost |
+| Data diffs | Full row-level data comparison across targets or virtual environments | No | Table diff |
 | Zero-copy cloning | `sqb clone` | No | No |
 | **Models** | | | |
 | SQL models | `MODEL()` header with inline config | Jinja-templated SQL + YAML sidecar | `MODEL` DDL |
 | Python models | Coming soon | Limited (remote only) | Pandas, PySpark, Snowpark, BigFrames |
 | Custom materializations | Python with full framework hooks | Jinja-based | Python-based custom model kinds |
+| Lifecycle hooks | Typed `sql()`/`python()` hooks with compile-time validation and `HookContext` | Jinja pre/post hooks | Python pre/post hooks |
+| **Python nodes** | | | |
+| Tasks | `@task` - Python computation as DAG nodes | No | No |
+| Assets | `@asset` - external artifact production/observation | No | No |
+| Checks | `@check` - Python validation of tasks, assets, and loaders | No | No |
+| Factories | `@factory` - programmatic node generation | No | No |
+| Providers | Shared runtime services with name-based injection into nodes and hooks | No | No |
 | **dbt** | | | |
 | dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
 | **Sources** | | | |
 | Source loaders | Python `@loader` functions with table/append/delete_insert/merge strategies | No (external to dbt) | No (external to SQLMesh) |
 | Declarative ingestion | ingestr integration - YAML-only config for 50+ sources | No | No |
 | Auto-load during builds | Managed sources loaded before dependent models | No | No |
-| Source deferral | `defer_sources_to` reads source data from another target | No | No |
+| Source deferral | `--defer-sources-to` reads source data from another target | No | No |
 | **Other** | | | |
 | Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
 | Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
@@ -795,13 +808,13 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Tool | Best for |
 |------|----------|
-| **SQLBuild** | Test-first SQL pipelines. Chained unit tests, local E2E scenario replay in DuckDB, pre-promotion audit gating, offline compile-time validation, virtual environments with instant promotion. |
+| **SQLBuild** | Test-first SQL pipelines. Chained unit tests, local E2E scenario replay in DuckDB, pre-promotion audit gating, offline compile-time validation, source freshness tracking, Python nodes (tasks, assets, checks), and opt-in virtual environments. |
 | **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
 | **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
 
 ### Not yet in SQLBuild
 
-- **Python models** - Pandas, PySpark, Snowpark, BigFrames
+- **Python models** - Define models in Python using Pandas, PySpark, Snowpark, or BigFrames
 - **Broader adapter support** - ClickHouse, Redshift, Trino, Spark, Athena
 
 ## Project Configuration
@@ -985,7 +998,7 @@ Global feature toggles:
 
 ```toml
 [settings]
-sqlglot = true
+sql_analysis = true
 query_change_tracking = true
 sql_validation = true
 concurrency = 1
@@ -997,7 +1010,7 @@ default_audit_run_scope = "final"
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `sqlglot` | `true` | Enable SQLGlot-based SQL validation and static analysis at compile time |
+| `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
 | `virtual_environments` | `false` | Enable [virtual environments](/concepts/advanced/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
@@ -1218,7 +1231,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 
 class MyDatabaseAdapter(BaseAdapter):
     adapter_name = "my_database"
-    sqlglot_dialect_name = "postgres"  # SQLGlot dialect for SQL validation and lineage
+    sql_analysis_dialect_name = "postgres"  # SQL analysis dialect for SQL validation and lineage
 
     def connect(self, config):
         ...
@@ -1230,7 +1243,7 @@ class MyDatabaseAdapter(BaseAdapter):
         ...
 ```
 
-Set `sqlglot_dialect_name` to the [SQLGlot dialect](https://github.com/tobymao/sqlglot/tree/main/sqlglot/dialects) that matches your engine's SQL syntax. This enables compile-time SQL validation, column inference, column lineage, and local scenario replay for your adapter. If omitted, SQLBuild uses generic SQL parsing.
+Set `sql_analysis_dialect_name` to the SQL dialect name that matches your engine's SQL syntax. This enables compile-time SQL validation, column inference, column lineage, and local scenario replay for your adapter. If omitted, SQLBuild uses generic SQL parsing.
 
 For full control with no inherited defaults, subclass `StrictAdapter` instead. Every method is abstract and must be implemented explicitly. SQLBuild raises a clear error listing any unimplemented methods.
 
@@ -2327,14 +2340,18 @@ MODEL (
 
 ### Hooks
 
-Pre-hooks and post-hooks execute SQL before and after materialization. They support macro expansion and context variable interpolation:
+Pre-hooks and post-hooks run before and after materialization. Each entry is either a `sql("...")` hook that executes SQL, or a `python("hook_name")` hook that calls a Python function from the `hooks/` directory.
+
+#### SQL hooks
 
 ```sql
 MODEL (
   materialized table,
-  post_hook ['GRANT SELECT ON @@CTX:destination.qualified TO analyst_role'],
+  post_hooks [sql('GRANT SELECT ON @@CTX:destination.qualified TO analyst_role')],
 );
 ```
+
+SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time using SQL analysis.
 
 Available context variables in hooks:
 
@@ -2347,7 +2364,110 @@ Available context variables in hooks:
 | `@@CTX:run.target` | Active target name |
 | `@@CTX:run.id` | Current run ID |
 
-Hooks also support macro calls and project variable interpolation (`@@name`, `@@ENV:NAME`).
+#### Python hooks
+
+Python hooks call `@hook`-decorated functions discovered from the `hooks/` directory:
+
+```python
+# hooks/permissions.py
+from sqlbuild.hooks import hook
+
+@hook
+def grant_analyst(ctx):
+    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO analyst_role")
+```
+
+Reference a Python hook in the MODEL() header by name, with optional keyword arguments:
+
+```sql
+MODEL (
+  materialized table,
+  post_hooks [python("grant_analyst")],
+);
+```
+
+```sql
+MODEL (
+  materialized table,
+  post_hooks [python("grant_analyst", role: "reader_role")],
+);
+```
+
+You can mix SQL and Python hooks in the same list:
+
+```sql
+MODEL (
+  materialized table,
+  pre_hooks [sql('SET search_path TO analytics')],
+  post_hooks [
+    python("grant_analyst"),
+    sql('ANALYZE @@CTX:destination.qualified'),
+  ],
+);
+```
+
+#### Hook context
+
+Python hooks receive a `HookContext` as their first parameter (named `ctx`, `context`, or `hook_context`):
+
+| Field | Description |
+|-------|-------------|
+| `ctx.model_name` | Name of the model being built |
+| `ctx.phase` | `pre_hooks` or `post_hooks` |
+| `ctx.hook_name` | Name of the hook being invoked |
+| `ctx.run_id` | Current run ID |
+| `ctx.environment` | Active target name |
+| `ctx.vars` | Project variables |
+| `ctx.destination.qualified` | Fully qualified destination relation name |
+| `ctx.destination.schema` | Destination schema |
+| `ctx.destination.name` | Destination relation name |
+| `ctx.destination.database` | Destination database |
+| `ctx.adapter` | Adapter instance |
+| `ctx.connection` | Live connection |
+| `ctx.execute_sql(sql)` | Execute SQL on the connection |
+| `ctx.query(sql)` | Execute SQL and return rows |
+| `ctx.log(message)` | Log to the run output |
+| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) by name |
+
+Providers can also be injected directly as hook function parameters by name. See [Providers](/concepts/python-nodes/providers).
+
+#### Hook decorator
+
+The `@hook` decorator accepts optional metadata:
+
+```python
+from sqlbuild.hooks import hook
+
+@hook
+def grant_analyst(ctx):
+    """Grant analyst role on the destination table."""
+    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO analyst_role")
+
+@hook(name="custom_name", description="Custom hook with explicit name")
+def my_hook(ctx, role="analyst_role"):
+    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO {role}")
+```
+
+| Argument | Description |
+|----------|-------------|
+| `name` | Override the hook name (defaults to the function name) |
+| `description` | Human-readable description (defaults to the function docstring) |
+
+#### Discovery rules
+
+- Hook functions are discovered from `.py` files under `hooks/` recursively
+- Files named `__init__.py` or starting with `_` are skipped
+- Each function decorated with `@hook` is registered by name
+- Hook names must be unique across all hook files
+- Python hook references in MODEL() headers are validated at compile time: unknown names, unknown kwargs, and missing required parameters all raise compile errors
+
+#### Validation
+
+At compile time, SQLBuild validates every `python("hook_name")` reference:
+
+- The hook name must match a discovered `@hook` function
+- Any keyword arguments passed in the MODEL() header must match parameters on the function signature
+- If the function does not accept `**kwargs`, unknown arguments raise a compile error
 
 ### Config reference
 
@@ -2363,8 +2483,8 @@ Hooks also support macro calls and project variable interpolation (`@@name`, `@@
 | `schema` | Override target schema |
 | `database` | Override target database |
 | `alias` | Override target relation name |
-| `pre_hook` | SQL statements to execute before materialization |
-| `post_hook` | SQL statements to execute after materialization |
+| `pre_hooks` | Lifecycle hooks to run before materialization: `sql("...")` and/or `python("hook_name")` entries |
+| `post_hooks` | Lifecycle hooks to run after materialization: `sql("...")` and/or `python("hook_name")` entries |
 | `enabled` | Set to `false` to skip the model |
 | `contract` | `enforced` or `none`. When enforced, declared columns are the authoritative output schema. |
 
@@ -2410,8 +2530,8 @@ How SQLBuild processes variables, context, and dynamic content in SQL and config
 
 SQLBuild uses two syntax layers for dynamic content:
 
-- **`@` syntax** is for any executable SQL - model queries, hooks, tests, audits, and inline source expressions
-- **`${...}` syntax** is for config values - project TOML config, MODEL() header fields (excluding hooks), and source/seed YAML declarations
+- **`@` syntax** is for any executable SQL - model queries, SQL hooks, tests, audits, and inline source expressions
+- **`${...}` syntax** is for config values - project TOML config, MODEL() header fields (excluding SQL hooks), and source/seed YAML declarations
 
 The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's a config value, it uses `${...}`. These layers never mix.
 
@@ -2419,16 +2539,16 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 
 | Syntax | Where | Resolved |
 |--------|-------|----------|
-| `@macro(args)` | Model SQL, hooks, tests, audits, inline source expressions | Compile time - expands to macro return value |
-| `@@name` | Model SQL, hooks, tests, audits, inline source expressions | Compile time - project variable substitution |
-| `@@ENV:NAME` | Model SQL, hooks, tests, audits, inline source expressions | Compile time - environment variable |
-| `@@CTX:name` | Hooks only | Compile time - destination relation, target, run ID |
+| `@macro(args)` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - expands to macro return value |
+| `@@name` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - project variable substitution |
+| `@@ENV:NAME` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - environment variable |
+| `@@CTX:name` | SQL hooks only | Compile time - destination relation, target, run ID |
 | `@@@name` | Model SQL | Preserved for runtime (custom materializations) |
 | `@name` / `@'name'` | Generic audit SQL only | Audit engine parameter |
 | `${CTX:...}` | TOML/YAML config values | Config compilation |
 | `${ENV:...}` | TOML/YAML config values | Config compilation |
 
-`@@CTX:` is intentionally hook-only. Model SQL describes a relation's data and should not reference its own destination identity. Hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL.
+`@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the `HookContext` object (see [Hooks](/concepts/models#hooks)).
 
 ### Project variables
 
@@ -2490,10 +2610,10 @@ If the environment variable is not set, SQLBuild raises a compile error.
 
 Context variables provide access to the current model's destination relation, active target, and run metadata.
 
-**In hooks** (`@@CTX:` syntax):
+**In SQL hooks** (`@@CTX:` syntax):
 
 ```sql
-post_hook ['GRANT SELECT ON @@CTX:destination.qualified TO analyst_role'],
+post_hooks [sql('GRANT SELECT ON @@CTX:destination.qualified TO analyst_role')],
 ```
 
 **In TOML/YAML config values** (`${CTX:...}` syntax):
@@ -2527,7 +2647,7 @@ def timestamp_trunc(ctx, grain: str, expr: str) -> str:
     return f"DATE_TRUNC('{grain}', {expr})"
 ```
 
-The macro context provides `adapter_name`, `sqlglot_enabled`, `target_name`, and `vars`.
+The macro context provides `adapter_name`, `sql_analysis_enabled`, `target_name`, and `vars`.
 
 ### Deferred placeholders
 
@@ -2555,15 +2675,15 @@ This is distinct from `@@name` (project variables) and `@macro()` (macro calls),
 SQLBuild processes authored SQL in this order:
 
 1. **Config templates** (`${CTX:...}`, `${ENV:...}`) in TOML/YAML config values are resolved during config compilation
-2. **Project variables** (`@@name`), **environment variables** (`@@ENV:NAME`), and **context variables** (`@@CTX:name` in hooks) are substituted
+2. **Project variables** (`@@name`), **environment variables** (`@@ENV:NAME`), and **context variables** (`@@CTX:name` in SQL hooks) are substituted
 3. **Macro calls** (`@name(args)`) are expanded
-4. **SQLGlot validation** runs against the fully expanded SQL
+4. **SQL analysis validation** runs against the fully expanded SQL
 
 This means:
 - Config templates resolve first, before any SQL processing
 - Macros see already-substituted variable values in the SQL
-- `@@CTX:destination.qualified` in hooks sees the final target-overridden destination name because hooks are expanded after destination naming is fully resolved
-- SQLGlot validates the final expanded SQL, catching syntax errors from both vars and macros
+- `@@CTX:destination.qualified` in SQL hooks sees the final target-overridden destination name because hooks are expanded after destination naming is fully resolved
+- SQL analysis validates the final expanded SQL, catching syntax errors from both vars and macros
 
 ## Python Macros
 
@@ -2644,7 +2764,7 @@ SELECT 1
 
 ### Using macros in hooks
 
-Macros are expanded inside `pre_hook` and `post_hook` strings:
+Macros are expanded inside `sql(...)` hook entries in `pre_hooks` and `post_hooks`:
 
 ```python
 # macros/permissions.py
@@ -2655,13 +2775,15 @@ def grant_target(target):
 ```sql
 MODEL (
   materialized table,
-  post_hook ['@grant_target(@@CTX:destination.qualified)'],
+  post_hooks [sql('@grant_target(@@CTX:destination.qualified)')],
 );
 
 SELECT 1 AS id
 ```
 
-Hook SQL is validated at compile time using SQLGlot, so invalid hook SQL is caught before execution. Hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
+Hook SQL is validated at compile time using SQL analysis, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
+
+For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models#hooks) for the full Python hook API.
 
 ### Macro context
 
@@ -2680,7 +2802,7 @@ The macro context provides:
 | Field | Description |
 |-------|-------------|
 | `adapter_name` | The active adapter (e.g. `duckdb`, `snowflake`) |
-| `sqlglot_enabled` | Whether SQLGlot analysis is enabled |
+| `sql_analysis_enabled` | Whether SQL analysis is enabled |
 | `target_name` | The active target name, if any |
 | `vars` | Effective project variables as a dict (merged from project config, target, local config, and CLI `--vars`) |
 
@@ -2740,11 +2862,11 @@ def revenue_column(column, alias):
 ### Where macros are allowed
 
 - **Model query SQL** - the SELECT statement after the MODEL() header
-- **Hook strings** - `pre_hook` and `post_hook` values in MODEL() config
+- **Hook strings** - `sql(...)` entries in `pre_hooks` and `post_hooks` in MODEL() config
 - **Test SQL** - unit test CTE bodies
 - **Audit SQL** - singular audit queries
 
-Macros are **not allowed** in MODEL() config values (other than hooks). If a config field contains `@macro()`, SQLBuild raises a compile error.
+Macros are **not allowed** in MODEL() config values (other than SQL hook entries). If a config field contains `@macro()`, SQLBuild raises a compile error.
 
 ### Discovery rules
 
@@ -3183,6 +3305,32 @@ The plan assigns a reason to each model that needs work:
 | Upstream changed | An upstream model's change cascades downstream |
 
 Models with no changes show as `Normal` in the plan output and are executed in their standard mode (views are recreated, incrementals run their delta, etc.).
+
+#### Cascade propagation
+
+When a model or function changes, the change signal propagates downstream through the DAG. Every model downstream of a changed node is marked `Upstream changed` in the plan, even if its own SQL and config are identical.
+
+The cascade walk is topological -- it processes models in dependency order, so each model sees the resolved state of all its upstreams before deciding its own effective action.
+
+**What cascades:**
+
+- A query, config, or schema change on any model cascades to all its downstream dependents.
+- A function change cascades to every model that calls it (directly or transitively).
+- Source freshness changes propagate downstream the same way (see [Source freshness](#source-freshness)).
+
+**How materialization types respond:**
+
+- **Views** are recreated on every build regardless, so a cascade has no extra cost.
+- **Tables** are fully rebuilt, same as if they had changed themselves.
+- **Incremental models** receive a backfill window from the cascade. A `full` backfill always cascades. A `bounded` backfill only cascades when the upstream and downstream models share the same `cursor_type` (e.g. both use `timestamp`), so unrelated cursor types don't inherit bounded windows that don't apply. The downstream model's own `query_change_backfill` policy takes precedence over any cascaded signal.
+
+**Resolution when multiple upstreams are stale:**
+
+If a model has multiple stale upstreams with different backfill actions, the most aggressive action wins. `full` beats `bounded`, and among bounded actions, the longer duration wins. Ties are broken alphabetically by model name for determinism.
+
+**Overriding cascaded backfill:**
+
+Downstream incremental models can set their own `query_change_backfill` or `schema_change_backfill` policies to override the cascaded signal. If a downstream model declares its own policy, that policy applies instead of the upstream's. If it has no policy, it inherits the upstream's rebuild scope. See [Incremental Models -- Backfill policies](/concepts/incremental#backfill-policies) for configuration details.
 
 #### Backfill policies
 
@@ -4423,7 +4571,7 @@ This:
 1. Checks snapshot freshness via the input fingerprint (missing/stale snapshots are skipped by default)
 2. Creates a temporary DuckDB database at `target/run/scenarios/<scenario_name>/local.duckdb`
 3. Loads JSONL snapshots into typed DuckDB tables using column metadata from `scenario.json`
-4. Transpiles model and check SQL from the project adapter dialect to DuckDB via SQLGlot
+4. Transpiles model and check SQL from the project adapter dialect to DuckDB via SQL analysis
 5. Builds functions, models, and runs expected/assertion checks in DuckDB
 6. Keeps the local DuckDB file for inspection (it lives under `target/`, so it's always retained)
 
@@ -4451,7 +4599,7 @@ sqb scenario test --local --strict
 
 #### Local type overrides
 
-When SQLGlot's automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
+When automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
 
 ```toml
 [scenario.local_type_overrides.snowflake]
@@ -4482,7 +4630,7 @@ See the [CLI reference](/cli/scenario) for full command documentation.
 ### Limitations
 
 - Custom materializations are not supported in scenarios yet. Scenario models using custom materializations will fail with a clear error.
-- Local replay transpiles SQL from the project adapter dialect to DuckDB via SQLGlot. Adapter-specific SQL that SQLGlot cannot translate will produce a clear error with the failing resource name and reason.
+- Local replay transpiles SQL from the project adapter dialect to DuckDB via SQL analysis. Adapter-specific SQL that SQL analysis cannot translate will produce a clear error with the failing resource name and reason.
 
 ## Selectors
 
@@ -4648,9 +4796,9 @@ Trace individual columns through your SQL pipeline - understand where data comes
 
 ### How it works
 
-SQLBuild analyzes column lineage statically at compile time using [SQLGlot](https://github.com/tobymao/sqlglot). No warehouse connection is needed. The analyzer parses each model's SQL, resolves `ref()` and `source()` calls, and traces columns through `SELECT` lists, CTEs, JOINs, subqueries, and expressions.
+SQLBuild analyzes column lineage statically at compile time using SQL analysis. No warehouse connection is needed. The analyzer parses each model's SQL, resolves `ref()` and `source()` calls, and traces columns through `SELECT` lists, CTEs, JOINs, subqueries, and expressions.
 
-Column lineage requires SQLGlot to be enabled in project settings (it is by default).
+Column lineage requires SQL analysis to be enabled in project settings (it is by default).
 
 ### Transform types
 
@@ -4681,7 +4829,7 @@ Each edge also carries a confidence level indicating how certain the analyzer is
 
 Column lineage supports two analysis modes that trade off speed against depth of analysis.
 
-**Rich mode** uses SQLGlot's lineage module and optimizer to resolve columns through CTEs, subqueries, and multi-level nesting with full transform classification. Thorough, but slower because the optimizer runs per column per model.
+**Rich mode** uses SQL analysis to resolve columns through CTEs, subqueries, and multi-level nesting with full transform classification. Thorough, but slower on large projects.
 
 **Fast mode** parses the SQL AST directly to extract column mappings, resolve CTE references, and classify transforms. It handles the same SQL patterns that most column lineage tools support and is fast enough to run on every compile.
 
@@ -4749,7 +4897,7 @@ These checks run automatically during `sqb compile` and report diagnostics with 
 
 ### Limitations
 
-- Column lineage requires SQLGlot to be enabled (`sqlglot = true` in settings, which is the default)
+- Column lineage requires SQL analysis to be enabled (`sql_analysis = true` in settings, which is the default)
 - Complex SQL patterns (deeply nested correlated subqueries, dynamic SQL, adapter-specific functions) may reduce accuracy or confidence
 - `SELECT *` is tracked as a `star` transform - the analyzer knows the column passes through but the mapping is less precise than explicit column references
 - Column lineage is computed statically from SQL text. Runtime-only column additions (e.g. from dynamic UDFs) are not tracked
@@ -4974,8 +5122,11 @@ Each node receives a context object as its first argument (`TaskContext`, `Asset
 | `ctx.qualify_name(name)` | Qualify a relation name |
 | `ctx.relation(ref)` | Resolve a declared `model()`/`source()` reference to a relation |
 | `ctx.payload(node_fn)` / `ctx.metadata(node_fn)` | Read an upstream node's result in the same run |
+| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) by name |
 
 Task and asset contexts add `ctx.result(...)` and `ctx.skip(...)`. Check contexts add `ctx.pass_(...)`, `ctx.fail(...)`, and `ctx.warn(...)`.
+
+Providers can also be injected directly as function parameters by name. See [Providers](/concepts/python-nodes/providers) for details.
 
 ### Returns and skips
 
@@ -5876,6 +6027,198 @@ Generated nodes follow the same rules as directly-authored ones, including the [
 ### Naming
 
 Generated nodes need unique names across the project. Pass an explicit `name=` to each node a factory creates (factories almost always generate names from a loop variable or config), since relying on the function's own name would produce duplicates.
+
+## Providers
+
+Source: `concepts/python-nodes/providers.mdx`
+
+Shared runtime services for Python nodes and hooks.
+
+Providers are shared runtime services that SQLBuild discovers, configures, and injects into your Python nodes and hooks. Use them for external connections, API clients, or any stateful service that multiple nodes need access to.
+
+### Defining a provider
+
+Create a Python file under `providers/` in your project. A provider is a class that subclasses `Provider` from `sqlbuild.providers`:
+
+```python
+# providers/warehouse_client.py
+from sqlbuild.providers import Provider
+
+class WarehouseClient(Provider):
+    api_key: str
+    endpoint: str = "https://api.example.com"
+
+    def setup(self, ctx):
+        self.session = create_session(self.api_key, self.endpoint)
+
+    def teardown(self):
+        self.session.close()
+```
+
+`Provider` extends [pydantic-settings `BaseSettings`](https://docs.pydantic.dev/latest/concepts/pydantic_settings/), so provider fields are validated and can be populated from environment variables automatically.
+
+### Provider name
+
+Each provider has a runtime name used for injection. By default, the name is derived from the class name by converting to `lower_snake_case`:
+
+- `WarehouseClient` becomes `warehouse_client`
+- `SlackNotifier` becomes `slack_notifier`
+
+Override the name explicitly with `provider_name`:
+
+```python
+class WarehouseClient(Provider):
+    provider_name = "warehouse"
+    api_key: str
+```
+
+Provider names must be unique across all provider files and must be valid Python identifiers (`lower_snake_case`).
+
+### Using providers in Python nodes
+
+Providers are injected into Python node functions by **parameter name**. Add a parameter whose name matches the provider's runtime name:
+
+```python
+from sqlbuild.tasks import task
+
+@task
+def export_orders(ctx, warehouse_client):
+    warehouse_client.session.upload(ctx.query("SELECT * FROM orders"))
+```
+
+SQLBuild matches the parameter name `warehouse_client` to the discovered provider with that name, sets it up if it hasn't been already, and passes it to the function.
+
+You can also type-annotate the parameter for IDE support and compile-time validation:
+
+```python
+from sqlbuild.tasks import task
+from providers.warehouse_client import WarehouseClient
+
+@task
+def export_orders(ctx, warehouse_client: WarehouseClient):
+    warehouse_client.session.upload(ctx.query("SELECT * FROM orders"))
+```
+
+When a type annotation is present, SQLBuild validates that the discovered provider is an instance of the annotated class. A mismatch raises a compile-time error.
+
+Provider injection works in all Python node types:
+
+- **Loaders** (`@loader`)
+- **Tasks** (`@task`)
+- **Assets** (`@asset`)
+- **Checks** (`@check`)
+
+### Using providers in hooks
+
+Python lifecycle hooks also support provider injection by parameter name:
+
+```python
+# hooks/notify.py
+from sqlbuild.hooks import hook
+
+@hook
+def notify_complete(ctx, slack_notifier):
+    slack_notifier.send(f"Model {ctx.model_name} built successfully")
+```
+
+```sql
+MODEL (
+  materialized table,
+  post_hooks [python("notify_complete")],
+);
+```
+
+Providers are also available on the `HookContext` via `ctx.providers`:
+
+```python
+@hook
+def notify_complete(ctx):
+    notifier = ctx.providers.slack_notifier
+    notifier.send(f"Model {ctx.model_name} built successfully")
+```
+
+### Using providers via context
+
+All Python node contexts (`TaskContext`, `AssetContext`, `CheckContext`, `LoaderContext`) and `HookContext` expose a `ctx.providers` container for name-based access:
+
+```python
+@task
+def export_orders(ctx):
+    client = ctx.providers.warehouse_client
+    client.session.upload(ctx.query("SELECT * FROM orders"))
+```
+
+Both approaches -- parameter injection and `ctx.providers` -- are equivalent. Parameter injection is more explicit and enables type checking; `ctx.providers` is useful when provider access is conditional or dynamic.
+
+### Lifecycle
+
+Providers follow a lazy setup, reverse-teardown lifecycle scoped to the command invocation:
+
+1. **Discovery** -- on compile, SQLBuild discovers all `Provider` subclasses under `providers/` and validates their settings (from environment variables or field defaults).
+2. **Lazy setup** -- `setup(ctx)` is called the first time a provider is accessed during a build, not at startup. Providers that are never used are never set up.
+3. **Teardown** -- after the command completes, `teardown()` is called on all providers that were set up, in reverse setup order. Teardown runs even if the build failed.
+
+```python
+class WarehouseClient(Provider):
+    api_key: str
+
+    def setup(self, ctx):
+        # Called once, the first time any node accesses this provider
+        self.connection = connect(self.api_key)
+
+    def teardown(self):
+        # Called after the command completes
+        self.connection.close()
+```
+
+Both `setup` and `teardown` are optional. A provider with only field declarations and no lifecycle methods is valid -- it acts as a validated configuration object.
+
+### Configuration from environment variables
+
+Because `Provider` extends `pydantic-settings BaseSettings`, fields without defaults are read from environment variables. The environment variable name matches the field name in uppercase:
+
+```python
+class SlackNotifier(Provider):
+    slack_token: str          # reads SLACK_TOKEN from environment
+    channel: str = "#builds"  # has a default, environment variable is optional
+```
+
+See the [pydantic-settings documentation](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) for advanced configuration like custom env prefixes, `.env` file support, and nested settings.
+
+### Discovery rules
+
+- Provider classes are discovered from `.py` files under `providers/` recursively
+- Files named `__init__.py` or starting with `_` are skipped
+- Each concrete (non-abstract) subclass of `Provider` is registered
+- Provider names must be unique across all provider files
+- Settings are validated at discovery time -- missing required fields (without environment variables set) raise a discovery error immediately, not at runtime
+
+### Plan output
+
+When providers are used by Python nodes or hooks, `sqb plan` shows a Providers section listing each provider and its consumers:
+
+```
+Providers
+  warehouse_client  2 nodes
+  slack_notifier    1 node
+```
+
+Use `--verbose` to see which specific nodes consume each provider.
+
+### Project layout
+
+```
+my-project/
+  providers/
+    warehouse_client.py
+    slack_notifier.py
+  hooks/
+    notify.py
+  loaders/
+    load_orders.py
+  tasks/
+    export_orders.py
+```
 
 ## SQL References
 
@@ -7145,7 +7488,7 @@ Source: `integrations/dagster.mdx`
 
 Orchestrate SQLBuild pipelines with Dagster scheduling, retries, and asset UI.
 
-SQLBuild includes a Dagster integration that maps your project's models, sources, seeds, functions, tests, audits, and scenarios into Dagster assets and asset checks. SQLBuild handles the SQL transformation layer. Dagster handles scheduling, retries, alerting, and the asset-centric UI.
+SQLBuild includes a Dagster integration that maps your project's models, sources, seeds, functions, loaders, tasks, assets, tests, audits, scenarios, and Python checks into Dagster assets and asset checks. SQLBuild handles the SQL transformation layer. Dagster handles scheduling, retries, alerting, and the asset-centric UI.
 
 ### Install
 
@@ -7170,11 +7513,11 @@ This creates the waffle shop project with a `dagster/definitions.py` that includ
 ### How it works
 
 1. `sqb compile --dag` generates a static `sqlbuild_dag.json` artifact with your project's full graph (nodes, edges, checks)
-2. `@sqlbuild_assets()` reads the artifact and creates one Dagster `AssetSpec` per source, seed, model, and function, with dependency edges preserved
+2. `@sqlbuild_assets()` reads the artifact and creates one Dagster `AssetSpec` per source, seed, model, function, loader, task, and asset, with dependency edges preserved
 3. `SqlBuildCliResource` shells out to `sqb build`, `sqb test`, `sqb scenario test`, etc. as subprocesses
 4. Execution results (materializations, audit pass/fail, scenario outcomes) are parsed from structured JSON and emitted as Dagster `MaterializeResult` and `AssetCheckResult` events
 
-SQLBuild tests and audits become Dagster asset checks. Scenarios become asset checks attached to the models they exercise.
+SQLBuild tests, audits, and Python checks become Dagster asset checks. Scenarios become asset checks attached to the models they exercise.
 
 ### Quickstart
 
@@ -7204,7 +7547,7 @@ defs = dg.Definitions(
 dagster dev -f definitions.py
 ```
 
-Dagster discovers every SQLBuild model as an asset. Selecting a subset of assets in the Dagster UI automatically scopes the `sqb build` invocation to those models via `--select`.
+Dagster discovers every SQLBuild model, loader, task, and asset as a Dagster asset. Selecting a subset in the Dagster UI automatically scopes the `sqb build` invocation to those nodes via `--select`.
 
 For production deployments, use `project.prepare()` or `sqb compile --dag` to generate the DAG artifact explicitly in your CI pipeline.
 
@@ -7212,7 +7555,7 @@ For production deployments, use `project.prepare()` or `sqb compile --dag` to ge
 
 When you select a subset of assets in the Dagster UI, the integration automatically:
 
-1. Maps selected Dagster asset keys back to SQLBuild model names using the DAG artifact
+1. Maps selected Dagster asset keys back to SQLBuild node names using the DAG artifact
 2. Writes the selectors to a temporary file
 3. Passes `--select-file` to the `sqb` CLI so only the selected models are built
 
@@ -7220,11 +7563,12 @@ This means Dagster's asset subsetting works naturally with SQLBuild's selector s
 
 ### Checks
 
-SQLBuild tests, audits, and scenarios are registered as Dagster asset checks:
+SQLBuild tests, audits, scenarios, and Python checks are registered as Dagster asset checks:
 
 - **Unit tests** become checks attached to the models they test
 - **Audits** become checks attached to the model or source they audit, with severity mapped to `AssetCheckSeverity.ERROR` or `AssetCheckSeverity.WARN`
 - **Scenarios** become checks attached to the models they exercise
+- **Python checks** (`@check`) become checks attached to the tasks, assets, or loaders they validate
 
 Check results are emitted with pass/fail status and metadata from the execution JSON.
 
@@ -7476,6 +7820,14 @@ Each `node` dict passed to translator methods contains:
 }
 ```
 
+Python node asset keys use a two-part key with the node kind as prefix:
+
+| Kind | Asset key example |
+|------|-------------------|
+| Task | `("task", "prepare_orders")` |
+| Asset | `("asset", "orders_export")` |
+| Loader | `("loader", "raw_orders")` |
+
 #### Check structure
 
 Each `check` dict passed to check translator methods contains:
@@ -7514,7 +7866,7 @@ Source: `integrations/rivers.mdx`
 
 Orchestrate SQLBuild pipelines with Rivers scheduling, jobs, and asset tracking.
 
-SQLBuild includes a Rivers integration that maps your project's models, sources, seeds, loaders, and functions into Rivers assets with dependency edges preserved. SQLBuild handles the SQL transformation layer. Rivers handles scheduling, execution, and the asset-centric UI.
+SQLBuild includes a Rivers integration that maps your project's models, sources, seeds, loaders, tasks, assets, and functions into Rivers assets with dependency edges preserved. SQLBuild handles the SQL transformation layer. Rivers handles scheduling, execution, and the asset-centric UI.
 
 ### Install
 
@@ -7539,7 +7891,7 @@ This creates the waffle shop project with a `rivers_pipeline/definitions.py` tha
 ### How it works
 
 1. `sqb compile --dag` generates a static `sqlbuild_dag.json` artifact with your project's full graph (nodes, edges)
-2. `@sqlbuild_assets()` reads the artifact and creates one Rivers `AssetDef` per source, loader, seed, model, and function, with dependency edges preserved
+2. `@sqlbuild_assets()` reads the artifact and creates one Rivers `AssetDef` per source, loader, seed, model, function, task, and asset, with dependency edges preserved
 3. The decorated function runs `sqb build` as a subprocess and yields `Materialization` events for each output
 
 ### Quickstart
@@ -7657,7 +8009,7 @@ def my_assets(context):
 
 | Method | Default behavior |
 |--------|-----------------|
-| `get_asset_name(node)` | Joins the asset key parts with `__` |
+| `get_asset_name(node)` | Joins the asset key parts with `__` (e.g. `task__prepare_orders`, `asset__orders_export`) |
 | `get_group_name(node)` | Uses the project name |
 | `get_tags(node)` | Includes `sqlbuild/kind:<kind>` plus model tags |
 | `get_kinds(node)` | Returns `["sqlbuild", "<materialization_type>"]` |
@@ -8249,14 +8601,14 @@ sqb --project-dir <path> compile [flags]
 
 1. **Discovery** - finds `sqlbuild_project.toml`, scans for models, sources, seeds, functions, audits, tests, and macros
 2. **Graph resolution** - resolves `ref()` and `source()` calls, expands macros, orders models by dependency
-3. **SQL validation** - validates SQL syntax using SQLGlot (when enabled)
+3. **SQL validation** - validates SQL syntax using SQL analysis (when enabled)
 4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
 5. **Contract validation** - checks declared column contracts against inferred query output
 6. **Artifact write** - writes compiled SQL to `target/compiled/`
 
 ### Static analysis
 
-When SQLGlot is enabled (default), compile performs static analysis on your models without connecting to the warehouse:
+When SQL analysis is enabled (default), compile performs static analysis on your models without connecting to the warehouse:
 
 - **Column inference**: Infers output columns from each model's SQL, including through CTEs, subqueries, and JOINs
 - **Column contract validation**: If a model declares columns in its `MODEL()` header, compile checks that every declared column exists in the query output. If a column declares a type and `type_enforcement` is enabled, compile also verifies the inferred type matches the declared type
@@ -8332,7 +8684,7 @@ The `--lineage-mode` flag controls how column lineage is computed during compile
 | Mode | Description |
 |------|-------------|
 | `fast` | Default. Lightweight column extraction using SQL model metadata. |
-| `rich` | Full SQLGlot-based analysis with transform classification and deeper tracing. Slower on large projects. |
+| `rich` | Full SQL analysis with transform classification and deeper tracing. Slower on large projects. |
 | `none` | Skip column lineage entirely. |
 
 Column lineage results are included in the JSON compile report under each model's `lineage` field. See [Column Lineage](/concepts/column-lineage) for details on analysis modes and transform types.
@@ -9371,7 +9723,7 @@ sqb lineage fact_orders.total_cents
 sqb lineage fact_orders.order_id --direction downstream
 ```
 
-Column lineage supports `upstream` and `downstream` directions (not `both`). The `--mode` flag selects the analysis mode: `rich` (default, full SQLGlot analysis) or `fast` (lightweight, faster on large projects).
+Column lineage supports `upstream` and `downstream` directions (not `both`). The `--mode` flag selects the analysis mode: `rich` (default, full SQL analysis) or `fast` (lightweight, faster on large projects).
 
 #### Tree
 

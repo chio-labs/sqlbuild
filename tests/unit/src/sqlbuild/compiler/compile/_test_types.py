@@ -34,7 +34,7 @@ class BuildCompileInputsTestCase:
         ]
         | None
     ) = None
-    expected_effective_sqlglot: bool = True
+    expected_effective_sql_analysis: bool = True
     expected_effective_sql_validation: bool = True
     expected_effective_max_concurrency: int = 1
     expected_model_query_sqls: tuple[str, ...] = field(default_factory=tuple)

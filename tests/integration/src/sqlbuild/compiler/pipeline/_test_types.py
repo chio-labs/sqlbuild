@@ -54,7 +54,7 @@ class AppendCursorPipelineIntegrationTestCase:
 
 
 @dataclass(frozen=True)
-class SqlglotChainCompileTargetIntegrationTestCase:
+class SqlAnalysisChainCompileTargetIntegrationTestCase:
     description: str
     project_files: dict[str, str]
     compiled_test_path: str

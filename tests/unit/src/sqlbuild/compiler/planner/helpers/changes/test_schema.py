@@ -79,7 +79,7 @@ DETECT_SCHEMA_CHANGES_TEST_CASES: list[DetectSchemaChangesTestCase] = [
         ),
     ),
     DetectSchemaChangesTestCase(
-        description="detects added column from sqlglot when yml has no columns",
+        description="detects added column from sql_analysis when yml has no columns",
         yml_columns=(),
         inferred_columns=(
             InferredColumn(name="id", type=None),
@@ -96,7 +96,7 @@ DETECT_SCHEMA_CHANGES_TEST_CASES: list[DetectSchemaChangesTestCase] = [
         ),
     ),
     DetectSchemaChangesTestCase(
-        description="detects type change from sqlglot explicit cast",
+        description="detects type change from sql_analysis explicit cast",
         yml_columns=(),
         inferred_columns=(InferredColumn(name="amount", type="DECIMAL(10, 2)"),),
         warehouse_columns=(ColumnInfo(name="amount", type="INTEGER"),),
@@ -178,7 +178,7 @@ DETECT_SCHEMA_CHANGES_TEST_CASES: list[DetectSchemaChangesTestCase] = [
         ),
     ),
     DetectSchemaChangesTestCase(
-        description="removed column uses sqlglot source when no yml columns exist",
+        description="removed column uses sql_analysis source when no yml columns exist",
         yml_columns=(),
         inferred_columns=(InferredColumn(name="id", type=None),),
         warehouse_columns=(

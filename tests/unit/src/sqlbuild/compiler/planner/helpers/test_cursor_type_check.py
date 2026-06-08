@@ -22,7 +22,7 @@ RETURNS_WARNING_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="event_time",
         cursor_type="integer",
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=True,
         expected_severity=WarningSeverity.WARNING,
         expected_message_fragment="appears to be timestamp",
@@ -32,27 +32,27 @@ RETURNS_WARNING_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="version_id",
         cursor_type="timestamp",
         warehouse_columns=(("version_id", "BIGINT"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=True,
         expected_severity=WarningSeverity.WARNING,
         expected_message_fragment="appears to be integer",
     ),
     CursorTypeCheckTestCase(
-        description="sqlglot detects timestamp column with integer cursor_type",
+        description="sql_analysis detects timestamp column with integer cursor_type",
         cursor_column="event_time",
         cursor_type="integer",
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=True,
+        sql_analysis_enabled=True,
         expected_warning=True,
         expected_severity=WarningSeverity.ERROR,
         expected_message_fragment="which is timestamp",
     ),
     CursorTypeCheckTestCase(
-        description="sqlglot detects integer column with timestamp cursor_type",
+        description="sql_analysis detects integer column with timestamp cursor_type",
         cursor_column="version_id",
         cursor_type="timestamp",
         warehouse_columns=(("version_id", "BIGINT"),),
-        sqlglot_enabled=True,
+        sql_analysis_enabled=True,
         expected_warning=True,
         expected_severity=WarningSeverity.ERROR,
         expected_message_fragment="which is integer",
@@ -77,7 +77,7 @@ def test_given_mismatched_cursor_type_when_checking_then_returns_warning(
         cursor_column=test_case.cursor_column,
         cursor_type=test_case.cursor_type,
         warehouse_columns=columns,
-        sqlglot_enabled=test_case.sqlglot_enabled,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
     assert result is not None
@@ -92,7 +92,7 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column=None,
         cursor_type="timestamp",
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
@@ -100,7 +100,7 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="event_time",
         cursor_type=None,
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
@@ -108,7 +108,7 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="event_time",
         cursor_type="timestamp",
         warehouse_columns=(("other_col", "VARCHAR"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
@@ -116,7 +116,7 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="event_time",
         cursor_type="timestamp",
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
@@ -124,23 +124,23 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="version_id",
         cursor_type="integer",
         warehouse_columns=(("version_id", "BIGINT"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
-        description="matching timestamp type returns none with sqlglot",
+        description="matching timestamp type returns none with sql_analysis",
         cursor_column="event_time",
         cursor_type="timestamp",
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=True,
+        sql_analysis_enabled=True,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
-        description="matching integer type returns none with sqlglot",
+        description="matching integer type returns none with sql_analysis",
         cursor_column="version_id",
         cursor_type="integer",
         warehouse_columns=(("version_id", "BIGINT"),),
-        sqlglot_enabled=True,
+        sql_analysis_enabled=True,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
@@ -148,7 +148,7 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="payload",
         cursor_type="timestamp",
         warehouse_columns=(("payload", "VARCHAR"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
     CursorTypeCheckTestCase(
@@ -156,7 +156,7 @@ RETURNS_NONE_TEST_CASES: list[CursorTypeCheckTestCase] = [
         cursor_column="Event_Time",
         cursor_type="timestamp",
         warehouse_columns=(("event_time", "TIMESTAMP_NTZ"),),
-        sqlglot_enabled=False,
+        sql_analysis_enabled=False,
         expected_warning=False,
     ),
 ]
@@ -179,7 +179,7 @@ def test_given_consistent_or_uncheckable_cursor_type_when_checking_then_returns_
         cursor_column=test_case.cursor_column,
         cursor_type=test_case.cursor_type,
         warehouse_columns=columns,
-        sqlglot_enabled=test_case.sqlglot_enabled,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
     assert result is None

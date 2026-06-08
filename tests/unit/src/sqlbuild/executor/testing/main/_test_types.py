@@ -6,4 +6,4 @@ class BuildComparisonSqlTestCase:
     description: str
     adapter_name: str
     expected_fragments: tuple[str, ...]
-    sqlglot_enabled: bool = True
+    sql_analysis_enabled: bool = True

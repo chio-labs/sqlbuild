@@ -14,7 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
-    SqlglotChainSqlTestE2ETestCase,
+    SqlAnalysisChainSqlTestE2ETestCase,
     SqlTestE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
@@ -23,10 +23,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_macro_test_project_files,
 )
 
-SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
-    SqlglotChainSqlTestE2ETestCase(
-        description="sqlglot enabled chain test runs and writes generated ctes",
-        sqlglot_enabled=True,
+SQL_ANALYSIS_CHAIN_TEST_CASES: list[SqlAnalysisChainSqlTestE2ETestCase] = [
+    SqlAnalysisChainSqlTestE2ETestCase(
+        description="sql_analysis enabled chain test runs and writes generated ctes",
+        sql_analysis_enabled=True,
         expected_artifact_fragments=(
             "__source__raw AS (",
             "__ref__stg_orders AS (",
@@ -42,9 +42,9 @@ SQLGLOT_CHAIN_TEST_CASES: list[SqlglotChainSqlTestE2ETestCase] = [
             "__actual__fact_orders AS (\n  SELECT\n    id,\n    amount + 1 AS adjusted\n  FROM (",
         ),
     ),
-    SqlglotChainSqlTestE2ETestCase(
-        description="sqlglot disabled chain test runs and keeps nested fallback sql",
-        sqlglot_enabled=False,
+    SqlAnalysisChainSqlTestE2ETestCase(
+        description="sql_analysis disabled chain test runs and keeps nested fallback sql",
+        sql_analysis_enabled=False,
         expected_artifact_fragments=(
             "__actual__fact_orders AS (",
             "FROM (",
@@ -121,17 +121,19 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
 
 @pytest.mark.parametrize(
     "test_case",
-    SQLGLOT_CHAIN_TEST_CASES,
-    ids=[case.description for case in SQLGLOT_CHAIN_TEST_CASES],
+    SQL_ANALYSIS_CHAIN_TEST_CASES,
+    ids=[case.description for case in SQL_ANALYSIS_CHAIN_TEST_CASES],
 )
 def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
-    test_case: SqlglotChainSqlTestE2ETestCase,
+    test_case: SqlAnalysisChainSqlTestE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="chain_test_project",
-        repo_files=build_chain_test_project_files(sqlglot_enabled=test_case.sqlglot_enabled),
+        repo_files=build_chain_test_project_files(
+            sql_analysis_enabled=test_case.sql_analysis_enabled
+        ),
     )
 
     test_result: subprocess.CompletedProcess[str] = run_sqb(
