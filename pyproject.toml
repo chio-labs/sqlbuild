@@ -90,6 +90,7 @@ markers = [
   "postgres: tests that require a live PostgreSQL database",
   "sqlserver: tests that require a live Microsoft SQL Server database",
   "motherduck: tests that require live MotherDuck credentials",
+  "performance: opt-in performance guard tests",
 ]
 
 [tool.ruff]
