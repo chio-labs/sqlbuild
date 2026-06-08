@@ -215,12 +215,12 @@ ERROR_TEST_CASES: list[PlanScenarioGraphErrorTestCase] = [
         expected_error_fragment="assertion references unknown model 'daily_revenue'",
     ),
     PlanScenarioGraphErrorTestCase(
-        description="sqlglot assertion parse failure fails clearly without regex fallback",
+        description="polyglot assertion parse failure fails clearly without regex fallback",
         model_deps={"daily_revenue": ()},
         source_names=(),
         seed_names=(),
         assertion_sql_bodies=("SELECT * FROM __ref(daily_revenue) WHERE (",),
-        expected_error_fragment="could not be parsed with SQLGlot",
+        expected_error_fragment="could not be parsed with Polyglot",
     ),
     PlanScenarioGraphErrorTestCase(
         description="unknown ref fixture fails clearly",

@@ -214,7 +214,7 @@ def _build_compile_lineage(
         case CompileLineageMode.RICH:
             model_count: int = len(graph.project.models)
             with maybe_status(
-                f"Analyzing rich column lineage for {model_count} models...",
+                f"Analyzing column lineage for {model_count} models...",
                 enabled=model_count >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD,
             ):
                 return build_project_column_lineage(

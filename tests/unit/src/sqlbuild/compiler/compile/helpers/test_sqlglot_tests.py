@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("sqlglot")
+pytest.importorskip("polyglot_sql")
 
 from sqlbuild.compiler.compile.helpers.sqlglot_tests import (  # noqa: E402
     extract_expected_branch_column_names_with_sqlglot,

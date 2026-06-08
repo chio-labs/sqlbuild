@@ -109,7 +109,7 @@ def select_column_target_lineage(
         depth=depth,
     )
     with maybe_status(
-        f"Analyzing rich column lineage for {len(candidate_selection.model_names)} models...",
+        f"Analyzing column lineage for {len(candidate_selection.model_names)} models...",
         enabled=(
             mode == ColumnLineageMode.RICH
             and len(candidate_selection.model_names) >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD
@@ -122,9 +122,9 @@ def select_column_target_lineage(
         )
     if column_lineage is None:
         raise CliUserError(
-            "column lineage requires SQLGlot analysis to be enabled and available",
+            "column lineage requires SQL analysis to be enabled and available",
             code="C307",
-            help="enable SQLGlot analysis or install SQLGlot for column lineage",
+            help="enable SQL analysis or install SQLBuild with Polyglot support",
         )
 
     target_column: QualifiedLineageColumn = QualifiedLineageColumn(

@@ -20,8 +20,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_PARSE,
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
 )
+from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
 from sqlbuild.shared.types import SqlReferenceKind
 
 _REF_PATTERN: re.Pattern[str] = re.compile(
@@ -163,7 +163,7 @@ def _extract_assertion_target_names(
                 warnings.append(
                     _error(
                         f"Scenario '{scenario_name}' assertion CTE '{cte.name}' could not be "
-                        f"parsed with SQLGlot: {error}",
+                        f"parsed with Polyglot: {error}",
                         code=str(getattr(error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)),
                     )
                 )
@@ -177,35 +177,29 @@ def _extract_assertion_target_names(
 def _extract_assertion_target_names_with_sqlglot(
     sql: str, *, sqlglot_dialect: str | None
 ) -> tuple[str, ...]:
-    sqlglot_module: Any | None = import_sqlglot()
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if sqlglot_module is None or expressions_module is None:
-        error: ValueError = ValueError("SQLGlot is enabled but unavailable")
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        error: ValueError = ValueError("Polyglot is enabled but unavailable")
         object.__setattr__(error, "code", SCENARIO_PLAN_SQLGLOT_UNAVAILABLE)
         raise error
     try:
         parsed: Any = (
-            sqlglot_module.parse_one(sql, read=sqlglot_dialect)
+            polyglot_module.parse_one(sql, dialect=sqlglot_dialect)
             if sqlglot_dialect is not None
-            else sqlglot_module.parse_one(sql)
+            else polyglot_module.parse_one(sql, dialect="generic")
         )
     except Exception as error:
         value_error: ValueError = ValueError(str(error))
         object.__setattr__(value_error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)
         raise value_error from None
 
-    table_type: type[Any] = expressions_module.Table
-    anonymous_type: type[Any] = expressions_module.Anonymous
     names: list[str] = []
-    table: Any
-    for table in parsed.find_all(table_type):
-        anonymous: Any = table.this
-        if not isinstance(anonymous, anonymous_type):
-            continue
-        function_name: str = str(anonymous.this).lower()
+    function: Any
+    for function in parsed.find_all(polyglot_module.Function):
+        function_name: str = str(function.name).lower()
         if function_name != SqlReferenceKind.REF.function_name:
             continue
-        expressions: list[Any] = list(anonymous.expressions)
+        expressions: list[Any] = list(function.expressions)
         if len(expressions) != 1:
             continue
         argument: Any = expressions[0]

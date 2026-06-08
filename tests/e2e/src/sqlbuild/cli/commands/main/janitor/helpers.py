@@ -78,7 +78,6 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
                 target_name="janitor_tracked_extra",
                 run_id="run_janitor_e2e",
                 query_hash="query_hash",
-                ast_hash=None,
                 schema_fingerprint="schema_hash",
                 query_sql="SELECT 1 AS id",
                 ts=datetime(2026, 1, 15, 12, 0, 0),

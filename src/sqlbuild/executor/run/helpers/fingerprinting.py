@@ -10,7 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.shared.helpers.hashing import compute_ast_hash, compute_query_hash
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
 def try_write_fingerprint(
@@ -42,7 +42,6 @@ def try_write_fingerprint(
             target_name=entry.destination.name,
             run_id=run_id,
             query_hash=compute_query_hash(entry.fingerprint_query_sql),
-            ast_hash=compute_ast_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
             query_sql=entry.fingerprint_query_sql,
             metadata_json=entry.fingerprint_metadata_json or "{}",

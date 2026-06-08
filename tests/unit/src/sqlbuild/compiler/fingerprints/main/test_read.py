@@ -31,7 +31,6 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
                     "orders",
                     "run_001",
                     "query_hash",
-                    "ast_hash",
                     "schema_hash",
                     base64.b64encode(b"SELECT 1 AS order_id").decode("ascii"),
                     base64.b64encode(b'{"config":{"materialized":"table"}}').decode("ascii"),

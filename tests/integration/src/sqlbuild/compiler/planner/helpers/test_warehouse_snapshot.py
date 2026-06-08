@@ -70,7 +70,6 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
                     target_name="orders",
                     run_id="run_001",
                     query_hash="hash_a",
-                    ast_hash=None,
                     schema_fingerprint="schema_a",
                     query_sql="SELECT 1",
                     ts=datetime(2026, 1, 15, 12, 0, 0),

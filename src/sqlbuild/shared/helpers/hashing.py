@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 
 _WHITESPACE_RUN: re.Pattern[str] = re.compile(r"\s+")
 
@@ -24,20 +22,6 @@ def compute_query_hash(query_sql: str) -> str:
 
     normalized: str = normalize_query_sql(query_sql)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def compute_ast_hash(query_sql: str) -> str | None:
-    """Compute a stable hash from the SQLGlot-normalized AST."""
-
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
-        return None
-    try:
-        parsed: Any = sqlglot_module.parse_one(query_sql)
-    except Exception:
-        return None
-    normalized_sql: str = parsed.sql(pretty=False)
-    return hashlib.sha256(normalized_sql.encode("utf-8")).hexdigest()
 
 
 def compute_schema_fingerprint(columns: tuple[ColumnInfo, ...]) -> str:

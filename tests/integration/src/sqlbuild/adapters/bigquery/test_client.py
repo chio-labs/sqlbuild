@@ -876,7 +876,6 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
         target_name=test_case.expected_target_name,
         run_id="run-1",
         query_hash="query-hash",
-        ast_hash="ast-hash",
         schema_fingerprint="schema-hash",
         query_sql=test_case.query_sql,
         ts=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
