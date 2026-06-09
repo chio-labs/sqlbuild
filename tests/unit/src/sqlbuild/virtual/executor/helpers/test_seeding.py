@@ -70,13 +70,13 @@ class FakeSeedAdapter(BaseAdapter):
         self,
         connection: object,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists, statement_recorder
         self.drop_count += 1
-        self.executed_sql.append(f"DROP {target}")
+        self.executed_sql.append(f"DROP {destination}")
 
 
 class FakeStateBackend:

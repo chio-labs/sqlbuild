@@ -81,34 +81,34 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, sql, config
-        self.events.append(f"create:{target}")
-        if self.fail_on_create_target is not None and self.fail_on_create_target in target:
+        self.events.append(f"create:{destination}")
+        if self.fail_on_create_target is not None and self.fail_on_create_target in destination:
             raise RuntimeError("fixture create failed")
-        statement_recorder.record(f"CREATE TABLE {target}")
+        statement_recorder.record(f"CREATE TABLE {destination}")
 
     def drop(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists
-        self.events.append(f"drop:{target}")
-        statement_recorder.record(f"DROP TABLE {target}")
+        self.events.append(f"drop:{destination}")
+        statement_recorder.record(f"DROP TABLE {destination}")
 
     def load_seed(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -117,10 +117,10 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, file_path, columns, csv_settings, replace, infer_types
-        self.events.append(f"seed:{target}")
+        self.events.append(f"seed:{destination}")
         if self.fail_on_seed:
             raise RuntimeError("seed load failed")
-        statement_recorder.record(f"LOAD SEED {target}")
+        statement_recorder.record(f"LOAD SEED {destination}")
 
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         del connection, limit

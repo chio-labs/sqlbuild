@@ -114,7 +114,7 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
         if entry.destination.qualified_name is None:
             continue
         statements: tuple[str, ...] = adapter.render_create_function(
-            target=entry.destination.qualified_name,
+            destination=entry.destination.qualified_name,
             arguments=entry.arguments,
             returns=entry.returns,
             body_sql=entry.body_sql,
@@ -141,7 +141,7 @@ def _write_static_functions(
         if function.destination.qualified_name is None:
             continue
         statements: tuple[str, ...] = adapter.render_create_function(
-            target=function.destination.qualified_name,
+            destination=function.destination.qualified_name,
             arguments=function.arguments,
             returns=function.returns,
             body_sql=function.body_sql,

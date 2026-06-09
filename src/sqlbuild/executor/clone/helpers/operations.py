@@ -35,7 +35,7 @@ def clone_relation(
     try:
         adapter.drop(
             target_connection,
-            target=target_qualified,
+            destination=target_qualified,
             if_exists=True,
             statement_recorder=recorder,
         )
@@ -88,7 +88,7 @@ def recreate_view(
     try:
         adapter.create_view_as(
             target_connection,
-            target=qualified_name(adapter=adapter, entry=target_entry),
+            destination=qualified_name(adapter=adapter, entry=target_entry),
             sql=target_entry.resolved_sql,
             statement_recorder=recorder,
         )

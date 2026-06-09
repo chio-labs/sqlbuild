@@ -343,7 +343,7 @@ def _drop_logical_vde_views(
         )
         adapter.drop_view(
             connection,
-            target=resolve_relation_location_qualified_name(
+            destination=resolve_relation_location_qualified_name(
                 adapter=adapter, location=virtual_target
             ),
             if_exists=True,

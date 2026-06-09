@@ -329,7 +329,7 @@ def test_given_python_function_when_rendering_then_snowflake_returns_expected_dd
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="udf_db.udf_schema.is_positive_int",
+        destination="udf_db.udf_schema.is_positive_int",
         arguments=(FunctionArgument(name="a_string", type="STRING"),),
         returns="INTEGER",
         body_sql="def main(a_string):\n    return 1 if a_string else 0",
@@ -363,7 +363,7 @@ def test_given_table_function_when_rendering_then_snowflake_returns_expected_ddl
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="analytics.customer_orders",
+        destination="analytics.customer_orders",
         arguments=(FunctionArgument(name="p_customer_id", type="INTEGER"),),
         returns="TABLE",
         body_sql=("SELECT order_id FROM analytics.fact_orders\nWHERE customer_id = p_customer_id"),
@@ -459,7 +459,7 @@ def test_given_default_seed_csv_settings_when_loading_seed_then_uses_python_csv_
 
     adapter.load_seed(
         connection,
-        target="dev.waffle_types",
+        destination="dev.waffle_types",
         file_path=seed_file,
         columns=(
             ColumnInfo(name="id", type="INTEGER"),

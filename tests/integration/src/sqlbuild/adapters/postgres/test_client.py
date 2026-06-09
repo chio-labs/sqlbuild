@@ -118,10 +118,10 @@ def test_given_model_sql_when_building_then_postgres_creates_and_promotes_table(
     staging: str = qualified_name(schema=postgres_schema, name=f"{test_case.table_name}__staging")
 
     adapter.create_table_as(
-        connection, target=staging, sql=test_case.source_sql, statement_recorder=recorder
+        connection, destination=staging, sql=test_case.source_sql, statement_recorder=recorder
     )
     adapter.create_table_as(
-        connection, target=target, sql=f"SELECT * FROM {staging}", statement_recorder=recorder
+        connection, destination=target, sql=f"SELECT * FROM {staging}", statement_recorder=recorder
     )
     adapter.swap(connection, left=target, right=staging, statement_recorder=recorder)
 
@@ -161,7 +161,7 @@ def test_given_merge_sql_when_merging_then_postgres_upserts_without_constraint(
 
     adapter.merge(
         connection,
-        target=target,
+        destination=target,
         sql=test_case.merge_sql,
         unique_key=test_case.unique_key,
         statement_recorder=recorder,
@@ -632,7 +632,7 @@ def test_given_seed_csv_when_loading_then_postgres_inserts_all_rows(
 
     adapter.load_seed(
         connection,
-        target=target,
+        destination=target,
         file_path=seed_file,
         columns=(
             ColumnInfo(name="id", type="INTEGER"),

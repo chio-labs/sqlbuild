@@ -55,7 +55,7 @@ def seed_virtual_physical_version(
     ):
         adapter.drop(
             connection,
-            target=target,
+            destination=target,
             if_exists=True,
             statement_recorder=recorder,
         )
@@ -99,7 +99,7 @@ def _seed_physical_relation(
         cursor_start: str = _cursor_start_for_append_seed(entry=entry)
         adapter.create_table_as(
             connection,
-            target=destination,
+            destination=destination,
             sql=adapter.render_seed_select_before_cursor(
                 source=origin,
                 cursor_column=entry.cursor_column or "",
@@ -121,7 +121,7 @@ def _seed_physical_relation(
 
     adapter.create_table_as(
         connection,
-        target=destination,
+        destination=destination,
         sql=f"SELECT * FROM {origin}",
         statement_recorder=statement_recorder,
     )

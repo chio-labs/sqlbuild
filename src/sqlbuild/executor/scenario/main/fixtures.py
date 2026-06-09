@@ -45,7 +45,7 @@ def execute_scenario_fixture(
         ):
             adapter.create_table_as(
                 connection,
-                target=target_relation,
+                destination=target_relation,
                 sql=fixture_plan.sql,
                 config=None,
                 statement_recorder=statement_recorder,

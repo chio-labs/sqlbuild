@@ -45,14 +45,14 @@ def execute_scenario_cleanup(
                 if cleanup_target.materialization_type == MaterializationType.VIEW:
                     adapter.drop_view(
                         connection,
-                        target=cleanup_target.target_relation,
+                        destination=cleanup_target.target_relation,
                         if_exists=True,
                         statement_recorder=statement_recorder,
                     )
                 else:
                     adapter.drop(
                         connection,
-                        target=cleanup_target.target_relation,
+                        destination=cleanup_target.target_relation,
                         if_exists=True,
                         statement_recorder=statement_recorder,
                     )

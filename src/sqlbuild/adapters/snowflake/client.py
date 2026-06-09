@@ -166,49 +166,49 @@ class SnowflakeAdapter(BaseAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         column_sql: str = ""
         if columns is not None:
             column_sql = (
                 " (" + ", ".join(self.render_identifier(column) for column in columns) + ")"
             )
-        return (f"INSERT INTO {target}{column_sql} {sql}",)
+        return (f"INSERT INTO {destination}{column_sql} {sql}",)
 
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        staged: str = f"{target}__delete_insert"
+        staged: str = f"{destination}__delete_insert"
         key_condition: str = " AND ".join(
-            f"{target}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
+            f"{destination}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
             for k in unique_key
         )
-        create_staged: tuple[str, ...] = self.render_create_table_as(target=staged, sql=sql)
-        delete_sql: str = f"DELETE FROM {target} USING {staged} WHERE {key_condition}"
+        create_staged: tuple[str, ...] = self.render_create_table_as(destination=staged, sql=sql)
+        delete_sql: str = f"DELETE FROM {destination} USING {staged} WHERE {key_condition}"
         insert_stmts: tuple[str, ...] = self.render_append(
-            target=target,
+            destination=destination,
             sql=f"SELECT * FROM {staged}",
             columns=columns,
         )
-        drop_staged: tuple[str, ...] = self.render_drop(target=staged, if_exists=True)
+        drop_staged: tuple[str, ...] = self.render_drop(destination=staged, if_exists=True)
         return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
 
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -217,47 +217,52 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         quoted_cursor_column: str = self.render_identifier(cursor_column)
         delete_sql: str = (
-            f"DELETE FROM {target} WHERE {quoted_cursor_column} >= '{cursor_start}' "
+            f"DELETE FROM {destination} WHERE {quoted_cursor_column} >= '{cursor_start}' "
             f"AND {quoted_cursor_column} < '{cursor_end}'"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {target}",)
+        return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
     ) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
             for col in columns
         )
 
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
 
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            f"ALTER TABLE {destination} ALTER COLUMN "
+            f"{self.render_identifier(col.name)} TYPE {col.type}"
             for col in columns
         )
 
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -276,7 +281,7 @@ class SnowflakeAdapter(BaseAdapter):
             f"__source.{self.render_identifier(col)}" for col in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -290,12 +295,12 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -305,11 +310,11 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -319,7 +324,7 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -333,7 +338,7 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> None:
         del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            target=target,
+            destination=destination,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
@@ -352,11 +357,11 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -366,11 +371,13 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -472,7 +479,7 @@ class SnowflakeAdapter(BaseAdapter):
             origin=origin,
         )
         if remove_origin:
-            statements = (*statements, *self.render_drop(target=origin))
+            statements = (*statements, *self.render_drop(destination=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -482,12 +489,14 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -497,7 +506,7 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -505,7 +514,7 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target, sql=sql, unique_key=keys, columns=columns
+            destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
@@ -517,7 +526,7 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -526,7 +535,7 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
@@ -659,7 +668,7 @@ class SnowflakeAdapter(BaseAdapter):
             current_timestamp=current_timestamp,
         )
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
@@ -756,7 +765,7 @@ class SnowflakeAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_create_initial_historical_timestamp_changes_target(
         self,
@@ -777,7 +786,7 @@ class SnowflakeAdapter(BaseAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
@@ -980,7 +989,7 @@ class SnowflakeAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_check_snapshot_changes(
         self,
@@ -1443,7 +1452,7 @@ class SnowflakeAdapter(BaseAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1460,7 +1469,7 @@ class SnowflakeAdapter(BaseAdapter):
             column_sql: str = ", ".join(f"{column.name} {column.type}" for column in return_columns)
             del returns, runtime_version, entry_point, packages
             return (
-                f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+                f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
                 f"RETURNS TABLE ({column_sql})\n"
                 f"AS $$\n{body_sql}\n$$",
             )
@@ -1474,7 +1483,7 @@ class SnowflakeAdapter(BaseAdapter):
                 package_values: str = "','".join(packages)
                 package_clause = f"PACKAGES = ('{package_values}')\n"
             return (
-                f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+                f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
                 f"RETURNS {returns}\n"
                 "LANGUAGE PYTHON\n"
                 f"RUNTIME_VERSION = '{runtime_version}'\n"
@@ -1483,7 +1492,7 @@ class SnowflakeAdapter(BaseAdapter):
                 f"AS $$\n{body_sql}\n$$",
             )
         return (
-            f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+            f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
             f"RETURNS {returns}\n"
             "LANGUAGE SQL\n"
             f"AS $$\n{body_sql}\n$$",
@@ -1502,11 +1511,11 @@ class SnowflakeAdapter(BaseAdapter):
     def supports_durable_clone(self) -> bool:
         return True
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (
-            f"DROP TABLE{exists_clause} {target}",
-            f"DROP VIEW{exists_clause} {target}",
+            f"DROP TABLE{exists_clause} {destination}",
+            f"DROP VIEW{exists_clause} {destination}",
         )
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
@@ -1523,7 +1532,9 @@ class SnowflakeAdapter(BaseAdapter):
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         if hard_copy:
-            return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+            return self.render_create_table_as(
+                destination=destination, sql=f"SELECT * FROM {origin}"
+            )
         return (f"CREATE OR REPLACE TABLE {destination} CLONE {origin}",)
 
     def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
@@ -1584,7 +1595,7 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1596,19 +1607,19 @@ class SnowflakeAdapter(BaseAdapter):
         if replace:
             self.drop(
                 connection,
-                target=target,
+                destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
-        create_sql: str = f"CREATE TABLE {target} ({column_defs})"
+        create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
         self.execute(connection, create_sql)
 
         column_names: tuple[str, ...] = tuple(column.name for column in columns)
         placeholders: str = ", ".join(["%s"] * len(column_names))
         insert_sql: str = (
-            f"INSERT INTO {target} ({', '.join(column_names)}) VALUES ({placeholders})"
+            f"INSERT INTO {destination} ({', '.join(column_names)}) VALUES ({placeholders})"
         )
         rows: list[tuple[object, ...]] = []
         with file_path.open(
@@ -1649,7 +1660,7 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1657,7 +1668,7 @@ class SnowflakeAdapter(BaseAdapter):
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_merge(
-            target=target, sql=sql, unique_key=keys, source_columns=source_columns
+            destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         statement: str
@@ -1681,11 +1692,13 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_add_columns(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1695,12 +1708,12 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop_columns(
-            target=target, column_names=column_names
+            destination=destination, column_names=column_names
         )
         statement_recorder.record_many(statements)
         statement: str
@@ -1711,11 +1724,13 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_alter_column_types(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:

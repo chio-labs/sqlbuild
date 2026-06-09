@@ -66,7 +66,7 @@ def execute_function(
         )
         adapter.create_function(
             connection,
-            target=function_entry.destination.qualified_name,
+            destination=function_entry.destination.qualified_name,
             arguments=function_entry.arguments,
             returns=function_entry.returns,
             body_sql=function_entry.body_sql,

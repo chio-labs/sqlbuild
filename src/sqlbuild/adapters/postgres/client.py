@@ -336,8 +336,8 @@ class PostgresAdapter(BaseAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
@@ -348,7 +348,7 @@ class PostgresAdapter(BaseAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -371,48 +371,48 @@ class PostgresAdapter(BaseAdapter):
         else:
             returns_clause = f"RETURNS {returns}"
         return (
-            f"CREATE OR REPLACE FUNCTION {target}({arg_sql})\n"
+            f"CREATE OR REPLACE FUNCTION {destination}({arg_sql})\n"
             f"{returns_clause}\n"
             f"LANGUAGE SQL AS $$\n{body_sql}\n$$",
         )
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         column_sql: str = ""
         if columns is not None:
             column_sql = (
                 " (" + ", ".join(self.render_identifier(column) for column in columns) + ")"
             )
-        return (f"INSERT INTO {target}{column_sql} {sql}",)
+        return (f"INSERT INTO {destination}{column_sql} {sql}",)
 
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        staged: str = f"{target}__delete_insert"
+        staged: str = f"{destination}__delete_insert"
         key_condition: str = " AND ".join(
-            f"{target}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
+            f"{destination}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
             for k in unique_key
         )
-        create_staged: tuple[str, ...] = self.render_create_table_as(target=staged, sql=sql)
-        delete_sql: str = f"DELETE FROM {target} USING {staged} WHERE {key_condition}"
+        create_staged: tuple[str, ...] = self.render_create_table_as(destination=staged, sql=sql)
+        delete_sql: str = f"DELETE FROM {destination} USING {staged} WHERE {key_condition}"
         insert_stmts: tuple[str, ...] = self.render_append(
-            target=target,
+            destination=destination,
             sql=f"SELECT * FROM {staged}",
             columns=columns,
         )
-        drop_staged: tuple[str, ...] = self.render_drop(target=staged, if_exists=True)
+        drop_staged: tuple[str, ...] = self.render_drop(destination=staged, if_exists=True)
         return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
 
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -421,19 +421,21 @@ class PostgresAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         quoted_cursor_column: str = self.render_identifier(cursor_column)
         delete_sql: str = (
-            f"DELETE FROM {target} WHERE {quoted_cursor_column} >= '{cursor_start}' "
+            f"DELETE FROM {destination} WHERE {quoted_cursor_column} >= '{cursor_start}' "
             f"AND {quoted_cursor_column} < '{cursor_end}'"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP TABLE{exists_clause} {target}",)
+        return (f"DROP TABLE{exists_clause} {destination}",)
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {target}",)
+        return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         staging: str = f"{left}__swap_staging"
@@ -451,10 +453,10 @@ class PostgresAdapter(BaseAdapter):
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -494,34 +496,37 @@ class PostgresAdapter(BaseAdapter):
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
     ) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
             for col in columns
         )
 
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
 
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            f"ALTER TABLE {destination} ALTER COLUMN "
+            f"{self.render_identifier(col.name)} TYPE {col.type}"
             for col in columns
         )
 
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -540,7 +545,7 @@ class PostgresAdapter(BaseAdapter):
             f"__source.{self.render_identifier(col)}" for col in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -554,12 +559,12 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -569,11 +574,11 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -583,7 +588,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -597,7 +602,7 @@ class PostgresAdapter(BaseAdapter):
     ) -> None:
         del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            target=target,
+            destination=destination,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
@@ -616,11 +621,11 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -630,11 +635,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -776,7 +783,7 @@ class PostgresAdapter(BaseAdapter):
             origin=origin,
         )
         if remove_origin:
-            statements = (*statements, *self.render_drop(target=origin))
+            statements = (*statements, *self.render_drop(destination=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -786,12 +793,14 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -801,7 +810,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -809,7 +818,7 @@ class PostgresAdapter(BaseAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target, sql=sql, unique_key=keys, columns=columns
+            destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
@@ -821,7 +830,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -830,7 +839,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
@@ -988,7 +997,7 @@ class PostgresAdapter(BaseAdapter):
             current_timestamp=self.render_current_timestamp(),
         )
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
@@ -1158,7 +1167,7 @@ class PostgresAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_create_initial_historical_timestamp_changes_target(
         self,
@@ -1179,7 +1188,7 @@ class PostgresAdapter(BaseAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_create_initial_historical_check_snapshot_target(
         self,
@@ -1204,7 +1213,7 @@ class PostgresAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
@@ -1468,10 +1477,10 @@ class PostgresAdapter(BaseAdapter):
         )
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (
-            f"DROP TABLE IF EXISTS {target}",
-            f"CREATE TABLE {target} AS {sql}",
+            f"DROP TABLE IF EXISTS {destination}",
+            f"CREATE TABLE {destination} AS {sql}",
         )
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
@@ -1482,7 +1491,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1494,19 +1503,19 @@ class PostgresAdapter(BaseAdapter):
         if replace:
             self.drop(
                 connection,
-                target=target,
+                destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
-        create_sql: str = f"CREATE TABLE {target} ({column_defs})"
+        create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
         self.execute(connection, create_sql)
 
         column_names: tuple[str, ...] = tuple(col.name for col in columns)
         placeholders: str = ", ".join(["%s"] * len(column_names))
         insert_sql: str = (
-            f"INSERT INTO {target} ({', '.join(column_names)}) VALUES ({placeholders})"
+            f"INSERT INTO {destination} ({', '.join(column_names)}) VALUES ({placeholders})"
         )
         rows: list[tuple[object, ...]] = []
         with file_path.open(
@@ -1548,7 +1557,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1568,15 +1577,15 @@ class PostgresAdapter(BaseAdapter):
                 for col in non_key_columns
             )
             update_sql: str = (
-                f"UPDATE {target} AS __target SET {update_set} "
+                f"UPDATE {destination} AS __target SET {update_set} "
                 f"FROM {source_select_sql} WHERE {key_match_sql}"
             )
             statement_recorder.record(update_sql)
             self.execute(connection, update_sql)
         insert_sql: str = (
-            f"INSERT INTO {target} ({col_list}) "
+            f"INSERT INTO {destination} ({col_list}) "
             f"SELECT {col_list} FROM {source_select_sql} "
-            f"WHERE NOT EXISTS (SELECT 1 FROM {target} AS __target WHERE {key_match_sql})"
+            f"WHERE NOT EXISTS (SELECT 1 FROM {destination} AS __target WHERE {key_match_sql})"
         )
         statement_recorder.record(insert_sql)
         self.execute(connection, insert_sql)
@@ -1585,11 +1594,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_add_columns(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         for stmt in statements:
             self.execute(connection, stmt)
@@ -1598,12 +1609,12 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop_columns(
-            target=target, column_names=column_names
+            destination=destination, column_names=column_names
         )
         statement_recorder.record_many(statements)
         for stmt in statements:
@@ -1613,11 +1624,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_alter_column_types(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         for stmt in statements:
             self.execute(connection, stmt)

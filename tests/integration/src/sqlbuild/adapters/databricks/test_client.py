@@ -677,14 +677,14 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
 
     adapter.load_seed(
         connection,
-        target=seed_target,
+        destination=seed_target,
         file_path=seed_path,
         columns=(ColumnInfo(name="id", type="INTEGER"), ColumnInfo(name="name", type="VARCHAR")),
         statement_recorder=recorder,
     )
     adapter.create_table_as(
         connection,
-        target=table_target,
+        destination=table_target,
         sql=f"SELECT id, name FROM {seed_target} ORDER BY id",
         statement_recorder=recorder,
     )
@@ -734,7 +734,7 @@ def test_given_merge_source_when_merging_then_target_matches_expected_rows(
 
     adapter.merge(
         connection,
-        target=target_name,
+        destination=target_name,
         sql=test_case.source_sql,
         unique_key=test_case.unique_key,
         statement_recorder=build_statement_recorder(),

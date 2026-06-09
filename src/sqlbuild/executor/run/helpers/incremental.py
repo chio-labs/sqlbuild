@@ -134,13 +134,13 @@ def execute_incremental_entry(
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
             adapter.drop(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
             adapter.create_table_as(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 sql=resolved_sql,
                 statement_recorder=statement_recorder,
             )
@@ -385,7 +385,7 @@ def execute_incremental_entry(
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
         adapter.drop(
             connection,
-            target=delta_qualified,
+            destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
         )
@@ -472,7 +472,7 @@ def _apply_schema_change(
         if added:
             adapter.add_columns(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
             )
@@ -487,21 +487,21 @@ def _apply_schema_change(
         if added:
             adapter.add_columns(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
             )
         if removed:
             adapter.drop_columns(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 column_names=tuple(removed),
                 statement_recorder=statement_recorder,
             )
         if type_changed:
             adapter.alter_column_types(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 columns=tuple(type_changed),
                 statement_recorder=statement_recorder,
             )
@@ -541,7 +541,7 @@ def _execute_dml(
     if strategy == IncrementalStrategy.APPEND:
         adapter.append(
             connection,
-            target=target_qualified,
+            destination=target_qualified,
             sql=dml_sql,
             columns=dml_columns,
             statement_recorder=statement_recorder,
@@ -559,7 +559,7 @@ def _execute_dml(
                 )
             adapter.delete_insert_cursor(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 sql=dml_sql,
                 cursor_column=cursor_column,
                 cursor_start=cursor_start,
@@ -570,7 +570,7 @@ def _execute_dml(
         else:
             adapter.delete_insert(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 sql=dml_sql,
                 unique_key=unique_key,
                 columns=dml_columns,
@@ -583,7 +583,7 @@ def _execute_dml(
         merge_sql: str = f"SELECT {merge_projection} FROM {delta_qualified}"
         adapter.merge(
             connection,
-            target=target_qualified,
+            destination=target_qualified,
             sql=merge_sql,
             unique_key=unique_key,
             statement_recorder=statement_recorder,

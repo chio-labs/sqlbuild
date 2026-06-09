@@ -191,12 +191,12 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -206,11 +206,11 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -220,7 +220,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -234,7 +234,7 @@ class BigQueryAdapter(BaseAdapter):
     ) -> None:
         del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            target=target,
+            destination=destination,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
@@ -253,11 +253,11 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -267,11 +267,13 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -329,12 +331,14 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -344,7 +348,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -354,7 +358,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -440,31 +444,34 @@ class BigQueryAdapter(BaseAdapter):
         return self.sql_analysis_dialect_name
 
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
             for col in columns
         )
 
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
 
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            f"ALTER TABLE {destination} ALTER COLUMN "
+            f"{self.render_identifier(col.name)} TYPE {col.type}"
             for col in columns
         )
 
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -483,7 +490,7 @@ class BigQueryAdapter(BaseAdapter):
             f"__source.{self.render_identifier(col)}" for col in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -604,7 +611,7 @@ class BigQueryAdapter(BaseAdapter):
             current_timestamp=current_timestamp,
         )
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
@@ -701,7 +708,7 @@ class BigQueryAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_create_initial_historical_timestamp_changes_target(
         self,
@@ -722,7 +729,7 @@ class BigQueryAdapter(BaseAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
@@ -925,7 +932,7 @@ class BigQueryAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_check_snapshot_changes(
         self,
@@ -1243,11 +1250,11 @@ class BigQueryAdapter(BaseAdapter):
             sql += f" OPTIONS(location = '{self._location}')"
         return (sql,)
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {self._quote_identifier_path(target)} AS {sql}",)
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {self._quote_identifier_path(destination)} AS {sql}",)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {self._quote_identifier_path(target)} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {self._quote_identifier_path(destination)} AS {sql}",)
 
     def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
@@ -1258,7 +1265,7 @@ class BigQueryAdapter(BaseAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1274,7 +1281,7 @@ class BigQueryAdapter(BaseAdapter):
                 raise AdapterUserError("BigQuery table functions must use SQL language")
             del returns, runtime_version, entry_point, packages
             return (
-                f"CREATE OR REPLACE TABLE FUNCTION {self._quote_identifier_path(target)}"
+                f"CREATE OR REPLACE TABLE FUNCTION {self._quote_identifier_path(destination)}"
                 f"({argument_sql})\n"
                 f"AS (\n{body_sql}\n)",
             )
@@ -1289,7 +1296,7 @@ class BigQueryAdapter(BaseAdapter):
                 package_sql = f",\n  packages = [{package_values}]"
             return (
                 "CREATE OR REPLACE FUNCTION "
-                f"{self._quote_identifier_path(target)}({argument_sql})\n"
+                f"{self._quote_identifier_path(destination)}({argument_sql})\n"
                 f"RETURNS {returns}\n"
                 "LANGUAGE python\n"
                 "OPTIONS(\n"
@@ -1300,15 +1307,16 @@ class BigQueryAdapter(BaseAdapter):
                 f"AS r'''\n{body_sql}\n'''",
             )
         return (
-            f"CREATE OR REPLACE FUNCTION {self._quote_identifier_path(target)}({argument_sql})\n"
+            "CREATE OR REPLACE FUNCTION "
+            f"{self._quote_identifier_path(destination)}({argument_sql})\n"
             f"RETURNS {returns}\n"
             f"AS (\n{body_sql}\n)",
         )
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
-        quoted_target: str = self._quote_identifier_path(target)
+        quoted_target: str = self._quote_identifier_path(destination)
         if columns is not None:
             col_list: str = ", ".join(self.render_identifier(column) for column in columns)
             return (f"INSERT INTO {quoted_target} ({col_list}) {sql}",)
@@ -1317,7 +1325,7 @@ class BigQueryAdapter(BaseAdapter):
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1338,7 +1346,7 @@ class BigQueryAdapter(BaseAdapter):
             f"{self._render_cursor_bound_string(cursor_end)}"
         )
         return (
-            f"MERGE {self._quote_identifier_path(target)} AS __target "
+            f"MERGE {self._quote_identifier_path(destination)} AS __target "
             f"USING ({sql}) AS __source ON FALSE "
             f"WHEN NOT MATCHED BY TARGET THEN {insert_clause} "
             f"WHEN NOT MATCHED BY SOURCE AND {cursor_filter} THEN DELETE",
@@ -1347,45 +1355,47 @@ class BigQueryAdapter(BaseAdapter):
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         if columns is None:
-            quoted_target: str = self._quote_identifier_path(target)
+            quoted_target: str = self._quote_identifier_path(destination)
             staged: str = f"{quoted_target}__delete_insert"
             key_condition: str = " AND ".join(
                 f"{quoted_target}.{self.render_identifier(k)} = "
                 f"{staged}.{self.render_identifier(k)}"
                 for k in unique_key
             )
-            create_staged: tuple[str, ...] = self.render_create_table_as(target=staged, sql=sql)
+            create_staged: tuple[str, ...] = self.render_create_table_as(
+                destination=staged, sql=sql
+            )
             delete_sql: str = f"DELETE FROM {quoted_target} USING {staged} WHERE {key_condition}"
             insert_stmts: tuple[str, ...] = self.render_append(
-                target=quoted_target,
+                destination=quoted_target,
                 sql=f"SELECT * FROM {staged}",
                 columns=columns,
             )
-            drop_staged: tuple[str, ...] = self.render_drop(target=staged, if_exists=True)
+            drop_staged: tuple[str, ...] = self.render_drop(destination=staged, if_exists=True)
             return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
         return self.render_merge(
-            target=target,
+            destination=destination,
             sql=sql,
             unique_key=unique_key,
             source_columns=columns,
         )
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (
-            f"DROP TABLE{exists_clause} {self._quote_identifier_path(target)}",
-            f"DROP VIEW{exists_clause} {self._quote_identifier_path(target)}",
+            f"DROP TABLE{exists_clause} {self._quote_identifier_path(destination)}",
+            f"DROP VIEW{exists_clause} {self._quote_identifier_path(destination)}",
         )
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {self._quote_identifier_path(target)}",)
+        return (f"DROP VIEW{exists_clause} {self._quote_identifier_path(destination)}",)
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         destination_name: str = self._strip_identifier_quotes(destination).split(".")[-1]
@@ -1406,7 +1416,7 @@ class BigQueryAdapter(BaseAdapter):
                 f"CREATE TABLE {self._quote_identifier_path(destination)} "
                 f"CLONE {self._quote_identifier_path(origin)}",
             )
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (
@@ -1517,7 +1527,7 @@ class BigQueryAdapter(BaseAdapter):
             statement_recorder=statement_recorder,
         )
         if remove_origin:
-            self.drop(connection, target=origin, statement_recorder=statement_recorder)
+            self.drop(connection, destination=origin, statement_recorder=statement_recorder)
 
     def relation_exists(
         self,
@@ -1689,7 +1699,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: _BigQueryConnection,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1717,12 +1727,12 @@ class BigQueryAdapter(BaseAdapter):
         if csv_settings.encoding is not None:
             job_config.encoding = csv_settings.encoding
         statement_recorder.record(
-            f"LOAD CSV {file_path} INTO {target} ({', '.join(col.name for col in columns)})"
+            f"LOAD CSV {file_path} INTO {destination} ({', '.join(col.name for col in columns)})"
         )
         with file_path.open("rb") as seed_file:
             connection.client.load_table_from_file(
                 seed_file,
-                self._strip_identifier_quotes(target),
+                self._strip_identifier_quotes(destination),
                 job_config=job_config,
                 location=connection.location,
             ).result()
@@ -1731,13 +1741,13 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: _BigQueryConnection,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = tuple(
             "ALTER TABLE "
-            f"{self._quote_identifier_path(target)} ADD COLUMN "
+            f"{self._quote_identifier_path(destination)} ADD COLUMN "
             f"{self.render_identifier(column.name)} {self._to_bigquery_type(column.type)}"
             for column in columns
         )
@@ -1750,7 +1760,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1758,7 +1768,7 @@ class BigQueryAdapter(BaseAdapter):
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_merge(
-            target=target, sql=sql, unique_key=keys, source_columns=source_columns
+            destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         statement: str
@@ -1769,7 +1779,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -1779,7 +1789,7 @@ class BigQueryAdapter(BaseAdapter):
         if columns is None:
             columns = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target,
+            destination=destination,
             sql=sql,
             unique_key=keys,
             columns=columns,
@@ -1793,7 +1803,7 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1804,7 +1814,7 @@ class BigQueryAdapter(BaseAdapter):
         if columns is None:
             columns = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,

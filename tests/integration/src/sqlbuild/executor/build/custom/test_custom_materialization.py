@@ -500,7 +500,7 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         )
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )

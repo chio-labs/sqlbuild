@@ -49,7 +49,7 @@ def validate_and_evolve_existing_target(
     if new_columns:
         adapter.add_columns(
             connection,
-            target=target,
+            destination=target,
             columns=tuple(new_columns),
             statement_recorder=statement_recorder,
         )

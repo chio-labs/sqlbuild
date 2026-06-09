@@ -108,7 +108,7 @@ class SeedPipelineTestAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -117,9 +117,9 @@ class SeedPipelineTestAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         del file_path, columns, csv_settings, replace, infer_types, statement_recorder
-        if self.barrier is not None and target in self.barrier_targets:
+        if self.barrier is not None and destination in self.barrier_targets:
             self.barrier.wait(timeout=1)
-        self.loads.append((target, connection))
+        self.loads.append((destination, connection))
 
 
 class ScenarioPipelinePlanBuilder:

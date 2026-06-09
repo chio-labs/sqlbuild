@@ -2639,7 +2639,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
     def append_spy(
         connection: object,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: object,
@@ -2649,7 +2649,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
     def merge_spy(
         connection: object,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         statement_recorder: object,
@@ -2659,7 +2659,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
     def delete_insert_cursor_spy(
         connection: object,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,

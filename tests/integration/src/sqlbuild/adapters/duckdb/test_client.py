@@ -766,7 +766,7 @@ def test_given_sql_when_creating_table_as_then_table_is_writable(
 ) -> None:
     adapter.create_table_as(
         connection,
-        target="result",
+        destination="result",
         sql="SELECT * FROM (VALUES (1), (2), (3)) AS t(id)",
         statement_recorder=StatementRecorder(),
     )
@@ -806,7 +806,7 @@ def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
 
     adapter.create_table_as(
         connection,
-        target=test_case.target,
+        destination=test_case.target,
         sql=test_case.sql,
         statement_recorder=recorder,
     )
@@ -852,7 +852,7 @@ def test_given_statement_recorder_when_delete_inserting_then_records_expected_sq
 
     adapter.delete_insert(
         connection,
-        target=test_case.target,
+        destination=test_case.target,
         sql=test_case.sql,
         unique_key=test_case.unique_key or "id",
         statement_recorder=recorder,
@@ -886,7 +886,7 @@ def test_given_source_table_when_creating_view_then_view_reflects_source(
         connection.execute(statement)
     adapter.create_view_as(
         connection,
-        target="result_view",
+        destination="result_view",
         sql="SELECT id FROM source",
         statement_recorder=StatementRecorder(),
     )
@@ -915,7 +915,7 @@ def test_given_existing_table_when_dropping_then_table_no_longer_exists(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.drop(connection, target=test_case.target, statement_recorder=StatementRecorder())
+    adapter.drop(connection, destination=test_case.target, statement_recorder=StatementRecorder())
 
     result: bool = adapter.relation_exists(
         connection, database=None, schema=None, name=test_case.target
@@ -1101,7 +1101,7 @@ def test_given_existing_table_when_appending_then_row_count_increases(
         connection.execute(statement)
     adapter.append(
         connection,
-        target="append_t",
+        destination="append_t",
         sql="SELECT * FROM (VALUES (2), (3)) AS t(id)",
         statement_recorder=StatementRecorder(),
     )
@@ -1176,7 +1176,7 @@ def test_given_target_when_delete_inserting_then_matching_rows_replaced(
         connection.execute(statement)
     adapter.delete_insert(
         connection,
-        target="di_target",
+        destination="di_target",
         sql=test_case.sql,
         unique_key=test_case.unique_key,
         statement_recorder=StatementRecorder(),
@@ -1203,7 +1203,7 @@ def test_given_target_and_source_when_merging_then_upserts_correctly(
         connection.execute(statement)
     adapter.merge(
         connection,
-        target="merge_target",
+        destination="merge_target",
         sql=test_case.source_sql,
         unique_key=test_case.unique_key,
         statement_recorder=StatementRecorder(),
@@ -1233,7 +1233,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
     first_recorder: StatementRecorder = StatementRecorder()
     adapter.load_seed(
         connection,
-        target="seed_table",
+        destination="seed_table",
         file_path=csv_path,
         columns=test_case.columns,
         csv_settings=test_case.csv_settings,
@@ -1242,7 +1242,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
     )
     adapter.load_seed(
         connection,
-        target="seed_table",
+        destination="seed_table",
         file_path=csv_path,
         columns=test_case.columns,
         csv_settings=test_case.csv_settings,
@@ -1386,7 +1386,7 @@ def test_given_failing_insert_when_delete_inserting_then_original_rows_preserved
     with pytest.raises(duckdb.ConstraintException):
         adapter.delete_insert(
             connection,
-            target=test_case.target,
+            destination=test_case.target,
             sql=test_case.source_sql,
             unique_key=test_case.unique_key,
             statement_recorder=StatementRecorder(),
@@ -1430,7 +1430,7 @@ def test_given_failing_insert_when_delete_insert_cursor_then_original_rows_prese
     with pytest.raises(duckdb.ConstraintException):
         adapter.delete_insert_cursor(
             connection,
-            target=test_case.target,
+            destination=test_case.target,
             sql=test_case.source_sql,
             cursor_column="cursor_ts",
             cursor_start="2024-01-01",

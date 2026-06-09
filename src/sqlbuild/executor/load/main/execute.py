@@ -240,7 +240,7 @@ def execute_source_load(
         )
         adapter.drop(
             connection,
-            target=staging,
+            destination=staging,
             if_exists=True,
             statement_recorder=statement_recorder,
         )
@@ -248,7 +248,7 @@ def execute_source_load(
         try:
             adapter.drop(
                 connection,
-                target=staging,
+                destination=staging,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
@@ -324,7 +324,7 @@ def _apply_source_write_strategy(
     if source_entry.write_strategy == SourceWriteStrategy.APPEND:
         adapter.append(
             connection,
-            target=target,
+            destination=target,
             sql=staging_sql,
             columns=tuple(column.name for column in staging_columns),
             statement_recorder=statement_recorder,
@@ -333,7 +333,7 @@ def _apply_source_write_strategy(
     if source_entry.write_strategy == SourceWriteStrategy.MERGE:
         adapter.merge(
             connection,
-            target=target,
+            destination=target,
             sql=staging_sql,
             unique_key=source_entry.unique_key,
             statement_recorder=statement_recorder,
@@ -356,7 +356,7 @@ def _apply_source_write_strategy(
             return
         adapter.delete_insert_cursor(
             connection,
-            target=target,
+            destination=target,
             sql=staging_sql,
             cursor_column=source_entry.cursor_column,
             cursor_start=format_cursor_bound(cursor_start),

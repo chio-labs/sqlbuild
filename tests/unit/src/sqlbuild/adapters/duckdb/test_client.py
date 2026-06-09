@@ -122,7 +122,7 @@ def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
     adapter: DuckDbAdapter = DuckDbAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="main.customer_orders",
+        destination="main.customer_orders",
         arguments=(FunctionArgument(name="p_customer_id", type="INTEGER"),),
         returns="TABLE",
         body_sql="SELECT order_id FROM main.fact_orders\nWHERE customer_id = p_customer_id",

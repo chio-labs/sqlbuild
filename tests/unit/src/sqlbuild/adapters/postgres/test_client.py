@@ -57,7 +57,7 @@ def test_given_table_target_when_rendering_create_then_postgres_drops_before_cre
     adapter: PostgresAdapter = PostgresAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_table_as(
-        target=test_case.target,
+        destination=test_case.target,
         sql=test_case.sql,
     )
 
@@ -86,7 +86,7 @@ def test_given_sql_function_when_rendering_create_then_postgres_declares_languag
     adapter: PostgresAdapter = PostgresAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="public.is_completed_order",
+        destination="public.is_completed_order",
         arguments=(FunctionArgument(name="order_status", type="TEXT"),),
         returns="BOOLEAN",
         body_sql="SELECT order_status = 'completed'",
@@ -327,7 +327,7 @@ def test_given_seed_csv_when_loading_then_postgres_uses_executemany(
 
     adapter.load_seed(
         connection,
-        target="public.waffle_types",
+        destination="public.waffle_types",
         file_path=seed_file,
         columns=(
             ColumnInfo(name="id", type="INTEGER"),

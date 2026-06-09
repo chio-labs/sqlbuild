@@ -91,7 +91,7 @@ def test_given_table_target_when_rendering_create_then_sqlserver_uses_select_int
     adapter: SqlServerAdapter = SqlServerAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_table_as(
-        target=test_case.target,
+        destination=test_case.target,
         sql=test_case.sql,
     )
 
@@ -121,7 +121,7 @@ def test_given_sql_function_when_rendering_create_then_sqlserver_declares_functi
     adapter: SqlServerAdapter = SqlServerAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="dbo.is_completed_order",
+        destination="dbo.is_completed_order",
         arguments=(FunctionArgument(name="order_status", type="NVARCHAR(MAX)"),),
         returns="BIT",
         body_sql="SELECT order_status = 'completed'",
