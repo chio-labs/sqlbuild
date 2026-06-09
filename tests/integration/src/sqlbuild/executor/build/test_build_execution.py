@@ -433,7 +433,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         ),
     ),
     BuildExecutionTestCase(
-        description="direct mode warn audit records warning and build succeeds",
+        description="standard mode warn audit records warning and build succeeds",
         project_files={
             "sqlbuild_project.toml": (
                 'name = "demo"\n'
@@ -470,7 +470,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         ),
     ),
     BuildExecutionTestCase(
-        description="direct mode with passing audit creates table",
+        description="standard mode with passing audit creates table",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 5 AS id",
@@ -827,7 +827,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_missing_relations=("main.stg_orders", "main.orders"),
     ),
     BuildExecutionTestCase(
-        description="direct mode failing audit leaves target updated but build fails",
+        description="standard mode failing audit leaves target updated but build fails",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",

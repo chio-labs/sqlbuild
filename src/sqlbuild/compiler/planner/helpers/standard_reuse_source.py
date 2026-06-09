@@ -1,4 +1,4 @@
-"""Direct target reuse source-state helpers."""
+"""Standard target reuse source-state helpers."""
 
 from __future__ import annotations
 
@@ -16,16 +16,16 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import FingerprintSet
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
-    DirectReuseSourceModelSnapshot,
-    DirectReuseSourceSnapshot,
     PlannerScope,
+    StandardReuseSourceModelSnapshot,
+    StandardReuseSourceSnapshot,
 )
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from sqlbuild.spec.models.targets import resolve_target_config
 
 
-def build_direct_reuse_source_snapshot(
+def build_standard_reuse_source_snapshot(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
@@ -33,8 +33,8 @@ def build_direct_reuse_source_snapshot(
     scope: PlannerScope,
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
-) -> DirectReuseSourceSnapshot | None:
-    """Read source-target fingerprints and model relation existence for direct reuse."""
+) -> StandardReuseSourceSnapshot | None:
+    """Read source-target fingerprints and model relation existence for standard reuse."""
 
     if project.effective_target_name is None or project_config is None or local_config is None:
         return None
@@ -94,7 +94,7 @@ def build_direct_reuse_source_snapshot(
             "the expected version."
         ) from error
 
-    model_snapshots: dict[str, DirectReuseSourceModelSnapshot] = {}
+    model_snapshots: dict[str, StandardReuseSourceModelSnapshot] = {}
     model: CompiledModel
     for model in project.models:
         if model.key not in scope.selected_keys:
@@ -105,7 +105,7 @@ def build_direct_reuse_source_snapshot(
             source_target=source_target,
             source_vars=source_vars,
         )
-        model_snapshots[model.name] = DirectReuseSourceModelSnapshot(
+        model_snapshots[model.name] = StandardReuseSourceModelSnapshot(
             model_name=model.name,
             destination=destination,
             relation_exists=adapter.relation_exists(
@@ -120,7 +120,7 @@ def build_direct_reuse_source_snapshot(
                 else None
             ),
         )
-    return DirectReuseSourceSnapshot(
+    return StandardReuseSourceSnapshot(
         target_name=source_target_name,
         fingerprint_database=source_database,
         fingerprint_schema=source_schema,

@@ -7,7 +7,7 @@ import pytest
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.changes_only import (
-    build_direct_identity_stale_model_names,
+    build_standard_identity_stale_model_names,
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
 )
@@ -23,8 +23,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
+    StandardSourceFreshnessPlanningResult,
+    StandardSourceFreshnessPropagationResult,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     DirectIdentityStaleModelNamesTestCase,
@@ -93,7 +93,7 @@ def test_given_identity_hashes_when_collecting_stale_models_then_returns_missing
         execution_order=(),
     )
 
-    result: frozenset[str] = build_direct_identity_stale_model_names(
+    result: frozenset[str] = build_standard_identity_stale_model_names(
         scope=scope,
         expected_version_hashes=test_case.expected_version_hashes,
         built_version_hashes=test_case.built_version_hashes,
@@ -234,8 +234,8 @@ def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
                 ),
             }
         ),
-        source_freshness=DirectSourceFreshnessPlanningResult(
-            propagation=DirectSourceFreshnessPropagationResult(
+        source_freshness=StandardSourceFreshnessPlanningResult(
+            propagation=StandardSourceFreshnessPropagationResult(
                 stale_model_names=frozenset({"unchanged_model"}),
             ),
         ),

@@ -1,1 +1,1 @@
-"""Direct source freshness state package."""
+"""Standard source freshness state package."""

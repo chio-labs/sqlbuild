@@ -15,12 +15,12 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
 from sqlbuild.compiler.source_freshness.main.planning import (
-    build_direct_source_freshness_planning_result,
+    build_standard_source_freshness_planning_result,
 )
 from sqlbuild.compiler.source_freshness.main.propagation import (
-    build_direct_source_freshness_propagation_result,
+    build_standard_source_freshness_propagation_result,
 )
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 
 
 def build_planner_source_freshness_result(
@@ -30,11 +30,11 @@ def build_planner_source_freshness_result(
     connection: Any,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
-) -> DirectSourceFreshnessPlanningResult:
-    """Build direct source freshness comparison data for planner output."""
+) -> StandardSourceFreshnessPlanningResult:
+    """Build standard source freshness comparison data for planner output."""
 
-    source_freshness: DirectSourceFreshnessPlanningResult = (
-        build_direct_source_freshness_planning_result(
+    source_freshness: StandardSourceFreshnessPlanningResult = (
+        build_standard_source_freshness_planning_result(
             adapter=adapter,
             connection=connection,
             sources=tuple(relations.source_read_map.values()),
@@ -47,7 +47,7 @@ def build_planner_source_freshness_result(
     )
     return replace(
         source_freshness,
-        propagation=build_direct_source_freshness_propagation_result(
+        propagation=build_standard_source_freshness_propagation_result(
             source_freshness=source_freshness,
             scope=scope,
         ),

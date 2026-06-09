@@ -18,15 +18,9 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner.helpers.changes_only import (
-    build_direct_identity_stale_model_names,
+    build_standard_identity_stale_model_names,
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
-)
-from sqlbuild.compiler.planner.helpers.direct_reuse_decisions import (
-    build_direct_reuse_decisions,
-)
-from sqlbuild.compiler.planner.helpers.direct_reuse_source import (
-    build_direct_reuse_source_snapshot,
 )
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
@@ -35,24 +29,30 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_source_freshness_result
+from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
+    build_standard_reuse_decisions,
+)
+from sqlbuild.compiler.planner.helpers.standard_reuse_source import (
+    build_standard_reuse_source_snapshot,
+)
 from sqlbuild.compiler.planner.helpers.version_identity import (
-    DirectModelVersionIdentities,
-    build_direct_model_version_identities,
+    StandardModelVersionIdentities,
+    build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
-    DirectReuseDecisionResults,
-    DirectReuseSourceSnapshot,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
     PlannerResolvedActions,
     PlannerScope,
     PlanOutput,
+    StandardReuseDecisionResults,
+    StandardReuseSourceSnapshot,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -117,10 +117,10 @@ def build_execution_plan(
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
         on_progress("Generating plan...")
     plan_start: float = time.monotonic()
-    direct_reuse_source: DirectReuseSourceSnapshot | None = (
+    standard_reuse_source: StandardReuseSourceSnapshot | None = (
         None
         if full_refresh
-        else build_direct_reuse_source_snapshot(
+        else build_standard_reuse_source_snapshot(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -129,17 +129,17 @@ def build_execution_plan(
             local_config=local_config,
         )
     )
-    version_identities: DirectModelVersionIdentities = build_direct_model_version_identities(
+    version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
         scope=scope,
     )
-    direct_reuse_decisions: DirectReuseDecisionResults | None = None
-    if direct_reuse_source is not None:
-        direct_reuse_decisions = build_direct_reuse_decisions(
+    standard_reuse_decisions: StandardReuseDecisionResults | None = None
+    if standard_reuse_source is not None:
+        standard_reuse_decisions = build_standard_reuse_decisions(
             scope=scope,
             expected_version_hashes=version_identities.model_version_hashes,
             built_fingerprints=snapshot.fingerprints,
-            source_snapshot=direct_reuse_source,
+            source_snapshot=standard_reuse_source,
         )
 
     changes: PlannerChangeResults = detect_changes(
@@ -154,7 +154,7 @@ def build_execution_plan(
         scope=scope,
         changes=changes,
     )
-    source_freshness: DirectSourceFreshnessPlanningResult | None = None
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
     if changes_only:
         source_freshness = build_planner_source_freshness_result(
             project=project,
@@ -164,13 +164,15 @@ def build_execution_plan(
             relations=relations,
         )
     if changes_only and not full_refresh:
-        direct_identity_stale_model_names: frozenset[str] = build_direct_identity_stale_model_names(
-            scope=scope,
-            expected_version_hashes=version_identities.model_version_hashes,
-            built_version_hashes={
-                model_name: fingerprint.version_hash
-                for model_name, fingerprint in snapshot.fingerprints.items()
-            },
+        standard_identity_stale_model_names: frozenset[str] = (
+            build_standard_identity_stale_model_names(
+                scope=scope,
+                expected_version_hashes=version_identities.model_version_hashes,
+                built_version_hashes={
+                    model_name: fingerprint.version_hash
+                    for model_name, fingerprint in snapshot.fingerprints.items()
+                },
+            )
         )
         scope = prune_unchanged_scope(
             scope=scope,
@@ -185,7 +187,7 @@ def build_execution_plan(
             expected_version_hashes=version_identities.model_version_hashes,
         )
     else:
-        direct_identity_stale_model_names = frozenset()
+        standard_identity_stale_model_names = frozenset()
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
@@ -209,9 +211,9 @@ def build_execution_plan(
         reload_sources=reload_sources,
     )
     if source_freshness is not None:
-        direct_remaining_stale_model_names: tuple[str, ...] = tuple(
+        standard_remaining_stale_model_names: tuple[str, ...] = tuple(
             sorted(
-                direct_identity_stale_model_names
+                standard_identity_stale_model_names
                 - frozenset(
                     key.name
                     for key in scope.selected_keys
@@ -224,20 +226,20 @@ def build_execution_plan(
             source_freshness=source_freshness,
             metadata={
                 **plan_output.metadata,
-                "direct_source_freshness": _serialize_direct_source_freshness_metadata(
+                "standard_source_freshness": _serialize_standard_source_freshness_metadata(
                     source_freshness
                 ),
-                "direct_remaining_stale_model_names": direct_remaining_stale_model_names,
+                "standard_remaining_stale_model_names": standard_remaining_stale_model_names,
             },
         )
-    if direct_reuse_source is not None:
+    if standard_reuse_source is not None:
         plan_output = replace(
             plan_output,
             metadata={
                 **plan_output.metadata,
-                **_serialize_direct_reuse_metadata(
-                    direct_reuse_source=direct_reuse_source,
-                    direct_reuse_decisions=direct_reuse_decisions,
+                **_serialize_standard_reuse_metadata(
+                    standard_reuse_source=standard_reuse_source,
+                    standard_reuse_decisions=standard_reuse_decisions,
                 ),
             },
         )
@@ -246,8 +248,8 @@ def build_execution_plan(
     return plan_output
 
 
-def _serialize_direct_source_freshness_metadata(
-    source_freshness: DirectSourceFreshnessPlanningResult,
+def _serialize_standard_source_freshness_metadata(
+    source_freshness: StandardSourceFreshnessPlanningResult,
 ) -> dict[str, object]:
     changed_source_names: tuple[str, ...] = tuple(
         sorted(identity.source_name for identity in source_freshness.changed_identities)
@@ -271,16 +273,16 @@ def _serialize_direct_source_freshness_metadata(
     }
 
 
-def _serialize_direct_reuse_metadata(
+def _serialize_standard_reuse_metadata(
     *,
-    direct_reuse_source: DirectReuseSourceSnapshot,
-    direct_reuse_decisions: DirectReuseDecisionResults | None,
+    standard_reuse_source: StandardReuseSourceSnapshot,
+    standard_reuse_decisions: StandardReuseDecisionResults | None,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
-        "direct_reuse_source": {
-            "target_name": direct_reuse_source.target_name,
-            "fingerprint_database": direct_reuse_source.fingerprint_database,
-            "fingerprint_schema": direct_reuse_source.fingerprint_schema,
+        "standard_reuse_source": {
+            "target_name": standard_reuse_source.target_name,
+            "fingerprint_database": standard_reuse_source.fingerprint_database,
+            "fingerprint_schema": standard_reuse_source.fingerprint_schema,
             "models": {
                 model_name: {
                     "database": model_snapshot.destination.database,
@@ -291,16 +293,16 @@ def _serialize_direct_reuse_metadata(
                     "built_version_present": model_snapshot.built_version_hash is not None,
                 }
                 for model_name, model_snapshot in sorted(
-                    direct_reuse_source.model_snapshots.items()
+                    standard_reuse_source.model_snapshots.items()
                 )
             },
         }
     }
-    if direct_reuse_decisions is None:
+    if standard_reuse_decisions is None:
         return metadata
-    metadata["direct_reuse_decisions"] = {
-        "target_name": direct_reuse_source.target_name,
-        "source_target_name": direct_reuse_decisions.source_target_name,
+    metadata["standard_reuse_decisions"] = {
+        "target_name": standard_reuse_source.target_name,
+        "source_target_name": standard_reuse_decisions.source_target_name,
         "models": {
             model_name: {
                 "decision": decision.decision,
@@ -309,7 +311,7 @@ def _serialize_direct_reuse_metadata(
                 "source_built_version_present": decision.source_built_version_present,
                 "source_matches_expected": decision.source_matches_expected,
             }
-            for model_name, decision in sorted(direct_reuse_decisions.models.items())
+            for model_name, decision in sorted(standard_reuse_decisions.models.items())
         },
     }
     return metadata

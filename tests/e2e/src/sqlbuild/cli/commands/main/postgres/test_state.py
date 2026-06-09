@@ -3269,12 +3269,12 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
     "test_case",
     [
         PostgresVirtualParityE2ETestCase(
-            description="postgres direct mode promotion guard",
+            description="postgres standard mode promotion guard",
             expected_stdout_fragments=("promote requires virtual_environments = true",),
             expected_exit_code=1,
         )
     ],
-    ids=["postgres direct mode promotion guard"],
+    ids=["postgres standard mode promotion guard"],
 )
 def test_given_postgres_direct_mode_project_when_promoting_then_fails_with_mode_error(
     test_case: PostgresVirtualParityE2ETestCase,

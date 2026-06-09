@@ -54,7 +54,7 @@ class SharedSourceFreshnessHashTestCase:
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessPlanningTestCase:
+class StandardSourceFreshnessPlanningTestCase:
     description: str
     previous_data_version: str | None
     current_query: str
@@ -63,7 +63,7 @@ class DirectSourceFreshnessPlanningTestCase:
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessLagToleranceTestCase:
+class StandardSourceFreshnessLagToleranceTestCase:
     description: str
     current_query: str
     expected_changed_count: int
@@ -71,34 +71,34 @@ class DirectSourceFreshnessLagToleranceTestCase:
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessUnknownTestCase:
+class StandardSourceFreshnessUnknownTestCase:
     description: str
     expected_unknown_source_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessAdapterDefaultTestCase:
+class StandardSourceFreshnessAdapterDefaultTestCase:
     description: str
     expected_changed_count: int
     expected_observed_count: int
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessManagedSkipTestCase:
+class StandardSourceFreshnessManagedSkipTestCase:
     description: str
     expected_observed_count: int
     expected_unknown_source_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessMultiSchemaTestCase:
+class StandardSourceFreshnessMultiSchemaTestCase:
     description: str
     expected_previous_count: int
     expected_unchanged_count: int
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessPropagationTestCase:
+class StandardSourceFreshnessPropagationTestCase:
     description: str
     changed_source_names: tuple[str, ...]
     unknown_source_names: tuple[str, ...]
@@ -109,6 +109,6 @@ class DirectSourceFreshnessPropagationTestCase:
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessPlanningErrorTestCase:
+class StandardSourceFreshnessPlanningErrorTestCase:
     description: str
     expected_error_fragment: str

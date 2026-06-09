@@ -1,4 +1,4 @@
-"""Direct source freshness state models."""
+"""Standard source freshness state models."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class SourceFreshnessObservation:
 
 @dataclass(frozen=True)
 class SourceFreshnessIdentity:
-    """Stable identity for one source freshness stream in direct state."""
+    """Stable identity for one source freshness stream in standard state."""
 
     source_name: str
     target_database: str | None
@@ -31,7 +31,7 @@ class SourceFreshnessIdentity:
 
 @dataclass(frozen=True)
 class SourceFreshnessRecord:
-    """One append-only direct source freshness observation."""
+    """One append-only standard source freshness observation."""
 
     source_name: str
     target_database: str | None
@@ -56,15 +56,15 @@ class SourceFreshnessRecord:
 
 @dataclass(frozen=True)
 class SourceFreshnessSet:
-    """Latest direct source freshness records for one target schema."""
+    """Latest standard source freshness records for one target schema."""
 
     schema: str
     records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessPropagationResult:
-    """Downstream model impact derived from direct source freshness roots."""
+class StandardSourceFreshnessPropagationResult:
+    """Downstream model impact derived from standard source freshness roots."""
 
     changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = field(
         default_factory=dict
@@ -74,7 +74,7 @@ class DirectSourceFreshnessPropagationResult:
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessPlanningResult:
+class StandardSourceFreshnessPlanningResult:
     """Direct planning-time source freshness observations and comparisons."""
 
     observed_records: tuple[SourceFreshnessRecord, ...] = ()
@@ -82,4 +82,4 @@ class DirectSourceFreshnessPlanningResult:
     changed_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unchanged_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unknown_source_names: tuple[str, ...] = ()
-    propagation: DirectSourceFreshnessPropagationResult | None = None
+    propagation: StandardSourceFreshnessPropagationResult | None = None

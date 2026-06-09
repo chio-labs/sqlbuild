@@ -6,12 +6,12 @@ import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.source_freshness import (
-    append_eligible_direct_source_freshness_records,
+    append_eligible_standard_source_freshness_records,
 )
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
+    StandardSourceFreshnessPlanningResult,
+    StandardSourceFreshnessPropagationResult,
 )
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
@@ -51,13 +51,13 @@ def test_given_source_freshness_observation_when_appending_then_requires_success
 ) -> None:
     adapter: RecordingAdapter = RecordingAdapter()
 
-    append_eligible_direct_source_freshness_records(
+    append_eligible_standard_source_freshness_records(
         plan=PlanOutput(
             model_entries=(model_entry("orders"),),
-            source_freshness=DirectSourceFreshnessPlanningResult(
+            source_freshness=StandardSourceFreshnessPlanningResult(
                 observed_records=(source_freshness_record(),),
                 changed_identities=frozenset({source_freshness_identity()}),
-                propagation=DirectSourceFreshnessPropagationResult(
+                propagation=StandardSourceFreshnessPropagationResult(
                     changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
                     stale_model_names=frozenset({"orders"}),
                 ),
@@ -94,13 +94,13 @@ def test_given_eligible_source_freshness_when_appending_then_uses_adapter_render
 ) -> None:
     adapter: RecordingAdapter = RecordingAdapter()
 
-    append_eligible_direct_source_freshness_records(
+    append_eligible_standard_source_freshness_records(
         plan=PlanOutput(
             model_entries=(model_entry("orders"),),
-            source_freshness=DirectSourceFreshnessPlanningResult(
+            source_freshness=StandardSourceFreshnessPlanningResult(
                 observed_records=(source_freshness_record(),),
                 changed_identities=frozenset({source_freshness_identity()}),
-                propagation=DirectSourceFreshnessPropagationResult(
+                propagation=StandardSourceFreshnessPropagationResult(
                     changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
                     stale_model_names=frozenset({"orders"}),
                 ),
@@ -138,10 +138,10 @@ def test_given_eligible_source_freshness_when_appending_then_reuses_plan_time_ob
 ) -> None:
     adapter: RecordingAdapter = RecordingAdapter()
 
-    append_eligible_direct_source_freshness_records(
+    append_eligible_standard_source_freshness_records(
         plan=PlanOutput(
             model_entries=(model_entry("orders"),),
-            source_freshness=DirectSourceFreshnessPlanningResult(
+            source_freshness=StandardSourceFreshnessPlanningResult(
                 observed_records=(
                     source_freshness_record(
                         run_id="planning-run",
@@ -150,7 +150,7 @@ def test_given_eligible_source_freshness_when_appending_then_reuses_plan_time_ob
                     ),
                 ),
                 changed_identities=frozenset({source_freshness_identity()}),
-                propagation=DirectSourceFreshnessPropagationResult(
+                propagation=StandardSourceFreshnessPropagationResult(
                     changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
                     stale_model_names=frozenset({"orders"}),
                 ),

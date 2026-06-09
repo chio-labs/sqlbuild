@@ -33,8 +33,8 @@ class NestedProgressChildRow:
 
 
 @dataclass
-class DirectPythonLifecycleState:
-    """Mutable state for direct-mode Python lifecycle execution."""
+class StandardPythonLifecycleState:
+    """Mutable state for standard-mode Python lifecycle execution."""
 
     plan_output: PlanOutput
     discovered_inputs: DiscoveredProjectInputs

@@ -1,4 +1,4 @@
-"""Direct changes-only planner scope pruning helpers."""
+"""Standard changes-only planner scope pruning helpers."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.models import (
     ResolvedModelAction,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 
 
 def prune_unchanged_scope(
@@ -27,10 +27,10 @@ def prune_unchanged_scope(
     scope: PlannerScope,
     changes: PlannerChangeResults,
     resolved_actions: PlannerResolvedActions,
-    source_freshness: DirectSourceFreshnessPlanningResult | None = None,
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None,
     expected_version_hashes: dict[str, str] | None = None,
 ) -> PlannerScope:
-    """Remove unchanged selected SQL nodes for direct changes-only planning."""
+    """Remove unchanged selected SQL nodes for standard changes-only planning."""
 
     selected_keys: set[CompiledObjectKey] = set()
     key: CompiledObjectKey
@@ -60,13 +60,13 @@ def prune_unchanged_scope(
     return replace(scope, selected_keys=frozenset(selected_keys))
 
 
-def build_direct_identity_stale_model_names(
+def build_standard_identity_stale_model_names(
     *,
     scope: PlannerScope,
     expected_version_hashes: dict[str, str],
     built_version_hashes: dict[str, str | None],
 ) -> frozenset[str]:
-    """Return all model names whose direct built identity is missing or stale."""
+    """Return all model names whose standard built identity is missing or stale."""
 
     return frozenset(
         build_stale_model_names_from_version_identities(
@@ -83,7 +83,7 @@ def mark_version_identity_stale_actions(
     resolved_actions: PlannerResolvedActions,
     expected_version_hashes: dict[str, str] | None,
 ) -> PlannerResolvedActions:
-    """Mark direct composed-version stale entries as upstream-driven work."""
+    """Mark standard composed-version stale entries as upstream-driven work."""
 
     if expected_version_hashes is None:
         return resolved_actions
@@ -166,7 +166,7 @@ def _version_identity_requires_upstream_cascade(
 def _source_freshness_marks_model_stale(
     *,
     model_name: str,
-    source_freshness: DirectSourceFreshnessPlanningResult | None,
+    source_freshness: StandardSourceFreshnessPlanningResult | None,
 ) -> bool:
     if source_freshness is None or source_freshness.propagation is None:
         return False

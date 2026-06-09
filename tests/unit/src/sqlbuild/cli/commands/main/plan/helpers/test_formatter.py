@@ -793,7 +793,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         description="direct metadata caps remaining stale models after partial selection",
         plan_output=build_plan_output(
             metadata={
-                "direct_remaining_stale_model_names": tuple(
+                "standard_remaining_stale_model_names": tuple(
                     f"model_{index:02d}" for index in range(55)
                 ),
             },
@@ -809,7 +809,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
         description="direct metadata shows full remaining stale set in verbose output",
         plan_output=build_plan_output(
             metadata={
-                "direct_remaining_stale_model_names": tuple(
+                "standard_remaining_stale_model_names": tuple(
                     f"model_{index:02d}" for index in range(3)
                 ),
             },

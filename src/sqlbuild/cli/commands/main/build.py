@@ -16,16 +16,12 @@ from sqlbuild.cli.commands.main.helpers.check import (
 )
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.helpers.source_freshness import (
-    append_eligible_direct_source_freshness_records,
+    append_eligible_standard_source_freshness_records,
 )
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
-)
-from sqlbuild.cli.commands.main.shared.helpers.direct_python_lifecycle import (
-    DirectPythonLifecycleState,
-    prepare_direct_python_lifecycle,
 )
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_build_execution_json,
@@ -55,6 +51,10 @@ from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
 )
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
+)
+from sqlbuild.cli.commands.main.shared.helpers.standard_python_lifecycle import (
+    StandardPythonLifecycleState,
+    prepare_standard_python_lifecycle,
 )
 from sqlbuild.cli.commands.main.virtual_build import run_virtual_build
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
@@ -259,7 +259,7 @@ def run_build(
             use_color=use_color,
         )
 
-        python_lifecycle: DirectPythonLifecycleState = prepare_direct_python_lifecycle(
+        python_lifecycle: StandardPythonLifecycleState = prepare_standard_python_lifecycle(
             discovered_inputs=discovered_inputs,
             pipeline_result=pipeline_result,
             plan_output=plan_output,
@@ -317,7 +317,7 @@ def run_build(
             providers=provider_session.providers,
         )
         if changes_only:
-            append_eligible_direct_source_freshness_records(
+            append_eligible_standard_source_freshness_records(
                 plan=plan_output,
                 result=result,
                 adapter=adapter,

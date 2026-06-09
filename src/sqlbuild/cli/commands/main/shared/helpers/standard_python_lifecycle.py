@@ -1,4 +1,4 @@
-"""Shared direct-mode Python lifecycle orchestration for run/build commands."""
+"""Shared standard-mode Python lifecycle orchestration for run/build commands."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
     task_asset_python_node_names,
     write_python_node_results,
 )
-from sqlbuild.cli.commands.main.shared.models import DirectPythonLifecycleState
+from sqlbuild.cli.commands.main.shared.models import StandardPythonLifecycleState
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -40,7 +40,7 @@ from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def prepare_direct_python_lifecycle(
+def prepare_standard_python_lifecycle(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     pipeline_result: CompilePipelineResult,
@@ -58,8 +58,8 @@ def prepare_direct_python_lifecycle(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None],
     providers: ProviderContainer | None = None,
-) -> DirectPythonLifecycleState:
-    """Execute ingress Python and prepare read-side dispatch for direct run/build."""
+) -> StandardPythonLifecycleState:
+    """Execute ingress Python and prepare read-side dispatch for standard run/build."""
 
     selected_task_asset_names: frozenset[str] = (
         task_asset_python_node_names(
@@ -170,7 +170,7 @@ def prepare_direct_python_lifecycle(
                 results=initial_read_side_results,
                 use_color=use_color,
             )
-    return DirectPythonLifecycleState(
+    return StandardPythonLifecycleState(
         plan_output=plan_output,
         discovered_inputs=discovered_inputs,
         adapter=adapter,

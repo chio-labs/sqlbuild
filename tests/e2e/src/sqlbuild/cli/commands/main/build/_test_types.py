@@ -42,7 +42,7 @@ class PythonBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DirectPythonBuildHardeningE2ETestCase:
+class StandardPythonBuildHardeningE2ETestCase:
     """Test case for direct build Python lifecycle hardening behavior."""
 
     description: str
@@ -618,7 +618,7 @@ class SchemaBackfillBuildE2ETestCase:
 
 @dataclass(frozen=True)
 class DirectChangesOnlyStateBuildE2ETestCase:
-    """Test case for direct changes-only state/data behavior."""
+    """Test case for standard changes-only state/data behavior."""
 
     description: str
     project_name: str

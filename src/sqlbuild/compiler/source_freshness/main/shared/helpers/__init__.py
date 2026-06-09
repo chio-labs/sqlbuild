@@ -1,1 +1,1 @@
-"""Shared direct source freshness SQL helpers."""
+"""Shared standard source freshness SQL helpers."""

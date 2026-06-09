@@ -92,8 +92,8 @@ class PlannerTestAdapter(BaseAdapter):
         del connection
 
 
-class DirectReuseSourceTestResult:
-    """Minimal DB-API-style result for direct reuse source tests."""
+class StandardReuseSourceTestResult:
+    """Minimal DB-API-style result for standard reuse source tests."""
 
     def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
         self._rows: tuple[tuple[object, ...], ...] = rows
@@ -102,8 +102,8 @@ class DirectReuseSourceTestResult:
         return self._rows
 
 
-class DirectReuseSourceTestAdapter(PlannerTestAdapter):
-    """Adapter test double for direct reuse source snapshot tests."""
+class StandardReuseSourceTestAdapter(PlannerTestAdapter):
+    """Adapter test double for standard reuse source snapshot tests."""
 
     def __init__(
         self,
@@ -118,15 +118,15 @@ class DirectReuseSourceTestAdapter(PlannerTestAdapter):
         self.fingerprint_table_exists: bool = fingerprint_table_exists
         self.fingerprint_read_fails: bool = fingerprint_read_fails
 
-    def execute(self, connection: object, sql: str) -> DirectReuseSourceTestResult:
+    def execute(self, connection: object, sql: str) -> StandardReuseSourceTestResult:
         del connection
         if "WHERE 1 = 0" in sql:
             if not self.fingerprint_table_exists:
                 raise RuntimeError("missing fingerprint table")
-            return DirectReuseSourceTestResult(())
+            return StandardReuseSourceTestResult(())
         if self.fingerprint_read_fails:
             raise RuntimeError("cannot select fingerprint rows")
-        return DirectReuseSourceTestResult(self.fingerprint_rows)
+        return StandardReuseSourceTestResult(self.fingerprint_rows)
 
     def relation_exists(
         self,
@@ -159,7 +159,7 @@ def model_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
 
 
-def build_direct_reuse_source_project() -> CompiledProject:
+def build_standard_reuse_source_project() -> CompiledProject:
     """Build a minimal compiled project with two selected models."""
 
     return CompiledProject(
@@ -204,12 +204,12 @@ def build_direct_reuse_source_project() -> CompiledProject:
     )
 
 
-def build_direct_reuse_source_scope(
+def build_standard_reuse_source_scope(
     *, selected_model_names: frozenset[str] | None = None
 ) -> PlannerScope:
     """Build a minimal planner scope selecting two models."""
 
-    project: CompiledProject = build_direct_reuse_source_project()
+    project: CompiledProject = build_standard_reuse_source_project()
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
     selected_keys: frozenset[CompiledObjectKey] = frozenset(
         model.key
@@ -226,7 +226,9 @@ def build_direct_reuse_source_scope(
     )
 
 
-def build_direct_reuse_fingerprint_row(*, model_name: str, version_hash: str) -> tuple[object, ...]:
+def build_standard_reuse_fingerprint_row(
+    *, model_name: str, version_hash: str
+) -> tuple[object, ...]:
     """Build one valid fingerprint row tuple for read_latest_fingerprints."""
 
     encoded_sql: str = base64.b64encode(b"SELECT 1").decode("ascii")
@@ -246,10 +248,10 @@ def build_direct_reuse_fingerprint_row(*, model_name: str, version_hash: str) ->
     )
 
 
-def build_direct_reuse_decision_scope(
+def build_standard_reuse_decision_scope(
     *, selected_model_names: frozenset[str] | None = None
 ) -> PlannerScope:
-    """Build a planner scope for direct reuse decision matrix tests."""
+    """Build a planner scope for standard reuse decision matrix tests."""
 
     model_configs: tuple[tuple[str, dict[str, object]], ...] = (
         ("candidate", {}),
@@ -294,8 +296,8 @@ def build_direct_reuse_decision_scope(
     )
 
 
-def build_direct_reuse_fingerprint(*, model_name: str, version_hash: str) -> Fingerprint:
-    """Build a minimal fingerprint for direct reuse decision tests."""
+def build_standard_reuse_fingerprint(*, model_name: str, version_hash: str) -> Fingerprint:
+    """Build a minimal fingerprint for standard reuse decision tests."""
 
     return Fingerprint(
         model_name=model_name,

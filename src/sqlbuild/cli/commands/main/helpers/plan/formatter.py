@@ -108,13 +108,13 @@ def format_plan(
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    _format_direct_source_freshness_metadata(
+    _format_standard_source_freshness_metadata(
         lines,
         plan,
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    _format_direct_remaining_stale_metadata(
+    _format_standard_remaining_stale_metadata(
         lines,
         plan,
         section_header_style=resolved_section_header_style,
@@ -1163,14 +1163,14 @@ def _format_virtual_metadata(
         lines.append(f"  remaining stale after selection: {remaining_stale_set}")
 
 
-def _format_direct_source_freshness_metadata(
+def _format_standard_source_freshness_metadata(
     lines: list[str],
     plan: PlanOutput,
     *,
     section_header_style: Callable[[str], str],
     display_options: DisplayOptions,
 ) -> None:
-    raw_metadata: object | None = plan.metadata.get("direct_source_freshness")
+    raw_metadata: object | None = plan.metadata.get("standard_source_freshness")
     if not isinstance(raw_metadata, dict):
         return
     source_freshness_metadata: dict[str, object] = cast(dict[str, object], raw_metadata)
@@ -1224,7 +1224,7 @@ def _format_direct_source_freshness_metadata(
         )
 
 
-def _format_direct_remaining_stale_metadata(
+def _format_standard_remaining_stale_metadata(
     lines: list[str],
     plan: PlanOutput,
     *,
@@ -1232,7 +1232,7 @@ def _format_direct_remaining_stale_metadata(
     display_options: DisplayOptions,
 ) -> None:
     remaining_stale_model_names: tuple[str, ...] = _metadata_string_tuple(
-        plan.metadata.get("direct_remaining_stale_model_names")
+        plan.metadata.get("standard_remaining_stale_model_names")
     )
     if not remaining_stale_model_names:
         return

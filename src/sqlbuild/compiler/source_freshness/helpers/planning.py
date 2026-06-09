@@ -1,4 +1,4 @@
-"""Direct source freshness planning observation and comparison helpers."""
+"""Standard source freshness planning observation and comparison helpers."""
 
 from __future__ import annotations
 
@@ -19,17 +19,17 @@ from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
     SourceFreshnessObservation,
     SourceFreshnessRecord,
     SourceFreshnessSet,
+    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy
 
 
-def build_direct_source_freshness_planning_result(
+def build_standard_source_freshness_planning_result(
     *,
     adapter: StrictAdapter,
     connection: Any,
@@ -39,7 +39,7 @@ def build_direct_source_freshness_planning_result(
     observed_at: datetime,
     run_id: str,
     render_qualified_name: Callable[..., str | None],
-) -> DirectSourceFreshnessPlanningResult:
+) -> StandardSourceFreshnessPlanningResult:
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = (
         _read_previous_records(
             adapter=adapter,
@@ -95,7 +95,7 @@ def build_direct_source_freshness_planning_result(
         else:
             changed_identities.add(observed_record.identity)
 
-    return DirectSourceFreshnessPlanningResult(
+    return StandardSourceFreshnessPlanningResult(
         observed_records=tuple(sorted(observed_records, key=lambda record: str(record.identity))),
         previous_records=tuple(
             sorted(previous_records_by_identity.values(), key=lambda record: str(record.identity))
