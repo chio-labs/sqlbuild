@@ -12,3 +12,10 @@ class DirectSourceFreshnessPlanOutputTestCase:
 class HookFunctionPlanOutputTestCase:
     description: str
     expected_hook_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DirectReuseSourcePlanOutputTestCase:
+    description: str
+    expected_source_target_name: str
+    expected_model_names: tuple[str, ...]

@@ -23,6 +23,7 @@ def read_latest_fingerprints(
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
+    require_table: bool = False,
 ) -> FingerprintSet:
     """Read all fingerprints for a schema and resolve latest per model in memory."""
 
@@ -32,6 +33,8 @@ def read_latest_fingerprints(
         render_qualified_name=render_qualified_name,
     )
     if not _table_exists(connection=connection, execute=execute, qualified_name=qualified_name):
+        if require_table:
+            raise FingerprintInputError(f"Unable to read fingerprints from {qualified_name}")
         return FingerprintSet(schema=schema, fingerprints={})
 
     read_sql: str = build_read_all_sql(

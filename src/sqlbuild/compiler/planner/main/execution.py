@@ -22,6 +22,9 @@ from sqlbuild.compiler.planner.helpers.changes_only import (
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
 )
+from sqlbuild.compiler.planner.helpers.direct_reuse_source import (
+    build_direct_reuse_source_snapshot,
+)
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
@@ -36,6 +39,7 @@ from sqlbuild.compiler.planner.helpers.version_identity import (
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
+    DirectReuseSourceSnapshot,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
@@ -109,6 +113,14 @@ def build_execution_plan(
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
         on_progress("Generating plan...")
     plan_start: float = time.monotonic()
+    direct_reuse_source: DirectReuseSourceSnapshot | None = build_direct_reuse_source_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        scope=scope,
+        project_config=project_config,
+        local_config=local_config,
+    )
     version_identities: DirectModelVersionIdentities = build_direct_model_version_identities(
         functions=project.functions,
         scope=scope,
@@ -202,6 +214,14 @@ def build_execution_plan(
                 "direct_remaining_stale_model_names": direct_remaining_stale_model_names,
             },
         )
+    if direct_reuse_source is not None:
+        plan_output = replace(
+            plan_output,
+            metadata={
+                **plan_output.metadata,
+                "direct_reuse_source": _serialize_direct_reuse_source_metadata(direct_reuse_source),
+            },
+        )
     if on_progress is not None:
         on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
     return plan_output
@@ -229,4 +249,25 @@ def _serialize_direct_source_freshness_metadata(
         "unchanged_source_names": unchanged_source_names,
         "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
         "stale_model_names": stale_model_names,
+    }
+
+
+def _serialize_direct_reuse_source_metadata(
+    direct_reuse_source: DirectReuseSourceSnapshot,
+) -> dict[str, object]:
+    return {
+        "target_name": direct_reuse_source.target_name,
+        "fingerprint_database": direct_reuse_source.fingerprint_database,
+        "fingerprint_schema": direct_reuse_source.fingerprint_schema,
+        "models": {
+            model_name: {
+                "database": model_snapshot.destination.database,
+                "schema": model_snapshot.destination.schema,
+                "name": model_snapshot.destination.name,
+                "qualified_name": model_snapshot.destination.qualified_name,
+                "relation_exists": model_snapshot.relation_exists,
+                "built_version_present": model_snapshot.built_version_hash is not None,
+            }
+            for model_name, model_snapshot in sorted(direct_reuse_source.model_snapshots.items())
+        },
     }
