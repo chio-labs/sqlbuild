@@ -478,13 +478,13 @@ class PostgresAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: str | None,
     ) -> str:
         return self._render_seed_select_before_cursor_impl(
-            source=source,
+            origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
             cursor_type=cursor_type,
@@ -976,11 +976,11 @@ class PostgresAdapter(BaseAdapter):
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
 
-    def render_create_initial_snapshot_target(
+    def render_create_initial_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         snapshot_strategy: str | None,
         updated_at_column: str | None,
         observed_at_column: str | None,
@@ -997,18 +997,18 @@ class PostgresAdapter(BaseAdapter):
             current_timestamp=self.render_current_timestamp(),
         )
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
+                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {origin}"
             ),
         )
 
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -1031,9 +1031,9 @@ class PostgresAdapter(BaseAdapter):
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = __source.{updated_at_column} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND __source.{updated_at_column} > __target.{updated_at_column}"
@@ -1049,10 +1049,10 @@ class PostgresAdapter(BaseAdapter):
             f"ELSE __source.{updated_at_column} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __active.{updated_at_column}"
@@ -1062,8 +1062,8 @@ class PostgresAdapter(BaseAdapter):
             statements = (
                 *statements,
                 _snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -1074,8 +1074,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
@@ -1102,9 +1102,9 @@ class PostgresAdapter(BaseAdapter):
             f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = {current_timestamp} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND ({change_condition})"
@@ -1123,10 +1123,10 @@ class PostgresAdapter(BaseAdapter):
             f"ELSE {current_timestamp} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
         )
@@ -1135,8 +1135,8 @@ class PostgresAdapter(BaseAdapter):
             statements = (
                 *statements,
                 _snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -1144,11 +1144,11 @@ class PostgresAdapter(BaseAdapter):
             )
         return statements
 
-    def render_create_initial_historical_timestamp_snapshot_target(
+    def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -1158,7 +1158,7 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = _historical_timestamp_snapshot_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1167,13 +1167,13 @@ class PostgresAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(destination=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -1181,20 +1181,20 @@ class PostgresAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         historical_sql: str = _historical_timestamp_changes_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(destination=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
-    def render_create_initial_historical_check_snapshot_target(
+    def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -1204,7 +1204,7 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = _historical_check_snapshot_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -1213,7 +1213,7 @@ class PostgresAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(destination=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
@@ -1936,8 +1936,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -1947,8 +1947,8 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._pg_historical_timestamp_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1961,7 +1961,7 @@ class PostgresAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = _historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -1971,7 +1971,7 @@ class PostgresAdapter(BaseAdapter):
         else:
             close_sql = (
                 f"WITH {new_changes_sql} "
-                f"UPDATE {target} AS __target "
+                f"UPDATE {destination} AS __target "
                 f"SET {valid_to_column} = ("
                 f"SELECT MIN(__new_changes.{updated_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
@@ -1988,7 +1988,7 @@ class PostgresAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -2000,8 +2000,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -2009,8 +2009,8 @@ class PostgresAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._pg_historical_timestamp_changes_new_records_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
@@ -2020,7 +2020,7 @@ class PostgresAdapter(BaseAdapter):
         )
         close_sql: str = (
             f"WITH {new_changes_sql} "
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = ("
             f"SELECT MIN(__new_changes.{updated_at_column}) "
             f"FROM __new_changes WHERE {key_condition}"
@@ -2037,7 +2037,7 @@ class PostgresAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -2049,8 +2049,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_historical_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2060,8 +2060,8 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._pg_historical_check_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -2074,7 +2074,7 @@ class PostgresAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = _historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -2084,7 +2084,7 @@ class PostgresAdapter(BaseAdapter):
         else:
             close_sql = (
                 f"WITH {new_changes_sql} "
-                f"UPDATE {target} AS __target "
+                f"UPDATE {destination} AS __target "
                 f"SET {valid_to_column} = ("
                 f"SELECT MIN(__new_changes.{observed_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
@@ -2101,7 +2101,7 @@ class PostgresAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
             f"LEAD(__new_changes.{observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
@@ -2113,8 +2113,8 @@ class PostgresAdapter(BaseAdapter):
     @staticmethod
     def _pg_historical_timestamp_new_changes_cte_sql(
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -2128,14 +2128,14 @@ class PostgresAdapter(BaseAdapter):
             "__latest AS (SELECT * FROM ("
             f"SELECT *, ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-            f") AS __rn FROM {target}) AS __q WHERE __rn = 1)"
+            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1)"
         )
         if invalidate_hard_deletes:
             latest_join_condition: str = _snapshot_key_condition(
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -2144,7 +2144,7 @@ class PostgresAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({updated_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {source}"
+                f") AS __prev_updated_at FROM {origin}"
                 "), __delta_changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
                 f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2155,7 +2155,7 @@ class PostgresAdapter(BaseAdapter):
                 f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{col}' for col in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
                 ")"
             )
@@ -2166,7 +2166,7 @@ class PostgresAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __delta_changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2181,8 +2181,8 @@ class PostgresAdapter(BaseAdapter):
     @staticmethod
     def _pg_historical_timestamp_changes_new_records_cte_sql(
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_to_column: str,
@@ -2197,9 +2197,9 @@ class PostgresAdapter(BaseAdapter):
             "__latest AS (SELECT * FROM ("
             f"SELECT *, ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {updated_at_column} DESC"
-            f") AS __rn FROM {target}) AS __q WHERE __rn = 1"
+            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1"
             "), __new_changes AS ("
-            f"SELECT __source.* FROM {source} AS __source "
+            f"SELECT __source.* FROM {origin} AS __source "
             f"LEFT JOIN __latest ON {latest_join_condition} "
             f"WHERE __latest.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
@@ -2209,8 +2209,8 @@ class PostgresAdapter(BaseAdapter):
     @staticmethod
     def _pg_historical_check_new_changes_cte_sql(
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2245,11 +2245,11 @@ class PostgresAdapter(BaseAdapter):
             "__latest AS (SELECT * FROM ("
             f"SELECT *, ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-            f") AS __rn FROM {target}) AS __q WHERE __rn = 1)"
+            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1)"
         )
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -2258,7 +2258,7 @@ class PostgresAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
                 "), __delta_changes AS ("
                 f"{changed_or_first_sql}"
                 f"), {latest_sql}, __new_changes AS ("
@@ -2269,7 +2269,7 @@ class PostgresAdapter(BaseAdapter):
                 f"AND ({latest_change_condition}))"
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
                 ")"
             )
@@ -2277,7 +2277,7 @@ class PostgresAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __delta_changes AS ("
             f"{changed_or_first_sql}"
             f"), {latest_sql}, __new_changes AS ("

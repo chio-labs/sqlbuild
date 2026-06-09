@@ -62,9 +62,9 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "TIMESTAMP '2024-01-01' AS updated_at"
     )
     statement: str
-    for statement in adapter.render_create_initial_snapshot_target(
-        target="main.initial_custom_target",
-        source="main.initial_custom_source",
+    for statement in adapter.render_create_initial_snapshot_destination(
+        destination="main.initial_custom_target",
+        origin="main.initial_custom_source",
         snapshot_strategy="timestamp",
         updated_at_column="updated_at",
         observed_at_column=None,
@@ -92,8 +92,8 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, TIMESTAMP '2024-01-02' AS updated_at"
     )
     for statement in adapter.render_apply_timestamp_snapshot_changes(
-        target="main.ts_target",
-        source="main.ts_source",
+        destination="main.ts_target",
+        origin="main.ts_source",
         unique_key=("customer_id",),
         updated_at_column="updated_at",
         observed_at_column=None,
@@ -127,8 +127,8 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "TIMESTAMP '2024-01-01' AS updated_at"
     )
     for statement in adapter.render_apply_timestamp_snapshot_changes(
-        target="main.ts_delete_target",
-        source="main.ts_delete_source",
+        destination="main.ts_delete_target",
+        origin="main.ts_delete_source",
         unique_key=("customer_id", "region"),
         updated_at_column="updated_at",
         observed_at_column=None,
@@ -158,8 +158,8 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, 'active' AS status"
     )
     for statement in adapter.render_apply_check_snapshot_changes(
-        target="main.check_target",
-        source="main.check_source",
+        destination="main.check_target",
+        origin="main.check_source",
         unique_key=("customer_id",),
         check_columns=("status",),
         updated_at_column=None,
@@ -188,9 +188,9 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, TIMESTAMP '2024-01-02' AS updated_at, "
         "TIMESTAMP '2024-01-04' AS observed_at"
     )
-    for statement in adapter.render_create_initial_historical_timestamp_snapshot_target(
-        target="main.hist_ts_target",
-        source="main.hist_ts_source",
+    for statement in adapter.render_create_initial_historical_timestamp_snapshot_destination(
+        destination="main.hist_ts_target",
+        origin="main.hist_ts_source",
         unique_key=("customer_id",),
         updated_at_column="updated_at",
         observed_at_column="observed_at",
@@ -219,8 +219,8 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "TIMESTAMP '2024-01-10' AS observed_at"
     )
     for statement in adapter.render_apply_historical_timestamp_changes(
-        target="main.hist_changes_target",
-        source="main.hist_changes_source",
+        destination="main.hist_changes_target",
+        origin="main.hist_changes_source",
         unique_key=("customer_id",),
         updated_at_column="updated_at",
         valid_from_column="valid_from",
@@ -242,9 +242,9 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "UNION ALL SELECT 1 AS customer_id, 'pro' AS plan, TIMESTAMP '2024-01-03' AS observed_at "
         "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, TIMESTAMP '2024-01-02' AS observed_at"
     )
-    for statement in adapter.render_create_initial_historical_check_snapshot_target(
-        target="main.hist_check_target",
-        source="main.hist_check_source",
+    for statement in adapter.render_create_initial_historical_check_snapshot_destination(
+        destination="main.hist_check_target",
+        origin="main.hist_check_source",
         unique_key=("customer_id",),
         check_columns=("plan",),
         observed_at_column="observed_at",
@@ -272,8 +272,8 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "SELECT 1 AS customer_id, 'pro' AS plan, TIMESTAMP '2024-01-03' AS observed_at"
     )
     for statement in adapter.render_apply_historical_check_snapshot_changes(
-        target="main.hist_check_apply_target",
-        source="main.hist_check_apply_source",
+        destination="main.hist_check_apply_target",
+        origin="main.hist_check_apply_source",
         unique_key=("customer_id",),
         check_columns=("plan",),
         observed_at_column="observed_at",
@@ -327,8 +327,8 @@ def test_given_snapshot_insert_failure_when_transaction_rolls_back_then_history_
         "SELECT 1 AS customer_id, 'pro' AS plan, TIMESTAMP '2024-01-03' AS updated_at"
     )
     statements: tuple[str, ...] = adapter.render_apply_timestamp_snapshot_changes(
-        target="main.tx_target",
-        source="main.tx_source",
+        destination="main.tx_target",
+        origin="main.tx_source",
         unique_key=("customer_id",),
         updated_at_column="updated_at",
         observed_at_column=None,

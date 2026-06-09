@@ -589,11 +589,11 @@ class BigQueryAdapter(BaseAdapter):
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
-    def render_create_initial_snapshot_target(
+    def render_create_initial_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         snapshot_strategy: str | None,
         updated_at_column: str | None,
         observed_at_column: str | None,
@@ -611,18 +611,18 @@ class BigQueryAdapter(BaseAdapter):
             current_timestamp=current_timestamp,
         )
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
+                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {origin}"
             ),
         )
 
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -645,9 +645,9 @@ class BigQueryAdapter(BaseAdapter):
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = __source.{updated_at_column} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND __source.{updated_at_column} > __target.{updated_at_column}"
@@ -663,10 +663,10 @@ class BigQueryAdapter(BaseAdapter):
             f"ELSE __source.{updated_at_column} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __active.{updated_at_column}"
@@ -676,8 +676,8 @@ class BigQueryAdapter(BaseAdapter):
             statements = (
                 *statements,
                 self._snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -685,11 +685,11 @@ class BigQueryAdapter(BaseAdapter):
             )
         return statements
 
-    def render_create_initial_historical_timestamp_snapshot_target(
+    def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -699,7 +699,7 @@ class BigQueryAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = self._historical_timestamp_snapshot_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -708,13 +708,13 @@ class BigQueryAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(destination=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -722,20 +722,20 @@ class BigQueryAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         historical_sql: str = self._historical_timestamp_changes_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(destination=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -745,8 +745,8 @@ class BigQueryAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_timestamp_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -756,7 +756,7 @@ class BigQueryAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = self._historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -765,7 +765,7 @@ class BigQueryAdapter(BaseAdapter):
             )
         else:
             close_sql = self._historical_snapshot_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -779,7 +779,7 @@ class BigQueryAdapter(BaseAdapter):
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = self._historical_snapshot_insert_sql(
-            target=target,
+            destination=destination,
             insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
             select_sql=(
@@ -794,8 +794,8 @@ class BigQueryAdapter(BaseAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -803,14 +803,14 @@ class BigQueryAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_timestamp_changes_new_records_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
         )
         close_sql: str = self._historical_snapshot_close_sql(
-            target=target,
+            destination=destination,
             new_changes_sql=new_changes_sql,
             unique_key=unique_key,
             valid_from_column=valid_from_column,
@@ -824,7 +824,7 @@ class BigQueryAdapter(BaseAdapter):
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = self._historical_snapshot_insert_sql(
-            target=target,
+            destination=destination,
             insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
             select_sql=(
@@ -839,8 +839,8 @@ class BigQueryAdapter(BaseAdapter):
     def render_apply_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
@@ -867,9 +867,9 @@ class BigQueryAdapter(BaseAdapter):
             f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = {current_timestamp} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND ({change_condition})"
@@ -888,10 +888,10 @@ class BigQueryAdapter(BaseAdapter):
             f"ELSE {current_timestamp} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
         )
@@ -900,8 +900,8 @@ class BigQueryAdapter(BaseAdapter):
             statements = (
                 *statements,
                 self._snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -909,11 +909,11 @@ class BigQueryAdapter(BaseAdapter):
             )
         return statements
 
-    def render_create_initial_historical_check_snapshot_target(
+    def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -923,7 +923,7 @@ class BigQueryAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = self._historical_check_snapshot_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -932,13 +932,13 @@ class BigQueryAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(destination=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
     def render_apply_historical_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -948,8 +948,8 @@ class BigQueryAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_check_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -959,7 +959,7 @@ class BigQueryAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = self._historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -968,7 +968,7 @@ class BigQueryAdapter(BaseAdapter):
             )
         else:
             close_sql = self._historical_snapshot_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -982,7 +982,7 @@ class BigQueryAdapter(BaseAdapter):
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = self._historical_snapshot_insert_sql(
-            target=target,
+            destination=destination,
             insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
             select_sql=(
@@ -1444,13 +1444,13 @@ class BigQueryAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: str | None,
     ) -> str:
         return self._render_seed_select_before_cursor_impl(
-            source=source,
+            origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
             cursor_type=cursor_type,
@@ -2318,8 +2318,8 @@ class BigQueryAdapter(BaseAdapter):
     def _snapshot_hard_delete_close_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         valid_to_column: str,
         current_timestamp: str,
@@ -2329,11 +2329,11 @@ class BigQueryAdapter(BaseAdapter):
         )
         first_key: str = unique_key[0]
         return (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = {current_timestamp} "
             f"WHERE __target.{valid_to_column} IS NULL "
             f"AND NOT EXISTS ("
-            f"SELECT 1 FROM {source} AS __source "
+            f"SELECT 1 FROM {origin} AS __source "
             f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
             f")"
         )
@@ -2342,7 +2342,7 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_check_snapshot_select_sql(
         cls,
         *,
-        source: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2383,26 +2383,26 @@ class BigQueryAdapter(BaseAdapter):
                 "WITH __ordered AS ("
                 "SELECT __source.*, "
                 f"(SELECT MAX(__groups.__observed_at) FROM ("
-                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}"
+                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}"
                 ") AS __groups "
                 f"WHERE __groups.__observed_at < __source.{observed_at_column}"
                 ") AS __prev_group_observed_at, "
                 f"LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {source} AS __source"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {origin} AS __source"
                 "), __changes AS ("
                 "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
                 f"OR ({change_condition}) "
                 "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at"
                 "), __observed_groups AS ("
-                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}"
+                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}"
                 "), __hard_delete_candidates AS ("
                 f"SELECT {hard_delete_key_sql}, __changes.{observed_at_column}, "
                 "MIN(__observed_groups.__observed_at) AS __hard_deleted_at "
                 "FROM __changes "
                 "JOIN __observed_groups "
                 f"ON __observed_groups.__observed_at > __changes.{observed_at_column} "
-                f"LEFT JOIN {source} AS __present "
+                f"LEFT JOIN {origin} AS __present "
                 f"ON __present.{observed_at_column} = __observed_groups.__observed_at "
                 f"AND {present_condition} "
                 f"WHERE __present.{unique_key[0]} IS NULL "
@@ -2429,7 +2429,7 @@ class BigQueryAdapter(BaseAdapter):
             "WITH __ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
             ") "
@@ -2443,7 +2443,7 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_timestamp_snapshot_select_sql(
         cls,
         *,
-        source: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -2474,19 +2474,19 @@ class BigQueryAdapter(BaseAdapter):
                 "WITH __ordered AS ("
                 f"SELECT *, LAG({updated_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {source}"
+                f") AS __prev_updated_at FROM {origin}"
                 "), __changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
                 f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
                 "), __observed_groups AS ("
-                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}"
+                f"SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}"
                 "), __hard_delete_candidates AS ("
                 f"SELECT {hard_delete_key_sql}, __changes.{observed_at_column}, "
                 "MIN(__observed_groups.__observed_at) AS __hard_deleted_at "
                 "FROM __changes "
                 "JOIN __observed_groups "
                 f"ON __observed_groups.__observed_at > __changes.{observed_at_column} "
-                f"LEFT JOIN {source} AS __present "
+                f"LEFT JOIN {origin} AS __present "
                 f"ON __present.{observed_at_column} = __observed_groups.__observed_at "
                 f"AND {present_condition} "
                 f"WHERE __present.{unique_key[0]} IS NULL "
@@ -2513,7 +2513,7 @@ class BigQueryAdapter(BaseAdapter):
             "WITH __ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2528,8 +2528,8 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_timestamp_new_changes_cte_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -2547,8 +2547,8 @@ class BigQueryAdapter(BaseAdapter):
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
             hard_deletes_sql: str = cls._historical_hard_deletes_select_sql(
-                target=target,
-                source=source,
+                destination=destination,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 valid_to_column=valid_to_column,
@@ -2557,12 +2557,12 @@ class BigQueryAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({updated_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {source}"
+                f") AS __prev_updated_at FROM {origin}"
                 "), __delta_changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
                 f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
                 "), __latest AS ("
-                f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+                f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
                 ") = 1"
                 "), __new_changes AS ("
@@ -2578,12 +2578,12 @@ class BigQueryAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __delta_changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
             "), __latest AS ("
-            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
             ") = 1"
             "), __new_changes AS ("
@@ -2598,7 +2598,7 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_timestamp_changes_select_sql(
         cls,
         *,
-        source: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -2611,15 +2611,15 @@ class BigQueryAdapter(BaseAdapter):
             f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
             f"LEAD({updated_at_column}) OVER (PARTITION BY {partition_sql} "
             f"ORDER BY {updated_at_column}) AS {valid_to_column} "
-            f"FROM {source}"
+            f"FROM {origin}"
         )
 
     @classmethod
     def _historical_timestamp_changes_new_records_cte_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_to_column: str,
@@ -2631,11 +2631,11 @@ class BigQueryAdapter(BaseAdapter):
         first_key: str = unique_key[0]
         return (
             "__latest AS ("
-            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {updated_at_column} DESC"
             ") = 1"
             "), __new_changes AS ("
-            f"SELECT __source.* FROM {source} AS __source "
+            f"SELECT __source.* FROM {origin} AS __source "
             f"LEFT JOIN __latest ON {latest_join_condition} "
             f"WHERE __latest.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
@@ -2646,8 +2646,8 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_check_new_changes_cte_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2693,8 +2693,8 @@ class BigQueryAdapter(BaseAdapter):
                 for column in check_columns
             )
             hard_deletes_sql: str = cls._historical_hard_deletes_select_sql(
-                target=target,
-                source=source,
+                destination=destination,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 valid_to_column=valid_to_column,
@@ -2703,11 +2703,11 @@ class BigQueryAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
                 "), __delta_changes AS ("
                 f"{changed_or_first_sql}"
                 "), __latest AS ("
-                f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+                f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
                 ") = 1"
                 "), __new_changes AS ("
@@ -2733,11 +2733,11 @@ class BigQueryAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __delta_changes AS ("
             f"{changed_or_first_sql}"
             "), __latest AS ("
-            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
             ") = 1"
             "), __new_changes AS ("
@@ -2760,18 +2760,18 @@ class BigQueryAdapter(BaseAdapter):
 
     @classmethod
     def _historical_hard_deleted_at_sql(
-        cls, *, source: str, unique_key: tuple[str, ...], observed_at_column: str, row_alias: str
+        cls, *, origin: str, unique_key: tuple[str, ...], observed_at_column: str, row_alias: str
     ) -> str:
         present_condition: str = cls._snapshot_key_condition(
             left_alias="__present", right_alias=row_alias, unique_key=unique_key
         )
         return (
             "(SELECT MIN(__observed_groups.__observed_at) "
-            f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}) "
+            f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}) "
             "AS __observed_groups "
             f"WHERE __observed_groups.__observed_at > {row_alias}.{observed_at_column} "
             "AND NOT EXISTS ("
-            f"SELECT 1 FROM {source} AS __present "
+            f"SELECT 1 FROM {origin} AS __present "
             f"WHERE __present.{observed_at_column} = __observed_groups.__observed_at "
             f"AND {present_condition}"
             "))"
@@ -2781,8 +2781,8 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_hard_deletes_select_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         observed_at_column: str,
         valid_to_column: str,
@@ -2794,11 +2794,11 @@ class BigQueryAdapter(BaseAdapter):
         first_key: str = unique_key[0]
         return (
             f"SELECT {target_key_sql}, MIN(__observed_groups.__observed_at) AS __close_at "
-            f"FROM {target} AS __target "
-            f"JOIN (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}) "
+            f"FROM {destination} AS __target "
+            f"JOIN (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}) "
             "AS __observed_groups "
             f"ON __observed_groups.__observed_at > __target.{observed_at_column} "
-            f"LEFT JOIN {source} AS __present "
+            f"LEFT JOIN {origin} AS __present "
             f"ON __present.{observed_at_column} = __observed_groups.__observed_at "
             f"AND {present_condition} "
             f"WHERE __target.{valid_to_column} IS NULL "
@@ -2810,7 +2810,7 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_snapshot_combined_close_sql(
         cls,
         *,
-        target: str,
+        destination: str,
         new_changes_sql: str,
         unique_key: tuple[str, ...],
         valid_from_column: str,
@@ -2819,7 +2819,7 @@ class BigQueryAdapter(BaseAdapter):
     ) -> str:
         candidate_key_sql: str = ", ".join(unique_key)
         return cls._historical_snapshot_close_sql(
-            target=target,
+            destination=destination,
             new_changes_sql=new_changes_sql,
             unique_key=unique_key,
             valid_from_column=valid_from_column,
@@ -2837,7 +2837,7 @@ class BigQueryAdapter(BaseAdapter):
     def _historical_snapshot_close_sql(
         cls,
         *,
-        target: str,
+        destination: str,
         new_changes_sql: str,
         unique_key: tuple[str, ...],
         valid_from_column: str,
@@ -2855,7 +2855,7 @@ class BigQueryAdapter(BaseAdapter):
             f"{candidate_key_sql}"
         )
         return (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = __close_candidates.__close_at "
             f"FROM ({close_candidates_query}) AS __close_candidates "
             f"WHERE __target.{valid_to_column} IS NULL "
@@ -2865,6 +2865,8 @@ class BigQueryAdapter(BaseAdapter):
 
     @staticmethod
     def _historical_snapshot_insert_sql(
-        *, target: str, insert_column_sql: str, new_changes_sql: str, select_sql: str
+        *, destination: str, insert_column_sql: str, new_changes_sql: str, select_sql: str
     ) -> str:
-        return f"INSERT INTO {target} ({insert_column_sql}) WITH {new_changes_sql} {select_sql}"
+        return (
+            f"INSERT INTO {destination} ({insert_column_sql}) WITH {new_changes_sql} {select_sql}"
+        )

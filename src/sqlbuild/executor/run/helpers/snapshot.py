@@ -516,9 +516,9 @@ def _create_initial_snapshot_target(
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
         if entry.historical_input == HistoricalInput.CHANGES:
             statements: tuple[str, ...] = (
-                adapter.render_create_initial_historical_timestamp_changes_target(
-                    target=target_qualified,
-                    source=delta_qualified,
+                adapter.render_create_initial_historical_timestamp_changes_destination(
+                    destination=target_qualified,
+                    origin=delta_qualified,
                     unique_key=entry.unique_key,
                     updated_at_column=updated_at_column,
                     valid_from_column=valid_from_column,
@@ -527,9 +527,9 @@ def _create_initial_snapshot_target(
                 )
             )
         else:
-            statements = adapter.render_create_initial_historical_timestamp_snapshot_target(
-                target=target_qualified,
-                source=delta_qualified,
+            statements = adapter.render_create_initial_historical_timestamp_snapshot_destination(
+                destination=target_qualified,
+                origin=delta_qualified,
                 unique_key=entry.unique_key,
                 updated_at_column=updated_at_column,
                 observed_at_column=entry.observed_at_column,
@@ -540,9 +540,9 @@ def _create_initial_snapshot_target(
             )
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.observed_at_column is not None:
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
-        statements = adapter.render_create_initial_historical_check_snapshot_target(
-            target=target_qualified,
-            source=delta_qualified,
+        statements = adapter.render_create_initial_historical_check_snapshot_destination(
+            destination=target_qualified,
+            origin=delta_qualified,
             unique_key=entry.unique_key,
             check_columns=check_columns,
             observed_at_column=entry.observed_at_column,
@@ -552,9 +552,9 @@ def _create_initial_snapshot_target(
             invalidate_hard_deletes=entry.invalidate_hard_deletes,
         )
     else:
-        statements = adapter.render_create_initial_snapshot_target(
-            target=target_qualified,
-            source=delta_qualified,
+        statements = adapter.render_create_initial_snapshot_destination(
+            destination=target_qualified,
+            origin=delta_qualified,
             snapshot_strategy=entry.snapshot_strategy,
             updated_at_column=entry.updated_at_column,
             observed_at_column=entry.observed_at_column,
@@ -623,8 +623,8 @@ def _apply_timestamp_snapshot_changes(
         statements: tuple[str, ...]
         if entry.historical_input == HistoricalInput.CHANGES:
             statements = adapter.render_apply_historical_timestamp_changes(
-                target=target_qualified,
-                source=delta_qualified,
+                destination=target_qualified,
+                origin=delta_qualified,
                 unique_key=entry.unique_key,
                 updated_at_column=updated_at_column,
                 valid_from_column=valid_from_column,
@@ -633,8 +633,8 @@ def _apply_timestamp_snapshot_changes(
             )
         else:
             statements = adapter.render_apply_historical_timestamp_snapshot_changes(
-                target=target_qualified,
-                source=delta_qualified,
+                destination=target_qualified,
+                origin=delta_qualified,
                 unique_key=entry.unique_key,
                 updated_at_column=updated_at_column,
                 observed_at_column=entry.observed_at_column,
@@ -650,8 +650,8 @@ def _apply_timestamp_snapshot_changes(
                 adapter.execute(connection, statement)
         return
     statements: tuple[str, ...] = adapter.render_apply_timestamp_snapshot_changes(
-        target=target_qualified,
-        source=delta_qualified,
+        destination=target_qualified,
+        origin=delta_qualified,
         unique_key=entry.unique_key,
         updated_at_column=updated_at_column,
         observed_at_column=entry.observed_at_column,
@@ -684,8 +684,8 @@ def _apply_check_snapshot_changes(
     output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
     if entry.observed_at_column is not None:
         statements: tuple[str, ...] = adapter.render_apply_historical_check_snapshot_changes(
-            target=target_qualified,
-            source=delta_qualified,
+            destination=target_qualified,
+            origin=delta_qualified,
             unique_key=entry.unique_key,
             check_columns=check_columns,
             observed_at_column=entry.observed_at_column,
@@ -696,8 +696,8 @@ def _apply_check_snapshot_changes(
         )
     else:
         statements = adapter.render_apply_check_snapshot_changes(
-            target=target_qualified,
-            source=delta_qualified,
+            destination=target_qualified,
+            origin=delta_qualified,
             unique_key=entry.unique_key,
             check_columns=check_columns,
             updated_at_column=entry.updated_at_column,

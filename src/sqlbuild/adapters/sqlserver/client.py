@@ -104,7 +104,7 @@ class SqlServerAdapter(BaseAdapter):
     def _historical_snapshot_combined_close_sql(
         self,
         *,
-        target: str,
+        destination: str,
         new_changes_sql: str,
         unique_key: tuple[str, ...],
         valid_from_column: str,
@@ -129,7 +129,7 @@ class SqlServerAdapter(BaseAdapter):
             "SELECT MIN(__close_candidates.__close_at) FROM __close_candidates "
             f"WHERE {close_candidate_condition}"
             ") "
-            f"FROM {target} AS __target "
+            f"FROM {destination} AS __target "
             f"WHERE __target.{valid_to_column} IS NULL "
             f"AND __target.{valid_from_column} < ("
             "SELECT MIN(__close_candidates.__close_at) FROM __close_candidates "
@@ -141,8 +141,8 @@ class SqlServerAdapter(BaseAdapter):
     def _snapshot_hard_delete_close_sql(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         valid_to_column: str,
         current_timestamp: str,
@@ -153,10 +153,10 @@ class SqlServerAdapter(BaseAdapter):
         first_key: str = unique_key[0]
         return (
             f"UPDATE __target SET {valid_to_column} = {current_timestamp} "
-            f"FROM {target} AS __target "
+            f"FROM {destination} AS __target "
             f"WHERE __target.{valid_to_column} IS NULL "
             "AND NOT EXISTS ("
-            f"SELECT 1 FROM {source} AS __source "
+            f"SELECT 1 FROM {origin} AS __source "
             f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
             ")"
         )
@@ -164,8 +164,8 @@ class SqlServerAdapter(BaseAdapter):
     def _historical_timestamp_new_changes_cte_sql(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -184,7 +184,7 @@ class SqlServerAdapter(BaseAdapter):
         hard_deletes_sql: str = ""
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -192,19 +192,19 @@ class SqlServerAdapter(BaseAdapter):
             hard_deletes_sql = (
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
             )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __delta_changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL OR {updated_changed}"
             "), __latest_ordered AS ("
             f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition_sql} "
-            f"ORDER BY {valid_from_column} DESC) AS __rn FROM {target}"
+            f"ORDER BY {valid_from_column} DESC) AS __rn FROM {destination}"
             "), __latest AS ("
             "SELECT * FROM __latest_ordered WHERE __rn = 1"
             "), __new_changes AS ("
@@ -219,8 +219,8 @@ class SqlServerAdapter(BaseAdapter):
     def _historical_check_new_changes_cte_sql(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -254,7 +254,7 @@ class SqlServerAdapter(BaseAdapter):
         hard_deletes_sql: str = ""
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -262,7 +262,7 @@ class SqlServerAdapter(BaseAdapter):
             hard_deletes_sql = (
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
             )
         changed_or_first_sql: str = (
@@ -273,12 +273,12 @@ class SqlServerAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __delta_changes AS ("
             f"{changed_or_first_sql}"
             "), __latest_ordered AS ("
             f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition_sql} "
-            f"ORDER BY {valid_from_column} DESC) AS __rn FROM {target}"
+            f"ORDER BY {valid_from_column} DESC) AS __rn FROM {destination}"
             "), __latest AS ("
             "SELECT * FROM __latest_ordered WHERE __rn = 1"
             "), __new_changes AS ("
@@ -1083,8 +1083,8 @@ class SqlServerAdapter(BaseAdapter):
     def render_apply_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
@@ -1113,8 +1113,8 @@ class SqlServerAdapter(BaseAdapter):
         )
         close_sql: str = (
             f"UPDATE __target SET {valid_to_column} = {current_timestamp} "
-            f"FROM {target} AS __target "
-            f"JOIN {source} AS __source ON {key_condition} "
+            f"FROM {destination} AS __target "
+            f"JOIN {origin} AS __source ON {key_condition} "
             f"WHERE __target.{valid_to_column} IS NULL "
             f"AND ({change_condition})"
         )
@@ -1133,10 +1133,10 @@ class SqlServerAdapter(BaseAdapter):
             f"ELSE {current_timestamp} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS DATETIME2) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
         )
@@ -1145,8 +1145,8 @@ class SqlServerAdapter(BaseAdapter):
             statements = (
                 *statements,
                 self._snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -1157,8 +1157,8 @@ class SqlServerAdapter(BaseAdapter):
     def render_apply_historical_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -1168,8 +1168,8 @@ class SqlServerAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_check_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -1182,7 +1182,7 @@ class SqlServerAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = self._historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -1197,7 +1197,7 @@ class SqlServerAdapter(BaseAdapter):
                 f"SELECT MIN(__new_changes.{observed_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
                 f") "
-                f"FROM {target} AS __target "
+                f"FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL "
                 f"AND __target.{valid_from_column} < ("
                 f"SELECT MIN(__new_changes.{observed_at_column}) "
@@ -1210,7 +1210,7 @@ class SqlServerAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f";WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
             f"LEAD(__new_changes.{observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
@@ -1222,8 +1222,8 @@ class SqlServerAdapter(BaseAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -1231,8 +1231,8 @@ class SqlServerAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         new_changes_sql: str = _historical_timestamp_changes_new_records_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
@@ -1247,7 +1247,7 @@ class SqlServerAdapter(BaseAdapter):
             f"SELECT MIN(__new_changes.{updated_at_column}) "
             f"FROM __new_changes WHERE {key_condition}"
             f") "
-            f"FROM {target} AS __target "
+            f"FROM {destination} AS __target "
             f"WHERE __target.{valid_to_column} IS NULL "
             f"AND __target.{valid_from_column} < ("
             f"SELECT MIN(__new_changes.{updated_at_column}) "
@@ -1260,7 +1260,7 @@ class SqlServerAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f";WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -1272,8 +1272,8 @@ class SqlServerAdapter(BaseAdapter):
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -1283,8 +1283,8 @@ class SqlServerAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_timestamp_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1297,7 +1297,7 @@ class SqlServerAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = self._historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -1312,7 +1312,7 @@ class SqlServerAdapter(BaseAdapter):
                 f"SELECT MIN(__new_changes.{updated_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
                 f") "
-                f"FROM {target} AS __target "
+                f"FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL "
                 f"AND __target.{valid_from_column} < ("
                 f"SELECT MIN(__new_changes.{updated_at_column}) "
@@ -1325,7 +1325,7 @@ class SqlServerAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f";WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -1337,8 +1337,8 @@ class SqlServerAdapter(BaseAdapter):
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -1362,8 +1362,8 @@ class SqlServerAdapter(BaseAdapter):
         )
         close_sql: str = (
             f"UPDATE __target SET {valid_to_column} = __source.{updated_at_column} "
-            f"FROM {target} AS __target "
-            f"JOIN {source} AS __source ON {key_condition} "
+            f"FROM {destination} AS __target "
+            f"JOIN {origin} AS __source ON {key_condition} "
             f"WHERE __target.{valid_to_column} IS NULL "
             f"AND __source.{updated_at_column} > __target.{updated_at_column}"
         )
@@ -1378,10 +1378,10 @@ class SqlServerAdapter(BaseAdapter):
             f"ELSE __source.{updated_at_column} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS DATETIME2) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __active.{updated_at_column}"
@@ -1391,8 +1391,8 @@ class SqlServerAdapter(BaseAdapter):
             statements = (
                 *statements,
                 self._snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -1433,13 +1433,13 @@ class SqlServerAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: str | None,
     ) -> str:
         return self._render_seed_select_before_cursor_impl(
-            source=source,
+            origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
             cursor_type=cursor_type,
@@ -1448,11 +1448,11 @@ class SqlServerAdapter(BaseAdapter):
     def relation_names_match(self, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left, right)
 
-    def render_create_initial_historical_check_snapshot_target(
+    def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -1480,7 +1480,7 @@ class SqlServerAdapter(BaseAdapter):
         hard_deleted_at_sql: str = "CAST(NULL AS DATETIME2)"
         if invalidate_hard_deletes:
             hard_deleted_at_sql = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__changes",
@@ -1495,7 +1495,7 @@ class SqlServerAdapter(BaseAdapter):
         historical_sql: str = (
             f";WITH __ordered AS (SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
             "), __versions AS ("
@@ -1504,15 +1504,15 @@ class SqlServerAdapter(BaseAdapter):
             f") AS __next_change_at, {hard_deleted_at_sql} AS __hard_deleted_at FROM __changes"
             ") "
             f"SELECT {output_select_sql}, {observed_at_column} AS {valid_from_column}, "
-            f"{valid_to_expr} AS {valid_to_column} INTO {target} FROM __versions"
+            f"{valid_to_expr} AS {valid_to_column} INTO {destination} FROM __versions"
         )
-        return (f"DROP TABLE IF EXISTS {target}", historical_sql)
+        return (f"DROP TABLE IF EXISTS {destination}", historical_sql)
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -1524,17 +1524,17 @@ class SqlServerAdapter(BaseAdapter):
         historical_sql: str = (
             f";WITH __ordered AS (SELECT *, LEAD({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {updated_at_column}"
-            f") AS __next_updated_at FROM {source}) "
+            f") AS __next_updated_at FROM {origin}) "
             f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
-            f"__next_updated_at AS {valid_to_column} INTO {target} FROM __ordered"
+            f"__next_updated_at AS {valid_to_column} INTO {destination} FROM __ordered"
         )
-        return (f"DROP TABLE IF EXISTS {target}", historical_sql)
+        return (f"DROP TABLE IF EXISTS {destination}", historical_sql)
 
-    def render_create_initial_historical_timestamp_snapshot_target(
+    def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -1552,21 +1552,21 @@ class SqlServerAdapter(BaseAdapter):
         historical_sql: str = (
             f";WITH __ordered AS (SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL OR {changed_condition}"
             ") "
             f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
             f"LEAD({updated_at_column}) OVER (PARTITION BY {partition_sql} "
-            f"ORDER BY {updated_at_column}) AS {valid_to_column} INTO {target} FROM __changes"
+            f"ORDER BY {updated_at_column}) AS {valid_to_column} INTO {destination} FROM __changes"
         )
-        return (f"DROP TABLE IF EXISTS {target}", historical_sql)
+        return (f"DROP TABLE IF EXISTS {destination}", historical_sql)
 
-    def render_create_initial_snapshot_target(
+    def render_create_initial_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         snapshot_strategy: str | None,
         updated_at_column: str | None,
         observed_at_column: str | None,
@@ -1583,10 +1583,10 @@ class SqlServerAdapter(BaseAdapter):
             current_timestamp=self.render_current_timestamp(),
         )
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-                f"CAST(NULL AS DATETIME2) AS {valid_to_column} FROM {source}"
+                f"CAST(NULL AS DATETIME2) AS {valid_to_column} FROM {origin}"
             ),
         )
 

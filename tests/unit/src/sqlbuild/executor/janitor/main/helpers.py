@@ -342,7 +342,7 @@ class FakeJanitorAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: object,

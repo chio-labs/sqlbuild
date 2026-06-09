@@ -308,11 +308,11 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
-    def render_create_initial_snapshot_target(
+    def render_create_initial_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         snapshot_strategy: str | None,
         updated_at_column: str | None,
         observed_at_column: str | None,
@@ -330,18 +330,18 @@ class DuckDbBackedAdapter(BaseAdapter):
             current_timestamp=current_timestamp,
         )
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
+                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {origin}"
             ),
         )
 
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -364,9 +364,9 @@ class DuckDbBackedAdapter(BaseAdapter):
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = __source.{updated_at_column} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND __source.{updated_at_column} > __target.{updated_at_column}"
@@ -382,10 +382,10 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"ELSE __source.{updated_at_column} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __active.{updated_at_column}"
@@ -395,8 +395,8 @@ class DuckDbBackedAdapter(BaseAdapter):
             statements = (
                 *statements,
                 self._snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -404,11 +404,11 @@ class DuckDbBackedAdapter(BaseAdapter):
             )
         return statements
 
-    def render_create_initial_historical_timestamp_snapshot_target(
+    def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -418,9 +418,9 @@ class DuckDbBackedAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=self._historical_timestamp_snapshot_select_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 updated_at_column=updated_at_column,
                 observed_at_column=observed_at_column,
@@ -431,11 +431,11 @@ class DuckDbBackedAdapter(BaseAdapter):
             ),
         )
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -443,9 +443,9 @@ class DuckDbBackedAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=self._historical_timestamp_changes_select_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 updated_at_column=updated_at_column,
                 valid_from_column=valid_from_column,
@@ -457,8 +457,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -468,8 +468,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_timestamp_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -482,7 +482,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = self._historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -492,7 +492,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         else:
             close_sql = (
                 f"WITH {new_changes_sql} "
-                f"UPDATE {target} AS __target "
+                f"UPDATE {destination} AS __target "
                 f"SET {valid_to_column} = ("
                 f"SELECT MIN(__new_changes.{updated_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
@@ -509,7 +509,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -521,8 +521,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -530,8 +530,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_timestamp_changes_new_records_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
@@ -541,7 +541,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         )
         close_sql: str = (
             f"WITH {new_changes_sql} "
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = ("
             f"SELECT MIN(__new_changes.{updated_at_column}) "
             f"FROM __new_changes WHERE {key_condition}"
@@ -558,7 +558,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -570,8 +570,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_apply_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
@@ -598,9 +598,9 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = {current_timestamp} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND ({change_condition})"
@@ -619,10 +619,10 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"ELSE {current_timestamp} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
         )
@@ -631,8 +631,8 @@ class DuckDbBackedAdapter(BaseAdapter):
             statements = (
                 *statements,
                 self._snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -640,11 +640,11 @@ class DuckDbBackedAdapter(BaseAdapter):
             )
         return statements
 
-    def render_create_initial_historical_check_snapshot_target(
+    def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -654,9 +654,9 @@ class DuckDbBackedAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         return self.render_create_table_as(
-            destination=target,
+            destination=destination,
             sql=self._historical_check_snapshot_select_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 check_columns=check_columns,
                 observed_at_column=observed_at_column,
@@ -670,8 +670,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_apply_historical_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -681,8 +681,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._historical_check_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -695,7 +695,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = self._historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -705,7 +705,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         else:
             close_sql = (
                 f"WITH {new_changes_sql} "
-                f"UPDATE {target} AS __target "
+                f"UPDATE {destination} AS __target "
                 f"SET {valid_to_column} = ("
                 f"SELECT MIN(__new_changes.{observed_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
@@ -722,7 +722,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
             f"LEAD(__new_changes.{observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
@@ -1371,13 +1371,13 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: str | None,
     ) -> str:
         return self._render_seed_select_before_cursor_impl(
-            source=source,
+            origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
             cursor_type=cursor_type,
@@ -2147,8 +2147,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _snapshot_hard_delete_close_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         valid_to_column: str,
         current_timestamp: str,
@@ -2158,11 +2158,11 @@ class DuckDbBackedAdapter(BaseAdapter):
         )
         first_key: str = unique_key[0]
         return (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = {current_timestamp} "
             f"WHERE __target.{valid_to_column} IS NULL "
             f"AND NOT EXISTS ("
-            f"SELECT 1 FROM {source} AS __source "
+            f"SELECT 1 FROM {origin} AS __source "
             f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
             f")"
         )
@@ -2171,7 +2171,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _historical_check_snapshot_select_sql(
         cls,
         *,
-        source: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2194,7 +2194,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         output_select_sql: str = ", ".join(column for column in output_columns)
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__changes",
@@ -2203,7 +2203,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 "WITH __ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
                 "), __changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
                 "), __versions AS ("
@@ -2224,7 +2224,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             "WITH __ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
             ") "
@@ -2238,7 +2238,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _historical_timestamp_snapshot_select_sql(
         cls,
         *,
-        source: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -2251,7 +2251,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         output_select_sql: str = ", ".join(column for column in output_columns)
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__changes",
@@ -2260,7 +2260,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 "WITH __ordered AS ("
                 f"SELECT *, LAG({updated_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {source}"
+                f") AS __prev_updated_at FROM {origin}"
                 "), __changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
                 f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2282,7 +2282,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             "WITH __ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2297,8 +2297,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _historical_timestamp_new_changes_cte_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -2316,7 +2316,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
             hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -2325,12 +2325,12 @@ class DuckDbBackedAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({updated_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {source}"
+                f") AS __prev_updated_at FROM {origin}"
                 "), __delta_changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
                 f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
                 "), __latest AS ("
-                f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+                f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
                 ") = 1"
                 "), __new_changes AS ("
@@ -2340,7 +2340,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
                 ")"
             )
@@ -2348,12 +2348,12 @@ class DuckDbBackedAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __delta_changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
             "), __latest AS ("
-            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
             ") = 1"
             "), __new_changes AS ("
@@ -2368,7 +2368,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _historical_timestamp_changes_select_sql(
         cls,
         *,
-        source: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -2381,15 +2381,15 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
             f"LEAD({updated_at_column}) OVER (PARTITION BY {partition_sql} "
             f"ORDER BY {updated_at_column}) AS {valid_to_column} "
-            f"FROM {source}"
+            f"FROM {origin}"
         )
 
     @classmethod
     def _historical_timestamp_changes_new_records_cte_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_to_column: str,
@@ -2401,11 +2401,11 @@ class DuckDbBackedAdapter(BaseAdapter):
         first_key: str = unique_key[0]
         return (
             "__latest AS ("
-            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {updated_at_column} DESC"
             ") = 1"
             "), __new_changes AS ("
-            f"SELECT __source.* FROM {source} AS __source "
+            f"SELECT __source.* FROM {origin} AS __source "
             f"LEFT JOIN __latest ON {latest_join_condition} "
             f"WHERE __latest.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
@@ -2416,8 +2416,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _historical_check_new_changes_cte_sql(
         cls,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2457,7 +2457,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 for column in check_columns
             )
             hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -2466,11 +2466,11 @@ class DuckDbBackedAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
                 "), __delta_changes AS ("
                 f"{changed_or_first_sql}"
                 "), __latest AS ("
-                f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+                f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
                 ") = 1"
                 "), __new_changes AS ("
@@ -2481,7 +2481,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 f"AND ({latest_change_condition}))"
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
                 ")"
             )
@@ -2489,11 +2489,11 @@ class DuckDbBackedAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __delta_changes AS ("
             f"{changed_or_first_sql}"
             "), __latest AS ("
-            f"SELECT * FROM {target} QUALIFY ROW_NUMBER() OVER ("
+            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
             ") = 1"
             "), __new_changes AS ("
@@ -2516,18 +2516,18 @@ class DuckDbBackedAdapter(BaseAdapter):
 
     @classmethod
     def _historical_hard_deleted_at_sql(
-        cls, *, source: str, unique_key: tuple[str, ...], observed_at_column: str, row_alias: str
+        cls, *, origin: str, unique_key: tuple[str, ...], observed_at_column: str, row_alias: str
     ) -> str:
         present_condition: str = cls._snapshot_key_condition(
             left_alias="__present", right_alias=row_alias, unique_key=unique_key
         )
         return (
             "(SELECT MIN(__observed_groups.__observed_at) "
-            f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {source}) "
+            f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}) "
             "AS __observed_groups "
             f"WHERE __observed_groups.__observed_at > {row_alias}.{observed_at_column} "
             "AND NOT EXISTS ("
-            f"SELECT 1 FROM {source} AS __present "
+            f"SELECT 1 FROM {origin} AS __present "
             f"WHERE __present.{observed_at_column} = __observed_groups.__observed_at "
             f"AND {present_condition}"
             "))"
@@ -2537,7 +2537,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def _historical_snapshot_combined_close_sql(
         cls,
         *,
-        target: str,
+        destination: str,
         new_changes_sql: str,
         unique_key: tuple[str, ...],
         valid_from_column: str,
@@ -2555,7 +2555,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"SELECT {candidate_key_sql}, __close_at FROM __hard_deletes "
             "WHERE __close_at IS NOT NULL"
             ") "
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = ("
             "SELECT MIN(__close_candidates.__close_at) FROM __close_candidates "
             f"WHERE {close_candidate_condition}"

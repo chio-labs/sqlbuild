@@ -38,8 +38,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -50,8 +50,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         del (
-            target,
-            source,
+            destination,
+            origin,
             unique_key,
             updated_at_column,
             observed_at_column,
@@ -67,8 +67,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -78,8 +78,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         del (
-            target,
-            source,
+            destination,
+            origin,
             unique_key,
             updated_at_column,
             observed_at_column,
@@ -94,8 +94,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -103,8 +103,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         del (
-            target,
-            source,
+            destination,
+            origin,
             unique_key,
             updated_at_column,
             valid_from_column,
@@ -114,11 +114,11 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         self.rendered_historical_timestamp_change_records = True
         return (f"INSERT INTO main.rendered_snapshot_sql VALUES ('{self.marker}')",)
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -126,7 +126,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         del (
-            source,
+            origin,
             unique_key,
             updated_at_column,
             valid_from_column,
@@ -134,7 +134,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
             output_columns,
         )
         self.rendered_initial_historical_timestamp_change_records = True
-        return (f"CREATE TABLE {target} AS SELECT '{self.marker}' AS marker",)
+        return (f"CREATE TABLE {destination} AS SELECT '{self.marker}' AS marker",)
 
 
 @pytest.mark.parametrize(
