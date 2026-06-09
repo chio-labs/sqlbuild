@@ -307,16 +307,16 @@ def _apply_source_write_strategy(
     if source_entry.write_strategy == SourceWriteStrategy.TABLE:
         adapter.replace_table_from_relation(
             connection,
-            target=target,
-            source=staging,
+            destination=target,
+            origin=staging,
             statement_recorder=statement_recorder,
         )
         return
     if not target_exists:
         adapter.replace_table_from_relation(
             connection,
-            target=target,
-            source=staging,
+            destination=target,
+            origin=staging,
             statement_recorder=statement_recorder,
         )
         return

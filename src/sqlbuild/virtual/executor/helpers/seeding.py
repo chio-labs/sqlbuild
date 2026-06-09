@@ -68,8 +68,8 @@ def seed_virtual_physical_version(
     seed_strategy: str = _seed_physical_relation(
         adapter=adapter,
         connection=connection,
-        source=source,
-        target=target,
+        origin=source,
+        destination=target,
         entry=entry,
         statement_recorder=recorder,
     )
@@ -90,8 +90,8 @@ def _seed_physical_relation(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    source: str,
-    target: str,
+    origin: str,
+    destination: str,
     entry: ModelPlanEntry,
     statement_recorder: StatementRecorder,
 ) -> str:
@@ -99,9 +99,9 @@ def _seed_physical_relation(
         cursor_start: str = _cursor_start_for_append_seed(entry=entry)
         adapter.create_table_as(
             connection,
-            target=target,
+            target=destination,
             sql=adapter.render_seed_select_before_cursor(
-                source=source,
+                source=origin,
                 cursor_column=entry.cursor_column or "",
                 cursor_end_exclusive=cursor_start,
                 cursor_type=entry.cursor_type,
@@ -113,16 +113,16 @@ def _seed_physical_relation(
     if adapter.supports_durable_clone():
         adapter.durable_clone(
             connection,
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             statement_recorder=statement_recorder,
         )
         return "durable_clone"
 
     adapter.create_table_as(
         connection,
-        target=target,
-        sql=f"SELECT * FROM {source}",
+        target=destination,
+        sql=f"SELECT * FROM {origin}",
         statement_recorder=statement_recorder,
     )
     return "copy"

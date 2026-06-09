@@ -23,8 +23,8 @@ def create_relation_from_reuse_origin(
     if hard_copy:
         adapter.durable_clone(
             connection,
-            source=origin_relation,
-            target=destination_relation,
+            origin=origin_relation,
+            destination=destination_relation,
             statement_recorder=statement_recorder,
         )
         return
@@ -36,8 +36,8 @@ def create_relation_from_reuse_origin(
         )
     adapter.clone(
         connection,
-        source=origin_relation,
-        target=destination_relation,
+        origin=origin_relation,
+        destination=destination_relation,
         hard_copy=False,
         statement_recorder=statement_recorder,
     )

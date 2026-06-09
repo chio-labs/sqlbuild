@@ -127,7 +127,7 @@ def test_given_qualified_names_when_renaming_then_postgres_uses_unqualified_targ
 ) -> None:
     adapter: PostgresAdapter = PostgresAdapter()
 
-    (statement,) = adapter.render_rename(source=test_case.source, target=test_case.target)
+    (statement,) = adapter.render_rename(origin=test_case.source, destination=test_case.target)
 
     assert statement == test_case.expected_statement
 
@@ -166,9 +166,9 @@ def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_mov
 
     adapter.move_or_copy_relation(
         connection,
-        source=test_case.source,
-        target=test_case.target,
-        remove_source=True,
+        origin=test_case.source,
+        destination=test_case.target,
+        remove_origin=True,
         allow_copy_fallback=False,
         statement_recorder=statement_recorder,
     )

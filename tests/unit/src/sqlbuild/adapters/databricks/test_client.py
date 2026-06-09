@@ -150,8 +150,8 @@ def test_given_clone_request_when_rendering_then_databricks_uses_expected_clone_
     adapter: DatabricksAdapter = DatabricksAdapter()
 
     statements: tuple[str, ...] = adapter.render_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
         hard_copy=test_case.hard_copy,
     )
 
@@ -181,8 +181,8 @@ def test_given_durable_clone_request_when_rendering_then_databricks_uses_deep_cl
     adapter: DatabricksAdapter = DatabricksAdapter()
 
     statements: tuple[str, ...] = adapter.render_durable_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
     )
 
     assert adapter.supports_durable_clone() is test_case.expected_supports_durable_clone

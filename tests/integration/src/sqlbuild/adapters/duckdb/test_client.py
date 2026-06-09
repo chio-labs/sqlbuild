@@ -950,8 +950,8 @@ def test_given_existing_table_when_renaming_then_new_name_exists(
         connection.execute(statement)
     adapter.rename(
         connection,
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
         statement_recorder=StatementRecorder(),
     )
 
@@ -994,9 +994,9 @@ def test_given_same_schema_table_when_moving_without_copy_then_native_rename_is_
 
     adapter.move_or_copy_relation(
         connection,
-        source=test_case.source,
-        target=test_case.target,
-        remove_source=True,
+        origin=test_case.source,
+        destination=test_case.target,
+        remove_origin=True,
         allow_copy_fallback=False,
         statement_recorder=StatementRecorder(),
     )
@@ -1067,7 +1067,10 @@ def test_given_source_table_when_cloning_then_target_has_same_rows(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.clone(
-        connection, source="source_t", target="cloned_t", statement_recorder=StatementRecorder()
+        connection,
+        origin="source_t",
+        destination="cloned_t",
+        statement_recorder=StatementRecorder(),
     )
     count: int = adapter.count_rows(connection, relation="cloned_t")
 

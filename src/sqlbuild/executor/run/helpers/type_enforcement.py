@@ -72,7 +72,7 @@ def enforce_types_staged(
     )
     adapter.rename(
         connection,
-        source=enforced_qualified,
-        target=staging_qualified,
+        origin=enforced_qualified,
+        destination=staging_qualified,
         statement_recorder=statement_recorder,
     )

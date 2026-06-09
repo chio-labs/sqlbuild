@@ -454,9 +454,9 @@ class SqlServerAdapter(BaseAdapter):
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (f"DROP VIEW{exists_clause} {target}",)
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        target_name: str = target.split(".")[-1].strip("[]")
-        return (f"EXEC sp_rename '{source}', '{target_name}'",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        destination_name: str = destination.split(".")[-1].strip("[]")
+        return (f"EXEC sp_rename '{origin}', '{destination_name}'",)
 
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
@@ -662,14 +662,14 @@ class SqlServerAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -681,11 +681,13 @@ class SqlServerAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1056,11 +1058,11 @@ class SqlServerAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1397,15 +1399,15 @@ class SqlServerAdapter(BaseAdapter):
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -1716,8 +1718,10 @@ class SqlServerAdapter(BaseAdapter):
             return f"{schema}.{name}"
         return None
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_set_difference_operator(self) -> str:
         """Render the generic SQL set-difference operator."""
@@ -1799,9 +1803,9 @@ class SqlServerAdapter(BaseAdapter):
             left, f"{self._relation_name(left)}__swap_staging"
         )
         return (
-            *self.render_rename(source=left, target=staging),
-            *self.render_rename(source=right, target=left),
-            *self.render_rename(source=staging, target=right),
+            *self.render_rename(origin=left, destination=staging),
+            *self.render_rename(origin=right, destination=left),
+            *self.render_rename(origin=staging, destination=right),
         )
 
     def _relation_name(self, relation: str) -> str:
@@ -1822,13 +1826,13 @@ class SqlServerAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1839,35 +1843,37 @@ class SqlServerAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
-        source_parts: list[str] = source.split(".")
-        target_parts: list[str] = target.split(".")
+        origin_parts: list[str] = origin.split(".")
+        destination_parts: list[str] = destination.split(".")
         if (
-            remove_source
-            and len(source_parts) >= 2
-            and len(target_parts) >= 2
-            and source_parts[:-2] == target_parts[:-2]
+            remove_origin
+            and len(origin_parts) >= 2
+            and len(destination_parts) >= 2
+            and origin_parts[:-2] == destination_parts[:-2]
         ):
-            source_parent: str = ".".join(source_parts[:-1])
-            target_parent: str = ".".join(target_parts[:-1])
-            if source_parent == target_parent:
-                statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+            origin_parent: str = ".".join(origin_parts[:-1])
+            destination_parent: str = ".".join(destination_parts[:-1])
+            if origin_parent == destination_parent:
+                statements: tuple[str, ...] = self.render_rename(
+                    origin=origin, destination=destination
+                )
             else:
-                target_schema: str = target_parts[-2]
-                source_name: str = source_parts[-1]
-                target_name: str = target_parts[-1]
-                moved_source: str = ".".join((*source_parts[:-2], target_schema, source_name))
-                statements = (f"ALTER SCHEMA {target_schema} TRANSFER {source}",)
-                if source_name != target_name:
-                    target_name_unquoted: str = target_name.strip("[]")
+                destination_schema: str = destination_parts[-2]
+                origin_name: str = origin_parts[-1]
+                destination_name: str = destination_parts[-1]
+                moved_origin: str = ".".join((*origin_parts[:-2], destination_schema, origin_name))
+                statements = (f"ALTER SCHEMA {destination_schema} TRANSFER {origin}",)
+                if origin_name != destination_name:
+                    destination_name_unquoted: str = destination_name.strip("[]")
                     statements = (
                         *statements,
-                        f"EXEC sp_rename '{moved_source}', '{target_name_unquoted}'",
+                        f"EXEC sp_rename '{moved_origin}', '{destination_name_unquoted}'",
                     )
             statement_recorder.record_many(statements)
             stmt: str
@@ -1877,11 +1883,11 @@ class SqlServerAdapter(BaseAdapter):
         if not allow_copy_fallback:
             raise AdapterUserError("SQL Server relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
-        if remove_source:
-            statements = (*statements, *self.render_drop(target=source))
+        if remove_origin:
+            statements = (*statements, *self.render_drop(target=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -2062,7 +2068,10 @@ class SqlServerAdapter(BaseAdapter):
 
         if replace:
             self.drop(
-                connection, target=target, if_exists=True, statement_recorder=statement_recorder
+                connection,
+                target=target,
+                if_exists=True,
+                statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(
             f"{self.render_identifier(col.name)} {col.type}" for col in columns

@@ -245,7 +245,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         """Render SQL statements that rename a relation."""
         ...
 
@@ -258,16 +258,16 @@ class StrictAdapter(
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         """Render SQL statements that clone or copy a relation."""
         ...
 
     @abstractmethod
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        """Render SQL statements that clone/copy into a durable independent target."""
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        """Render SQL statements that clone/copy into a durable independent destination."""
         ...
 
     @abstractmethod
@@ -301,8 +301,10 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        """Render SQL statements that replace a target table from a source relation."""
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        """Render SQL statements that replace a destination table from a origin relation."""
         ...
 
     @abstractmethod
@@ -310,11 +312,11 @@ class StrictAdapter(
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Replace a target table from a source relation."""
+        """Replace a destination table from a origin relation."""
         ...
 
     @abstractmethod
@@ -322,13 +324,13 @@ class StrictAdapter(
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Move a relation to a target, or copy it when explicit fallback is allowed."""
+        """Move a relation to a destination, or copy it when explicit fallback is allowed."""
         ...
 
     @abstractmethod

@@ -156,8 +156,8 @@ def test_given_base_adapter_when_rendering_durable_clone_then_uses_copy_fallback
     adapter: BaseAdapter = ConcreteBaseAdapter()
 
     result: tuple[str, ...] = adapter.render_durable_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
     )
 
     assert adapter.supports_durable_clone() is test_case.expected_supports_durable_clone
