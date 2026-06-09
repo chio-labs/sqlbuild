@@ -9,6 +9,8 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
+from sqlbuild.compiler.planner.main.model_upstream_closure import build_upstream_model_names
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
     build_function_local_hashes as build_shared_function_local_hashes,
@@ -18,6 +20,9 @@ from sqlbuild.compiler.planner.main.version_identity_local_hash import (
 )
 from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
+)
+from sqlbuild.compiler.planner.main.version_identity_stale_model_names import (
+    build_version_identity_stale_model_names,
 )
 from sqlbuild.compiler.planner.main.version_identity_version_hash import (
     build_model_version_identity_hash,
@@ -192,12 +197,11 @@ def build_stale_model_names(
 ) -> tuple[str, ...]:
     """Return model names whose bound and expected hashes differ."""
 
-    incomplete: set[str] = set(source_freshness_incomplete_model_names)
-    return tuple(
-        model_name
-        for model_name in model_names
-        if model_name in incomplete
-        or bound_version_hashes.get(model_name) != expected_version_hashes.get(model_name)
+    return build_version_identity_stale_model_names(
+        model_names=model_names,
+        expected_version_hashes=expected_version_hashes,
+        built_version_hashes=bound_version_hashes,
+        forced_stale_model_names=source_freshness_incomplete_model_names,
     )
 
 
@@ -372,25 +376,19 @@ def build_default_virtual_selection(
 ) -> tuple[str, ...]:
     """Return stale models plus their downstream model closure."""
 
-    selected: set[str] = set(stale_model_names)
-    stale_model_name: str
-    for stale_model_name in stale_model_names:
-        start_key: Any | None = graph.all_keys.get(stale_model_name)
-        if start_key is None:
-            continue
-        stack: list[Any] = [start_key]
-        visited: set[Any] = set()
-        while stack:
-            current: Any = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current.resource_type == CompiledResourceType.MODEL:
-                selected.add(current.name)
-            downstream_key: Any
-            for downstream_key in graph.downstream_deps.get(current, ()):  # pragma: no branch
-                stack.append(downstream_key)
-    return tuple(sorted(selected))
+    start_keys: tuple[CompiledObjectKey, ...] = tuple(
+        key
+        for model_name in stale_model_names
+        if (key := graph.all_keys.get(model_name)) is not None
+    )
+    return tuple(
+        sorted(
+            build_downstream_model_names(
+                start_keys=start_keys,
+                downstream_deps=graph.downstream_deps,
+            )
+        )
+    )
 
 
 def resolve_virtual_model_selection(
@@ -449,26 +447,18 @@ def build_stale_required_upstream_closure(
 
     selected: set[str] = set(selected_model_names)
     stale: set[str] = set(stale_model_names)
-    required: set[str] = set()
-    selected_model_name: str
-    for selected_model_name in selected_model_names:
-        start_key: Any | None = graph.all_keys.get(selected_model_name)
-        if start_key is None:
-            continue
-        stack: list[Any] = list(graph.upstream_deps.get(start_key, ()))
-        visited: set[Any] = set()
-        while stack:
-            current: Any = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current.resource_type == CompiledResourceType.MODEL:
-                if current.name in stale and current.name not in selected:
-                    required.add(current.name)
-            upstream_key: Any
-            for upstream_key in graph.upstream_deps.get(current, ()):  # pragma: no branch
-                stack.append(upstream_key)
-    return tuple(sorted(required))
+    start_keys: tuple[CompiledObjectKey, ...] = tuple(
+        key
+        for model_name in selected_model_names
+        if (key := graph.all_keys.get(model_name)) is not None
+    )
+    required: frozenset[str] = build_upstream_model_names(
+        start_keys=tuple(
+            upstream_key for key in start_keys for upstream_key in graph.upstream_deps.get(key, ())
+        ),
+        upstream_deps=graph.upstream_deps,
+    )
+    return tuple(sorted(model_name for model_name in required if model_name in stale - selected))
 
 
 def _resolve_selected_model_names(

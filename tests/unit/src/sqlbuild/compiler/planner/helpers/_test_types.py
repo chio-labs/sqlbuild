@@ -79,6 +79,23 @@ class DirectIdentityStaleModelNamesTestCase:
 
 
 @dataclass(frozen=True)
+class VersionStalenessTestCase:
+    description: str
+    model_names: tuple[str, ...]
+    expected_version_hashes: dict[str, str]
+    built_version_hashes: dict[str, str | None]
+    forced_stale_model_names: tuple[str, ...]
+    expected_stale_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelClosureTestCase:
+    description: str
+    expected_downstream_model_names: frozenset[str]
+    expected_upstream_model_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class PlannerSourceFreshnessReadMapTestCase:
     description: str
     expected_observed_data_version: str
