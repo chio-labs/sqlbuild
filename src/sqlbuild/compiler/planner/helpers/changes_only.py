@@ -6,6 +6,9 @@ from dataclasses import replace
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.version_staleness import (
+    build_stale_model_names_from_version_identities,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
@@ -65,16 +68,13 @@ def build_direct_identity_stale_model_names(
 ) -> frozenset[str]:
     """Return all model names whose direct built identity is missing or stale."""
 
-    stale_model_names: set[str] = set()
-    model_name: str
-    for model_name in scope.models_by_name:
-        expected_version_hash: str | None = expected_version_hashes.get(model_name)
-        if expected_version_hash is None:
-            continue
-        built_version_hash: str | None = built_version_hashes.get(model_name)
-        if built_version_hash != expected_version_hash:
-            stale_model_names.add(model_name)
-    return frozenset(stale_model_names)
+    return frozenset(
+        build_stale_model_names_from_version_identities(
+            model_names=tuple(scope.models_by_name),
+            expected_version_hashes=expected_version_hashes,
+            built_version_hashes=built_version_hashes,
+        )
+    )
 
 
 def mark_version_identity_stale_actions(
