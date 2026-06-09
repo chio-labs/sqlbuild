@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookRelation
 from sqlbuild.executor.run.types import HookPhase
@@ -18,7 +18,7 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 
@@ -30,7 +30,7 @@ def execute_hooks(
     phase: HookPhase,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
     model_name: str | None = None,
-    destination: CompiledRelationDestination | None = None,
+    destination: CompiledRelationLocation | None = None,
     run_id: str = "",
     environment: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
@@ -140,7 +140,7 @@ def invoke_python_hook(
     hook_index: int,
     phase: HookPhase,
     model_name: str | None,
-    destination: CompiledRelationDestination | None,
+    destination: CompiledRelationLocation | None,
     run_id: str,
     environment: str | None,
     effective_vars: Mapping[str, object] | None,
@@ -292,7 +292,7 @@ def build_hook_context(
     hook_index: int,
     phase: HookPhase,
     model_name: str,
-    destination: CompiledRelationDestination,
+    destination: CompiledRelationLocation,
     run_id: str,
     environment: str | None,
     effective_vars: Mapping[str, object],
@@ -303,7 +303,7 @@ def build_hook_context(
         name=destination.name,
         schema=destination.schema,
         database=destination.database,
-        qualified=resolve_destination_qualified_name(adapter=adapter, target=destination),
+        qualified=resolve_relation_location_qualified_name(adapter=adapter, location=destination),
     )
     return HookContext(
         model_name=model_name,

@@ -8,7 +8,7 @@ from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
@@ -36,29 +36,29 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_manifest_model_node,
 )
 
-_MODEL_TARGETS: dict[str, CompiledRelationDestination] = {
-    "orders": CompiledRelationDestination(
+_MODEL_TARGETS: dict[str, CompiledRelationLocation] = {
+    "orders": CompiledRelationLocation(
         database=None, schema="staging", name="orders", qualified_name="staging.orders"
     ),
-    "customers": CompiledRelationDestination(
+    "customers": CompiledRelationLocation(
         database=None, schema="staging", name="customers", qualified_name="staging.customers"
     ),
 }
 
-_SEED_TARGETS: dict[str, CompiledRelationDestination] = {
-    "country_codes": CompiledRelationDestination(
+_SEED_TARGETS: dict[str, CompiledRelationLocation] = {
+    "country_codes": CompiledRelationLocation(
         database=None, schema="seeds", name="country_codes", qualified_name="seeds.country_codes"
     ),
 }
 
-_FUNCTION_TARGETS: dict[str, CompiledRelationDestination] = {
-    "customer_orders": CompiledRelationDestination(
+_FUNCTION_TARGETS: dict[str, CompiledRelationLocation] = {
+    "customer_orders": CompiledRelationLocation(
         database=None,
         schema="analytics",
         name="customer_orders",
         qualified_name="analytics.customer_orders",
     ),
-    "format_cents": CompiledRelationDestination(
+    "format_cents": CompiledRelationLocation(
         database=None,
         schema="analytics",
         name="format_cents",
@@ -431,13 +431,13 @@ APPLY_DEFERRED_TEST_CASES: list[ApplyDeferredTargetsTestCase] = [
 def test_given_deferred_targets_when_applying_then_replaces_expected_targets(
     test_case: ApplyDeferredTargetsTestCase,
 ) -> None:
-    model_targets: dict[str, CompiledRelationDestination] = {
+    model_targets: dict[str, CompiledRelationLocation] = {
         name: build_target(q, name) for name, q in test_case.model_target_qualified.items()
     }
-    seed_targets: dict[str, CompiledRelationDestination] = {
+    seed_targets: dict[str, CompiledRelationLocation] = {
         name: build_target(q, name) for name, q in test_case.seed_target_qualified.items()
     }
-    deferred: dict[str, CompiledRelationDestination] = {
+    deferred: dict[str, CompiledRelationLocation] = {
         name: build_target(q, name) for name, q in test_case.deferred_qualified.items()
     }
     selected_keys: frozenset[CompiledObjectKey] = frozenset(

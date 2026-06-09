@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner.helpers.plan_entry import (
@@ -41,7 +41,7 @@ def build_plan_output_from_model_changes_phase(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     reload_sources: bool = False,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,

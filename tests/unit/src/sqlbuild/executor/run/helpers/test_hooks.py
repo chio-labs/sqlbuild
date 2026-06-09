@@ -7,7 +7,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.models import HookContext
@@ -185,7 +185,7 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
             ),
         ),
         model_name="orders",
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name="orders",
@@ -276,7 +276,7 @@ def test_given_python_hooks_when_executing_then_injects_supported_context_aliase
             ),
         ),
         model_name="orders",
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name="orders",
@@ -324,7 +324,7 @@ def test_given_python_hook_raises_when_executing_then_reports_hook_label(
                 ),
             ),
             model_name="orders",
-            destination=CompiledRelationDestination(
+            destination=CompiledRelationLocation(
                 database=None,
                 schema="main",
                 name="orders",

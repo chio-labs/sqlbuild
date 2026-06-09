@@ -18,7 +18,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
     LoadedMacro,
     MacroContext,
@@ -152,7 +152,7 @@ def build_test_and_project(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="staging",
                     name=model_name,
@@ -177,13 +177,13 @@ def build_test_and_project(
                 arguments=(),
                 returns="BOOLEAN",
                 body_sql="SELECT TRUE",
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="main",
                     name=function_name,
                     qualified_name=qualified_name,
                 ),
-                fingerprint_destination=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationLocation(
                     database=None,
                     schema="main",
                     name=function_name,

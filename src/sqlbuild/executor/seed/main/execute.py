@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.seed.constants import SEED_LOAD_FAILED_CODE
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 
 
 def execute_seed(
@@ -24,8 +24,8 @@ def execute_seed(
     """Load one seed into the warehouse."""
 
     start: float = time.monotonic()
-    target_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=seed_entry.destination
+    target_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=seed_entry.destination
     )
     try:
         adapter.ensure_schema(

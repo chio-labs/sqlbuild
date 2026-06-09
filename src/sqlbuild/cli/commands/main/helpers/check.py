@@ -8,7 +8,7 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
@@ -27,7 +27,7 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind, SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -362,7 +362,7 @@ def _validate_check_sql_ref_exists(
     ref: SqlResourceRef,
 ) -> None:
     if ref.kind == SqlResourceRefKind.MODEL:
-        target: CompiledRelationDestination | None = pipeline_result.plan_output.model_targets.get(
+        target: CompiledRelationLocation | None = pipeline_result.plan_output.model_targets.get(
             ref.name
         )
         if target is None:
@@ -376,7 +376,7 @@ def _validate_check_sql_ref_exists(
             schema=target.schema,
             name=target.name,
         )
-        relation: str = resolve_destination_qualified_name(adapter=adapter, target=target)
+        relation: str = resolve_relation_location_qualified_name(adapter=adapter, location=target)
     elif ref.kind == SqlResourceRefKind.SOURCE:
         source: SourceEntry | None = (
             pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map

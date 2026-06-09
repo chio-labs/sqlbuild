@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 
 
 def resolve_qualified_name_parts(
@@ -25,20 +25,20 @@ def resolve_qualified_name_parts(
     return name
 
 
-def resolve_destination_qualified_name(
+def resolve_relation_location_qualified_name(
     *,
     adapter: BaseAdapter,
-    target: CompiledRelationDestination,
+    location: CompiledRelationLocation,
 ) -> str:
-    """Resolve one compiled target to its final adapter-qualified relation name."""
+    """Resolve one compiled relation location to its final adapter-qualified name."""
 
-    if target.database is not None or target.schema is not None:
+    if location.database is not None or location.schema is not None:
         return resolve_qualified_name_parts(
             adapter=adapter,
-            database=target.database,
-            schema=target.schema,
-            name=target.name,
+            database=location.database,
+            schema=location.schema,
+            name=location.name,
         )
-    if target.qualified_name is not None:
-        return target.qualified_name
-    return target.name
+    if location.qualified_name is not None:
+        return location.qualified_name
+    return location.name

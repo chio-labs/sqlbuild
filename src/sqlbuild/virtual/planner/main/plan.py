@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
@@ -288,7 +288,7 @@ def _read_bound_state(
     dict[str, str],
     dict[str, str],
     tuple[str, ...],
-    dict[str, CompiledRelationDestination],
+    dict[str, CompiledRelationLocation],
     dict[str, RelationInfo],
     dict[str, str],
     dict[str, str],
@@ -360,7 +360,7 @@ def _read_bound_state(
             graph=graph,
             virtual_environment_name=target_name,
         )
-        model_targets: dict[str, CompiledRelationDestination] = {
+        model_targets: dict[str, CompiledRelationLocation] = {
             model.name: model.destination for model in graph.project.models
         }
         physical_relations: dict[str, PhysicalRelationRecord] = {}
@@ -373,7 +373,7 @@ def _read_bound_state(
             )
             if relation is not None:
                 physical_relations[model_name] = relation
-        deferred_targets: dict[str, CompiledRelationDestination] = {
+        deferred_targets: dict[str, CompiledRelationLocation] = {
             model_name: build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,

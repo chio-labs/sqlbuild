@@ -17,7 +17,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledDirectLogicSqlTestPayload,
@@ -67,7 +67,7 @@ def plan_test(
     """Build a test plan entry with chained resolution."""
 
     if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
-        function_targets: dict[str, CompiledRelationDestination] = {
+        function_targets: dict[str, CompiledRelationLocation] = {
             function.name: function.destination for function in project.functions
         }
         return (
@@ -83,7 +83,7 @@ def plan_test(
     model_payload: CompiledModelSqlTestPayload = test.payload
 
     model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
-    function_targets: dict[str, CompiledRelationDestination] = {
+    function_targets: dict[str, CompiledRelationLocation] = {
         function.name: function.destination for function in project.functions
     }
     mock_refs: dict[str, str] = _extract_mock_refs(test)
@@ -268,7 +268,7 @@ def plan_test(
 def _plan_direct_logic_test(
     *,
     test: CompiledSqlTest,
-    function_targets: dict[str, CompiledRelationDestination],
+    function_targets: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
@@ -336,7 +336,7 @@ def _resolve_assertion_sql(
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
-    function_targets: dict[str, CompiledRelationDestination],
+    function_targets: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     reachable_mocks: set[str] = set()
@@ -398,7 +398,7 @@ def _resolve_test_model_sql(
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, str],
     reachable_mocks: set[str],
-    function_targets: dict[str, CompiledRelationDestination],
+    function_targets: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     """Replace refs and sources in model SQL with mocks or chain outputs."""

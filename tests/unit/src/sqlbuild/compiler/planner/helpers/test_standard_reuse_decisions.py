@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
     build_standard_reuse_decisions,
 )
@@ -80,7 +80,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
             model_snapshots={
                 "candidate": StandardReuseFromTargetModelSnapshot(
                     model_name="candidate",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="candidate",
@@ -91,7 +91,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "current": StandardReuseFromTargetModelSnapshot(
                     model_name="current",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="current",
@@ -102,7 +102,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "missing_fingerprint": StandardReuseFromTargetModelSnapshot(
                     model_name="missing_fingerprint",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="missing_fingerprint",
@@ -113,7 +113,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "missing_relation": StandardReuseFromTargetModelSnapshot(
                     model_name="missing_relation",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="missing_relation",
@@ -124,7 +124,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "version_mismatch": StandardReuseFromTargetModelSnapshot(
                     model_name="version_mismatch",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="version_mismatch",
@@ -135,7 +135,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "ineligible_view": StandardReuseFromTargetModelSnapshot(
                     model_name="ineligible_view",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="ineligible_view",
@@ -146,7 +146,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "incremental_candidate": StandardReuseFromTargetModelSnapshot(
                     model_name="incremental_candidate",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="incremental_candidate",
@@ -157,7 +157,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "ineligible_custom": StandardReuseFromTargetModelSnapshot(
                     model_name="ineligible_custom",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="ineligible_custom",
@@ -168,7 +168,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "missing_expected": StandardReuseFromTargetModelSnapshot(
                     model_name="missing_expected",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="missing_expected",
@@ -179,7 +179,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "current_reuse_from_missing": StandardReuseFromTargetModelSnapshot(
                     model_name="current_reuse_from_missing",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="current_reuse_from_missing",
@@ -221,7 +221,7 @@ def test_given_scoped_models_when_building_standard_reuse_decisions_then_classif
             model_snapshots={
                 "candidate": StandardReuseFromTargetModelSnapshot(
                     model_name="candidate",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="candidate",
@@ -232,7 +232,7 @@ def test_given_scoped_models_when_building_standard_reuse_decisions_then_classif
                 ),
                 "current": StandardReuseFromTargetModelSnapshot(
                     model_name="current",
-                    reuse_origin=CompiledRelationDestination(
+                    reuse_origin=CompiledRelationLocation(
                         database=None,
                         schema="prod_schema",
                         name="current",

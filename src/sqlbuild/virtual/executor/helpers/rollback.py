@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -209,7 +209,7 @@ def validate_physical_relations_exist(
                     f"checkpoint references unknown model '{model_name}'",
                     code="S023",
                 )
-            target: CompiledRelationDestination = build_virtual_destination_from_physical_relation(
+            target: CompiledRelationLocation = build_virtual_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
                 fallback_target=model.destination,
@@ -271,7 +271,7 @@ def publish_function_versions(
             function: CompiledFunction | None = functions_by_name.get(function_name)
             if function is None:
                 continue
-            target: CompiledRelationDestination = build_virtual_destination(
+            target: CompiledRelationLocation = build_virtual_destination(
                 adapter=adapter,
                 target=function.destination,
                 virtual_environment_name=virtual_environment_name,

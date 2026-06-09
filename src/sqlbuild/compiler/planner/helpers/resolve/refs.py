@@ -9,12 +9,12 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.shared.helpers.sql_scanning import find_matching_paren
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,
     reference_call_prefix_pattern_text,
@@ -55,8 +55,8 @@ _CLAUSE_KEYWORDS: frozenset[str] = frozenset(
 def resolve_ref_references(
     *,
     query_sql: str,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     cursor_bounds: CursorBounds | None,
     cursor_inputs: dict[str, str],
     adapter: BaseAdapter,
@@ -67,10 +67,12 @@ def resolve_ref_references(
 
     def _replace_ref(match: re.Match[str]) -> str:
         ref_name: str = match.group(1)
-        target: CompiledRelationDestination | None = model_targets.get(ref_name)
+        target: CompiledRelationLocation | None = model_targets.get(ref_name)
         if target is None:
             return match.group(0)
-        qualified_name: str = resolve_destination_qualified_name(adapter=adapter, target=target)
+        qualified_name: str = resolve_relation_location_qualified_name(
+            adapter=adapter, location=target
+        )
         if cursor_bounds is None:
             return qualified_name
         cursor_column: str | None = cursor_inputs.get(ref_name)
@@ -89,10 +91,10 @@ def resolve_ref_references(
 
     def _replace_seed(match: re.Match[str]) -> str:
         seed_name: str = match.group(1)
-        target: CompiledRelationDestination | None = seed_targets.get(seed_name)
+        target: CompiledRelationLocation | None = seed_targets.get(seed_name)
         if target is None:
             return match.group(0)
-        return resolve_destination_qualified_name(adapter=adapter, target=target)
+        return resolve_relation_location_qualified_name(adapter=adapter, location=target)
 
     return _SEED_PATTERN.sub(_replace_seed, _REF_PATTERN.sub(_replace_ref, query_sql))
 
@@ -120,7 +122,7 @@ def resolve_dbt_ref_references(
 def resolve_udf_references(
     *,
     query_sql: str,
-    function_targets: dict[str, CompiledRelationDestination],
+    function_targets: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     """Replace __udf() calls with adapter-specific scalar UDF calls."""
@@ -131,7 +133,7 @@ def resolve_udf_references(
     for match in _UDF_PATTERN.finditer(query_sql):
         parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
-        target: CompiledRelationDestination | None = function_targets.get(function_name)
+        target: CompiledRelationLocation | None = function_targets.get(function_name)
         if target is None or target.qualified_name is None:
             parts.append(match.group(0))
             last_index = match.end()
@@ -171,7 +173,7 @@ def _skip_whitespace(*, sql: str, start: int) -> int:
 def resolve_table_function_references(
     *,
     query_sql: str,
-    function_targets: dict[str, CompiledRelationDestination],
+    function_targets: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     """Replace __table_fn() calls with adapter-specific table function calls."""
@@ -182,7 +184,7 @@ def resolve_table_function_references(
     for match in _TABLE_FUNCTION_PATTERN.finditer(query_sql):
         parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
-        target: CompiledRelationDestination | None = function_targets.get(function_name)
+        target: CompiledRelationLocation | None = function_targets.get(function_name)
         if target is None or target.qualified_name is None:
             parts.append(match.group(0))
             last_index = match.end()
@@ -255,7 +257,7 @@ def _has_following_alias(*, sql: str, start: int) -> bool:
 
 def build_model_targets(
     models: tuple[CompiledModel, ...],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of model name to compiled relation target."""
 
     return {model.name: model.destination for model in models}
@@ -263,7 +265,7 @@ def build_model_targets(
 
 def build_seed_targets(
     seeds: tuple[CompiledSeed, ...],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of seed name to compiled relation target."""
 
     return {seed.name: seed.destination for seed in seeds}
@@ -271,7 +273,7 @@ def build_seed_targets(
 
 def build_function_targets(
     functions: tuple[CompiledFunction, ...],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of function name to compiled relation target."""
 
     return {function.name: function.destination for function in functions}
@@ -279,16 +281,16 @@ def build_function_targets(
 
 def apply_deferred_targets(
     *,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
-    deferred_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
+    deferred_targets: dict[str, CompiledRelationLocation],
     selected_keys: frozenset[CompiledObjectKey],
 ) -> None:
     """Replace non-selected model/seed targets with deferred target targets."""
 
     selected_names: frozenset[str] = frozenset(k.name for k in selected_keys)
     name: str
-    deferred_target: CompiledRelationDestination
+    deferred_target: CompiledRelationLocation
     for name, deferred_target in deferred_targets.items():
         if name in selected_names:
             continue

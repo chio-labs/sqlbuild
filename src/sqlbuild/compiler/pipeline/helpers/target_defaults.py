@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -80,11 +80,11 @@ def _resolve_function_target(
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
     python_functions_inherit_default_namespace: bool,
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     apply_defaults: bool = (
         function.language != FunctionLanguage.PYTHON or python_functions_inherit_default_namespace
     )
-    resolved: CompiledRelationDestination = _resolve_target(
+    resolved: CompiledRelationLocation = _resolve_target(
         function.destination,
         default_schema if apply_defaults else None,
         default_database if apply_defaults else None,
@@ -96,11 +96,11 @@ def _resolve_function_target(
 
 
 def _resolve_target(
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     """Fill in adapter defaults for None schema/database on a target."""
 
     schema: str | None = target.schema if target.schema is not None else default_schema
@@ -116,7 +116,7 @@ def _resolve_target(
         and qualified_name == target.qualified_name
     ):
         return target
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=target.name,

@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompileSqlReference,
 )
@@ -91,7 +91,7 @@ def build_planner_relations_context(
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,
@@ -99,9 +99,9 @@ def build_planner_relations_context(
 ) -> PlannerRelationsContext:
     """Resolve relation targets and source metadata for plan entry construction."""
 
-    model_targets: dict[str, CompiledRelationDestination] = build_model_targets(project.models)
-    seed_targets: dict[str, CompiledRelationDestination] = build_seed_targets(project.seeds)
-    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+    model_targets: dict[str, CompiledRelationLocation] = build_model_targets(project.models)
+    seed_targets: dict[str, CompiledRelationLocation] = build_seed_targets(project.seeds)
+    function_targets: dict[str, CompiledRelationLocation] = build_function_targets(
         project.functions
     )
     if deferred_targets is not None:
@@ -148,10 +148,10 @@ def plan_model(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationLocation],
+    function_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -263,10 +263,10 @@ def plan_model_from_change(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationLocation],
+    function_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -854,7 +854,7 @@ def _build_logical_ddl_from_adapter(
     adapter: BaseAdapter,
     action: PlanAction,
     resolved_sql: str,
-    destination: CompiledRelationDestination,
+    destination: CompiledRelationLocation,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
     cursor_column: str | None = None,
@@ -910,9 +910,9 @@ def _build_cursor_input_relations(
     *,
     model: CompiledModel,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationDestination],
+    seed_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
 ) -> tuple[CursorInputRelation, ...]:
@@ -1045,14 +1045,14 @@ def _resolve_cursor_input_relation(
     *,
     ref: CompileSqlReference,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
 ) -> str | None:
     """Resolve one cursor input reference to a qualified relation name."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
-        target: CompiledRelationDestination | None = model_targets.get(ref.ref_name)
+        target: CompiledRelationLocation | None = model_targets.get(ref.ref_name)
         if target is None:
             target = seed_targets.get(ref.ref_name)
         return target.qualified_name if target is not None else None

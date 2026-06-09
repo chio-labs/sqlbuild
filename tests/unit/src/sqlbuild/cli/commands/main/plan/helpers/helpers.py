@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
@@ -70,7 +70,7 @@ def build_model_entry(
         materialization_type=materialization_type,
         action=action,
         reason=reason,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql=f"SELECT * FROM {name}",
@@ -188,7 +188,7 @@ def build_seed_entry(*, name: str) -> SeedPlanEntry:
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         file_path=Path(f"seeds/{name}.csv"),
@@ -212,10 +212,10 @@ def build_function_entry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name),
         name=name,
         relative_path=Path(f"functions/{language.value}/{name}.sql"),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
-        fingerprint_destination=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         arguments=(),

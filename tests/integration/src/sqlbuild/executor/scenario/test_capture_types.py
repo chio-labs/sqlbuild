@@ -10,7 +10,7 @@ import duckdb
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots import read_scenario_snapshot_manifest
 from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
@@ -113,7 +113,7 @@ def test_given_typed_duckdb_relation_when_capturing_then_jsonl_reloads_with_mani
             ScenarioSnapshotCaptureRelationPlan(
                 kind=ScenarioArtifactKind.SOURCE,
                 logical_name="typed_source",
-                source_target=CompiledRelationDestination(
+                source_target=CompiledRelationLocation(
                     database=None,
                     schema=None,
                     name="typed_capture_source",

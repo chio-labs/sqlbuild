@@ -6,12 +6,12 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
 from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_destination
@@ -78,7 +78,7 @@ def adopt_into_virtual_state(
             ):
                 continue
             version_hash: str = model.name
-            physical_target: CompiledRelationDestination = build_virtual_physical_destination(
+            physical_target: CompiledRelationLocation = build_virtual_physical_destination(
                 adapter=adapter,
                 target=model.destination,
                 model_name=model.name,
@@ -95,10 +95,12 @@ def adopt_into_virtual_state(
             )
             adapter.move_or_copy_relation(
                 connection,
-                source=resolve_destination_qualified_name(
-                    adapter=adapter, target=model.destination
+                source=resolve_relation_location_qualified_name(
+                    adapter=adapter, location=model.destination
                 ),
-                target=resolve_destination_qualified_name(adapter=adapter, target=physical_target),
+                target=resolve_relation_location_qualified_name(
+                    adapter=adapter, location=physical_target
+                ),
                 remove_source=model_relation_type != "view",
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,
@@ -106,12 +108,12 @@ def adopt_into_virtual_state(
             if model_relation_type == "view":
                 adapter.drop_view(
                     connection,
-                    target=resolve_destination_qualified_name(
-                        adapter=adapter, target=model.destination
+                    target=resolve_relation_location_qualified_name(
+                        adapter=adapter, location=model.destination
                     ),
                     statement_recorder=recorder,
                 )
-            virtual_target: CompiledRelationDestination = build_virtual_logical_destination(
+            virtual_target: CompiledRelationLocation = build_virtual_logical_destination(
                 adapter=adapter,
                 target=model.destination,
                 virtual_environment_name=active_target_name,
@@ -119,10 +121,14 @@ def adopt_into_virtual_state(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
+                target=resolve_relation_location_qualified_name(
+                    adapter=adapter, location=virtual_target
+                ),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_destination_qualified_name(adapter=adapter, target=physical_target)
+                    + resolve_relation_location_qualified_name(
+                        adapter=adapter, location=physical_target
+                    )
                 ),
                 statement_recorder=recorder,
             )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.virtual.planner.helpers.targets import build_destination_from_physical_relation
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
@@ -12,8 +12,8 @@ def build_virtual_destination_from_physical_relation(
     *,
     adapter: BaseAdapter,
     relation: PhysicalRelationRecord,
-    fallback_target: CompiledRelationDestination,
-) -> CompiledRelationDestination:
+    fallback_target: CompiledRelationLocation,
+) -> CompiledRelationLocation:
     """Build a compiled target from a tracked physical relation."""
 
     return build_destination_from_physical_relation(

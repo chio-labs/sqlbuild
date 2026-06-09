@@ -13,7 +13,7 @@ from sqlbuild.shared.constants import (
     SCENARIO_EXEC_EXPECTED_FAILED,
     SCENARIO_EXEC_EXPECTED_INTERNAL,
 )
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.helpers.scenario_expected_comparison_sql import (
     build_scenario_expected_comparison_sql,
 )
@@ -28,8 +28,8 @@ def execute_scenario_expected_expectation(
 ) -> ScenarioExpectedExpectationExecutionResult:
     """Compare one scenario-built model relation with its expected query."""
 
-    actual_relation: str = resolve_destination_qualified_name(
-        adapter=adapter, target=expectation.actual_destination
+    actual_relation: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=expectation.actual_destination
     )
     comparison_sql: str = build_scenario_expected_comparison_sql(
         actual_sql=f"SELECT * FROM {actual_relation}",

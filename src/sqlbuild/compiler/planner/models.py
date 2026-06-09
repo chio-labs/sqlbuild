@@ -17,7 +17,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -233,9 +233,9 @@ class PlannerWarehouseSnapshotResult:
 class PlannerRelationsContext:
     """Resolved relation and source inputs for plan entry construction."""
 
-    model_targets: dict[str, CompiledRelationDestination]
-    seed_targets: dict[str, CompiledRelationDestination]
-    function_targets: dict[str, CompiledRelationDestination]
+    model_targets: dict[str, CompiledRelationLocation]
+    seed_targets: dict[str, CompiledRelationLocation]
+    function_targets: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
     source_read_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
@@ -292,7 +292,7 @@ class StandardReuseFromTargetModelSnapshot:
     """One model's relation and fingerprint state in the reuse_from target."""
 
     model_name: str
-    reuse_origin: CompiledRelationDestination
+    reuse_origin: CompiledRelationLocation
     relation_exists: bool
     built_version_hash: str | None = None
 
@@ -365,7 +365,7 @@ class ModelPlanEntry:
     materialization_type: MaterializationType
     action: PlanAction
     reason: PlanReason
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     fingerprint_query_sql: str
     resolved_sql: str
     logical_ddl: str
@@ -412,7 +412,7 @@ class ModelPlanEntry:
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
-    reuse_origin: CompiledRelationDestination | None = None
+    reuse_origin: CompiledRelationLocation | None = None
     reuse_hard_copy: bool = False
 
 
@@ -422,7 +422,7 @@ class SeedPlanEntry:
 
     key: CompiledObjectKey
     name: str
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     file_path: Path
     columns: tuple[ColumnInfo, ...]
     csv_settings: SeedCsvSettings
@@ -452,12 +452,12 @@ class FunctionPlanEntry:
     key: CompiledObjectKey
     name: str
     relative_path: Path
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     arguments: tuple[object, ...]
     returns: str
     body_sql: str
     fingerprint_query_sql: str
-    fingerprint_destination: CompiledRelationDestination
+    fingerprint_destination: CompiledRelationLocation
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None
@@ -578,14 +578,14 @@ class ScenarioRelationPlan:
 
     scenario_name: str
     relation_map: ScenarioRelationMap
-    model_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    seed_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
+    model_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     project_source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
-    source_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    ref_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    seed_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    dbt_ref_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
+    source_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    ref_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    dbt_ref_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -594,7 +594,7 @@ class ScenarioFixturePlan:
 
     kind: ScenarioArtifactKind
     logical_name: str
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     sql: str
 
 
@@ -603,7 +603,7 @@ class ScenarioExpectedExpectationPlan:
     """Expected-output comparison inputs for one scenario target model."""
 
     model_name: str
-    actual_destination: CompiledRelationDestination
+    actual_destination: CompiledRelationLocation
     expected_sql: str
 
 
@@ -667,9 +667,9 @@ class PlanOutput:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
-    model_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    seed_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    function_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
+    model_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    function_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)

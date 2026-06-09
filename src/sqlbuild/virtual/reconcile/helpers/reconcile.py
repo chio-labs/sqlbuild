@@ -11,12 +11,12 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.relation_type import normalize_relation_type
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import RelationType
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
@@ -354,8 +354,8 @@ def resolve_attach_relation(
         model_name=model_name,
     )
     for candidate in candidates:
-        rendered: str = resolve_destination_qualified_name(
-            adapter=adapter, target=fallback_target(candidate)
+        rendered: str = resolve_relation_location_qualified_name(
+            adapter=adapter, location=fallback_target(candidate)
         )
         if adapter.relation_names_match(rendered, physical_relation_name):
             return candidate
@@ -435,8 +435,8 @@ def physical_relation_exists(
         adapter.close(connection)
 
 
-def fallback_target(relation: PhysicalRelationRecord) -> CompiledRelationDestination:
-    return CompiledRelationDestination(
+def fallback_target(relation: PhysicalRelationRecord) -> CompiledRelationLocation:
+    return CompiledRelationLocation(
         database=relation.database_name,
         schema=relation.schema_name,
         name=relation.relation_name,

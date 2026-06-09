@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -73,7 +73,7 @@ def build_project_from_test_case(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(values=config_values),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -105,7 +105,7 @@ def build_project_from_test_case(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -133,13 +133,13 @@ def build_project_from_test_case(
                 arguments=(FunctionArgument(name="value", type="INTEGER"),),
                 returns="INTEGER",
                 body_sql=body_sql,
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=function_name,
                     qualified_name=f"{target_schema}.{function_name}",
                 ),
-                fingerprint_destination=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=function_name,
@@ -223,7 +223,7 @@ def build_project_from_source_cursor_input_test_case(
                 "cursor_inputs": {test_case.source_name: test_case.cursor_input_column},
             }
         ),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name=test_case.model_name,
@@ -310,7 +310,7 @@ def build_project_from_format_test_case(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(values=config_values),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -342,7 +342,7 @@ def build_project_from_format_test_case(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=seed_name,

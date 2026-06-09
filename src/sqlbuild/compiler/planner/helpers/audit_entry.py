@@ -12,7 +12,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.helpers.audit_scheduling import (
     resolve_attachment_kind,
@@ -26,8 +26,8 @@ from sqlbuild.spec.models.source import SourceEntry
 def plan_audit(
     *,
     audit: CompiledAudit,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     adapter: BaseAdapter,
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],

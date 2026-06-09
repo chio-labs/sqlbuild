@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
     FunctionArgument,
 )
@@ -42,7 +42,7 @@ def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> Compile
         relative_path=Path(f"models/{test_case.model_name}.sql"),
         query_sql=test_case.query_sql,
         config=CompileModelConfig(values=test_case.config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="staging", name=test_case.model_name, qualified_name=None
         ),
         schema_entry=schema_entry,
@@ -62,7 +62,7 @@ def build_model_from_metadata_test_case(
         relative_path=Path("models/orders.sql"),
         query_sql="SELECT 1 AS order_id",
         config=CompileModelConfig(values=test_case.config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="staging", name="orders", qualified_name=None
         ),
         schema_entry=SchemaModelEntry(
@@ -119,11 +119,11 @@ def build_project_for_function_metadata_detection() -> CompiledProject:
         relative_path=Path("models/orders.sql"),
         query_sql="SELECT is_large_order(amount) AS large_order FROM orders",
         config=CompileModelConfig(values={}),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="staging", name="orders", qualified_name=None
         ),
     )
-    function_destination: CompiledRelationDestination = CompiledRelationDestination(
+    function_destination: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema="staging",
         name="is_large_order",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileSqlReference,
 )
 from sqlbuild.shared.types import SqlReferenceKind
@@ -13,8 +13,8 @@ from sqlbuild.shared.types import SqlReferenceKind
 def has_model_backed_cursor_inputs(
     *,
     model: CompiledModel,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     cursor_inputs: dict[str, str],
 ) -> bool:
     """Return whether any cursor input points at another model relation."""

@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -34,7 +34,7 @@ def build_single_model_project(
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=physical_database,
             schema=physical_schema,
             name="test_model",

@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSource,
     CompileModelConfig,
     FunctionArgument,
@@ -45,13 +45,13 @@ def build_virtual_planner_test_project(
         arguments=(FunctionArgument(name="value", type="INTEGER"),),
         returns="INTEGER",
         body_sql=function_body_sql,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="normalize_order",
             qualified_name="staging.normalize_order",
         ),
-        fingerprint_destination=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="normalize_order",
@@ -90,7 +90,7 @@ def build_virtual_planner_test_project(
             if upstream_schema_columns
             else None
         ),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=upstream_schema,
             name=upstream_model_name,
@@ -104,7 +104,7 @@ def build_virtual_planner_test_project(
         relative_path=Path("models/fact_orders.sql"),
         query_sql=downstream_query_sql,
         config=CompileModelConfig(values={"materialized": "table"}),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="marts",
             name="fact_orders",
@@ -118,7 +118,7 @@ def build_virtual_planner_test_project(
         relative_path=Path("models/dim_customers.sql"),
         query_sql="SELECT 1 AS customer_id",
         config=CompileModelConfig(values={"materialized": "table"}),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="marts",
             name="dim_customers",

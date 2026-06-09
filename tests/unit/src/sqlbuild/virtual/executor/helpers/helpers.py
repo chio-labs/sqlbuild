@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -35,7 +35,7 @@ def build_virtual_executor_test_project() -> CompiledProject:
         relative_path=Path("models/stg_orders.sql"),
         query_sql="SELECT 1 AS id",
         config=CompileModelConfig(values={"materialized": "table"}),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="dev",
             name="stg_orders",
@@ -49,7 +49,7 @@ def build_virtual_executor_test_project() -> CompiledProject:
         relative_path=Path("models/fact_orders.sql"),
         query_sql='SELECT id FROM __ref("stg_orders")',
         config=CompileModelConfig(values={"materialized": "table"}),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="dev",
             name="fact_orders",
@@ -112,7 +112,7 @@ def build_seeded_incremental_plan_output(
         materialization_type=materialization_type,
         action=action,
         reason=PlanReason.QUERY_CHANGED,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="dev__sqb_physical",
             name="orders__v_newhash",

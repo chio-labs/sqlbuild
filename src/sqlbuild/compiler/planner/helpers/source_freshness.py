@@ -10,7 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
@@ -55,7 +55,7 @@ def build_planner_source_freshness_result(
 
 
 def _resolve_state_database(project: CompiledProject) -> str | None:
-    model_destination: CompiledRelationDestination
+    model_destination: CompiledRelationLocation
     for model_destination in _iter_state_destinations(project=project):
         if model_destination.database is not None:
             return model_destination.database
@@ -67,7 +67,7 @@ def _collect_state_schemas(*, project: CompiledProject, scope: PlannerScope) -> 
         key.name for key in scope.selected_keys if key.resource_type == CompiledResourceType.MODEL
     )
     schemas: set[str] = set()
-    model_destination: CompiledRelationDestination
+    model_destination: CompiledRelationLocation
     for model_destination in _iter_state_destinations(project=project):
         if model_destination.schema is not None:
             schemas.add(model_destination.schema)
@@ -80,9 +80,7 @@ def _collect_state_schemas(*, project: CompiledProject, scope: PlannerScope) -> 
     return tuple(sorted(schemas))
 
 
-def _iter_state_destinations(
-    *, project: CompiledProject
-) -> tuple[CompiledRelationDestination, ...]:
+def _iter_state_destinations(*, project: CompiledProject) -> tuple[CompiledRelationLocation, ...]:
     return (
         *(model.destination for model in project.models),
         *(seed.destination for seed in project.seeds),

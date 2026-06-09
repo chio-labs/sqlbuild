@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
@@ -163,13 +163,13 @@ def run_virtual_clone(
             target_model: CompiledModel = target_models_by_name[model_name]
             source_model: CompiledModel = source_models_by_name[model_name]
             version_hash: str = version_hashes[model_name]
-            source_target: CompiledRelationDestination = build_physical_destination(
+            source_target: CompiledRelationLocation = build_physical_destination(
                 adapter=adapter,
                 target=source_model.destination,
                 model_name=model_name,
                 version_hash=version_hash,
             )
-            source_lookup_target: CompiledRelationDestination = (
+            source_lookup_target: CompiledRelationLocation = (
                 replace_target_database(
                     adapter=adapter,
                     target=source_target,
@@ -178,7 +178,7 @@ def run_virtual_clone(
                 if source_database_alias is not None
                 else source_target
             )
-            target_target: CompiledRelationDestination = build_physical_destination(
+            target_target: CompiledRelationLocation = build_physical_destination(
                 adapter=adapter,
                 target=target_model.destination,
                 model_name=model_name,
