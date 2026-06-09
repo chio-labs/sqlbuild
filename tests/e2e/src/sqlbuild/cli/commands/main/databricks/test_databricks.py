@@ -171,7 +171,7 @@ def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -200,7 +200,7 @@ def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'

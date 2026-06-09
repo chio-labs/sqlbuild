@@ -484,6 +484,8 @@ def plan_model_from_change(
         previous_query_sql=previous_query_sql,
         fingerprint_metadata_json=change_result.fingerprint_metadata_json,
         previous_metadata_json=change_result.previous_metadata_json,
+        fingerprint_version_hash=change_result.fingerprint_version_hash,
+        previous_version_hash=change_result.previous_version_hash,
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,

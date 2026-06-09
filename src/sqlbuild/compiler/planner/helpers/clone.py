@@ -117,7 +117,7 @@ def build_clone_model_entries(
                 source_map=source_map,
                 source_warehouse_columns=source_warehouse_columns,
                 star_exclude_keyword=adapter.star_exclude_keyword(),
-                backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 full_refresh=False,
                 start_cursor_override=None,
                 end_cursor_override=None,

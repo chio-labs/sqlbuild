@@ -130,7 +130,7 @@ def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
         fingerprint_query_sql="select 1",
         resolved_sql="select 1",
         logical_ddl="",
-        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
     )
 
 

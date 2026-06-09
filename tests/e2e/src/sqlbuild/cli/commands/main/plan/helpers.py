@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -24,7 +26,11 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+)
 
 
 def build_virtual_plan_project_toml() -> str:
@@ -44,6 +50,120 @@ def build_virtual_plan_project_toml() -> str:
         "[targets.dev.state.connection]\n"
         'database = "state.duckdb"\n'
     )
+
+
+def build_direct_changes_only_project_toml(*, project_name: str) -> str:
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "duckdb"\n\n'
+        "[connection]\n"
+        'database = "warehouse.duckdb"\n'
+    )
+
+
+def direct_changes_only_stg_orders_sql(*, amount_cents: int, tags: str = "") -> str:
+    return (
+        f"MODEL (materialized table{tags});\n\n"
+        "SELECT\n"
+        "  1 AS order_id,\n"
+        f"  {amount_cents} AS amount_cents\n"
+    )
+
+
+def direct_changes_only_orders_model_sql(
+    *,
+    amount_expression: str,
+    policy_fragment: str,
+    columns_fragment: str,
+    extra_select_fragment: str = "",
+) -> str:
+    return (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  cursor id,\n"
+        "  cursor_type integer,\n"
+        "  unique_key id"
+        f"{policy_fragment}"
+        f"{',' if columns_fragment else ''}\n"
+        f"  {columns_fragment}\n"
+        ");\n\n"
+        "SELECT\n"
+        "  1 AS id,\n"
+        f"  {amount_expression} AS amount_cents"
+        f"{extra_select_fragment}\n"
+    )
+
+
+def prepare_direct_changes_only_incremental_project(
+    *, tmp_path: Path, project_name: str, model_sql: str
+) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_direct_changes_only_project_toml(
+                project_name=project_name
+            ),
+            "models/orders.sql": model_sql,
+        },
+    )
+
+
+def prepare_direct_function_identity_project(*, tmp_path: Path, project_name: str) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_direct_changes_only_project_toml(
+                project_name=project_name
+            ),
+            "functions/sql/is_large_order.sql": direct_is_large_order_function_sql(operator=">"),
+            "models/orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT 1 AS id, __udf("is_large_order")(150) AS is_large\n'
+            ),
+        },
+    )
+
+
+def direct_is_large_order_function_sql(*, operator: str) -> str:
+    return (
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+        f"replay_on_change bounded-14d);\n\namount {operator} 100\n"
+    )
+
+
+def rewrite_direct_is_large_order_function(*, project_dir: Path, operator: str) -> None:
+    (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+        direct_is_large_order_function_sql(operator=operator),
+        encoding="utf-8",
+    )
+
+
+def direct_model_version_hashes(*, db_path: Path, model_name: str) -> list[tuple[object, ...]]:
+    return query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT version_hash FROM main._sqlbuild_fingerprints "
+            f"WHERE model_name = '{model_name}' ORDER BY ts"
+        ),
+    )
+
+
+def plan_changes_only_json(*, project_dir: Path) -> dict[str, object]:
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--json"),
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    return cast(dict[str, object], json.loads(plan_result.stdout))
+
+
+def only_json_model(payload: dict[str, object]) -> dict[str, object]:
+    models: list[dict[str, object]] = cast(list[dict[str, object]], payload["models"])
+    assert len(models) == 1, payload
+    return models[0]
 
 
 def build_virtual_plan_repo_files(

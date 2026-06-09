@@ -401,7 +401,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         function_targets={"is_priority_order": "staging"},
         function_bodies={"is_priority_order": "value = 2"},
         previous_function_bodies={"is_priority_order": "value = 1"},
-        function_query_change_backfills={"is_priority_order": "full"},
+        function_replay_on_changes={"is_priority_order": "full"},
         function_deps={"fact_orders": ("is_priority_order",)},
         model_configs={
             "fact_orders": {
@@ -434,7 +434,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
         previous_function_bodies={
             "is_priority_order_py": "def main(value: int) -> int:\n    return value + 1",
         },
-        function_query_change_backfills={"is_priority_order_py": "full"},
+        function_replay_on_changes={"is_priority_order_py": "full"},
         function_deps={"fact_orders": ("is_priority_order_py",)},
         model_configs={
             "fact_orders": {
@@ -476,7 +476,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
                 "cursor": "id",
                 "cursor_type": "integer",
                 "unique_key": "id",
-                "query_change_backfill": "bounded-1d",
+                "replay_on_change": "bounded-1d",
             },
             "order_metrics": {
                 "materialized": "incremental",

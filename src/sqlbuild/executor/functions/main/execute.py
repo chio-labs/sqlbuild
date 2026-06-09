@@ -145,6 +145,7 @@ def _try_write_function_fingerprint(
             target_name=entry.destination.name,
             run_id=run_id,
             query_hash=compute_query_hash(entry.fingerprint_query_sql),
+            version_hash=compute_query_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
             query_sql=entry.fingerprint_query_sql,
             metadata_json="{}",

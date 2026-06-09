@@ -457,7 +457,7 @@ def _assemble_compiled_function(
         runtime_version=function_input.runtime_version,
         entry_point=function_input.entry_point,
         packages=function_input.packages,
-        query_change_backfill=function_input.query_change_backfill,
+        replay_on_change=function_input.replay_on_change,
     )
 
 

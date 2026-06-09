@@ -2375,7 +2375,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -2415,7 +2415,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -2739,7 +2739,7 @@ def test_given_postgres_config_and_function_changes_when_planning_then_reasons_m
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "SELECT amount > 9\n"
             ),
         },
@@ -2779,7 +2779,7 @@ def test_given_postgres_config_and_function_changes_when_planning_then_reasons_m
         )
         (function_project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
             "FUNCTION ("
-            "arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full"
+            "arguments (amount INTEGER), returns BOOLEAN, replay_on_change full"
             ");\n\n"
             "SELECT amount > 5\n"
         )
@@ -3112,7 +3112,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "SELECT amount > 9\n"
             ),
         },
@@ -3154,7 +3154,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
 
         (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
             "FUNCTION ("
-            "arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full"
+            "arguments (amount INTEGER), returns BOOLEAN, replay_on_change full"
             ");\n\n"
             "SELECT amount > 5\n",
             encoding="utf-8",

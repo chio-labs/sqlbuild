@@ -362,10 +362,6 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             file_path=file_path,
         )
     )
-    schema_change_backfill: dict[str, str] = _load_string_mapping(
-        payload=mapping.get("schema_change_backfill"),
-        file_path=file_path,
-    )
     row_diff_tolerances: dict[str, object] = _optional_mapping(
         payload=mapping,
         key="row_diff_tolerances",
@@ -384,8 +380,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
-        query_change_backfill=_optional_str(payload=mapping, key="query_change_backfill"),
-        schema_change_backfill=schema_change_backfill,
+        replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
         row_diff_exclude_columns=row_diff_exclude_columns,
         row_diff_tolerances=row_diff_tolerances,
         tags=tags,

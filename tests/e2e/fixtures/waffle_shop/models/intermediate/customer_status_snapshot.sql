@@ -8,9 +8,9 @@ MODEL (
   cursor_inputs (
     fact_orders ordered_at,
   ),
-  query_change_backfill full,
+  replay_on_change full,
   on_schema_change sync_all_columns,
-  schema_change_backfill (
+  replay_on_change (
     add_column bounded-30d,
     type_change full,
   ),

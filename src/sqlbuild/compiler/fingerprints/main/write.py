@@ -46,6 +46,7 @@ def write_fingerprint(
         target_name=fingerprint.target_name,
         run_id=fingerprint.run_id,
         query_hash=fingerprint.query_hash,
+        version_hash=fingerprint.version_hash,
         schema_fingerprint=fingerprint.schema_fingerprint,
         query_sql=fingerprint.query_sql,
         metadata_json=fingerprint.metadata_json,

@@ -617,6 +617,18 @@ class SchemaBackfillBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DirectChangesOnlyStateBuildE2ETestCase:
+    """Test case for direct changes-only state/data behavior."""
+
+    description: str
+    project_name: str
+    initial_amount_cents: int
+    changed_amount_cents: int
+    expected_initial_amount_dollars: float
+    expected_changed_amount_dollars: float
+
+
+@dataclass(frozen=True)
 class MixedTimestampGrainBuildE2ETestCase:
     """Test case for mixed timestamp grain replay behavior."""
 

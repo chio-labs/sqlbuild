@@ -651,11 +651,11 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
         'MODEL ();\n\nSELECT COUNT(*) AS order_count FROM __ref("fact_orders")\n'
     )
     baseline_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 9\n"
     )
     current_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n"
     )
     baseline_project_dir: Path = prepare_inline_project(
@@ -720,7 +720,7 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
             expected_fragments=(
                 "Changed functions (1)",
                 "is_large_order",
-                "policy: query_change_backfill=full",
+                "policy: replay_on_change=full",
                 "query diff:",
                 "--- previous",
                 "+++ current",
@@ -740,11 +740,11 @@ def test_given_virtual_build_then_function_change_when_running_plan_then_it_show
     tmp_path: Path,
 ) -> None:
     initial_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 9\n"
     )
     changed_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n"
     )
     project_dir: Path = prepare_inline_project(

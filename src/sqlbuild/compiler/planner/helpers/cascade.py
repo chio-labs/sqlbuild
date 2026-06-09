@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeCause,
@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReas
 _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
 _ACTION_RANK: dict[BackfillAction, int] = {
-    BackfillAction.WARN_ONLY: 0,
+    BackfillAction.FORWARD_ONLY: 0,
     BackfillAction.BOUNDED: 1,
     BackfillAction.FULL: 2,
 }
@@ -41,7 +41,7 @@ def resolve_cascades(
     function_name: str
     function_change: FunctionChangeResult
     for function_name, function_change in changes.functions.items():
-        if function_change.backfill.action == BackfillAction.WARN_ONLY:
+        if function_change.backfill.action == BackfillAction.FORWARD_ONLY:
             continue
         effective_cascades[function_name] = build_self_cascade(
             function_change.backfill,
@@ -65,11 +65,11 @@ def resolve_cascades(
             continue
         cursor_type: str | None = _get_config_str(model, "cursor_type")
         model_cursor_types[model.name] = cursor_type
-        local_policy: str | None = _get_config_str(model, "query_change_backfill")
+        local_policy: str | None = _get_config_str(model, "replay_on_change")
         cascade: CascadeResult | None = resolve_cascade(
             model_name=model.name,
             own_backfill=change.backfill,
-            local_backfill=resolve_query_change_backfill(query_change_backfill=local_policy),
+            local_backfill=resolve_replay_on_change(replay_on_change=local_policy),
             own_cursor_type=cursor_type,
             upstream_keys=scope.upstream_deps.get(key, ()),
             effective_cascades=effective_cascades,
@@ -182,7 +182,7 @@ def _gather_cascade_candidates(
         upstream_cascade: CascadeResult | None = effective_cascades.get(key.name)
         if upstream_cascade is None:
             continue
-        if upstream_cascade.effective_action == BackfillAction.WARN_ONLY:
+        if upstream_cascade.effective_action == BackfillAction.FORWARD_ONLY:
             continue
 
         if key.resource_type == CompiledResourceType.FUNCTION:
@@ -263,9 +263,9 @@ def _resolve_effective_backfill(
 ) -> BackfillResult:
     """Resolve the model's outgoing pressure from local and incoming state."""
 
-    if own_backfill.action != BackfillAction.WARN_ONLY:
+    if own_backfill.action != BackfillAction.FORWARD_ONLY:
         return own_backfill
-    if local_backfill.action != BackfillAction.WARN_ONLY:
+    if local_backfill.action != BackfillAction.FORWARD_ONLY:
         return local_backfill
     return BackfillResult(
         action=incoming_cascade.effective_action,
@@ -283,7 +283,7 @@ def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, i
     """Produce a comparable rank tuple for a backfill action.
 
     Returns (action_rank, duration_seconds) where action_rank orders
-    WARN_ONLY < BOUNDED < FULL, and duration_seconds orders bounded
+    FORWARD_ONLY < BOUNDED < FULL, and duration_seconds orders bounded
     durations by total size.
     """
 

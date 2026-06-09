@@ -20,7 +20,7 @@ def prepare_virtual_seeded_incremental_project(
     tmp_path: Path,
     project_name: str,
     incremental_strategy: str,
-    query_change_backfill: str,
+    replay_on_change: str,
 ) -> Path:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
@@ -38,7 +38,7 @@ def prepare_virtual_seeded_incremental_project(
             + "\n",
             "models/orders.sql": incremental_orders_model_sql(
                 incremental_strategy=incremental_strategy,
-                query_change_backfill=query_change_backfill,
+                replay_on_change=replay_on_change,
                 amount_expression="amount_cents + 0",
             ),
         },
@@ -79,13 +79,13 @@ def rewrite_incremental_orders_model(
     *,
     project_dir: Path,
     incremental_strategy: str,
-    query_change_backfill: str,
+    replay_on_change: str,
     amount_expression: str,
 ) -> None:
     (project_dir / "models" / "orders.sql").write_text(
         incremental_orders_model_sql(
             incremental_strategy=incremental_strategy,
-            query_change_backfill=query_change_backfill,
+            replay_on_change=replay_on_change,
             amount_expression=amount_expression,
         ),
         encoding="utf-8",
@@ -104,7 +104,7 @@ def count_virtual_physical_versions(*, project_dir: Path, schema: str = "dev__sq
 
 
 def incremental_orders_model_sql(
-    *, incremental_strategy: str, query_change_backfill: str, amount_expression: str
+    *, incremental_strategy: str, replay_on_change: str, amount_expression: str
 ) -> str:
     return (
         dedent(
@@ -115,7 +115,7 @@ def incremental_orders_model_sql(
               cursor ordered_at,
               cursor_type timestamp,
               cursor_grain day,
-              query_change_backfill {query_change_backfill}
+              replay_on_change {replay_on_change}
             );
 
             SELECT id, ordered_at, {amount_expression} AS amount_cents
@@ -123,4 +123,46 @@ def incremental_orders_model_sql(
             """
         ).strip()
         + "\n"
+    )
+
+
+def prepare_direct_changes_only_two_model_project(
+    *, tmp_path: Path, project_name: str, amount_cents: int
+) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/stg_orders.sql": direct_changes_only_stg_orders_sql(amount_cents=amount_cents),
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  order_id,\n"
+                "  amount_cents,\n"
+                "  amount_cents / 100.0 AS amount_dollars\n"
+                'FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+
+
+def write_direct_changes_only_stg_orders(*, project_dir: Path, amount_cents: int) -> None:
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        direct_changes_only_stg_orders_sql(amount_cents=amount_cents),
+        encoding="utf-8",
+    )
+
+
+def direct_changes_only_stg_orders_sql(*, amount_cents: int) -> str:
+    return (
+        "MODEL (materialized table);\n\n"
+        "SELECT\n"
+        "  1 AS order_id,\n"
+        f"  {amount_cents} AS amount_cents\n"
     )

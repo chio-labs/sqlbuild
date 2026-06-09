@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
 
@@ -14,8 +13,14 @@ from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
     build_function_local_hashes as build_shared_function_local_hashes,
 )
+from sqlbuild.compiler.planner.main.version_identity_local_hash import (
+    build_model_local_identity_hash,
+)
 from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
+)
+from sqlbuild.compiler.planner.main.version_identity_version_hash import (
+    build_model_version_identity_hash,
 )
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.virtual.state.models import (
@@ -45,13 +50,9 @@ def build_expected_local_hashes(
         model: Any | None = models_by_name.get(key.name)
         if model is None:
             continue
-        expected_local_hashes[model.name] = _stable_hash(
-            "\n".join(
-                (
-                    model.query_sql,
-                    model_metadata_jsons[model.name],
-                )
-            )
+        expected_local_hashes[model.name] = build_model_local_identity_hash(
+            query_sql=model.query_sql,
+            metadata_json=model_metadata_jsons[model.name],
         )
     return expected_local_hashes
 
@@ -109,29 +110,11 @@ def build_expected_version_hashes(
         model: Any | None = models_by_name.get(key.name)
         if model is None:
             continue
-        upstream_hashes: list[str] = []
-        upstream_key: Any
-        for upstream_key in model.deps:
-            if upstream_key.resource_type == CompiledResourceType.SOURCE:
-                source_hash: str | None = source_hashes.get(upstream_key.name)
-                if source_hash is not None:
-                    upstream_hashes.append(source_hash)
-                continue
-            if upstream_key.resource_type not in (
-                CompiledResourceType.MODEL,
-                CompiledResourceType.FUNCTION,
-            ):
-                continue
-            upstream_hash: str | None = expected_hashes.get(upstream_key.name)
-            if upstream_hash is not None:
-                upstream_hashes.append(upstream_hash)
-        expected_hashes[model.name] = _stable_hash(
-            "\n".join(
-                (
-                    expected_local_hashes[model.name],
-                    *upstream_hashes,
-                )
-            )
+        expected_hashes[model.name] = build_model_version_identity_hash(
+            local_hash=expected_local_hashes[model.name],
+            upstream_deps=model.deps,
+            upstream_version_hashes=expected_hashes,
+            source_version_hashes=source_hashes,
         )
     return expected_hashes
 
@@ -518,10 +501,6 @@ def _apply_exclude_to_model_names(
         return model_names
     excluded: set[str] = set(_resolve_selected_model_names(graph=graph, select=exclude, exclude=()))
     return tuple(model_name for model_name in model_names if model_name not in excluded)
-
-
-def _stable_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _topologically_order_keys(graph: ProjectGraph) -> tuple[Any, ...]:

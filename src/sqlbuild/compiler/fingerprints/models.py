@@ -20,6 +20,7 @@ class Fingerprint:
     query_sql: str
     ts: datetime
     metadata_json: str = "{}"
+    version_hash: str = ""
 
 
 @dataclass(frozen=True)

@@ -24,16 +24,16 @@ DETECT_FUNCTION_CHANGE_TEST_CASES: list[DetectFunctionChangeTestCase] = [
         description="first run function without policy returns first run reason and warn only",
         body_sql="order_status = 'completed'",
         previous_query_sql="",
-        query_change_backfill=None,
+        replay_on_change=None,
         expected_reason=PlanReason.FIRST_RUN,
-        expected_action=BackfillAction.WARN_ONLY,
+        expected_action=BackfillAction.FORWARD_ONLY,
         existing_fingerprint=False,
     ),
     DetectFunctionChangeTestCase(
         description="first run function with policy returns first run reason and bounded backfill",
         body_sql="order_status = 'completed'",
         previous_query_sql="",
-        query_change_backfill="bounded-30d",
+        replay_on_change="bounded-30d",
         expected_reason=PlanReason.FIRST_RUN,
         expected_action=BackfillAction.BOUNDED,
         expected_duration="30d",
@@ -43,7 +43,7 @@ DETECT_FUNCTION_CHANGE_TEST_CASES: list[DetectFunctionChangeTestCase] = [
         description="changed function with policy returns query reason and bounded backfill",
         body_sql="order_status = 'completed'",
         previous_query_sql="name=is_completed_order\nbody=\norder_status = 'complete'",
-        query_change_backfill="bounded-30d",
+        replay_on_change="bounded-30d",
         expected_reason=PlanReason.QUERY_CHANGED,
         expected_action=BackfillAction.BOUNDED,
         expected_duration="30d",
@@ -52,9 +52,9 @@ DETECT_FUNCTION_CHANGE_TEST_CASES: list[DetectFunctionChangeTestCase] = [
         description="changed function without policy returns query reason and warn only",
         body_sql="order_status = 'completed'",
         previous_query_sql="name=is_completed_order\nbody=\norder_status = 'complete'",
-        query_change_backfill=None,
+        replay_on_change=None,
         expected_reason=PlanReason.QUERY_CHANGED,
-        expected_action=BackfillAction.WARN_ONLY,
+        expected_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectFunctionChangeTestCase(
         description="target schema case change does not cause function query change",
@@ -70,9 +70,9 @@ DETECT_FUNCTION_CHANGE_TEST_CASES: list[DetectFunctionChangeTestCase] = [
             "body=\n"
             "order_status = 'completed'"
         ),
-        query_change_backfill=None,
+        replay_on_change=None,
         expected_reason=PlanReason.NO_CHANGE,
-        expected_action=BackfillAction.WARN_ONLY,
+        expected_action=BackfillAction.FORWARD_ONLY,
         target_schema="DEV",
     ),
 ]
@@ -88,7 +88,7 @@ def test_given_function_fingerprint_when_detecting_change_then_returns_reason_an
 ) -> None:
     function: CompiledFunction = build_compiled_function(
         body_sql=test_case.body_sql,
-        query_change_backfill=test_case.query_change_backfill,
+        replay_on_change=test_case.replay_on_change,
         target_schema=test_case.target_schema,
     )
     snapshot: WarehouseSnapshot = WarehouseSnapshot(

@@ -201,9 +201,11 @@ class ChangeDetectionResult:
     config_changed: bool = False
     fingerprint_metadata_json: str | None = None
     previous_metadata_json: str | None = None
+    fingerprint_version_hash: str | None = None
+    previous_version_hash: str | None = None
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
 
 
@@ -247,7 +249,7 @@ class FunctionChangeResult:
     fingerprint_sql: str
     reason: PlanReason = PlanReason.NO_CHANGE
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
 
 
@@ -273,6 +275,16 @@ class PlannerResolvedActions:
     """Cascade-resolved planning decisions keyed by model name."""
 
     models: dict[str, ResolvedModelAction]
+
+
+@dataclass(frozen=True)
+class DirectModelVersionIdentities:
+    """Current direct model version identity values by model name."""
+
+    function_local_hashes: dict[str, str]
+    model_metadata_jsons: dict[str, str]
+    model_local_hashes: dict[str, str]
+    model_version_hashes: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -348,10 +360,12 @@ class ModelPlanEntry:
     previous_query_sql: str | None = None
     fingerprint_metadata_json: str | None = None
     previous_metadata_json: str | None = None
+    fingerprint_version_hash: str | None = None
+    previous_version_hash: str | None = None
     schema_actions: tuple[SchemaAction, ...] = field(default_factory=tuple)
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
     cascade: CascadeResult | None = None
     custom_materialization_name: str | None = None
@@ -410,7 +424,7 @@ class FunctionPlanEntry:
     previous_query_sql: str | None = None
     reason: PlanReason = PlanReason.NO_CHANGE
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
 
 

@@ -290,6 +290,138 @@ def test_given_direct_query_change_when_planning_changes_only_then_selects_chang
     "test_case",
     [
         DirectPlanE2ETestCase(
+            description="direct changes-only query change advances selected downstream by default",
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "Query changed (1)",
+                "stg_orders",
+                "fact_orders",
+            ),
+            unexpected_fragments=("Plan ready (1 selected)",),
+        )
+    ],
+    ids=["direct changes-only query change advances selected downstream by default"],
+)
+def test_given_upstream_query_change_when_planning_changes_only_then_keeps_downstream_forward_run(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_forward_cascade_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_forward_cascade_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/stg_orders.sql": (
+                "MODEL (materialized table);\n\nSELECT 1 AS order_id, 100 AS amount_cents\n"
+            ),
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 1 AS order_id, 125 AS amount_cents\n",
+        encoding="utf-8",
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="direct changes-only retains downstream stale state outside scoped build",
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "fact_orders",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["direct changes-only retains downstream stale state outside scoped build"],
+)
+def test_given_scoped_upstream_changes_only_build_when_planning_later_then_downstream_remains_stale(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_changes_only_remaining_stale_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_changes_only_remaining_stale_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/stg_orders.sql": (
+                "MODEL (materialized table);\n\nSELECT 1 AS order_id, 100 AS amount_cents\n"
+            ),
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __ref("stg_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    (project_dir / "models" / "stg_orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 1 AS order_id, 125 AS amount_cents\n",
+        encoding="utf-8",
+    )
+
+    scoped_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only", "--select", "stg_orders"),
+        project_dir=project_dir,
+    )
+    assert scoped_build_result.returncode == 0, (
+        scoped_build_result.stdout + scoped_build_result.stderr
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
             description="direct changes-only plan keeps config-only changed selected model",
             expected_fragments=(
                 "Plan ready (1 selected)",
@@ -376,7 +508,7 @@ def test_given_direct_function_change_when_planning_changes_only_then_selects_de
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\namount > 100\n"
+                "replay_on_change full);\n\namount > 100\n"
             ),
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT __udf("is_large_order")(150) AS is_large\n'
@@ -390,7 +522,7 @@ def test_given_direct_function_change_when_planning_changes_only_then_selects_de
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
     (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
         "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-        "query_change_backfill full);\n\namount >= 100\n",
+        "replay_on_change full);\n\namount >= 100\n",
         encoding="utf-8",
     )
 
@@ -445,7 +577,7 @@ def test_given_direct_schema_change_when_planning_changes_only_then_selects_chan
                 "  cursor_type integer,\n"
                 "  unique_key order_id,\n"
                 "  on_schema_change append_new_columns,\n"
-                "  schema_change_backfill (add_column full),\n"
+                "  replay_on_change full,\n"
                 "  columns (\n"
                 "    order_id (type INTEGER),\n"
                 "  ),\n"
@@ -467,7 +599,7 @@ def test_given_direct_schema_change_when_planning_changes_only_then_selects_chan
         "  cursor_type integer,\n"
         "  unique_key order_id,\n"
         "  on_schema_change append_new_columns,\n"
-        "  schema_change_backfill (add_column full),\n"
+        "  replay_on_change full,\n"
         "  columns (\n"
         "    order_id (type INTEGER),\n"
         "    status_rank (type INTEGER),\n"
@@ -990,7 +1122,7 @@ def test_given_selected_upstream_query_change_when_planning_changes_only_then_ke
                 'database = "warehouse.duckdb"\n'
             ),
             "models/stg_orders.sql": (
-                "MODEL (materialized table, query_change_backfill full);\n\nSELECT 1 AS order_id\n"
+                "MODEL (materialized table, replay_on_change full);\n\nSELECT 1 AS order_id\n"
             ),
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")\n'
@@ -1003,7 +1135,7 @@ def test_given_selected_upstream_query_change_when_planning_changes_only_then_ke
     )
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
     (project_dir / "models" / "stg_orders.sql").write_text(
-        "MODEL (materialized table, query_change_backfill full);\n\nSELECT 2 AS order_id\n",
+        "MODEL (materialized table, replay_on_change full);\n\nSELECT 2 AS order_id\n",
         encoding="utf-8",
     )
 

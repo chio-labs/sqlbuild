@@ -218,16 +218,16 @@ def build_model_warnings(
     if (
         materialization_type == MaterializationType.INCREMENTAL
         and change_result.query_changed
-        and change_result.backfill.action == BackfillAction.WARN_ONLY
+        and change_result.backfill.action == BackfillAction.FORWARD_ONLY
     ):
         warnings.append(
             PlanWarning(
                 model_name=model_name,
                 severity=WarningSeverity.WARNING,
                 message=(
-                    f"query changed for '{model_name}'; incremental history will not be "
-                    "rebuilt unless you set query_change_backfill. Use "
-                    "query_change_backfill full or bounded-<duration> to rebuild history, "
+                    f"query changed for '{model_name}'; incremental history will run "
+                    "forward only unless you set replay_on_change. Use "
+                    "replay_on_change full or bounded-<duration> to replay history, "
                     "or set settings.query_change_tracking = false in sqlbuild_project.toml "
                     "to disable query-change warnings."
                 ),

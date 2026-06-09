@@ -52,7 +52,7 @@ def rewrite_virtual_plan_entries(
                     entry,
                     reason=PlanReason.NO_CHANGE,
                     cascade=CascadeResult(
-                        effective_action=BackfillAction.WARN_ONLY,
+                        effective_action=BackfillAction.FORWARD_ONLY,
                         effective_duration=None,
                         root_cause=root_cause,
                         root_reason=cause_reasons[root_cause],

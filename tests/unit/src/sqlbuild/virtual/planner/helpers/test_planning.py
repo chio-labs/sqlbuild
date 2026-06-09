@@ -896,10 +896,9 @@ def test_given_excluded_metadata_change_when_building_expected_hashes_then_hashe
         downstream_query_sql=test_case.downstream_query_sql,
         upstream_extra_config={
             "audits": ["not_null(id)"],
-            "query_change_backfill": "full",
             "row_diff_exclude_columns": ["loaded_at"],
             "row_diff_tolerances": {"amount": {"absolute": 1}},
-            "schema_change_backfill": "bounded-7d",
+            "replay_on_change": "bounded-7d",
             "tags": ["nightly"],
         },
     )
@@ -917,8 +916,8 @@ def test_given_excluded_metadata_change_when_building_expected_hashes_then_hashe
     assert (
         baseline_hashes["stg_orders"] != metadata_hashes["stg_orders"]
     ) is test_case.expected_hashes_differ
-    assert "query_change_backfill" not in metadata_jsons["stg_orders"]
-    assert "schema_change_backfill" not in metadata_jsons["stg_orders"]
+    assert "replay_on_change" not in metadata_jsons["stg_orders"]
+    assert "replay_on_change" not in metadata_jsons["stg_orders"]
     assert "row_diff" not in metadata_jsons["stg_orders"]
     assert "tags" not in metadata_jsons["stg_orders"]
 

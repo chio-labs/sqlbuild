@@ -1145,14 +1145,14 @@ def _build_virtual_model_change(
 
 
 def _virtual_root_backfill(model: CompiledModel) -> BackfillResult:
-    raw_policy: object | None = model.config.values.get("query_change_backfill")
+    raw_policy: object | None = model.config.values.get("replay_on_change")
     if raw_policy == BackfillAction.FULL:
         return BackfillResult(action=BackfillAction.FULL)
     if isinstance(raw_policy, str) and raw_policy.startswith("bounded-"):
         duration: str = raw_policy.removeprefix("bounded-").strip()
         if duration:
             return BackfillResult(action=BackfillAction.BOUNDED, duration=duration)
-    return BackfillResult(action=BackfillAction.WARN_ONLY)
+    return BackfillResult(action=BackfillAction.FORWARD_ONLY)
 
 
 def _create_logical_vde_views(
