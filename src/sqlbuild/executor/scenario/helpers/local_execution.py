@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
@@ -423,20 +423,20 @@ def _build_local_relation_plan(
     *, scenario_plan: ScenarioExecutionPlan, load_result: ScenarioLocalSnapshotLoadResult
 ) -> ScenarioRelationPlan:
     source_map: dict[str, SourceEntry] = dict(scenario_plan.relation_plan.source_map)
-    source_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    ref_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    dbt_ref_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    seed_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    seed_targets: dict[str, CompiledRelationDestination] = {}
-    model_targets: dict[str, CompiledRelationDestination] = {}
+    source_fixture_targets: dict[str, CompiledRelationLocation] = {}
+    ref_fixture_targets: dict[str, CompiledRelationLocation] = {}
+    dbt_ref_fixture_targets: dict[str, CompiledRelationLocation] = {}
+    seed_fixture_targets: dict[str, CompiledRelationLocation] = {}
+    seed_targets: dict[str, CompiledRelationLocation] = {}
+    model_targets: dict[str, CompiledRelationLocation] = {}
 
-    loaded_targets: dict[tuple[ScenarioArtifactKind, str], CompiledRelationDestination] = {
+    loaded_targets: dict[tuple[ScenarioArtifactKind, str], CompiledRelationLocation] = {
         (relation.kind, relation.logical_name): _local_target(relation.table_name)
         for relation in load_result.relations
     }
     source_name: str
     for source_name in scenario_plan.graph_plan.source_fixture_names:
-        target: CompiledRelationDestination = loaded_targets[
+        target: CompiledRelationLocation = loaded_targets[
             (ScenarioArtifactKind.SOURCE, source_name)
         ]
         source_fixture_targets[source_name] = target
@@ -591,8 +591,8 @@ def _local_result(
     )
 
 
-def _local_target(table_name: str) -> CompiledRelationDestination:
-    return CompiledRelationDestination(
+def _local_target(table_name: str) -> CompiledRelationLocation:
+    return CompiledRelationLocation(
         database=None,
         schema=None,
         name=table_name,
@@ -601,14 +601,14 @@ def _local_target(table_name: str) -> CompiledRelationDestination:
 
 
 def _add_target_replacements(
-    replacements: dict[str, str], *, target: CompiledRelationDestination, local_name: str
+    replacements: dict[str, str], *, target: CompiledRelationLocation, local_name: str
 ) -> None:
     original: str
     for original in _target_name_variants(target):
         replacements[original] = local_name
 
 
-def _target_name_variants(target: CompiledRelationDestination) -> tuple[str, ...]:
+def _target_name_variants(target: CompiledRelationLocation) -> tuple[str, ...]:
     values: list[str] = [target.name, f'"{target.name}"']
     if target.qualified_name is not None:
         values.append(target.qualified_name)

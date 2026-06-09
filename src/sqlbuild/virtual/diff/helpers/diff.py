@@ -8,7 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -93,7 +93,7 @@ def rewrite_project_to_physical_relations(
 ) -> CompiledProject:
     """Rewrite a project's model targets to tracked physical relations."""
 
-    targets: dict[str, CompiledRelationDestination] = {
+    targets: dict[str, CompiledRelationLocation] = {
         model.name: build_virtual_destination_from_physical_relation(
             adapter=adapter,
             relation=relations[model.name],

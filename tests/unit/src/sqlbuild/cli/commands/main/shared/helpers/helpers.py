@@ -10,7 +10,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
@@ -52,7 +52,7 @@ def build_snapshot_full_refresh_entry(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FULL_REFRESH,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name=name,
@@ -80,7 +80,7 @@ def build_progress_snapshot_plan_output(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FIRST_RUN,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name=name,

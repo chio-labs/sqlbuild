@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
@@ -54,7 +54,7 @@ def model_entry(name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.NO_CHANGE,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name=name,

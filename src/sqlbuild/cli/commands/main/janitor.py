@@ -46,7 +46,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
 )
 from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -59,7 +59,7 @@ from sqlbuild.executor.janitor.models import (
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_target_config
 from sqlbuild.virtual.executor.main.virtual_target import build_virtual_destination
@@ -335,7 +335,7 @@ def _drop_logical_vde_views(
 ) -> str:
     recorder: StatementRecorder = StatementRecorder()
     for model in project.models:
-        virtual_target: CompiledRelationDestination = build_virtual_destination(
+        virtual_target: CompiledRelationLocation = build_virtual_destination(
             adapter=adapter,
             target=model.destination,
             virtual_environment_name=virtual_environment_name,
@@ -343,7 +343,9 @@ def _drop_logical_vde_views(
         )
         adapter.drop_view(
             connection,
-            target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
+            target=resolve_relation_location_qualified_name(
+                adapter=adapter, location=virtual_target
+            ),
             if_exists=True,
             statement_recorder=recorder,
         )

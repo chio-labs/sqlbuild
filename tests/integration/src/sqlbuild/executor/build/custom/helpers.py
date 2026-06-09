@@ -16,7 +16,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
@@ -55,7 +55,7 @@ def build_custom_plan_entry(
         materialization_type=MaterializationType.CUSTOM,
         action=PlanAction.CUSTOM,
         reason=reason,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql=sql,
@@ -108,7 +108,7 @@ def run_custom_entry(
     entry: ModelPlanEntry,
     materialize_fn: Callable[[MaterializationContext], MaterializationResult],
     model_audits: tuple[AuditPlanEntry, ...] = (),
-    model_targets: dict[str, CompiledRelationDestination] | None = None,
+    model_targets: dict[str, CompiledRelationLocation] | None = None,
     existing_relation: RelationInfo | None = None,
     target: str = "test",
     effective_vars: dict[str, object] | None = None,

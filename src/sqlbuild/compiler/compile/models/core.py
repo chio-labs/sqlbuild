@@ -291,8 +291,8 @@ class CompileProjectInputs:
 
 
 @dataclass(frozen=True)
-class CompiledRelationDestination:
-    """Logical and physical target naming resolved during compile."""
+class CompiledRelationLocation:
+    """Logical and physical relation location resolved during compile."""
 
     database: str | None
     schema: str | None
@@ -312,7 +312,7 @@ class CompiledModel:
     relative_path: Path
     query_sql: str
     config: CompileModelConfig
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -344,7 +344,7 @@ class CompiledSeed:
     seed_file: DiscoveredSeedFile
     schema_entry: SchemaSeedEntry
     schema_file: DiscoveredSchemaFile
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
 
 
 @dataclass(frozen=True)
@@ -358,8 +358,8 @@ class CompiledFunction:
     arguments: tuple[FunctionArgument, ...]
     returns: str
     body_sql: str
-    destination: CompiledRelationDestination
-    fingerprint_destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
+    fingerprint_destination: CompiledRelationLocation
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL

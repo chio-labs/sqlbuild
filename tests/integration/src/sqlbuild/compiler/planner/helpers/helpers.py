@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -92,7 +92,7 @@ def build_project_with_targets(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=f"SELECT * FROM {model_name}",
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -122,7 +122,7 @@ def build_project_with_targets(
                         "incremental_strategy": "delete_insert",
                     }
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=spec.schema,
                     name=spec.name,
@@ -152,7 +152,7 @@ def build_project_with_targets(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -196,11 +196,11 @@ def build_project_with_targets(
 
 def build_deferred_targets_from_map(
     targets: dict[str, str],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build deferred targets from a name -> qualified_name mapping."""
 
     return {
-        name: CompiledRelationDestination(
+        name: CompiledRelationLocation(
             database=None,
             schema=qualified.rsplit(".", 1)[0] if "." in qualified else None,
             name=name,

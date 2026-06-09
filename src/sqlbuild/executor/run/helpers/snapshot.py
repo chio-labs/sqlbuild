@@ -10,7 +10,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, NormalizedType, Statement
 from sqlbuild.adapter.shared.type_normalization import normalize_type, types_equal
 from sqlbuild.adapter.shared.types import TypeFamily
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
@@ -32,8 +32,8 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
-    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
+    resolve_relation_location_qualified_name,
 )
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.source import SourceEntry
@@ -52,8 +52,8 @@ def execute_snapshot_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     run_id: str,
@@ -70,8 +70,8 @@ def execute_snapshot_entry(
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
-    target_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=entry.destination
+    target_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
     )
     delta_table: str = f"{target_table}__snapshot_delta"
     delta_qualified: str = resolve_qualified_name_parts(
@@ -373,8 +373,8 @@ def _execute_snapshot_delta_audits(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     delta_qualified: str,

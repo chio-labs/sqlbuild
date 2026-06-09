@@ -8,13 +8,13 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
-def build_project(*, target: CompiledRelationDestination) -> CompiledProject:
+def build_project(*, target: CompiledRelationLocation) -> CompiledProject:
     """Build a minimal compiled project for target validation tests."""
 
     return CompiledProject(

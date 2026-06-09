@@ -12,7 +12,7 @@ from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
@@ -72,7 +72,7 @@ def build_execution_plan(
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,

@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
@@ -131,8 +131,8 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
         config=test_case.model_config,
         ref_names=test_case.ref_names,
     )
-    model_targets: dict[str, CompiledRelationDestination] = {
-        ref_name: CompiledRelationDestination(
+    model_targets: dict[str, CompiledRelationLocation] = {
+        ref_name: CompiledRelationLocation(
             database=None,
             schema="staging",
             name=ref_name,

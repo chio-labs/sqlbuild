@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
@@ -86,9 +86,9 @@ def build_clone_model_entries(
     adapter: BaseAdapter,
     connection: Any,
 ) -> tuple[ModelPlanEntry, ...]:
-    model_targets: dict[str, CompiledRelationDestination] = build_model_targets(project.models)
-    seed_targets: dict[str, CompiledRelationDestination] = build_seed_targets(project.seeds)
-    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+    model_targets: dict[str, CompiledRelationLocation] = build_model_targets(project.models)
+    seed_targets: dict[str, CompiledRelationLocation] = build_seed_targets(project.seeds)
+    function_targets: dict[str, CompiledRelationLocation] = build_function_targets(
         project.functions
     )
     source_map: dict[str, SourceEntry] = {

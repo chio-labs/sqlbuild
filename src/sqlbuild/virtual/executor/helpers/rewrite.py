@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
@@ -19,17 +19,17 @@ from sqlbuild.virtual.state.models import PhysicalRelationRecord
 def build_physical_destination(
     *,
     adapter: BaseAdapter,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     model_name: str,
     version_hash: str,
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     """Build the physical version target for a virtual-mode model build."""
 
     physical_schema: str | None = (
         f"{target.schema}__sqb_physical" if target.schema is not None else None
     )
     physical_name: str = f"{model_name}__v_{version_hash[:8]}"
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=target.database,
         schema=physical_schema,
         name=physical_name,
@@ -47,10 +47,10 @@ def build_physical_destination(
 def build_virtual_destination(
     *,
     adapter: BaseAdapter,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     virtual_environment_name: str,
     unsuffixed_virtual_environment_name: str | None = None,
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     """Build the logical VDE view target for a model."""
 
     virtual_schema: str | None
@@ -60,7 +60,7 @@ def build_virtual_destination(
         virtual_schema = target.schema
     else:
         virtual_schema = f"{target.schema}__{virtual_environment_name}"
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=target.database,
         schema=virtual_schema,
         name=target.name,
@@ -79,11 +79,11 @@ def build_destination_from_physical_relation(
     *,
     adapter: BaseAdapter,
     relation: PhysicalRelationRecord,
-    fallback_target: CompiledRelationDestination,
-) -> CompiledRelationDestination:
+    fallback_target: CompiledRelationLocation,
+) -> CompiledRelationLocation:
     """Rebuild a compiled target from a stored physical relation record."""
 
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=relation.database_name,
         schema=relation.schema_name,
         name=relation.relation_name,
@@ -101,7 +101,7 @@ def build_destination_from_physical_relation(
 def rewrite_project_model_targets(
     *,
     project: CompiledProject,
-    rewritten_targets: dict[str, CompiledRelationDestination],
+    rewritten_targets: dict[str, CompiledRelationLocation],
 ) -> CompiledProject:
     """Return a compiled project with selected model targets replaced."""
 
@@ -156,7 +156,7 @@ def build_rewritten_model_targets(
     adapter: BaseAdapter,
     selected_model_version_hashes: dict[str, str],
     bound_physical_relations: dict[str, PhysicalRelationRecord],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build rewritten model targets for virtual build execution.
 
     Selected models point to new physical version targets. Unselected models with
@@ -164,7 +164,7 @@ def build_rewritten_model_targets(
     downstream selected models resolve refs against the same physical lineage.
     """
 
-    rewritten_targets: dict[str, CompiledRelationDestination] = {}
+    rewritten_targets: dict[str, CompiledRelationLocation] = {}
     model: CompiledModel
     for model in project.models:
         selected_version_hash: str | None = selected_model_version_hashes.get(model.name)

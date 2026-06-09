@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -177,7 +177,7 @@ def build_standard_reuse_from_target_project() -> CompiledProject:
                 relative_path=Path("models/orders.sql"),
                 query_sql="SELECT 1",
                 config=CompileModelConfig(logical_schema="analytics"),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="dev_schema",
                     name="orders",
@@ -192,7 +192,7 @@ def build_standard_reuse_from_target_project() -> CompiledProject:
                 relative_path=Path("models/customers.sql"),
                 query_sql="SELECT 1",
                 config=CompileModelConfig(logical_schema="analytics"),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="dev_schema",
                     name="customers",
@@ -273,7 +273,7 @@ def build_standard_reuse_decision_scope(
             relative_path=Path(f"models/{model_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(values=config_values),
-            destination=CompiledRelationDestination(
+            destination=CompiledRelationLocation(
                 database=None,
                 schema="dev_schema",
                 name=model_name,
@@ -435,7 +435,7 @@ def build_test_project(
                 relative_path=Path(rel_path),
                 query_sql=f"SELECT * FROM {model_name}",
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None, schema=None, name=model_name, qualified_name=None
                 ),
             )
@@ -476,7 +476,7 @@ def build_test_project(
                 ),
                 schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
                 schema_file=_stub_schema_file(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None, schema=None, name=seed_name, qualified_name=None
                 ),
             )
@@ -494,10 +494,10 @@ def build_test_project(
                 arguments=(),
                 returns="BOOLEAN",
                 body_sql="SELECT TRUE",
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None, schema=None, name=function_name, qualified_name=None
                 ),
-                fingerprint_destination=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationLocation(
                     database=None, schema=None, name=function_name, qualified_name=None
                 ),
             )
@@ -900,7 +900,7 @@ def build_source_cursor_input_model(
             ),
         ),
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -927,7 +927,7 @@ def build_cursor_input_contract_models(
             relative_path=Path(f"models/{test_case.reference_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(values={"contract": test_case.upstream_contract}),
-            destination=CompiledRelationDestination(
+            destination=CompiledRelationLocation(
                 database=None,
                 schema="staging",
                 name=test_case.reference_name,
@@ -998,7 +998,7 @@ def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledM
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -1037,7 +1037,7 @@ def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> C
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -1096,11 +1096,11 @@ def build_audit_from_test_case(
 
 def build_audit_model_targets(
     targets: dict[str, str],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build model target lookup from name -> qualified_name."""
 
     return {
-        name: CompiledRelationDestination(
+        name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=name,
@@ -1151,7 +1151,7 @@ def build_cursor_model_map(
             relative_path=Path(f"models/{ref_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(),
-            destination=CompiledRelationDestination(
+            destination=CompiledRelationLocation(
                 database=None,
                 schema=None,
                 name=ref_name,
@@ -1164,13 +1164,13 @@ def build_cursor_model_map(
 def build_cursor_deferred_targets(
     ref_name: str,
     qualified_name: str | None,
-) -> dict[str, CompiledRelationDestination] | None:
+) -> dict[str, CompiledRelationLocation] | None:
     """Build deferred targets dict with one entry, or None."""
 
     if qualified_name is None:
         return None
     return {
-        ref_name: CompiledRelationDestination(
+        ref_name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=ref_name,
@@ -1192,7 +1192,7 @@ def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -1224,7 +1224,7 @@ def build_microbatch_lookback_model(
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -1280,13 +1280,13 @@ def build_compiled_function(
         arguments=(FunctionArgument(name="order_status", type="STRING"),),
         returns="BOOLEAN",
         body_sql=body_sql,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name="is_completed_order",
             qualified_name=f"{target_schema}.is_completed_order",
         ),
-        fingerprint_destination=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name="is_completed_order",

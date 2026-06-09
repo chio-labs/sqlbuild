@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.compiler.auditing.main._test_types import (
     ExecuteRenderedAuditTestCase,
@@ -72,8 +72,8 @@ def test_given_rendered_audit_sql_when_executing_then_returns_expected_rows(
     for sql in test_case.setup_sql:
         connection.execute(sql)
 
-    model_targets: dict[str, CompiledRelationDestination] = {
-        name: CompiledRelationDestination(
+    model_targets: dict[str, CompiledRelationLocation] = {
+        name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=name,

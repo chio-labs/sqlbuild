@@ -7,7 +7,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.helpers.resolve.config import (
@@ -44,9 +44,9 @@ def resolve_model_sql(
     adapter: BaseAdapter,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination] | None = None,
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
+    function_targets: dict[str, CompiledRelationLocation] | None = None,
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -122,9 +122,9 @@ def resolve_function_sql(
     *,
     adapter: BaseAdapter,
     function: CompiledFunction,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
+    function_targets: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -173,8 +173,8 @@ def _compute_model_cursor_bounds(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_targets: dict[str, CompiledRelationLocation],
+    seed_targets: dict[str, CompiledRelationLocation],
     suppress_runtime_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""

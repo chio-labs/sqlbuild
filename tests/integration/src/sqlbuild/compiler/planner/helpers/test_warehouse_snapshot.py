@@ -10,7 +10,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
@@ -446,7 +446,7 @@ def test_given_deferred_targets_when_gathering_cursor_snapshots_then_resolves_co
     def _track_progress(message: str) -> None:
         progress_calls.append(message)
 
-    deferred: dict[str, CompiledRelationDestination] | None = (
+    deferred: dict[str, CompiledRelationLocation] | None = (
         build_deferred_targets_from_map(test_case.deferred_targets)
         if test_case.deferred_targets is not None
         else None

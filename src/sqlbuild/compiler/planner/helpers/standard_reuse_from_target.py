@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -99,7 +99,7 @@ def build_standard_reuse_from_target_snapshot(
     for model in project.models:
         if model.key not in scope.selected_keys:
             continue
-        reuse_origin: CompiledRelationDestination = _reuse_origin_destination(
+        reuse_origin: CompiledRelationLocation = _reuse_origin_destination(
             model=model,
             adapter=adapter,
             reuse_from_target=reuse_from_target,
@@ -167,7 +167,7 @@ def _reuse_origin_destination(
     adapter: BaseAdapter,
     reuse_from_target: TargetConfig,
     reuse_from_vars: dict[str, object],
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     database: str | None = _resolve_target_value(
         target_value=reuse_from_target.database,
         logical_database=model.destination.logical_database,
@@ -187,7 +187,7 @@ def _reuse_origin_destination(
         schema=schema,
         name=model.destination.name,
     )
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=model.destination.name,

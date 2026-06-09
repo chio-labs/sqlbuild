@@ -10,7 +10,7 @@ from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
 from sqlbuild.spec.models.project import TargetConfig
@@ -147,7 +147,7 @@ def test_given_deferred_target_config_when_building_targets_then_resolves_expect
         if test_case.adapter_name == "bigquery"
         else DuckDbAdapter().render_qualified_name
     )
-    targets: dict[str, CompiledRelationDestination] = build_deferred_targets(
+    targets: dict[str, CompiledRelationLocation] = build_deferred_targets(
         project=project,
         deferred_target_config=deferred_target_config,
         effective_vars=test_case.effective_vars,
@@ -156,7 +156,7 @@ def test_given_deferred_target_config_when_building_targets_then_resolves_expect
         render_qualified_name=render_qualified_name,
     )
 
-    result: CompiledRelationDestination = targets["test_model"]
+    result: CompiledRelationLocation = targets["test_model"]
     assert result.schema == test_case.expected_schema
     assert result.database == test_case.expected_database
     assert result.qualified_name == test_case.expected_qualified_name

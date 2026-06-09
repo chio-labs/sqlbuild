@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -32,10 +32,10 @@ def build_deferred_targets(
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build physical targets for all models and seeds under a deferred target."""
 
-    targets: dict[str, CompiledRelationDestination] = {}
+    targets: dict[str, CompiledRelationLocation] = {}
     model: CompiledModel
     for model in project.models:
         targets[model.name] = _resolve_deferred_target(
@@ -79,13 +79,13 @@ def gather_deferred_relations(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    deferred_targets: dict[str, CompiledRelationDestination],
+    deferred_targets: dict[str, CompiledRelationLocation],
 ) -> dict[str, RelationInfo]:
     """Gather existing relations from the deferred target's schemas."""
 
     schemas: set[str] = set()
     database: str | None = None
-    target: CompiledRelationDestination
+    target: CompiledRelationLocation
     for target in deferred_targets.values():
         if target.schema is not None:
             schemas.add(target.schema)
@@ -103,13 +103,13 @@ def gather_deferred_relations(
 
 def _resolve_deferred_target(
     *,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     deferred_target_config: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     """Resolve one target under the deferred target's naming rules."""
 
     schema: str | None = _resolve_target_field(
@@ -133,7 +133,7 @@ def _resolve_deferred_target(
         schema=schema,
         name=target.name,
     )
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=target.name,

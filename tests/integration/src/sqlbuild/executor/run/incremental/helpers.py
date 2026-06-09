@@ -14,7 +14,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
@@ -98,7 +98,7 @@ def build_incremental_plan_entry(
         materialization_type=MaterializationType.INCREMENTAL,
         action=action,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name=target_name,
@@ -308,8 +308,8 @@ def _execute_test(
         test_case=test_case,
         resolved_target_name=target_qualified,
     )
-    model_targets: dict[str, CompiledRelationDestination] = {
-        "orders": CompiledRelationDestination(
+    model_targets: dict[str, CompiledRelationLocation] = {
+        "orders": CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
             name=test_case.target_name,

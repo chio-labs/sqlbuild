@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
@@ -78,7 +78,7 @@ def build_duckdb_invalid_fixture_plan() -> ScenarioFixturePlan:
 def build_duckdb_cleanup_plan() -> ScenarioExecutionPlan:
     fixture_plans: tuple[ScenarioFixturePlan, ...] = build_duckdb_fixture_plans()
     ref_fixture: ScenarioFixturePlan = fixture_plans[1]
-    model_target: CompiledRelationDestination = _target(
+    model_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__model__daily_revenue"
     )
     return ScenarioExecutionPlan(
@@ -116,19 +116,19 @@ def build_duckdb_model_execution_plan(
     stg_orders_pre_hooks: object = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
 ) -> ScenarioExecutionPlan:
-    source_target: CompiledRelationDestination = _target(
+    source_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__source__raw__orders"
     )
-    ref_target: CompiledRelationDestination = _target(
+    ref_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__ref__stg_customers"
     )
-    seed_target: CompiledRelationDestination = _target(
+    seed_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__seed__country_codes"
     )
-    stg_orders_target: CompiledRelationDestination = _target(
+    stg_orders_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__model__stg_orders"
     )
-    daily_revenue_target: CompiledRelationDestination = _target(
+    daily_revenue_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__model__daily_revenue"
     )
     stg_orders: ModelPlanEntry = _model_entry(
@@ -191,7 +191,7 @@ def build_duckdb_model_execution_plan(
 
 
 def build_duckdb_expected_check_plan(*, expected_sql: str) -> ScenarioExecutionPlan:
-    model_target: CompiledRelationDestination = _target(
+    model_target: CompiledRelationLocation = _target(
         physical_name="__sqb_51b385aebe20__model__daily_revenue"
     )
     return ScenarioExecutionPlan(
@@ -290,8 +290,8 @@ def _fixture_plan(
     )
 
 
-def _target(*, physical_name: str) -> CompiledRelationDestination:
-    return CompiledRelationDestination(
+def _target(*, physical_name: str) -> CompiledRelationLocation:
+    return CompiledRelationLocation(
         database=None,
         schema=SCHEMA_NAME,
         name=physical_name,
@@ -302,7 +302,7 @@ def _target(*, physical_name: str) -> CompiledRelationDestination:
 def _model_entry(
     *,
     name: str,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     sql: str,
     pre_hooks: object = None,
     post_hooks: object = None,

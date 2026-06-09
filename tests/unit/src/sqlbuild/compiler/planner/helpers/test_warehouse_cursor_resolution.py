@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileSqlReference,
 )
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import (
@@ -71,7 +71,7 @@ def test_given_ref_and_deferred_targets_when_resolving_upstream_then_returns_exp
         test_case.ref_name,
         test_case.model_qualified_name,
     )
-    deferred_targets: dict[str, CompiledRelationDestination] | None = build_cursor_deferred_targets(
+    deferred_targets: dict[str, CompiledRelationLocation] | None = build_cursor_deferred_targets(
         test_case.ref_name,
         test_case.deferred_qualified_name,
     )

@@ -21,7 +21,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -404,7 +404,7 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 relative_path=Path("models/orders.sql"),
                 query_sql="select 1",
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="analytics",
                     name="orders",
@@ -420,7 +420,7 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 seed_file=cast(Any, object()),
                 schema_entry=SchemaSeedEntry(name="countries"),
                 schema_file=cast(Any, object()),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="analytics",
                     name="countries",

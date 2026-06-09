@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
@@ -70,7 +70,7 @@ def test_given_audit_when_planning_then_resolves_sql(
     test_case: PlanAuditTestCase,
 ) -> None:
     audit: CompiledAudit = build_audit_from_test_case(test_case)
-    model_targets: dict[str, CompiledRelationDestination] = build_audit_model_targets(
+    model_targets: dict[str, CompiledRelationLocation] = build_audit_model_targets(
         test_case.model_targets
     )
     source_map: dict[str, SourceEntry] = build_audit_source_map(test_case.source_map_entries)
@@ -107,7 +107,7 @@ def test_given_audit_with_unresolved_marker_when_planning_then_it_raises_clear_e
     test_case: PlanAuditTestCase,
 ) -> None:
     audit: CompiledAudit = build_audit_from_test_case(test_case)
-    model_targets: dict[str, CompiledRelationDestination] = build_audit_model_targets(
+    model_targets: dict[str, CompiledRelationLocation] = build_audit_model_targets(
         test_case.model_targets
     )
     source_map: dict[str, SourceEntry] = build_audit_source_map(test_case.source_map_entries)
