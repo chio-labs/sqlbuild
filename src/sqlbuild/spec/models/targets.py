@@ -115,14 +115,18 @@ def _validate_reuse_config(
 def _merge_clone_policy(
     *, project_clone: ClonePolicy, local_clone: LocalClonePolicy
 ) -> ClonePolicy:
-    allow_as_source: bool | None = local_clone.allow_as_source
-    allow_as_target: bool | None = local_clone.allow_as_target
+    allow_as_clone_origin: bool | None = local_clone.allow_as_clone_origin
+    allow_as_clone_destination: bool | None = local_clone.allow_as_clone_destination
     return ClonePolicy(
-        allow_as_source=(
-            allow_as_source if allow_as_source is not None else project_clone.allow_as_source
+        allow_as_clone_origin=(
+            allow_as_clone_origin
+            if allow_as_clone_origin is not None
+            else project_clone.allow_as_clone_origin
         ),
-        allow_as_target=(
-            allow_as_target if allow_as_target is not None else project_clone.allow_as_target
+        allow_as_clone_destination=(
+            allow_as_clone_destination
+            if allow_as_clone_destination is not None
+            else project_clone.allow_as_clone_destination
         ),
     )
 

@@ -164,15 +164,15 @@ def _resolve_target_config(
             else project_target.defer_sources_to
         ),
         clone=ClonePolicy(
-            allow_as_source=(
-                local_target.clone.allow_as_source
-                if local_target.clone.allow_as_source is not None
-                else project_target.clone.allow_as_source
+            allow_as_clone_origin=(
+                local_target.clone.allow_as_clone_origin
+                if local_target.clone.allow_as_clone_origin is not None
+                else project_target.clone.allow_as_clone_origin
             ),
-            allow_as_target=(
-                local_target.clone.allow_as_target
-                if local_target.clone.allow_as_target is not None
-                else project_target.clone.allow_as_target
+            allow_as_clone_destination=(
+                local_target.clone.allow_as_clone_destination
+                if local_target.clone.allow_as_clone_destination is not None
+                else project_target.clone.allow_as_clone_destination
             ),
         ),
     )

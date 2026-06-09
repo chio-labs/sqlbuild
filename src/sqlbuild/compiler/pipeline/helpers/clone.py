@@ -17,53 +17,53 @@ def prepare_clone_pipeline(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    from_target: str,
-    to_target: str,
+    origin_target_name: str,
+    destination_target_name: str,
     no_sql_validation: bool,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     cli_vars: dict[str, object] | None,
-    target_connection: Any,
+    destination_connection: Any,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
-    source_project: CompiledProject = _compile_project_for_environment(
+    origin_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        target_name=from_target,
+        target_name=origin_target_name,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
-    target_project: CompiledProject = _compile_project_for_environment(
+    destination_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        target_name=to_target,
+        target_name=destination_target_name,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     (
         clone_plan,
-        target_model_entries,
-        target_seed_entries,
-        source_model_entries,
-        source_seed_entries,
+        destination_model_entries,
+        destination_seed_entries,
+        origin_model_entries,
+        origin_seed_entries,
     ) = run_clone_planning(
-        project=target_project,
+        project=destination_project,
         select=select,
         exclude=exclude,
         adapter=adapter,
-        connection=target_connection,
-        source_project=source_project,
+        connection=destination_connection,
+        origin_project=origin_project,
     )
     return ClonePipelineResult(
-        source_project=source_project,
-        target_project=target_project,
+        origin_project=origin_project,
+        destination_project=destination_project,
         clone_plan=clone_plan,
-        target_model_entries=target_model_entries,
-        target_seed_entries=target_seed_entries,
-        source_model_entries=source_model_entries,
-        source_seed_entries=source_seed_entries,
+        destination_model_entries=destination_model_entries,
+        destination_seed_entries=destination_seed_entries,
+        origin_model_entries=origin_model_entries,
+        origin_seed_entries=origin_seed_entries,
     )
 
 

@@ -149,8 +149,8 @@ warehouse = "local_wh"
 user = "local_user"
 
 [targets.dev.clone]
-allow_as_source = true
-allow_as_target = false
+allow_as_clone_origin = true
+allow_as_clone_destination = false
 """.strip()
         },
         expected_target="dev",
@@ -170,8 +170,8 @@ allow_as_target = false
                 "defer_sources_to": "prod",
                 "reuse_from": "prod",
                 "reuse_hard_copy": True,
-                "allow_as_source": True,
-                "allow_as_target": False,
+                "allow_as_clone_origin": True,
+                "allow_as_clone_destination": False,
             }
         },
     ),
@@ -387,15 +387,15 @@ connection = "no"
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when environment clone allow_as_source is not a boolean",
+        description="raises when environment clone allow_as_clone_origin is not a boolean",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
 [targets.dev.clone]
-allow_as_source = 123
+allow_as_clone_origin = 123
 """.strip(),
-        expected_error_fragment="Expected 'allow_as_source' to be a boolean when provided",
+        expected_error_fragment="Expected 'allow_as_clone_origin' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when defaults tags is a string instead of list",
@@ -629,8 +629,8 @@ schema = "dev"
                 "defer_sources_to": None,
                 "reuse_from": None,
                 "reuse_hard_copy": False,
-                "allow_as_source": False,
-                "allow_as_target": False,
+                "allow_as_clone_origin": False,
+                "allow_as_clone_destination": False,
             }
         },
         expected_janitor_enabled=False,
@@ -687,8 +687,8 @@ warehouse = "dev_wh"
 schema_prefix = "dev"
 
 [targets.dev.clone]
-allow_as_source = true
-allow_as_target = true
+allow_as_clone_origin = true
+allow_as_clone_destination = true
 
 [janitor]
 enabled = true
@@ -752,8 +752,8 @@ target_path = "target/dbt"
                 "defer_sources_to": "prod",
                 "reuse_from": "prod",
                 "reuse_hard_copy": True,
-                "allow_as_source": True,
-                "allow_as_target": True,
+                "allow_as_clone_origin": True,
+                "allow_as_clone_destination": True,
             }
         },
         expected_janitor_enabled=True,
@@ -823,8 +823,8 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "defer_sources_to": target_config.defer_sources_to,
             "reuse_from": target_config.reuse_from,
             "reuse_hard_copy": target_config.reuse_hard_copy,
-            "allow_as_source": target_config.clone.allow_as_source,
-            "allow_as_target": target_config.clone.allow_as_target,
+            "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
+            "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
         for target_name, target_config in config.targets.items()
     } == test_case.expected_targets
@@ -898,8 +898,8 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "defer_sources_to": target_config.defer_sources_to,
             "reuse_from": target_config.reuse_from,
             "reuse_hard_copy": target_config.reuse_hard_copy,
-            "allow_as_source": target_config.clone.allow_as_source,
-            "allow_as_target": target_config.clone.allow_as_target,
+            "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
+            "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
         for target_name, target_config in config.targets.items()
     } == test_case.expected_targets

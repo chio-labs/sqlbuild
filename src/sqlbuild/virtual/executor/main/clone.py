@@ -14,13 +14,13 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.helpers.clone import (
     acquire_model_lease,
-    attach_source_database_for_clone,
+    attach_origin_database_for_clone,
     build_clone_graph_from_project,
     build_workspace_model_versions,
     hydrate_relation,
     register_hydrated_relation,
     release_model_lease,
-    replace_target_database,
+    replace_location_database,
 )
 from sqlbuild.virtual.executor.helpers.rewrite import build_physical_destination
 from sqlbuild.virtual.executor.models import VirtualCloneItemResult, VirtualCloneResult
@@ -39,10 +39,10 @@ def run_virtual_clone(
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    from_target: str,
-    to_target: str,
-    source_connection_config: dict[str, object],
-    target_connection_config: dict[str, object],
+    origin_target_name: str,
+    destination_target_name: str,
+    origin_connection_config: dict[str, object],
+    destination_connection_config: dict[str, object],
     virtual_environment_name: str | None = None,
     skip_locked: bool = False,
     no_sql_validation: bool = False,
@@ -53,33 +53,33 @@ def run_virtual_clone(
 ) -> VirtualCloneResult:
     """Hydrate target physical versions from matching source warehouse artifacts."""
 
-    pipeline_target_connection: Any = adapter.connect(target_connection_config)
+    pipeline_destination_connection: Any = adapter.connect(destination_connection_config)
     try:
         clone_pipeline: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
-            from_target=from_target,
-            to_target=to_target,
+            origin_target_name=origin_target_name,
+            destination_target_name=destination_target_name,
             no_sql_validation=no_sql_validation,
             select=select,
             exclude=exclude,
             cli_vars=cli_vars,
-            target_connection=pipeline_target_connection,
+            destination_connection=pipeline_destination_connection,
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
     finally:
-        adapter.close(pipeline_target_connection)
-    target_graph: ProjectGraph = build_clone_graph_from_project(
-        project=clone_pipeline.target_project
+        adapter.close(pipeline_destination_connection)
+    destination_graph: ProjectGraph = build_clone_graph_from_project(
+        project=clone_pipeline.destination_project
     )
     model_names: tuple[str, ...] = tuple(
-        entry.name for entry in clone_pipeline.target_model_entries
+        entry.name for entry in clone_pipeline.destination_model_entries
     )
-    target_models_by_name: dict[str, CompiledModel] = {
-        model.name: model for model in clone_pipeline.target_project.models
+    destination_models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in clone_pipeline.destination_project.models
     }
-    source_models_by_name: dict[str, CompiledModel] = {
-        model.name: model for model in clone_pipeline.source_project.models
+    origin_models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in clone_pipeline.origin_project.models
     }
 
     config, backend = build_state_runtime(
@@ -90,14 +90,14 @@ def run_virtual_clone(
     try:
         if virtual_environment_name is None:
             semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
-                graph=target_graph,
+                graph=destination_graph,
                 bound_refs=(),
                 bound_model_versions={},
             )
             version_hashes: dict[str, str] = semantics.expected_version_hashes
             model_versions: dict[str, ModelVersionRecord] = build_workspace_model_versions(
-                project=clone_pipeline.target_project,
-                model_entries=clone_pipeline.target_model_entries,
+                project=clone_pipeline.destination_project,
+                model_entries=clone_pipeline.destination_model_entries,
                 model_names=model_names,
                 version_hashes=version_hashes,
                 local_hashes=semantics.expected_local_hashes,
@@ -112,7 +112,7 @@ def run_virtual_clone(
             )
             if not refs:
                 raise PlannerInputError(
-                    f"unknown target virtual environment '{virtual_environment_name}'",
+                    f"unknown destination virtual environment '{virtual_environment_name}'",
                     code="S019",
                 )
             ref_hashes: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
@@ -121,7 +121,7 @@ def run_virtual_clone(
             )
             if missing_refs:
                 raise PlannerInputError(
-                    "target virtual environment is missing selected refs: "
+                    "destination virtual environment is missing selected refs: "
                     + ", ".join(missing_refs),
                     code="S020",
                 )
@@ -137,58 +137,59 @@ def run_virtual_clone(
                 )
                 if record is None:
                     raise PlannerInputError(
-                        "target virtual environment has a ref without model version state: " + name,
+                        "destination virtual environment has a ref without model version state: "
+                        + name,
                         code="S021",
                     )
                 model_versions[name] = record
-            mode = "target VDE refs"
+            mode = "destination VDE refs"
     finally:
         backend.close(state_connection)
 
-    target_connection: Any = adapter.connect(target_connection_config)
-    source_database_alias: str | None = attach_source_database_for_clone(
+    destination_connection: Any = adapter.connect(destination_connection_config)
+    origin_database_alias: str | None = attach_origin_database_for_clone(
         adapter=adapter,
-        target_connection=target_connection,
-        source_connection_config=source_connection_config,
-        target_connection_config=target_connection_config,
+        destination_connection=destination_connection,
+        origin_connection_config=origin_connection_config,
+        destination_connection_config=destination_connection_config,
     )
-    source_connection: Any = (
-        target_connection
-        if source_database_alias is not None
-        else adapter.connect(source_connection_config)
+    origin_connection: Any = (
+        destination_connection
+        if origin_database_alias is not None
+        else adapter.connect(origin_connection_config)
     )
     results: list[VirtualCloneItemResult] = []
     try:
         for model_name in model_names:
-            target_model: CompiledModel = target_models_by_name[model_name]
-            source_model: CompiledModel = source_models_by_name[model_name]
+            destination_model: CompiledModel = destination_models_by_name[model_name]
+            origin_model: CompiledModel = origin_models_by_name[model_name]
             version_hash: str = version_hashes[model_name]
-            source_target: CompiledRelationLocation = build_physical_destination(
+            origin_location: CompiledRelationLocation = build_physical_destination(
                 adapter=adapter,
-                target=source_model.destination,
+                target=origin_model.destination,
                 model_name=model_name,
                 version_hash=version_hash,
             )
-            source_lookup_target: CompiledRelationLocation = (
-                replace_target_database(
+            origin_lookup_location: CompiledRelationLocation = (
+                replace_location_database(
                     adapter=adapter,
-                    target=source_target,
-                    database=source_database_alias,
+                    location=origin_location,
+                    database=origin_database_alias,
                 )
-                if source_database_alias is not None
-                else source_target
+                if origin_database_alias is not None
+                else origin_location
             )
-            target_target: CompiledRelationLocation = build_physical_destination(
+            destination_location: CompiledRelationLocation = build_physical_destination(
                 adapter=adapter,
-                target=target_model.destination,
+                target=destination_model.destination,
                 model_name=model_name,
                 version_hash=version_hash,
             )
             if not adapter.relation_exists(
-                source_connection,
-                database=source_lookup_target.database,
-                schema=source_lookup_target.schema,
-                name=source_lookup_target.name,
+                origin_connection,
+                database=origin_lookup_location.database,
+                schema=origin_lookup_location.schema,
+                name=origin_lookup_location.name,
             ):
                 results.append(VirtualCloneItemResult(model_name, version_hash, "missing"))
                 continue
@@ -213,18 +214,18 @@ def run_virtual_clone(
             try:
                 action: str = hydrate_relation(
                     adapter=adapter,
-                    target_connection=target_connection,
-                    source_target=source_target,
-                    target_target=target_target,
-                    source_database_alias=source_database_alias,
+                    destination_connection=destination_connection,
+                    origin_location=origin_location,
+                    destination_location=destination_location,
+                    origin_database_alias=origin_database_alias,
                 )
                 register_hydrated_relation(
                     backend=backend,
                     config_schema=config.schema,
                     config_connection=config.connection,
                     model_version=model_versions[model_name],
-                    model=target_model,
-                    target=target_target,
+                    model=destination_model,
+                    destination=destination_location,
                 )
                 results.append(VirtualCloneItemResult(model_name, version_hash, action))
             finally:
@@ -235,14 +236,14 @@ def run_virtual_clone(
                     lease=lease,
                 )
     finally:
-        if source_connection is not target_connection:
-            adapter.close(source_connection)
-        adapter.close(target_connection)
+        if origin_connection is not destination_connection:
+            adapter.close(origin_connection)
+        adapter.close(destination_connection)
 
     return VirtualCloneResult(
         mode=mode,
-        source_environment=from_target,
-        target_environment=to_target,
-        target_virtual_environment=virtual_environment_name,
+        origin_environment=origin_target_name,
+        destination_environment=destination_target_name,
+        destination_virtual_environment=virtual_environment_name,
         item_results=tuple(results),
     )

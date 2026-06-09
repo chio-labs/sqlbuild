@@ -9,16 +9,16 @@ from dataclasses import dataclass, field
 class ClonePolicy:
     """Environment clone policy."""
 
-    allow_as_source: bool = False
-    allow_as_target: bool = False
+    allow_as_clone_origin: bool = False
+    allow_as_clone_destination: bool = False
 
 
 @dataclass(frozen=True)
 class LocalClonePolicy:
     """Local environment clone policy overrides."""
 
-    allow_as_source: bool | None = None
-    allow_as_target: bool | None = None
+    allow_as_clone_origin: bool | None = None
+    allow_as_clone_destination: bool | None = None
 
 
 @dataclass(frozen=True)

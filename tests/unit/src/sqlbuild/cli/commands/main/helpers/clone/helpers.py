@@ -20,7 +20,7 @@ def build_virtual_clone_result(*, missing_count: int, skipped_count: int = 0) ->
     )
     return VirtualCloneResult(
         mode="workspace expected hashes",
-        source_environment="prod",
-        target_environment="dev",
+        origin_environment="prod",
+        destination_environment="dev",
         item_results=missing_items + skipped_items,
     )

@@ -448,14 +448,14 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                 default=False,
             ),
             clone=ClonePolicy(
-                allow_as_source=_optional_bool(
+                allow_as_clone_origin=_optional_bool(
                     mapping=clone_mapping,
-                    key="allow_as_source",
+                    key="allow_as_clone_origin",
                     default=False,
                 ),
-                allow_as_target=_optional_bool(
+                allow_as_clone_destination=_optional_bool(
                     mapping=clone_mapping,
-                    key="allow_as_target",
+                    key="allow_as_clone_destination",
                     default=False,
                 ),
             ),
@@ -512,13 +512,13 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 key="reuse_hard_copy",
             ),
             clone=LocalClonePolicy(
-                allow_as_source=_optional_nullable_bool(
+                allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
-                    key="allow_as_source",
+                    key="allow_as_clone_origin",
                 ),
-                allow_as_target=_optional_nullable_bool(
+                allow_as_clone_destination=_optional_nullable_bool(
                     mapping=clone_mapping,
-                    key="allow_as_target",
+                    key="allow_as_clone_destination",
                 ),
             ),
             state=LocalStateConfig(

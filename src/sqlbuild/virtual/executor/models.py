@@ -105,9 +105,9 @@ class VirtualCloneResult:
     """Result returned by virtual physical-version hydration."""
 
     mode: str
-    source_environment: str
-    target_environment: str
-    target_virtual_environment: str | None = None
+    origin_environment: str
+    destination_environment: str
+    destination_virtual_environment: str | None = None
     item_results: tuple[VirtualCloneItemResult, ...] = field(default_factory=tuple)
 
     @property

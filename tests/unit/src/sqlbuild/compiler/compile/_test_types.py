@@ -141,8 +141,8 @@ class ResolveTargetConfigTestCase:
     expected_schema: str
     expected_reuse_from: str | None
     expected_reuse_hard_copy: bool
-    expected_allow_as_source: bool
-    expected_allow_as_target: bool
+    expected_allow_as_clone_origin: bool
+    expected_allow_as_clone_destination: bool
 
 
 @dataclass(frozen=True)
