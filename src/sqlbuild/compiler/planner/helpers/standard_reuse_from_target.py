@@ -1,4 +1,4 @@
-"""Standard target reuse source-state helpers."""
+"""Standard reuse_from target-state helpers."""
 
 from __future__ import annotations
 
@@ -17,15 +17,15 @@ from sqlbuild.compiler.fingerprints.models import FingerprintSet
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     PlannerScope,
-    StandardReuseSourceModelSnapshot,
-    StandardReuseSourceSnapshot,
+    StandardReuseFromTargetModelSnapshot,
+    StandardReuseFromTargetSnapshot,
 )
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from sqlbuild.spec.models.targets import resolve_target_config
 
 
-def build_standard_reuse_source_snapshot(
+def build_standard_reuse_from_target_snapshot(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
@@ -33,8 +33,8 @@ def build_standard_reuse_source_snapshot(
     scope: PlannerScope,
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
-) -> StandardReuseSourceSnapshot | None:
-    """Read source-target fingerprints and model relation existence for standard reuse."""
+) -> StandardReuseFromTargetSnapshot | None:
+    """Read reuse_from target fingerprints and model relation existence for standard reuse."""
 
     if project.effective_target_name is None or project_config is None or local_config is None:
         return None
@@ -43,76 +43,76 @@ def build_standard_reuse_source_snapshot(
         local_config=local_config,
         target_name=project.effective_target_name,
     )
-    source_target_name: str | None = active_target.reuse_from
-    if source_target_name is None:
+    reuse_from_target_name: str | None = active_target.reuse_from
+    if reuse_from_target_name is None:
         return None
-    source_target: TargetConfig = resolve_target_config(
+    reuse_from_target: TargetConfig = resolve_target_config(
         project_config=project_config,
         local_config=local_config,
-        target_name=source_target_name,
+        target_name=reuse_from_target_name,
     )
-    source_vars: dict[str, object] = _build_source_target_vars(
+    reuse_from_vars: dict[str, object] = _build_reuse_from_target_vars(
         project_config=project_config,
         local_config=local_config,
-        target_config=source_target,
+        target_config=reuse_from_target,
     )
-    source_schema: str | None = _resolve_target_value(
-        target_value=source_target.schema,
+    reuse_from_schema: str | None = _resolve_target_value(
+        target_value=reuse_from_target.schema,
         logical_database=project.effective_target_database,
         logical_schema=project.effective_target_schema,
         default_value=project.effective_target_schema,
-        effective_vars=source_vars,
+        effective_vars=reuse_from_vars,
     )
-    if source_schema is None:
+    if reuse_from_schema is None:
         raise PlannerInputError(
             f"target '{project.effective_target_name}' has reuse_from = "
-            f"'{source_target_name}', but source target '{source_target_name}' does not "
-            "resolve to a fingerprint schema"
+            f"'{reuse_from_target_name}', but reuse_from target "
+            f"'{reuse_from_target_name}' does not resolve to a fingerprint schema"
         )
-    source_database: str | None = _resolve_target_value(
-        target_value=source_target.database,
+    reuse_from_database: str | None = _resolve_target_value(
+        target_value=reuse_from_target.database,
         logical_database=project.effective_target_database,
         logical_schema=project.effective_target_schema,
         default_value=project.effective_target_database,
-        effective_vars=source_vars,
+        effective_vars=reuse_from_vars,
     )
     try:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=adapter.execute,
-            database=source_database,
-            schema=source_schema,
+            database=reuse_from_database,
+            schema=reuse_from_schema,
             render_qualified_name=adapter.render_qualified_name,
             require_table=True,
         )
     except FingerprintInputError as error:
         raise PlannerInputError(
             f"target '{project.effective_target_name}' has reuse_from = "
-            f"'{source_target_name}', but SQLBuild cannot read fingerprint state for "
-            f"source target '{source_target_name}'. Reuse requires access to the source "
-            "target fingerprint table so SQLBuild can prove the source relation matches "
-            "the expected version."
+            f"'{reuse_from_target_name}', but SQLBuild cannot read fingerprint state for "
+            f"reuse_from target '{reuse_from_target_name}'. Reuse requires access to the "
+            "reuse_from target fingerprint table so SQLBuild can prove the reuse_from "
+            "relation matches the expected version."
         ) from error
 
-    model_snapshots: dict[str, StandardReuseSourceModelSnapshot] = {}
+    model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot] = {}
     model: CompiledModel
     for model in project.models:
         if model.key not in scope.selected_keys:
             continue
-        destination: CompiledRelationDestination = _source_model_destination(
+        reuse_origin: CompiledRelationDestination = _reuse_origin_destination(
             model=model,
             adapter=adapter,
-            source_target=source_target,
-            source_vars=source_vars,
+            reuse_from_target=reuse_from_target,
+            reuse_from_vars=reuse_from_vars,
         )
-        model_snapshots[model.name] = StandardReuseSourceModelSnapshot(
+        model_snapshots[model.name] = StandardReuseFromTargetModelSnapshot(
             model_name=model.name,
-            destination=destination,
+            reuse_origin=reuse_origin,
             relation_exists=adapter.relation_exists(
                 connection,
-                database=destination.database,
-                schema=destination.schema,
-                name=destination.name,
+                database=reuse_origin.database,
+                schema=reuse_origin.schema,
+                name=reuse_origin.name,
             ),
             built_version_hash=(
                 fingerprint_set.fingerprints[model.name].version_hash
@@ -120,34 +120,67 @@ def build_standard_reuse_source_snapshot(
                 else None
             ),
         )
-    return StandardReuseSourceSnapshot(
-        target_name=source_target_name,
-        fingerprint_database=source_database,
-        fingerprint_schema=source_schema,
+    return StandardReuseFromTargetSnapshot(
+        reuse_from_target_name=reuse_from_target_name,
+        fingerprint_database=reuse_from_database,
+        fingerprint_schema=reuse_from_schema,
         model_snapshots=model_snapshots,
+        hard_copy=active_target.reuse_hard_copy,
     )
 
 
-def _source_model_destination(
+def enforce_standard_reuse_from_source_deferral_conflict(
+    *,
+    project: CompiledProject,
+    project_config: ProjectConfig | None,
+    local_config: LocalConfig | None,
+    defer_sources_to: str | None,
+    source_deferral_enabled: bool,
+) -> None:
+    """Reject source deferral when standard reuse is configured."""
+
+    if not source_deferral_enabled:
+        return
+    if project.effective_target_name is None or project_config is None or local_config is None:
+        return
+    active_target: TargetConfig = resolve_target_config(
+        project_config=project_config,
+        local_config=local_config,
+        target_name=project.effective_target_name,
+    )
+    if active_target.reuse_from is None:
+        return
+    source_deferral_target: str | None = defer_sources_to or active_target.defer_sources_to
+    if source_deferral_target is None:
+        return
+    raise PlannerInputError(
+        f"target '{project.effective_target_name}' has reuse_from = "
+        f"'{active_target.reuse_from}', but source deferral is active. Standard target "
+        "reuse requires the active target source context so freshness and cursor "
+        "comparisons are trustworthy. Remove defer_sources_to or reuse_from."
+    )
+
+
+def _reuse_origin_destination(
     *,
     model: CompiledModel,
     adapter: BaseAdapter,
-    source_target: TargetConfig,
-    source_vars: dict[str, object],
+    reuse_from_target: TargetConfig,
+    reuse_from_vars: dict[str, object],
 ) -> CompiledRelationDestination:
     database: str | None = _resolve_target_value(
-        target_value=source_target.database,
+        target_value=reuse_from_target.database,
         logical_database=model.destination.logical_database,
         logical_schema=model.destination.logical_schema,
         default_value=model.destination.logical_database,
-        effective_vars=source_vars,
+        effective_vars=reuse_from_vars,
     )
     schema: str | None = _resolve_target_value(
-        target_value=source_target.schema,
+        target_value=reuse_from_target.schema,
         logical_database=model.destination.logical_database,
         logical_schema=model.destination.logical_schema,
         default_value=model.destination.logical_schema,
-        effective_vars=source_vars,
+        effective_vars=reuse_from_vars,
     )
     qualified_name: str | None = adapter.render_qualified_name(
         database=database,
@@ -164,7 +197,7 @@ def _source_model_destination(
     )
 
 
-def _build_source_target_vars(
+def _build_reuse_from_target_vars(
     *,
     project_config: ProjectConfig,
     local_config: LocalConfig,

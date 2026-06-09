@@ -67,3 +67,15 @@ class AuditSqlResolutionTestCase:
     attached_target_name: str
     resolved_target_name: str
     expected_resolved_sql: str
+
+
+@dataclass(frozen=True)
+class TableReuseExecutionTestCase:
+    description: str
+    reuse_hard_copy: bool
+    promotion_mode: TablePromotionMode
+    expected_status: str
+    expected_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_error_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_lifecycle_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_target_exists: bool = True

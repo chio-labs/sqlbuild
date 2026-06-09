@@ -92,8 +92,8 @@ class PlannerTestAdapter(BaseAdapter):
         del connection
 
 
-class StandardReuseSourceTestResult:
-    """Minimal DB-API-style result for standard reuse source tests."""
+class StandardReuseFromTargetTestResult:
+    """Minimal DB-API-style result for standard reuse_from tests."""
 
     def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
         self._rows: tuple[tuple[object, ...], ...] = rows
@@ -102,8 +102,8 @@ class StandardReuseSourceTestResult:
         return self._rows
 
 
-class StandardReuseSourceTestAdapter(PlannerTestAdapter):
-    """Adapter test double for standard reuse source snapshot tests."""
+class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
+    """Adapter test double for standard reuse_from snapshot tests."""
 
     def __init__(
         self,
@@ -118,15 +118,15 @@ class StandardReuseSourceTestAdapter(PlannerTestAdapter):
         self.fingerprint_table_exists: bool = fingerprint_table_exists
         self.fingerprint_read_fails: bool = fingerprint_read_fails
 
-    def execute(self, connection: object, sql: str) -> StandardReuseSourceTestResult:
+    def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
         del connection
         if "WHERE 1 = 0" in sql:
             if not self.fingerprint_table_exists:
                 raise RuntimeError("missing fingerprint table")
-            return StandardReuseSourceTestResult(())
+            return StandardReuseFromTargetTestResult(())
         if self.fingerprint_read_fails:
             raise RuntimeError("cannot select fingerprint rows")
-        return StandardReuseSourceTestResult(self.fingerprint_rows)
+        return StandardReuseFromTargetTestResult(self.fingerprint_rows)
 
     def relation_exists(
         self,
@@ -159,7 +159,7 @@ def model_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
 
 
-def build_standard_reuse_source_project() -> CompiledProject:
+def build_standard_reuse_from_target_project() -> CompiledProject:
     """Build a minimal compiled project with two selected models."""
 
     return CompiledProject(
@@ -204,12 +204,12 @@ def build_standard_reuse_source_project() -> CompiledProject:
     )
 
 
-def build_standard_reuse_source_scope(
+def build_standard_reuse_from_target_scope(
     *, selected_model_names: frozenset[str] | None = None
 ) -> PlannerScope:
     """Build a minimal planner scope selecting two models."""
 
-    project: CompiledProject = build_standard_reuse_source_project()
+    project: CompiledProject = build_standard_reuse_from_target_project()
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
     selected_keys: frozenset[CompiledObjectKey] = frozenset(
         model.key
@@ -226,7 +226,7 @@ def build_standard_reuse_source_scope(
     )
 
 
-def build_standard_reuse_fingerprint_row(
+def build_standard_reuse_from_target_fingerprint_row(
     *, model_name: str, version_hash: str
 ) -> tuple[object, ...]:
     """Build one valid fingerprint row tuple for read_latest_fingerprints."""
@@ -263,7 +263,7 @@ def build_standard_reuse_decision_scope(
         ("incremental_candidate", {"materialized": "incremental"}),
         ("ineligible_custom", {"materialized": "custom_kind"}),
         ("missing_expected", {}),
-        ("current_source_missing", {}),
+        ("current_reuse_from_missing", {}),
     )
     models: tuple[CompiledModel, ...] = tuple(
         CompiledModel(
