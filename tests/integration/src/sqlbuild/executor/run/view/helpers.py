@@ -214,7 +214,7 @@ def _execute_view_test(
         test_case=test_case,
         resolved_target_name=target_qualified,
     )
-    model_targets: dict[str, CompiledRelationLocation] = {
+    model_locations: dict[str, CompiledRelationLocation] = {
         "dim_view": CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
@@ -227,8 +227,8 @@ def _execute_view_test(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map={},
         model_audits=model_audits,
         run_id="test_run",

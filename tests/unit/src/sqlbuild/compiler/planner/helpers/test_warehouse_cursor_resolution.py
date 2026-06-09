@@ -1,4 +1,4 @@
-"""Tests for cursor upstream qualified name resolution with deferred targets."""
+"""Tests for cursor upstream qualified name resolution with deferred locations."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     PlannerTestAdapter,
-    build_cursor_deferred_targets,
+    build_cursor_deferred_locations,
     build_cursor_model_map,
     build_cursor_ref,
 )
@@ -63,7 +63,7 @@ TEST_CASES: list[CursorUpstreamResolutionTestCase] = [
     TEST_CASES,
     ids=[case.description for case in TEST_CASES],
 )
-def test_given_ref_and_deferred_targets_when_resolving_upstream_then_returns_expected(
+def test_given_ref_and_deferred_locations_when_resolving_upstream_then_returns_expected(
     test_case: CursorUpstreamResolutionTestCase,
 ) -> None:
     ref: CompileSqlReference = build_cursor_ref(test_case.ref_name)
@@ -71,9 +71,11 @@ def test_given_ref_and_deferred_targets_when_resolving_upstream_then_returns_exp
         test_case.ref_name,
         test_case.model_qualified_name,
     )
-    deferred_targets: dict[str, CompiledRelationLocation] | None = build_cursor_deferred_targets(
-        test_case.ref_name,
-        test_case.deferred_qualified_name,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = (
+        build_cursor_deferred_locations(
+            test_case.ref_name,
+            test_case.deferred_qualified_name,
+        )
     )
 
     result: str | None = _resolve_upstream_qualified_name(
@@ -81,7 +83,7 @@ def test_given_ref_and_deferred_targets_when_resolving_upstream_then_returns_exp
         adapter=PlannerTestAdapter(),
         model_map=model_map,
         source_map={},
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         selected_names=test_case.selected_names,
     )
 

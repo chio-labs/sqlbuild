@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
 def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> None:
-    """Validate compiled model and seed targets for the effective adapter."""
+    """Validate compiled model and seed locations for the effective adapter."""
 
     if adapter_name not in {
         BuiltinAdapter.SNOWFLAKE,

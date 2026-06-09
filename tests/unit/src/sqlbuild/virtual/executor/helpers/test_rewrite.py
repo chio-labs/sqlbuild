@@ -6,9 +6,9 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_physical_destination,
-    build_rewritten_model_targets,
+    build_rewritten_model_locations,
     relation_type_for_model,
-    rewrite_project_model_targets,
+    rewrite_project_model_locations,
 )
 from tests.unit.src.sqlbuild.virtual.executor.helpers._test_types import (
     PhysicalTargetTestCase,
@@ -71,7 +71,7 @@ def test_given_selected_and_bound_models_when_rewriting_targets_then_it_uses_phy
     adapter: DuckDbAdapter = build_adapter()
     project: CompiledProject = build_virtual_executor_test_project()
 
-    rewritten_targets: dict[str, CompiledRelationLocation] = build_rewritten_model_targets(
+    rewritten_locations: dict[str, CompiledRelationLocation] = build_rewritten_model_locations(
         project=project,
         adapter=adapter,
         selected_model_version_hashes=test_case.selected_model_version_hashes,
@@ -84,9 +84,9 @@ def test_given_selected_and_bound_models_when_rewriting_targets_then_it_uses_phy
         },
     )
 
-    assert rewritten_targets["fact_orders"].schema == "dev__sqb_physical"
-    assert rewritten_targets["fact_orders"].name == test_case.expected_selected_name
-    assert rewritten_targets["stg_orders"].name == test_case.expected_bound_name
+    assert rewritten_locations["fact_orders"].schema == "dev__sqb_physical"
+    assert rewritten_locations["fact_orders"].name == test_case.expected_selected_name
+    assert rewritten_locations["stg_orders"].name == test_case.expected_bound_name
 
 
 @pytest.mark.parametrize(
@@ -100,21 +100,21 @@ def test_given_selected_and_bound_models_when_rewriting_targets_then_it_uses_phy
     ],
     ids=["project rewrite changes only targeted models"],
 )
-def test_given_rewritten_targets_when_rewriting_project_then_only_model_targets_change(
+def test_given_rewritten_locations_when_rewriting_project_then_only_model_locations_change(
     test_case: RewriteProjectTargetsTestCase,
 ) -> None:
     adapter: DuckDbAdapter = build_adapter()
     project: CompiledProject = build_virtual_executor_test_project()
-    rewritten_targets: dict[str, CompiledRelationLocation] = build_rewritten_model_targets(
+    rewritten_locations: dict[str, CompiledRelationLocation] = build_rewritten_model_locations(
         project=project,
         adapter=adapter,
         selected_model_version_hashes=test_case.selected_model_version_hashes,
         bound_physical_relations={},
     )
 
-    rewritten_project: CompiledProject = rewrite_project_model_targets(
+    rewritten_project: CompiledProject = rewrite_project_model_locations(
         project=project,
-        rewritten_targets=rewritten_targets,
+        rewritten_locations=rewritten_locations,
     )
 
     assert rewritten_project.models[0].destination == project.models[0].destination

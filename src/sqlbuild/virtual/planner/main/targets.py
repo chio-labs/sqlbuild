@@ -14,7 +14,7 @@ def build_virtual_destination_from_physical_relation(
     relation: PhysicalRelationRecord,
     fallback_target: CompiledRelationLocation,
 ) -> CompiledRelationLocation:
-    """Build a compiled target from a tracked physical relation."""
+    """Build a compiled relation location from a tracked physical relation."""
 
     return build_destination_from_physical_relation(
         adapter=adapter,

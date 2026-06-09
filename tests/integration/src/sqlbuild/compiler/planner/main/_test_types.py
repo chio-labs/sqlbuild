@@ -13,14 +13,14 @@ from sqlbuild.compiler.planner.types import (
 class FormatPlanIntegrationTestCase:
     description: str
     setup_sql: tuple[str, ...]
-    model_targets: dict[str, str]
+    model_locations: dict[str, str]
     model_configs: dict[str, dict[str, object]]
     model_queries: dict[str, str]
     full_refresh: bool
     expected_format_fragments: tuple[str, ...]
     unexpected_format_fragments: tuple[str, ...] = ()
     model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    seed_targets: dict[str, str] = field(default_factory=dict)
+    seed_locations: dict[str, str] = field(default_factory=dict)
     effective_connection: dict[str, object] = field(default_factory=dict)
 
 
@@ -28,7 +28,7 @@ class FormatPlanIntegrationTestCase:
 class BuildExecutionPlanTestCase:
     description: str
     setup_sql: tuple[str, ...]
-    model_targets: dict[str, str]
+    model_locations: dict[str, str]
     model_configs: dict[str, dict[str, object]]
     model_queries: dict[str, str]
     full_refresh: bool
@@ -38,8 +38,8 @@ class BuildExecutionPlanTestCase:
     expected_warning_severity: WarningSeverity | None = None
     expected_warning_count: int = 0
     expected_warning_fragment: str | None = None
-    seed_targets: dict[str, str] = field(default_factory=dict)
-    function_targets: dict[str, str] = field(default_factory=dict)
+    seed_locations: dict[str, str] = field(default_factory=dict)
+    function_locations: dict[str, str] = field(default_factory=dict)
     function_bodies: dict[str, str] = field(default_factory=dict)
     previous_function_bodies: dict[str, str] = field(default_factory=dict)
     function_replay_on_changes: dict[str, str] = field(default_factory=dict)

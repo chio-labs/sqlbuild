@@ -19,8 +19,8 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
-from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
-    build_deferred_targets,
+from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
+    build_deferred_locations,
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
@@ -161,7 +161,7 @@ def _build_result(
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
 
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:
         deferred_target_config: TargetConfig = resolve_deferred_target_config(
@@ -169,7 +169,7 @@ def _build_result(
             defer_to=defer_to,
             current_target_name=project.effective_target_name,
         )
-        deferred_targets = build_deferred_targets(
+        deferred_locations = build_deferred_locations(
             project=project,
             deferred_target_config=deferred_target_config,
             effective_vars=project.effective_vars,
@@ -180,7 +180,7 @@ def _build_result(
         deferred_relations = gather_deferred_relations(
             adapter=adapter,
             connection=connection,
-            deferred_targets=deferred_targets,
+            deferred_locations=deferred_locations,
         )
 
     selected_sql_keys: frozenset[CompiledObjectKey] | None = None
@@ -203,7 +203,7 @@ def _build_result(
         select=select,
         exclude=exclude,
         selected_keys=selected_sql_keys,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         deferred_relations=deferred_relations,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,

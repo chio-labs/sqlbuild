@@ -222,13 +222,13 @@ def build_scenario_cleanup_test_plan(
                 scenario_name="revenue__customer_refund",
                 hash_prefix="51b385aebe20",
             ),
-            model_targets={
+            model_locations={
                 "daily_revenue": model_target,
                 "stg_customers": ref_fixture.destination,
             },
-            source_fixture_targets={"raw__orders": source_fixture.destination},
-            ref_fixture_targets={"stg_customers": ref_fixture.destination},
-            seed_fixture_targets={"country_codes": seed_fixture.destination},
+            source_fixture_locations={"raw__orders": source_fixture.destination},
+            ref_fixture_locations={"stg_customers": ref_fixture.destination},
+            seed_fixture_locations={"country_codes": seed_fixture.destination},
         ),
         fixture_plans=(source_fixture, ref_fixture, seed_fixture),
         model_entries=(
@@ -296,7 +296,7 @@ def build_scenario_model_test_plan(
         name="__sqb_51b385aebe20__seed__country_codes",
         qualified_name="scenario_schema.__sqb_51b385aebe20__seed__country_codes",
     )
-    model_targets: dict[str, CompiledRelationLocation] = {
+    model_locations: dict[str, CompiledRelationLocation] = {
         entry.name: entry.destination for entry in model_entries
     }
     return ScenarioExecutionPlan(
@@ -321,9 +321,9 @@ def build_scenario_model_test_plan(
                 scenario_name="revenue__customer_refund",
                 hash_prefix="51b385aebe20",
             ),
-            model_targets=model_targets,
-            seed_targets={"country_codes": seed_target},
-            source_fixture_targets={"raw__orders": source_target},
+            model_locations=model_locations,
+            seed_locations={"country_codes": seed_target},
+            source_fixture_locations={"raw__orders": source_target},
             source_map={},
         ),
         model_entries=model_entries,

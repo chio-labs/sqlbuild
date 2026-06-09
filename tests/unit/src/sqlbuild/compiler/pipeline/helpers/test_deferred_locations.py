@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.pipeline.helpers.deferred_targets import build_deferred_targets
+from sqlbuild.compiler.pipeline.helpers.deferred_locations import build_deferred_locations
 from sqlbuild.spec.models.project import TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
     DeferredTargetTestCase,
@@ -107,7 +107,7 @@ DEFERRED_TARGET_TEST_CASES: list[DeferredTargetTestCase] = [
         expected_qualified_name="prod_warehouse.analytics.test_model",
     ),
     DeferredTargetTestCase(
-        description="bigquery deferred targets use adapter-qualified names",
+        description="bigquery deferred locations use adapter-qualified names",
         adapter_name="bigquery",
         logical_schema="analytics",
         logical_database="warehouse",
@@ -147,7 +147,7 @@ def test_given_deferred_target_config_when_building_targets_then_resolves_expect
         if test_case.adapter_name == "bigquery"
         else DuckDbAdapter().render_qualified_name
     )
-    targets: dict[str, CompiledRelationLocation] = build_deferred_targets(
+    locations: dict[str, CompiledRelationLocation] = build_deferred_locations(
         project=project,
         deferred_target_config=deferred_target_config,
         effective_vars=test_case.effective_vars,
@@ -156,7 +156,7 @@ def test_given_deferred_target_config_when_building_targets_then_resolves_expect
         render_qualified_name=render_qualified_name,
     )
 
-    result: CompiledRelationLocation = targets["test_model"]
+    result: CompiledRelationLocation = locations["test_model"]
     assert result.schema == test_case.expected_schema
     assert result.database == test_case.expected_database
     assert result.qualified_name == test_case.expected_qualified_name

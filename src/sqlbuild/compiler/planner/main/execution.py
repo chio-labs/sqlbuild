@@ -72,7 +72,7 @@ def build_execution_plan(
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
@@ -107,7 +107,7 @@ def build_execution_plan(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         on_progress=on_progress,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         deferred_relations=deferred_relations,
     )
     relations: PlannerRelationsContext = build_planner_relations_context(
@@ -115,7 +115,7 @@ def build_execution_plan(
         adapter=adapter,
         connection=connection,
         scope=scope,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         project_config=project_config,
         local_config=local_config,
         defer_sources_to=defer_sources_to,

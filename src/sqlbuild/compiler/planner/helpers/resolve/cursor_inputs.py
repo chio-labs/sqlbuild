@@ -13,8 +13,8 @@ from sqlbuild.shared.types import SqlReferenceKind
 def has_model_backed_cursor_inputs(
     *,
     model: CompiledModel,
-    model_targets: dict[str, CompiledRelationLocation],
-    seed_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     cursor_inputs: dict[str, str],
 ) -> bool:
     """Return whether any cursor input points at another model relation."""
@@ -25,8 +25,8 @@ def has_model_backed_cursor_inputs(
             continue
         if ref.ref_kind != SqlReferenceKind.REF:
             continue
-        if ref.ref_name in seed_targets:
+        if ref.ref_name in seed_locations:
             continue
-        if ref.ref_name in model_targets:
+        if ref.ref_name in model_locations:
             return True
     return False

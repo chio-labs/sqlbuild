@@ -50,9 +50,9 @@ def test_given_source_deferral_context_when_building_source_freshness_then_uses_
                 execution_order=(),
             ),
             relations=PlannerRelationsContext(
-                model_targets={},
-                seed_targets={},
-                function_targets={},
+                model_locations={},
+                seed_locations={},
+                function_locations={},
                 source_map={
                     "raw_orders": SourceEntry(
                         name="raw_orders",

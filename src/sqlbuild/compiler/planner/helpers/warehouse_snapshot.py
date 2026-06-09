@@ -82,7 +82,7 @@ def build_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> WarehouseSnapshot:
     """Gather warehouse state and validate selected upstream availability."""
@@ -97,7 +97,7 @@ def build_warehouse_snapshot(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         on_progress=on_progress,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
     )
     missing: tuple[MissingUpstream, ...] = check_buildability(
         selected_keys=scope.selected_keys,
@@ -125,7 +125,7 @@ def gather_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -174,7 +174,7 @@ def gather_warehouse_snapshot(
             existing_relations=relations,
             selected_keys=selected_keys,
             on_progress=on_progress,
-            deferred_targets=deferred_targets,
+            deferred_locations=deferred_locations,
         )
 
     return WarehouseSnapshot(
@@ -377,7 +377,7 @@ def _gather_cursor_snapshots(
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
     on_progress: Callable[[str], None] | None,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
@@ -391,7 +391,7 @@ def _gather_cursor_snapshots(
         source_map=source_map,
         existing_relations=existing_relations,
         selected_keys=selected_keys,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
     )
     if not cursor_models:
         return {}
@@ -421,7 +421,7 @@ def _collect_cursor_models(
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
@@ -462,7 +462,7 @@ def _collect_cursor_models(
                 adapter=adapter,
                 model_map=model_map,
                 source_map=source_map,
-                deferred_targets=deferred_targets,
+                deferred_locations=deferred_locations,
                 selected_names=selected_names,
             )
             if upstream_relation is None:
@@ -656,15 +656,19 @@ def _resolve_upstream_qualified_name(
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     selected_names: frozenset[str] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
         is_selected: bool = selected_names is not None and ref.ref_name in selected_names
-        if deferred_targets is not None and ref.ref_name in deferred_targets and not is_selected:
-            return deferred_targets[ref.ref_name].qualified_name
+        if (
+            deferred_locations is not None
+            and ref.ref_name in deferred_locations
+            and not is_selected
+        ):
+            return deferred_locations[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.destination.qualified_name

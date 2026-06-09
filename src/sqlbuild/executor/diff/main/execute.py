@@ -1,4 +1,4 @@
-"""Execute model diffs across compiled targets."""
+"""Execute model diffs across compiled relation locations."""
 
 from __future__ import annotations
 

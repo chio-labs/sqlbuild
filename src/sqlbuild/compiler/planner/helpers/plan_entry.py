@@ -31,10 +31,10 @@ from sqlbuild.compiler.planner.helpers.resolve.cursor import (
     compute_cursor_bounds,
 )
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
-    apply_deferred_targets,
-    build_function_targets,
-    build_model_targets,
-    build_seed_targets,
+    apply_deferred_locations,
+    build_function_locations,
+    build_model_locations,
+    build_seed_locations,
 )
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.source_deferral import build_source_read_map
@@ -91,24 +91,24 @@ def build_planner_relations_context(
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
 ) -> PlannerRelationsContext:
-    """Resolve relation targets and source metadata for plan entry construction."""
+    """Resolve relation locations and source metadata for plan entry construction."""
 
-    model_targets: dict[str, CompiledRelationLocation] = build_model_targets(project.models)
-    seed_targets: dict[str, CompiledRelationLocation] = build_seed_targets(project.seeds)
-    function_targets: dict[str, CompiledRelationLocation] = build_function_targets(
+    model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
+    seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
+    function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
         project.functions
     )
-    if deferred_targets is not None:
-        apply_deferred_targets(
-            model_targets=model_targets,
-            seed_targets=seed_targets,
-            deferred_targets=deferred_targets,
+    if deferred_locations is not None:
+        apply_deferred_locations(
+            model_locations=model_locations,
+            seed_locations=seed_locations,
+            deferred_locations=deferred_locations,
             selected_keys=scope.selected_keys,
         )
     source_map: dict[str, SourceEntry] = build_source_load_map(
@@ -128,9 +128,9 @@ def build_planner_relations_context(
         else source_map
     )
     return PlannerRelationsContext(
-        model_targets=model_targets,
-        seed_targets=seed_targets,
-        function_targets=function_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        function_locations=function_locations,
         source_map=source_map,
         source_read_map=source_read_map,
         source_warehouse_columns=gather_source_columns(
@@ -148,10 +148,10 @@ def plan_model(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationLocation],
-    function_targets: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -177,10 +177,10 @@ def plan_model(
         model=model,
         snapshot=snapshot,
         adapter=adapter,
-        model_targets=model_targets,
+        model_locations=model_locations,
         models_by_name=models_by_name,
-        seed_targets=seed_targets,
-        function_targets=function_targets,
+        seed_locations=seed_locations,
+        function_locations=function_locations,
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
@@ -236,10 +236,10 @@ def build_plan_entries(
             model=model,
             snapshot=snapshot,
             adapter=adapter,
-            model_targets=relations.model_targets,
+            model_locations=relations.model_locations,
             models_by_name=scope.models_by_name,
-            seed_targets=relations.seed_targets,
-            function_targets=relations.function_targets,
+            seed_locations=relations.seed_locations,
+            function_locations=relations.function_locations,
             source_map=relations.source_read_map,
             source_warehouse_columns=relations.source_warehouse_columns,
             star_exclude_keyword=relations.star_exclude_keyword,
@@ -263,10 +263,10 @@ def plan_model_from_change(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationLocation],
-    function_targets: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -292,9 +292,9 @@ def plan_model_from_change(
         adapter=adapter,
         model=model,
         snapshot=snapshot,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
-        function_targets=function_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        function_locations=function_locations,
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
@@ -349,9 +349,9 @@ def plan_model_from_change(
         cursor_input_relations = _build_cursor_input_relations(
             model=model,
             adapter=adapter,
-            model_targets=model_targets,
+            model_locations=model_locations,
             models_by_name=models_by_name,
-            seed_targets=seed_targets,
+            seed_locations=seed_locations,
             source_map=source_map,
             cursor_column=cursor_column,
         )
@@ -910,9 +910,9 @@ def _build_cursor_input_relations(
     *,
     model: CompiledModel,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
 ) -> tuple[CursorInputRelation, ...]:
@@ -932,8 +932,8 @@ def _build_cursor_input_relations(
         relation: str | None = _resolve_cursor_input_relation(
             ref=ref,
             adapter=adapter,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
         )
         if relation is not None:
@@ -946,7 +946,7 @@ def _build_cursor_input_relations(
                         models_by_name=models_by_name,
                     ),
                     is_model_backed=(
-                        ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_targets
+                        ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_locations
                     ),
                 )
             )
@@ -1045,16 +1045,16 @@ def _resolve_cursor_input_relation(
     *,
     ref: CompileSqlReference,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationLocation],
-    seed_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
 ) -> str | None:
     """Resolve one cursor input reference to a qualified relation name."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
-        target: CompiledRelationLocation | None = model_targets.get(ref.ref_name)
+        target: CompiledRelationLocation | None = model_locations.get(ref.ref_name)
         if target is None:
-            target = seed_targets.get(ref.ref_name)
+            target = seed_locations.get(ref.ref_name)
         return target.qualified_name if target is not None else None
     if ref.ref_kind == SqlReferenceKind.SOURCE:
         source: SourceEntry | None = source_map.get(ref.ref_name)

@@ -1094,7 +1094,7 @@ def build_audit_from_test_case(
     )
 
 
-def build_audit_model_targets(
+def build_audit_model_locations(
     targets: dict[str, str],
 ) -> dict[str, CompiledRelationLocation]:
     """Build model target lookup from name -> qualified_name."""
@@ -1161,11 +1161,11 @@ def build_cursor_model_map(
     }
 
 
-def build_cursor_deferred_targets(
+def build_cursor_deferred_locations(
     ref_name: str,
     qualified_name: str | None,
 ) -> dict[str, CompiledRelationLocation] | None:
-    """Build deferred targets dict with one entry, or None."""
+    """Build deferred locations dict with one entry, or None."""
 
     if qualified_name is None:
         return None

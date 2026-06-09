@@ -51,7 +51,7 @@ def build_project_from_test_case(
     models: list[CompiledModel] = []
     model_name: str
     target_schema: str
-    for model_name, target_schema in test_case.model_targets.items():
+    for model_name, target_schema in test_case.model_locations.items():
         config_values: dict[str, object] = test_case.model_configs.get(model_name, {})
         query_sql: str = test_case.model_queries.get(model_name, f"SELECT * FROM {model_name}")
         dep_names: tuple[str, ...] = test_case.model_deps.get(model_name, ())
@@ -84,7 +84,7 @@ def build_project_from_test_case(
 
     seeds: list[CompiledSeed] = []
     seed_name: str
-    for seed_name, target_schema in test_case.seed_targets.items():
+    for seed_name, target_schema in test_case.seed_locations.items():
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(
@@ -116,7 +116,7 @@ def build_project_from_test_case(
 
     functions: list[CompiledFunction] = []
     function_name: str
-    for function_name, target_schema in test_case.function_targets.items():
+    for function_name, target_schema in test_case.function_locations.items():
         body_sql: str = test_case.function_bodies.get(function_name, "value = 1")
         language: FunctionLanguage = test_case.function_languages.get(
             function_name, FunctionLanguage.SQL
@@ -292,7 +292,7 @@ def build_project_from_format_test_case(
     models: list[CompiledModel] = []
     model_name: str
     target_schema: str
-    for model_name, target_schema in test_case.model_targets.items():
+    for model_name, target_schema in test_case.model_locations.items():
         config_values: dict[str, object] = test_case.model_configs.get(model_name, {})
         query_sql: str = test_case.model_queries.get(model_name, f"SELECT * FROM {model_name}")
         dep_names: tuple[str, ...] = test_case.model_deps.get(model_name, ())
@@ -321,7 +321,7 @@ def build_project_from_format_test_case(
 
     seeds: list[CompiledSeed] = []
     seed_name: str
-    for seed_name, target_schema in test_case.seed_targets.items():
+    for seed_name, target_schema in test_case.seed_locations.items():
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(

@@ -164,7 +164,7 @@ def build_test_and_project(
     functions: list[CompiledFunction] = []
     function_name: str
     qualified_name: str
-    for function_name, qualified_name in test_case.function_targets.items():
+    for function_name, qualified_name in test_case.function_locations.items():
         functions.append(
             CompiledFunction(
                 key=CompiledObjectKey(

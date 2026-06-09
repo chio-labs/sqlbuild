@@ -1,4 +1,4 @@
-"""Compute deferred target targets and gather deferred relations."""
+"""Compute deferred relation locations and gather deferred relations."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
 _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
 
 
-def build_deferred_targets(
+def build_deferred_locations(
     *,
     project: CompiledProject,
     deferred_target_config: TargetConfig,
@@ -33,12 +33,12 @@ def build_deferred_targets(
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build physical targets for all models and seeds under a deferred target."""
+    """Build physical locations for all models and seeds under a deferred target."""
 
-    targets: dict[str, CompiledRelationLocation] = {}
+    locations: dict[str, CompiledRelationLocation] = {}
     model: CompiledModel
     for model in project.models:
-        targets[model.name] = _resolve_deferred_target(
+        locations[model.name] = _resolve_deferred_location(
             target=model.destination,
             deferred_target_config=deferred_target_config,
             effective_vars=effective_vars,
@@ -48,7 +48,7 @@ def build_deferred_targets(
         )
     seed: CompiledSeed
     for seed in project.seeds:
-        targets[seed.name] = _resolve_deferred_target(
+        locations[seed.name] = _resolve_deferred_location(
             target=seed.destination,
             deferred_target_config=deferred_target_config,
             effective_vars=effective_vars,
@@ -56,7 +56,7 @@ def build_deferred_targets(
             default_database=default_database,
             render_qualified_name=render_qualified_name,
         )
-    return targets
+    return locations
 
 
 def resolve_deferred_target_config(
@@ -79,18 +79,18 @@ def gather_deferred_relations(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    deferred_targets: dict[str, CompiledRelationLocation],
+    deferred_locations: dict[str, CompiledRelationLocation],
 ) -> dict[str, RelationInfo]:
-    """Gather existing relations from the deferred target's schemas."""
+    """Gather existing relations from the deferred target's relation-location schemas."""
 
     schemas: set[str] = set()
     database: str | None = None
-    target: CompiledRelationLocation
-    for target in deferred_targets.values():
-        if target.schema is not None:
-            schemas.add(target.schema)
-        if target.database is not None and database is None:
-            database = target.database
+    location: CompiledRelationLocation
+    for location in deferred_locations.values():
+        if location.schema is not None:
+            schemas.add(location.schema)
+        if location.database is not None and database is None:
+            database = location.database
 
     if not schemas:
         return {}
@@ -101,7 +101,7 @@ def gather_deferred_relations(
     return {rel.name: rel for rel in relations}
 
 
-def _resolve_deferred_target(
+def _resolve_deferred_location(
     *,
     target: CompiledRelationLocation,
     deferred_target_config: TargetConfig,
@@ -110,7 +110,7 @@ def _resolve_deferred_target(
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
 ) -> CompiledRelationLocation:
-    """Resolve one target under the deferred target's naming rules."""
+    """Resolve one relation location under the deferred target's naming rules."""
 
     schema: str | None = _resolve_target_field(
         target_value=deferred_target_config.schema,

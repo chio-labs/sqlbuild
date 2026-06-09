@@ -55,8 +55,8 @@ _CLAUSE_KEYWORDS: frozenset[str] = frozenset(
 def resolve_ref_references(
     *,
     query_sql: str,
-    model_targets: dict[str, CompiledRelationLocation],
-    seed_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     cursor_bounds: CursorBounds | None,
     cursor_inputs: dict[str, str],
     adapter: BaseAdapter,
@@ -67,7 +67,7 @@ def resolve_ref_references(
 
     def _replace_ref(match: re.Match[str]) -> str:
         ref_name: str = match.group(1)
-        target: CompiledRelationLocation | None = model_targets.get(ref_name)
+        target: CompiledRelationLocation | None = model_locations.get(ref_name)
         if target is None:
             return match.group(0)
         qualified_name: str = resolve_relation_location_qualified_name(
@@ -91,7 +91,7 @@ def resolve_ref_references(
 
     def _replace_seed(match: re.Match[str]) -> str:
         seed_name: str = match.group(1)
-        target: CompiledRelationLocation | None = seed_targets.get(seed_name)
+        target: CompiledRelationLocation | None = seed_locations.get(seed_name)
         if target is None:
             return match.group(0)
         return resolve_relation_location_qualified_name(adapter=adapter, location=target)
@@ -122,7 +122,7 @@ def resolve_dbt_ref_references(
 def resolve_udf_references(
     *,
     query_sql: str,
-    function_targets: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     """Replace __udf() calls with adapter-specific scalar UDF calls."""
@@ -133,7 +133,7 @@ def resolve_udf_references(
     for match in _UDF_PATTERN.finditer(query_sql):
         parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
-        target: CompiledRelationLocation | None = function_targets.get(function_name)
+        target: CompiledRelationLocation | None = function_locations.get(function_name)
         if target is None or target.qualified_name is None:
             parts.append(match.group(0))
             last_index = match.end()
@@ -173,7 +173,7 @@ def _skip_whitespace(*, sql: str, start: int) -> int:
 def resolve_table_function_references(
     *,
     query_sql: str,
-    function_targets: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     """Replace __table_fn() calls with adapter-specific table function calls."""
@@ -184,7 +184,7 @@ def resolve_table_function_references(
     for match in _TABLE_FUNCTION_PATTERN.finditer(query_sql):
         parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
-        target: CompiledRelationLocation | None = function_targets.get(function_name)
+        target: CompiledRelationLocation | None = function_locations.get(function_name)
         if target is None or target.qualified_name is None:
             parts.append(match.group(0))
             last_index = match.end()
@@ -255,46 +255,46 @@ def _has_following_alias(*, sql: str, start: int) -> bool:
     return token not in _CLAUSE_KEYWORDS
 
 
-def build_model_targets(
+def build_model_locations(
     models: tuple[CompiledModel, ...],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build a lookup of model name to compiled relation target."""
+    """Build a lookup of model name to compiled relation location."""
 
     return {model.name: model.destination for model in models}
 
 
-def build_seed_targets(
+def build_seed_locations(
     seeds: tuple[CompiledSeed, ...],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build a lookup of seed name to compiled relation target."""
+    """Build a lookup of seed name to compiled relation location."""
 
     return {seed.name: seed.destination for seed in seeds}
 
 
-def build_function_targets(
+def build_function_locations(
     functions: tuple[CompiledFunction, ...],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build a lookup of function name to compiled relation target."""
+    """Build a lookup of function name to compiled relation location."""
 
     return {function.name: function.destination for function in functions}
 
 
-def apply_deferred_targets(
+def apply_deferred_locations(
     *,
-    model_targets: dict[str, CompiledRelationLocation],
-    seed_targets: dict[str, CompiledRelationLocation],
-    deferred_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    deferred_locations: dict[str, CompiledRelationLocation],
     selected_keys: frozenset[CompiledObjectKey],
 ) -> None:
-    """Replace non-selected model/seed targets with deferred target targets."""
+    """Replace non-selected model/seed locations with deferred target locations."""
 
     selected_names: frozenset[str] = frozenset(k.name for k in selected_keys)
     name: str
-    deferred_target: CompiledRelationLocation
-    for name, deferred_target in deferred_targets.items():
+    deferred_location: CompiledRelationLocation
+    for name, deferred_location in deferred_locations.items():
         if name in selected_names:
             continue
-        if name in model_targets:
-            model_targets[name] = deferred_target
-        if name in seed_targets:
-            seed_targets[name] = deferred_target
+        if name in model_locations:
+            model_locations[name] = deferred_location
+        if name in seed_locations:
+            seed_locations[name] = deferred_location

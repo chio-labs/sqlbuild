@@ -20,7 +20,7 @@ def build_python_relation_targets(
     targets: dict[SqlResourceRef, str] = {}
     model_name: str
     target: CompiledRelationLocation
-    for model_name, target in plan_output.model_targets.items():
+    for model_name, target in plan_output.model_locations.items():
         targets[SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=model_name)] = (
             resolve_relation_location_qualified_name(adapter=adapter, location=target)
         )

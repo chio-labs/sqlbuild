@@ -311,7 +311,7 @@ def _format_model_assets(
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
     if plan is not None:
-        targets = {name: target.qualified_name for name, target in plan.model_targets.items()}
+        targets = {name: target.qualified_name for name, target in plan.model_locations.items()}
     return tuple(
         _drop_none(
             {
@@ -337,7 +337,7 @@ def _format_seed_assets(
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
     if plan is not None:
-        targets = {name: target.qualified_name for name, target in plan.seed_targets.items()}
+        targets = {name: target.qualified_name for name, target in plan.seed_locations.items()}
     return tuple(
         _drop_none(
             {
@@ -403,7 +403,7 @@ def _format_function_assets(
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
     if plan is not None:
-        targets = {name: target.qualified_name for name, target in plan.function_targets.items()}
+        targets = {name: target.qualified_name for name, target in plan.function_locations.items()}
     return tuple(
         _drop_none(
             {

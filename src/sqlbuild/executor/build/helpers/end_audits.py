@@ -18,8 +18,8 @@ def run_end_audits(
     end_audits: tuple[AuditPlanEntry, ...],
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationLocation],
-    seed_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
 ) -> tuple[AuditExecutionResult, ...]:
     """Execute all end audits and return results."""
@@ -31,8 +31,8 @@ def run_end_audits(
             audit=audit,
             adapter=adapter,
             connection=connection,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,

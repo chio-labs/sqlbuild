@@ -114,7 +114,7 @@ SELECT 1
         expected_tested_macro_names=((),),
     ),
     AssembleCompiledProjectTestCase(
-        description="assembles seed targets using local environment database templates",
+        description="assembles seed locations using local environment database templates",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
@@ -171,7 +171,7 @@ seeds:
         expected_tested_macro_names=(),
     ),
     AssembleCompiledProjectTestCase(
-        description="assembles seed targets using seed declaration templates",
+        description="assembles seed locations using seed declaration templates",
         repo_files=base_repo_files()
         | {
             "sqlbuild_project.toml": """
