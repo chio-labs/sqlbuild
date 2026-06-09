@@ -1602,7 +1602,7 @@ class BigQueryAdapter(BaseAdapter):
                 f"FROM `{dataset_id}`.INFORMATION_SCHEMA.ROUTINES WHERE 1=1"
             )
             if names:
-                quoted_names: str = ", ".join(f"'{name}'" for name in names)
+                quoted_names: str = ", ".join(self._quote_sql_string(name) for name in names)
                 query += f" AND routine_name IN ({quoted_names})"
             try:
                 cursor: _BigQueryCursor = self.execute(connection, query)

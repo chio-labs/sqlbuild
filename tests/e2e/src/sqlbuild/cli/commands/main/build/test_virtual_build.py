@@ -3129,7 +3129,7 @@ def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_fail
                 "        self,\n"
                 "        connection: Any,\n"
                 "        *,\n"
-                "        target: str,\n"
+                "        destination: str,\n"
                 "        sql: str,\n"
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"

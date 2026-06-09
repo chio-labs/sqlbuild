@@ -10,8 +10,10 @@ from sqlbuild.compiler.compile.models.core import (
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
+from tests.unit.src.sqlbuild.adapter.base.helpers import RecordingConnection
 from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbExpressionInferenceProfileTestCase,
+    DuckDbMetadataSqlTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
     DuckDbRenderIdentifierTestCase,
     DuckDbRenderTableFunctionTestCase,
@@ -130,3 +132,80 @@ def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
     )
 
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbMetadataSqlTestCase(
+            description="escapes single quotes in DuckDB metadata SQL literals",
+            database="warehouse'prod",
+            schema="sales'ops",
+            name="orders'2026",
+            expected_sql=(
+                "SELECT 1 FROM information_schema.schemata "
+                "WHERE schema_name = 'sales''ops' AND catalog_name = 'warehouse''prod'",
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'orders''2026' "
+                "AND table_schema = 'sales''ops' AND table_catalog = 'warehouse''prod'",
+                "SELECT table_name, table_schema, table_type "
+                "FROM information_schema.tables WHERE 1=1 "
+                "AND table_schema IN ('sales''ops') "
+                "AND table_name IN ('orders''2026') AND table_catalog = 'warehouse''prod'",
+                "SELECT function_name, schema_name, function_type "
+                "FROM duckdb_functions() WHERE 1=1 "
+                "AND schema_name IN ('sales''ops') "
+                "AND function_name IN ('orders''2026') AND database_name = 'warehouse''prod'",
+                "SELECT column_name, data_type FROM information_schema.columns "
+                "WHERE table_name = 'orders''2026' "
+                "AND table_schema = 'sales''ops' AND table_catalog = 'warehouse''prod' "
+                "ORDER BY ordinal_position",
+                "SELECT table_name, column_name, data_type "
+                "FROM information_schema.columns WHERE 1=1 "
+                "AND table_schema IN ('sales''ops') "
+                "AND table_name IN ('orders''2026') AND table_catalog = 'warehouse''prod' "
+                "ORDER BY table_name, ordinal_position",
+            ),
+        )
+    ],
+    ids=["escapes single quotes in DuckDB metadata SQL literals"],
+)
+def test_given_metadata_names_with_quotes_when_querying_then_duckdb_escapes_literals(
+    test_case: DuckDbMetadataSqlTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: RecordingConnection = RecordingConnection()
+
+    adapter.schema_exists(connection, database=test_case.database, schema=test_case.schema)
+    adapter.relation_exists(
+        connection,
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+    )
+    adapter.list_relations(
+        connection,
+        database=test_case.database,
+        schemas=(test_case.schema,),
+        names=(test_case.name,),
+    )
+    adapter.list_functions(
+        connection,
+        database=test_case.database,
+        schemas=(test_case.schema,),
+        names=(test_case.name,),
+    )
+    adapter.get_columns(
+        connection,
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+    )
+    adapter.get_all_columns(
+        connection,
+        database=test_case.database,
+        schemas=(test_case.schema,),
+        names=(test_case.name,),
+    )
+
+    assert tuple(connection.executed_sql) == test_case.expected_sql

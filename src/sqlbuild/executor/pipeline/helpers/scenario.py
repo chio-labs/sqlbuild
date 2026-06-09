@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -29,7 +30,10 @@ from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_INTERNAL,
 )
 from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
 def run_scenario_test_pipeline(
@@ -279,7 +283,13 @@ def select_scenario_snapshot_capture_candidates(
                 capture_adapter=capture_adapter,
                 capture_dialect=capture_dialect,
             )
-        except Exception:
+        except Exception as error:
+            log_debug_event(
+                _DEBUG_LOGGER,
+                "scenario snapshot state classification failed; skipping auto-capture",
+                scenario=scenario.name,
+                sqlbuild_error=str(error),
+            )
             continue
         if snapshot_state.state in (ScenarioSnapshotState.MISSING, ScenarioSnapshotState.STALE):
             names.append(scenario.name)

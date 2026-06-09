@@ -29,20 +29,20 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     "test_case",
     [
         VirtualCloneE2ETestCase(
-            description="hydrates workspace hashes from source warehouse without target refs",
+            description="hydrates workspace hashes from origin warehouse without destination refs",
             command=("--no-color", "clone", "--from", "prod", "--to", "dev"),
             expected_exit_code=0,
             expected_stdout_fragments=(
                 "Virtual clone  prod -> dev",
-                "mode                 workspace fingerprints",
-                "source state         not used",
-                "target refs          unchanged",
+                "mode                    workspace fingerprints",
+                "origin state            not used",
+                "destination refs        unchanged",
                 "hydrated             3",
-                "missing in source    0",
+                "missing in origin    0",
             ),
         )
     ],
-    ids=["hydrates workspace hashes from source warehouse without target refs"],
+    ids=["hydrates workspace hashes from origin warehouse without destination refs"],
 )
 def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_hydrated(
     test_case: VirtualCloneE2ETestCase,
@@ -76,7 +76,7 @@ def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_h
     "test_case",
     [
         VirtualCloneE2ETestCase(
-            description="hydrates target VDE refs and leaves refs/views unchanged",
+            description="hydrates destination VDE refs and leaves refs/views unchanged",
             command=(
                 "--no-color",
                 "clone",
@@ -89,15 +89,15 @@ def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_h
             ),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "mode                 target VDE refs",
-                "target VDE           dev",
-                "target refs          unchanged",
+                "mode                    destination VDE refs",
+                "destination VDE         dev",
+                "destination refs        unchanged",
                 "hydrated             1",
                 "already present      2",
             ),
         )
     ],
-    ids=["hydrates target VDE refs and leaves refs/views unchanged"],
+    ids=["hydrates destination VDE refs and leaves refs/views unchanged"],
 )
 def test_given_virtual_clone_vde_mode_when_target_artifact_missing_then_only_physical_is_restored(
     test_case: VirtualCloneE2ETestCase,
@@ -145,7 +145,7 @@ def test_given_virtual_clone_vde_mode_when_target_artifact_missing_then_only_phy
     "test_case",
     [
         VirtualCloneE2ETestCase(
-            description="missing source artifact reports missing and exits nonzero",
+            description="missing origin artifact reports missing and exits nonzero",
             command=(
                 "--no-color",
                 "clone",
@@ -158,12 +158,12 @@ def test_given_virtual_clone_vde_mode_when_target_artifact_missing_then_only_phy
             ),
             expected_exit_code=1,
             expected_stdout_fragments=(
-                "missing in source    1",
+                "missing in origin    1",
                 "missing: stg_orders",
             ),
         )
     ],
-    ids=["missing source artifact reports missing and exits nonzero"],
+    ids=["missing origin artifact reports missing and exits nonzero"],
 )
 def test_given_virtual_clone_when_source_artifact_missing_then_it_reports_missing(
     test_case: VirtualCloneE2ETestCase,

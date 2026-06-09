@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -15,7 +16,10 @@ from sqlbuild.adapter.shared.constants import (
 )
 from sqlbuild.adapter.shared.models import NormalizedType
 from sqlbuild.adapter.shared.types import TypeDialect, TypeFamily
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.adapter")
 
 
 def normalize_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
@@ -61,7 +65,14 @@ def _normalize_with_sqlglot(
             read=dialect,
             into=expressions_module.DataType,
         )
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "type normalization sqlglot parse failed; falling back",
+            type_sql=type_sql,
+            dialect=str(dialect),
+            sqlbuild_error=str(error),
+        )
         return None
     return _normalized_from_parsed_type(parsed=parsed, dialect=dialect)
 

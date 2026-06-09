@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import OrderedDict
 from copy import deepcopy
 from typing import Any
 
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 _IDENTIFIER_CHAR_PATTERN: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9_]+")
 _DATABRICKS_BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
@@ -95,7 +99,12 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
 
     try:
         parsed: Any = polyglot_module.parse_one(protected_sql, dialect="generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "comparison SQL top-level WITH parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
 
     parsed_dict: dict[str, Any] = parsed.to_dict()
@@ -166,7 +175,12 @@ def _existing_cte_name(*, lifted_ctes: OrderedDict[str, str], cte_name: str) -> 
 def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
     try:
         generated: list[str] = polyglot_module.generate(expression, dialect="generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "comparison SQL generation failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     if len(generated) != 1:
         return None

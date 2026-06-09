@@ -98,6 +98,13 @@ class StandardSourceFreshnessMultiSchemaTestCase:
 
 
 @dataclass(frozen=True)
+class StandardSourceFreshnessDuplicateSchemaTestCase:
+    description: str
+    expected_previous_data_version: str
+    expected_changed_count: int
+
+
+@dataclass(frozen=True)
 class StandardSourceFreshnessPropagationTestCase:
     description: str
     changed_source_names: tuple[str, ...]

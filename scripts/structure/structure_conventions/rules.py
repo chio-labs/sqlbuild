@@ -618,6 +618,34 @@ def check_no_raw_runtime_diagnostics(file_path: Path, module: ast.Module) -> lis
     return violations
 
 
+def check_no_swallowed_exception_probes(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject broad exception handlers that silently answer existence probes."""
+
+    if not _is_runtime_source_file(file_path):
+        return []
+
+    violations: list[Violation] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+        if not _is_bare_exception_handler(node):
+            continue
+        if not _handler_body_is_single_swallow(node.body):
+            continue
+        violations.append(
+            Violation(
+                code="SC044",
+                path=file_path,
+                line=node.lineno,
+                message=(
+                    "runtime code must not swallow broad exceptions as existence probe "
+                    "answers; use adapter metadata checks or log best-effort fallbacks"
+                ),
+            )
+        )
+    return violations
+
+
 def check_private_definition_ordering(file_path: Path, module: ast.Module) -> list[Violation]:
     """Reject private dataclasses and constants that appear after function definitions."""
 
@@ -1605,6 +1633,32 @@ def _raise_uses_raw_builtin(node: ast.Raise) -> bool:
         _base_name(node.exc.func) if isinstance(node.exc, ast.Call) else _base_name(node.exc)
     )
     return raised_name in RAW_BUILTIN_RAISE_NAMES
+
+
+def _is_bare_exception_handler(node: ast.ExceptHandler) -> bool:
+    return node.name is None and isinstance(node.type, ast.Name) and node.type.id == "Exception"
+
+
+def _handler_body_is_single_swallow(body: list[ast.stmt]) -> bool:
+    if len(body) != 1:
+        return False
+
+    statement: ast.stmt = body[0]
+    if isinstance(statement, ast.Continue):
+        return True
+    if not isinstance(statement, ast.Return):
+        return False
+    return _is_swallowed_probe_return_value(statement.value)
+
+
+def _is_swallowed_probe_return_value(node: ast.expr | None) -> bool:
+    if isinstance(node, ast.Constant):
+        return node.value is None or node.value is False
+    if isinstance(node, ast.Dict):
+        return not node.keys and not node.values
+    if isinstance(node, ast.Tuple):
+        return not node.elts
+    return False
 
 
 def _decorator_name(node: ast.expr) -> str:

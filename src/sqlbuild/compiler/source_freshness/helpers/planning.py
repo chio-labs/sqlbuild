@@ -151,8 +151,24 @@ def _read_previous_records(
             schema=state_schema,
             render_qualified_name=render_qualified_name,
         )
-        previous_records_by_identity.update(previous_set.records)
+        _merge_latest_previous_records(
+            previous_records_by_identity=previous_records_by_identity,
+            candidate_records=previous_set.records,
+        )
     return previous_records_by_identity
+
+
+def _merge_latest_previous_records(
+    *,
+    previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
+    candidate_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
+) -> None:
+    identity: SourceFreshnessIdentity
+    candidate_record: SourceFreshnessRecord
+    for identity, candidate_record in candidate_records.items():
+        previous_record: SourceFreshnessRecord | None = previous_records_by_identity.get(identity)
+        if previous_record is None or candidate_record.observed_at > previous_record.observed_at:
+            previous_records_by_identity[identity] = candidate_record
 
 
 def _source_for_observation(*, adapter: StrictAdapter, source: SourceEntry) -> SourceEntry | None:
