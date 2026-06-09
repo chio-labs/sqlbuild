@@ -139,6 +139,8 @@ target = "dev"
 database = "local_db"
 schema = "local_schema"
 defer_sources_to = "prod"
+reuse_from = "prod"
+reuse_hard_copy = true
 
 [targets.dev.connection]
 warehouse = "local_wh"
@@ -166,6 +168,8 @@ allow_as_target = false
                 "database": "local_db",
                 "schema": "local_schema",
                 "defer_sources_to": "prod",
+                "reuse_from": "prod",
+                "reuse_hard_copy": True,
                 "allow_as_source": True,
                 "allow_as_target": False,
             }
@@ -195,6 +199,28 @@ adapter = "duckdb"
 sql_analysis = 123
 """.strip(),
         expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when target reuse_from is not a string",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+reuse_from = 123
+""".strip(),
+        expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when target reuse_hard_copy is not a boolean",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+reuse_hard_copy = "yes"
+""".strip(),
+        expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings concurrency is not an integer",
@@ -537,6 +563,22 @@ sql_analysis = "no thanks"
         expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
     ),
     LoadLocalConfigErrorTestCase(
+        description="raises when local target reuse_from is not a string",
+        local_file_contents="""
+[targets.dev]
+reuse_from = 123
+""".strip(),
+        expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
+    ),
+    LoadLocalConfigErrorTestCase(
+        description="raises when local target reuse_hard_copy is not a boolean",
+        local_file_contents="""
+[targets.dev]
+reuse_hard_copy = "yes"
+""".strip(),
+        expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
+    ),
+    LoadLocalConfigErrorTestCase(
         description="raises when local settings concurrency is not an integer",
         local_file_contents="""
 [settings]
@@ -562,6 +604,9 @@ PROJECT_CONFIG_TEST_CASES: list[LoadProjectConfigTestCase] = [
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
+
+[targets.dev]
+schema = "dev"
 """.strip(),
         expected_name="demo",
         expected_adapter="duckdb",
@@ -575,7 +620,19 @@ default_target = "dev"
         expected_contract=None,
         expected_path_defaults={},
         expected_vars={},
-        expected_targets={},
+        expected_targets={
+            "dev": {
+                "connection": {},
+                "vars": {},
+                "database": None,
+                "schema": "dev",
+                "defer_sources_to": None,
+                "reuse_from": None,
+                "reuse_hard_copy": False,
+                "allow_as_source": False,
+                "allow_as_target": False,
+            }
+        },
         expected_janitor_enabled=False,
         expected_retention_days=30,
         expected_janitor_max_checkpoints=20,
@@ -620,6 +677,8 @@ user = "kevin"
 [targets.dev]
 schema = "dev_${user}"
 defer_sources_to = "prod"
+reuse_from = "prod"
+reuse_hard_copy = true
 
 [targets.dev.connection]
 warehouse = "dev_wh"
@@ -691,6 +750,8 @@ target_path = "target/dbt"
                 "database": None,
                 "schema": "dev_${user}",
                 "defer_sources_to": "prod",
+                "reuse_from": "prod",
+                "reuse_hard_copy": True,
                 "allow_as_source": True,
                 "allow_as_target": True,
             }
@@ -760,6 +821,8 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "database": target_config.database,
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
+            "reuse_from": target_config.reuse_from,
+            "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_source": target_config.clone.allow_as_source,
             "allow_as_target": target_config.clone.allow_as_target,
         }
@@ -833,6 +896,8 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "database": target_config.database,
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
+            "reuse_from": target_config.reuse_from,
+            "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_source": target_config.clone.allow_as_source,
             "allow_as_target": target_config.clone.allow_as_target,
         }
