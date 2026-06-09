@@ -101,7 +101,7 @@ def _seed_physical_relation(
             connection,
             destination=destination,
             sql=adapter.render_seed_select_before_cursor(
-                source=origin,
+                origin=origin,
                 cursor_column=entry.cursor_column or "",
                 cursor_end_exclusive=cursor_start,
                 cursor_type=entry.cursor_type,
