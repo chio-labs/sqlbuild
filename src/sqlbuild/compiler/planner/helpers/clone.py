@@ -141,7 +141,7 @@ def build_clone_model_entries(
     return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
 
 
-def build_source_model_entries(
+def build_origin_model_entries(
     *,
     project: CompiledProject,
     selected_names: frozenset[str],
@@ -192,7 +192,7 @@ def build_clone_seed_entries(
     )
 
 
-def build_source_seed_entries(
+def build_origin_seed_entries(
     *,
     project: CompiledProject,
     selected_names: frozenset[str],

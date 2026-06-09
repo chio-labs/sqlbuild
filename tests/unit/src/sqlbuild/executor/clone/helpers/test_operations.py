@@ -63,15 +63,15 @@ def test_given_clone_relation_when_executing_then_records_sql_and_reports_copy_m
     adapter: FakeCloneAdapter = FakeCloneAdapter(
         supports_zero_copy=test_case.supports_zero_copy_clone
     )
-    source_entry: ModelPlanEntry = build_clone_model_entry(schema="prod", name="fact_orders")
-    target_entry: ModelPlanEntry = build_clone_model_entry(schema="dev", name="fact_orders")
+    origin_entry: ModelPlanEntry = build_clone_model_entry(schema="prod", name="fact_orders")
+    destination_entry: ModelPlanEntry = build_clone_model_entry(schema="dev", name="fact_orders")
 
     result: CloneItemResult = clone_relation(
-        target_entry=target_entry,
-        source_entry=source_entry,
+        destination_entry=destination_entry,
+        origin_entry=origin_entry,
         adapter=adapter,
-        source_connection=object(),
-        target_connection=object(),
+        origin_connection=object(),
+        destination_connection=object(),
         hard_copy=test_case.hard_copy,
     )
 

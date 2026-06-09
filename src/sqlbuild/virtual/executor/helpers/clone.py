@@ -69,38 +69,38 @@ def build_workspace_model_versions(
 def hydrate_relation(
     *,
     adapter: BaseAdapter,
-    target_connection: Any,
-    source_target: CompiledRelationLocation,
-    target_target: CompiledRelationLocation,
-    source_database_alias: str | None,
+    destination_connection: Any,
+    origin_location: CompiledRelationLocation,
+    destination_location: CompiledRelationLocation,
+    origin_database_alias: str | None,
 ) -> str:
     if adapter.relation_exists(
-        target_connection,
-        database=target_target.database,
-        schema=target_target.schema,
-        name=target_target.name,
+        destination_connection,
+        database=destination_location.database,
+        schema=destination_location.schema,
+        name=destination_location.name,
     ):
         return "reused"
     adapter.ensure_schema(
-        target_connection,
-        database=target_target.database,
-        schema=target_target.schema or "",
+        destination_connection,
+        database=destination_location.database,
+        schema=destination_location.schema or "",
         statement_recorder=StatementRecorder(),
     )
-    clone_source_target: CompiledRelationLocation = (
-        replace_target_database(
-            adapter=adapter, target=source_target, database=source_database_alias
+    clone_origin_location: CompiledRelationLocation = (
+        replace_location_database(
+            adapter=adapter, location=origin_location, database=origin_database_alias
         )
-        if source_database_alias is not None
-        else source_target
+        if origin_database_alias is not None
+        else origin_location
     )
     adapter.durable_clone(
-        target_connection,
+        destination_connection,
         origin=resolve_relation_location_qualified_name(
-            adapter=adapter, location=clone_source_target
+            adapter=adapter, location=clone_origin_location
         ),
         destination=resolve_relation_location_qualified_name(
-            adapter=adapter, location=target_target
+            adapter=adapter, location=destination_location
         ),
         statement_recorder=StatementRecorder(),
     )
@@ -147,7 +147,7 @@ def register_hydrated_relation(
     config_connection: dict[str, object],
     model_version: ModelVersionRecord,
     model: CompiledModel,
-    target: CompiledRelationLocation,
+    destination: CompiledRelationLocation,
 ) -> None:
     connection: Any = backend.connect(config_connection)
     try:
@@ -176,9 +176,9 @@ def register_hydrated_relation(
                 record=PhysicalRelationRecord(
                     model_name=model.name,
                     version_hash=model_version.version_hash,
-                    database_name=target.database,
-                    schema_name=target.schema or "",
-                    relation_name=target.name,
+                    database_name=destination.database,
+                    schema_name=destination.schema or "",
+                    relation_name=destination.name,
                     relation_type=relation_type_for_model(
                         MaterializationType(
                             model.config.values.get("materialized", MaterializationType.TABLE)
@@ -190,37 +190,37 @@ def register_hydrated_relation(
         backend.close(connection)
 
 
-def attach_source_database_for_clone(
+def attach_origin_database_for_clone(
     *,
     adapter: BaseAdapter,
-    target_connection: Any,
-    source_connection_config: dict[str, object],
-    target_connection_config: dict[str, object],
+    destination_connection: Any,
+    origin_connection_config: dict[str, object],
+    destination_connection_config: dict[str, object],
 ) -> str | None:
     if adapter.adapter_name != BuiltinAdapter.DUCKDB:
         return None
-    source_database: object | None = source_connection_config.get("database")
-    target_database: object | None = target_connection_config.get("database")
-    if source_database is None or source_database in {target_database, ":memory:"}:
+    origin_database: object | None = origin_connection_config.get("database")
+    destination_database: object | None = destination_connection_config.get("database")
+    if origin_database is None or origin_database in {destination_database, ":memory:"}:
         return None
-    alias: str = "__sqb_clone_source"
+    alias: str = "__sqb_clone_origin"
     adapter.execute(
-        target_connection,
-        f"ATTACH '{str(source_database)}' AS {alias} (READ_ONLY)",
+        destination_connection,
+        f"ATTACH '{str(origin_database)}' AS {alias} (READ_ONLY)",
     )
     return alias
 
 
-def replace_target_database(
-    *, adapter: BaseAdapter, target: CompiledRelationLocation, database: str
+def replace_location_database(
+    *, adapter: BaseAdapter, location: CompiledRelationLocation, database: str
 ) -> CompiledRelationLocation:
     return CompiledRelationLocation(
         database=database,
-        schema=target.schema,
-        name=target.name,
+        schema=location.schema,
+        name=location.name,
         qualified_name=resolve_qualified_name_parts(
-            adapter=adapter, database=database, schema=target.schema, name=target.name
+            adapter=adapter, database=database, schema=location.schema, name=location.name
         ),
-        logical_schema=target.logical_schema,
-        logical_database=target.logical_database,
+        logical_schema=location.logical_schema,
+        logical_database=location.logical_database,
     )

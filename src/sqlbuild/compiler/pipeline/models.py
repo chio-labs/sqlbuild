@@ -39,15 +39,15 @@ class CompilePipelineResult:
 
 @dataclass(frozen=True)
 class ClonePipelineResult:
-    """Prepared clone inputs for source and target targets."""
+    """Prepared clone inputs for origin and destination target environments."""
 
-    source_project: CompiledProject
-    target_project: CompiledProject
+    origin_project: CompiledProject
+    destination_project: CompiledProject
     clone_plan: PlanOutput
-    target_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
-    target_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
-    source_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
-    source_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    destination_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    destination_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    origin_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    origin_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

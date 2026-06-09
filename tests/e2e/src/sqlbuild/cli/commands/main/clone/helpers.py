@@ -38,7 +38,7 @@ def build_virtual_clone_project_toml() -> str:
         "[targets.prod.connection]\n"
         'database = "prod.duckdb"\n\n'
         "[targets.prod.clone]\n"
-        "allow_as_source = true\n\n"
+        "allow_as_clone_origin = true\n\n"
         "[targets.prod.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
@@ -49,7 +49,7 @@ def build_virtual_clone_project_toml() -> str:
         "[targets.dev.connection]\n"
         'database = "dev.duckdb"\n\n'
         "[targets.dev.clone]\n"
-        "allow_as_target = true\n\n"
+        "allow_as_clone_destination = true\n\n"
         "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'

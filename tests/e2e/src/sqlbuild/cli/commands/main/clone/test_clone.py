@@ -35,8 +35,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                     database = "clone.duckdb"
 
                     [targets.prod.clone]
-                    allow_as_source = true
-                    allow_as_target = false
+                    allow_as_clone_origin = true
+                    allow_as_clone_destination = false
 
                     [targets.dev]
                     schema = "dev"
@@ -45,8 +45,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                     database = "clone.duckdb"
 
                     [targets.dev.clone]
-                    allow_as_source = true
-                    allow_as_target = true
+                    allow_as_clone_origin = true
+                    allow_as_clone_destination = true
                     """
                 ).strip()
                 + "\n",
@@ -106,7 +106,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "orders_enriched",
                 "recreated_view",
                 "missing_snapshot",
-                "missing in source environment",
+                "missing in origin environment",
                 "Completed with warnings.",
                 "WARN=1",
             ),
