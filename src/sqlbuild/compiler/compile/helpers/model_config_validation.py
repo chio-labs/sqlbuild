@@ -45,6 +45,7 @@ _BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
 )
 _INCREMENTAL_ONLY_KEYS: tuple[str, ...] = (
     "on_schema_change",
+    "replay_on_change",
     "append_cursor_inclusive",
 )
 _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
@@ -102,6 +103,9 @@ def validate_incremental_config(
     batch_concurrency: object | None = config.values.get("batch_concurrency")
     cursor_inputs: object | None = config.values.get("cursor_inputs")
     cursor_grain: str | None = _str(config, "cursor_grain")
+    replay_on_change: object | None = config.values.get("replay_on_change")
+    if replay_on_change is not None and not isinstance(replay_on_change, str):
+        raise CompileInputError(f"model '{model_name}': replay_on_change must be a string")
     if strategy is None:
         raise CompileInputError(
             f"model '{model_name}': incremental materialization requires incremental_strategy"

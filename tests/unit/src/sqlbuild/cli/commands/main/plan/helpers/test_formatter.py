@@ -77,6 +77,23 @@ TEST_CASES: list[FormatPlanTestCase] = [
         unexpected_fragments=("Normal",),
     ),
     FormatPlanTestCase(
+        description="human plan output omits identity hashes",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.QUERY_CHANGED,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    fingerprint_version_hash="expected_hash",
+                    previous_version_hash="built_hash",
+                ),
+            ),
+        ),
+        expected_fragments=("Query changed (1)", "fact_orders"),
+        unexpected_fragments=("expected_hash", "built_hash", "version_hash"),
+    ),
+    FormatPlanTestCase(
         description="first run shows materialization label with strategy and microbatch",
         plan_output=build_plan_output(
             model_entries=(
@@ -771,6 +788,35 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "stale model set: fact_orders, orders_rollup, stg_orders",
             "remaining stale after selection: orders_rollup",
         ),
+    ),
+    FormatPlanTestCase(
+        description="direct metadata caps remaining stale models after partial selection",
+        plan_output=build_plan_output(
+            metadata={
+                "direct_remaining_stale_model_names": tuple(
+                    f"model_{index:02d}" for index in range(55)
+                ),
+            },
+        ),
+        expected_fragments=(
+            "Remaining stale",
+            "models outside selection: 55",
+            "model set: model_00",
+            "... (+5 more; use --verbose to show all)",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="direct metadata shows full remaining stale set in verbose output",
+        plan_output=build_plan_output(
+            metadata={
+                "direct_remaining_stale_model_names": tuple(
+                    f"model_{index:02d}" for index in range(3)
+                ),
+            },
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        expected_fragments=("model set: model_00, model_01, model_02",),
+        unexpected_fragments=("use --verbose",),
     ),
     FormatPlanTestCase(
         description="provider usages show compact selected Python surface counts",

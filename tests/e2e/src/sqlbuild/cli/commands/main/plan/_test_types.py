@@ -20,7 +20,15 @@ class DirectPlanJsonE2ETestCase:
 class DirectChangesOnlyJsonE2ETestCase:
     description: str
     expected_reasons_by_name: dict[str, str]
-    unexpected_json_fragments: tuple[str, ...]
+    expected_identity_status_by_name: dict[str, str]
+
+
+@dataclass(frozen=True)
+class DirectPlanIdentityJsonE2ETestCase:
+    description: str
+    project_name: str
+    expected_identity_status: str
+    expected_built_version_present: bool
 
 
 @dataclass(frozen=True)
@@ -54,6 +62,7 @@ class DirectChangesOnlySelectorE2ETestCase:
     expected_selected_count: int
     expected_model_names: tuple[str, ...]
     unexpected_model_names: tuple[str, ...]
+    expected_remaining_stale_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,6 +80,7 @@ class DirectFunctionSelectorE2ETestCase:
     expected_plan_fragment: str
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...]
+    expected_remaining_stale_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

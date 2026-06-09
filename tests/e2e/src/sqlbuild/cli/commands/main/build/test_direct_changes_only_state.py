@@ -107,7 +107,8 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
     assert scoped_result.returncode == 0, scoped_result.stdout + scoped_result.stderr
     assert "Plan ready (1 selected)" in scoped_result.stdout
     assert "stg_orders" in scoped_result.stdout
-    assert "fact_orders" not in scoped_result.stdout
+    assert "Remaining stale" in scoped_result.stdout
+    assert "model set: fact_orders" in scoped_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT amount_cents, amount_dollars FROM fact_orders ORDER BY order_id",

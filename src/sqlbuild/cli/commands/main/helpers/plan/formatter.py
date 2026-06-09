@@ -114,6 +114,12 @@ def format_plan(
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
+    _format_direct_remaining_stale_metadata(
+        lines,
+        plan,
+        section_header_style=resolved_section_header_style,
+        display_options=resolved_display_options,
+    )
     _format_provider_usages(
         lines,
         plan=plan,
@@ -1216,6 +1222,30 @@ def _format_direct_source_freshness_metadata(
             "  source-stale models: "
             + _format_capped_name_list(stale_model_names, display_options=display_options)
         )
+
+
+def _format_direct_remaining_stale_metadata(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    section_header_style: Callable[[str], str],
+    display_options: DisplayOptions,
+) -> None:
+    remaining_stale_model_names: tuple[str, ...] = _metadata_string_tuple(
+        plan.metadata.get("direct_remaining_stale_model_names")
+    )
+    if not remaining_stale_model_names:
+        return
+    lines.append("")
+    lines.append(section_header_style("Remaining stale"))
+    lines.append(f"  models outside selection: {len(remaining_stale_model_names)}")
+    lines.append(
+        "  model set: "
+        + _format_capped_name_list(
+            remaining_stale_model_names,
+            display_options=display_options,
+        )
+    )
 
 
 def _metadata_string_tuple(raw_value: object | None) -> tuple[str, ...]:

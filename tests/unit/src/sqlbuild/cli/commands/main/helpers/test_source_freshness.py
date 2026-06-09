@@ -120,3 +120,57 @@ def test_given_eligible_source_freshness_when_appending_then_uses_adapter_render
 
     assert adapter.insert_count == test_case.expected_insert_count
     assert any("main._sqlbuild_source_freshness" in sql for sql in adapter.executed_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceFreshnessAppendEligibilityTestCase(
+            description="persists plan-time observation with successful build run id",
+            model_statuses={"orders": ExecutionStatus.SUCCESS},
+            expected_insert_count=1,
+        )
+    ],
+    ids=["persists plan-time observation with successful build run id"],
+)
+def test_given_eligible_source_freshness_when_appending_then_reuses_plan_time_observation(
+    test_case: SourceFreshnessAppendEligibilityTestCase,
+) -> None:
+    adapter: RecordingAdapter = RecordingAdapter()
+
+    append_eligible_direct_source_freshness_records(
+        plan=PlanOutput(
+            model_entries=(model_entry("orders"),),
+            source_freshness=DirectSourceFreshnessPlanningResult(
+                observed_records=(
+                    source_freshness_record(
+                        run_id="planning-run",
+                        data_version="plan-time-version",
+                        data_version_hash="plan-time-hash",
+                    ),
+                ),
+                changed_identities=frozenset({source_freshness_identity()}),
+                propagation=DirectSourceFreshnessPropagationResult(
+                    changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
+                    stale_model_names=frozenset({"orders"}),
+                ),
+            ),
+        ),
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=tuple(
+                ModelExecutionResult(model_name=model_name, status=status)
+                for model_name, status in test_case.model_statuses.items()
+            ),
+        ),
+        adapter=cast(BaseAdapter, adapter),
+        connection_config={},
+        run_id="successful-build-run",
+    )
+
+    insert_sql: str = next(sql for sql in adapter.executed_sql if sql.strip().startswith("INSERT"))
+    assert adapter.insert_count == test_case.expected_insert_count
+    assert "successful-build-run" in insert_sql
+    assert "planning-run" not in insert_sql
+    assert "plan-time-version" in insert_sql
+    assert "plan-time-hash" in insert_sql

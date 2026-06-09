@@ -14,9 +14,11 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationDestination,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner.helpers.changes_only import (
+    build_direct_identity_stale_model_names,
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
 )
@@ -134,6 +136,14 @@ def build_execution_plan(
             relations=relations,
         )
     if changes_only and not full_refresh:
+        direct_identity_stale_model_names: frozenset[str] = build_direct_identity_stale_model_names(
+            scope=scope,
+            expected_version_hashes=version_identities.model_version_hashes,
+            built_version_hashes={
+                model_name: fingerprint.version_hash
+                for model_name, fingerprint in snapshot.fingerprints.items()
+            },
+        )
         scope = prune_unchanged_scope(
             scope=scope,
             changes=changes,
@@ -146,6 +156,8 @@ def build_execution_plan(
             resolved_actions=resolved_actions,
             expected_version_hashes=version_identities.model_version_hashes,
         )
+    else:
+        direct_identity_stale_model_names = frozenset()
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
@@ -169,6 +181,16 @@ def build_execution_plan(
         reload_sources=reload_sources,
     )
     if source_freshness is not None:
+        direct_remaining_stale_model_names: tuple[str, ...] = tuple(
+            sorted(
+                direct_identity_stale_model_names
+                - frozenset(
+                    key.name
+                    for key in scope.selected_keys
+                    if key.resource_type == CompiledResourceType.MODEL
+                )
+            )
+        )
         plan_output = replace(
             plan_output,
             source_freshness=source_freshness,
@@ -177,6 +199,7 @@ def build_execution_plan(
                 "direct_source_freshness": _serialize_direct_source_freshness_metadata(
                     source_freshness
                 ),
+                "direct_remaining_stale_model_names": direct_remaining_stale_model_names,
             },
         )
     if on_progress is not None:

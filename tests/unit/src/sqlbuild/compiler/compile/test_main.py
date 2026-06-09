@@ -865,6 +865,8 @@ schema = "dev_${ENV:USER}_${CTX:model.schema}"
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
+  materialized incremental,
+  incremental_strategy append,
   alias '${CTX:model.name}_${CTX:run.target}',
   config (
     cluster_by ['${schema_prefix}_day'],
@@ -889,6 +891,8 @@ select 1
             {
                 "database": "dev_analytics_kevin",
                 "schema": "dev_kevin_marts",
+                "materialized": "incremental",
+                "incremental_strategy": "append",
                 "replay_on_change": "bounded-30d",
                 "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
                 "alias": "orders_dev",
@@ -2567,7 +2571,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         compile_inputs.run_id == test_case.run_id
         if test_case.run_id is not None
-        else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{6}", compile_inputs.run_id) is not None
+        else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{12}", compile_inputs.run_id) is not None
     )
 
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.changes_only import (
+    build_direct_identity_stale_model_names,
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
 )
@@ -24,6 +27,7 @@ from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPropagationResult,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    DirectIdentityStaleModelNamesTestCase,
     MarkVersionIdentityStaleActionsTestCase,
     PruneUnchangedScopeTestCase,
 )
@@ -52,6 +56,50 @@ SEED_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.SEED,
     name="seed_orders",
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectIdentityStaleModelNamesTestCase(
+            description="returns models with missing or mismatched built identities",
+            expected_version_hashes={
+                "current_model": "current_hash",
+                "stale_model": "new_hash",
+                "missing_model": "first_hash",
+            },
+            built_version_hashes={
+                "current_model": "current_hash",
+                "stale_model": "old_hash",
+                "missing_model": None,
+            },
+            expected_stale_model_names=frozenset({"stale_model", "missing_model"}),
+        )
+    ],
+    ids=["returns models with missing or mismatched built identities"],
+)
+def test_given_identity_hashes_when_collecting_stale_models_then_returns_missing_and_mismatched(
+    test_case: DirectIdentityStaleModelNamesTestCase,
+) -> None:
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name=cast(
+            dict[str, Any],
+            {"current_model": None, "stale_model": None, "missing_model": None},
+        ),
+        selected_keys=frozenset(),
+        execution_order=(),
+    )
+
+    result: frozenset[str] = build_direct_identity_stale_model_names(
+        scope=scope,
+        expected_version_hashes=test_case.expected_version_hashes,
+        built_version_hashes=test_case.built_version_hashes,
+    )
+
+    assert result == test_case.expected_stale_model_names
 
 
 @pytest.mark.parametrize(

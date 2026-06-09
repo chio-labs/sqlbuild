@@ -27,7 +27,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waff
             command=("plan", "--json", "--select", "order_status_index"),
             expected_exit_code=0,
             expected_reason="query_changed",
-            expected_warning_fragment="incremental history will not be rebuilt",
+            expected_backfill_action="bounded",
+            expected_backfill_duration="7d",
+            expected_warning_count=0,
         )
     ],
     ids=["remove column mutation reports query_changed for non-enforced output change"],
@@ -60,8 +62,9 @@ def test_given_remove_column_mutation_when_planning_then_query_change_semantics_
         )
         payload: dict[str, object] = json.loads(plan_result.stdout)
         model: dict[str, object] = payload["models"][0]
-        warning: dict[str, object] = payload["warnings"][0]
         assert model["reason"] == test_case.expected_reason
-        assert test_case.expected_warning_fragment in warning["message"]
+        assert model["backfill"]["action"] == test_case.expected_backfill_action
+        assert model["backfill"]["duration"] == test_case.expected_backfill_duration
+        assert len(payload["warnings"]) == test_case.expected_warning_count
     finally:
         model_path.write_text(original_text, encoding="utf-8")

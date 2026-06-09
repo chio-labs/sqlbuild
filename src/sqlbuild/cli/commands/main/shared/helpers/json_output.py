@@ -158,6 +158,10 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         "materialization_type": entry.materialization_type.value,
         "action": entry.action.value,
         "reason": effective_reason.value,
+        "expected_version_hash": entry.fingerprint_version_hash,
+        "built_version_hash": entry.previous_version_hash,
+        "built_version_present": entry.previous_version_hash is not None,
+        "identity_status": _model_identity_status(entry),
     }
 
     if entry.incremental_strategy is not None:
@@ -186,6 +190,18 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         model["qualified_name"] = entry.destination.qualified_name
 
     return model
+
+
+def _model_identity_status(entry: ModelPlanEntry) -> str:
+    """Return a stable JSON status for expected-vs-built model identity."""
+
+    if entry.fingerprint_version_hash is None:
+        return "unknown"
+    if entry.previous_version_hash is None:
+        return "missing"
+    if entry.previous_version_hash == entry.fingerprint_version_hash:
+        return "current"
+    return "stale"
 
 
 def _serialize_cascade(cascade: CascadeResult) -> dict[str, object]:

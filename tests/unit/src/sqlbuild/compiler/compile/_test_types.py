@@ -102,6 +102,13 @@ class BuildEffectiveRuntimeConfigTestCase:
 
 
 @dataclass(frozen=True)
+class RunIdGenerationTestCase:
+    description: str
+    sample_count: int
+    expected_pattern: str
+
+
+@dataclass(frozen=True)
 class BuildModelConfigHooksTestCase:
     description: str
     default_hook: object
