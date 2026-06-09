@@ -18,6 +18,11 @@ test-all:
 	uv run pytest tests -m "not real_warehouse and not dbt" -vv
 
 
+skills:
+	uv run sqb skills update --global --target opencode
+	uv run python -m scripts.skills.update_structure_skill
+
+
 test-dbt:
 	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv
 
