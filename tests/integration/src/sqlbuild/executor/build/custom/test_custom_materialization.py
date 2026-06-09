@@ -291,7 +291,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
+    model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
     audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -304,7 +304,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         entry=entry,
         materialize_fn=build_user_audit_fn(expect_pass=test_case.audit_passes),
         model_audits=(audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
     actual_audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
@@ -318,7 +318,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         entry=entry,
         materialize_fn=build_simple_fn(),
         model_audits=(actual_audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
 
     assert result.status == test_case.expected_status
@@ -355,7 +355,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
+    model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
     actual_audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -368,7 +368,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
         entry=entry,
         materialize_fn=build_user_audit_fn(expect_pass=test_case.audit_passes),
         model_audits=(actual_audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
 
     assert result.status == test_case.expected_status

@@ -494,7 +494,7 @@ class ScenarioUnmockedSeedExecutionPlanTestCase:
 class PlanAuditTestCase:
     description: str
     sql_body: str
-    model_targets: dict[str, str]
+    model_locations: dict[str, str]
     source_map_entries: dict[str, tuple[str | None, str, str | None]]
     expected_sql_fragment: str
     expected_error_fragment: str = ""

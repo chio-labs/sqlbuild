@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
-    apply_deferred_targets,
+    apply_deferred_locations,
     resolve_dbt_ref_references,
     resolve_ref_references,
     resolve_table_function_references,
@@ -87,7 +87,7 @@ NO_CURSOR_TEST_CASES: list[RefResolutionTestCase] = [
         expected_sql='SELECT * FROM __ref("unknown_model")',
     ),
     RefResolutionTestCase(
-        description="resolves seed marker from seed targets",
+        description="resolves seed marker from seed locations",
         query_sql='SELECT * FROM __seed("country_codes")',
         expected_sql="SELECT * FROM seeds.country_codes",
     ),
@@ -227,8 +227,8 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
 ) -> None:
     result: str = resolve_ref_references(
         query_sql=test_case.query_sql,
-        model_targets=_MODEL_TARGETS,
-        seed_targets=_SEED_TARGETS,
+        model_locations=_MODEL_TARGETS,
+        seed_locations=_SEED_TARGETS,
         cursor_bounds=None,
         cursor_inputs={},
         adapter=DuckDbAdapter(),
@@ -249,8 +249,8 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
 ) -> None:
     result: str = resolve_ref_references(
         query_sql=test_case.query_sql,
-        model_targets=_MODEL_TARGETS,
-        seed_targets=_SEED_TARGETS,
+        model_locations=_MODEL_TARGETS,
+        seed_locations=_SEED_TARGETS,
         cursor_bounds=(
             _INTEGER_CURSOR_BOUNDS
             if test_case.cursor_type == CursorKind.INTEGER
@@ -286,8 +286,8 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
 ) -> None:
     result: str = resolve_ref_references(
         query_sql=test_case.query_sql,
-        model_targets=_MODEL_TARGETS,
-        seed_targets=_SEED_TARGETS,
+        model_locations=_MODEL_TARGETS,
+        seed_locations=_SEED_TARGETS,
         cursor_bounds=_CURSOR_BOUNDS,
         cursor_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
@@ -324,7 +324,7 @@ def test_given_table_function_marker_when_resolving_then_returns_expected_sql(
 ) -> None:
     result: str = resolve_table_function_references(
         query_sql=test_case.query_sql,
-        function_targets=_FUNCTION_TARGETS,
+        function_locations=_FUNCTION_TARGETS,
         adapter=DuckDbAdapter(),
     )
 
@@ -341,7 +341,7 @@ def test_given_udf_marker_when_resolving_then_returns_expected_sql(
 ) -> None:
     result: str = resolve_udf_references(
         query_sql=test_case.query_sql,
-        function_targets=_FUNCTION_TARGETS,
+        function_locations=_FUNCTION_TARGETS,
         adapter=DuckDbAdapter(),
     )
 
@@ -364,7 +364,7 @@ def test_given_custom_adapter_when_resolving_udf_marker_then_uses_adapter_render
 ) -> None:
     result: str = resolve_udf_references(
         query_sql=test_case.query_sql,
-        function_targets=_FUNCTION_TARGETS,
+        function_locations=_FUNCTION_TARGETS,
         adapter=BracketUdfCallAdapter(),
     )
 
@@ -387,7 +387,7 @@ def test_given_custom_adapter_when_resolving_table_function_marker_then_uses_ada
 ) -> None:
     result: str = resolve_table_function_references(
         query_sql=test_case.query_sql,
-        function_targets=_FUNCTION_TARGETS,
+        function_locations=_FUNCTION_TARGETS,
         adapter=BracketTableFunctionCallAdapter(),
     )
 
@@ -428,13 +428,13 @@ APPLY_DEFERRED_TEST_CASES: list[ApplyDeferredTargetsTestCase] = [
     APPLY_DEFERRED_TEST_CASES,
     ids=[case.description for case in APPLY_DEFERRED_TEST_CASES],
 )
-def test_given_deferred_targets_when_applying_then_replaces_expected_targets(
+def test_given_deferred_locations_when_applying_then_replaces_expected_locations(
     test_case: ApplyDeferredTargetsTestCase,
 ) -> None:
-    model_targets: dict[str, CompiledRelationLocation] = {
+    model_locations: dict[str, CompiledRelationLocation] = {
         name: build_target(q, name) for name, q in test_case.model_target_qualified.items()
     }
-    seed_targets: dict[str, CompiledRelationLocation] = {
+    seed_locations: dict[str, CompiledRelationLocation] = {
         name: build_target(q, name) for name, q in test_case.seed_target_qualified.items()
     }
     deferred: dict[str, CompiledRelationLocation] = {
@@ -445,18 +445,18 @@ def test_given_deferred_targets_when_applying_then_replaces_expected_targets(
         for n in test_case.selected_names
     )
 
-    apply_deferred_targets(
-        model_targets=model_targets,
-        seed_targets=seed_targets,
-        deferred_targets=deferred,
+    apply_deferred_locations(
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        deferred_locations=deferred,
         selected_keys=selected_keys,
     )
 
     result_model_qualified: dict[str, str | None] = {
-        name: t.qualified_name for name, t in model_targets.items()
+        name: t.qualified_name for name, t in model_locations.items()
     }
     result_seed_qualified: dict[str, str | None] = {
-        name: t.qualified_name for name, t in seed_targets.items()
+        name: t.qualified_name for name, t in seed_locations.items()
     }
     assert result_model_qualified == test_case.expected_model_qualified
     assert result_seed_qualified == test_case.expected_seed_qualified

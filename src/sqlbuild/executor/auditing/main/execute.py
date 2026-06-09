@@ -24,8 +24,8 @@ def execute_audit(
     audit: AuditPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationLocation],
-    seed_targets: dict[str, CompiledRelationLocation],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     relation_overrides: dict[str, str] | None,
     run_scope_phase: AuditRunScope,
@@ -37,8 +37,8 @@ def execute_audit(
         if relation_overrides is None
         else render_audit_sql(
             unresolved_sql=audit.unresolved_sql,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
             adapter=adapter,
             relation_overrides=relation_overrides,

@@ -1,4 +1,4 @@
-"""Apply adapter default schema/database to compiled targets."""
+"""Apply adapter default schema/database to compiled relation locations."""
 
 from __future__ import annotations
 

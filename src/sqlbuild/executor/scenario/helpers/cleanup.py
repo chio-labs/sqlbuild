@@ -52,8 +52,8 @@ def collect_scenario_cleanup_targets(
     }
     model_name: str
     model_target: CompiledRelationLocation
-    for model_name, model_target in sorted(scenario_plan.relation_plan.model_targets.items()):
-        if model_name in scenario_plan.relation_plan.ref_fixture_targets:
+    for model_name, model_target in sorted(scenario_plan.relation_plan.model_locations.items()):
+        if model_name in scenario_plan.relation_plan.ref_fixture_locations:
             continue
         model_entry: ModelPlanEntry | None = model_entry_map.get(model_name)
         materialization_type: MaterializationType = MaterializationType.TABLE

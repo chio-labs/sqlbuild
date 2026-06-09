@@ -29,7 +29,7 @@ def build_warehouse_snapshot_phase(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationLocation] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> PlannerWarehouseSnapshotResult:
     scope: PlannerScope = build_planner_scope(
@@ -47,7 +47,7 @@ def build_warehouse_snapshot_phase(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         on_progress=on_progress,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         deferred_relations=deferred_relations,
     )
     return PlannerWarehouseSnapshotResult(scope=scope, snapshot=snapshot)

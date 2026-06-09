@@ -233,9 +233,9 @@ class PlannerWarehouseSnapshotResult:
 class PlannerRelationsContext:
     """Resolved relation and source inputs for plan entry construction."""
 
-    model_targets: dict[str, CompiledRelationLocation]
-    seed_targets: dict[str, CompiledRelationLocation]
-    function_targets: dict[str, CompiledRelationLocation]
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
     source_read_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
@@ -574,18 +574,18 @@ class ScenarioRelationMap:
 
 @dataclass(frozen=True)
 class ScenarioRelationPlan:
-    """Resolved scenario relation targets for model/source/seed ref resolution."""
+    """Resolved scenario relation locations for model/source/seed ref resolution."""
 
     scenario_name: str
     relation_map: ScenarioRelationMap
-    model_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
-    seed_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    model_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     project_source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
-    source_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
-    ref_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
-    seed_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
-    dbt_ref_fixture_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    source_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    ref_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    dbt_ref_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -667,9 +667,9 @@ class PlanOutput:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
-    model_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
-    seed_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
-    function_targets: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    model_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    function_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)

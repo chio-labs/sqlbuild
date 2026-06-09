@@ -13,7 +13,7 @@ def build_destination_from_physical_relation(
     relation: PhysicalRelationRecord,
     fallback_target: CompiledRelationLocation,
 ) -> CompiledRelationLocation:
-    """Rebuild a compiled target from a stored physical relation record."""
+    """Rebuild a compiled relation location from a stored physical relation record."""
 
     return CompiledRelationLocation(
         database=relation.database_name,

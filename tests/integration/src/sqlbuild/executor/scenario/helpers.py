@@ -101,11 +101,11 @@ def build_duckdb_cleanup_plan() -> ScenarioExecutionPlan:
                 scenario_name=SCENARIO_NAME,
                 hash_prefix=HASH_PREFIX,
             ),
-            model_targets={
+            model_locations={
                 "daily_revenue": model_target,
                 "stg_customers": ref_fixture.destination,
             },
-            ref_fixture_targets={"stg_customers": ref_fixture.destination},
+            ref_fixture_locations={"stg_customers": ref_fixture.destination},
         ),
         fixture_plans=fixture_plans,
     )
@@ -175,14 +175,14 @@ def build_duckdb_model_execution_plan(
                 scenario_name=SCENARIO_NAME,
                 hash_prefix=HASH_PREFIX,
             ),
-            model_targets={
+            model_locations={
                 "stg_orders": stg_orders_target,
                 "daily_revenue": daily_revenue_target,
                 "stg_customers": ref_target,
             },
-            seed_targets={"country_codes": seed_target},
-            source_fixture_targets={"raw__orders": source_target},
-            ref_fixture_targets={"stg_customers": ref_target},
+            seed_locations={"country_codes": seed_target},
+            source_fixture_locations={"raw__orders": source_target},
+            ref_fixture_locations={"stg_customers": ref_target},
         ),
         fixture_plans=build_duckdb_fixture_plans()[:2],
         model_entries=(stg_orders, daily_revenue),
@@ -214,7 +214,7 @@ def build_duckdb_expected_check_plan(*, expected_sql: str) -> ScenarioExecutionP
                 scenario_name=SCENARIO_NAME,
                 hash_prefix=HASH_PREFIX,
             ),
-            model_targets={"daily_revenue": model_target},
+            model_locations={"daily_revenue": model_target},
         ),
         expected_expectations=(
             ScenarioExpectedExpectationPlan(

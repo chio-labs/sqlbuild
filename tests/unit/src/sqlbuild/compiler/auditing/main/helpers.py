@@ -16,10 +16,10 @@ def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
     return builtin_adapter_classes()[adapter_name]()
 
 
-def build_render_model_targets(
+def build_render_model_locations(
     targets: dict[str, str],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build model targets from a simple name-to-qualified mapping."""
+    """Build model locations from a simple name-to-qualified mapping."""
 
     return {
         name: CompiledRelationLocation(
@@ -32,10 +32,10 @@ def build_render_model_targets(
     }
 
 
-def build_render_seed_targets(
+def build_render_seed_locations(
     targets: dict[str, str],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build seed targets from a simple name-to-qualified mapping."""
+    """Build seed locations from a simple name-to-qualified mapping."""
 
     return {
         name: CompiledRelationLocation(

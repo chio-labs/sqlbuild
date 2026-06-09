@@ -46,7 +46,7 @@ def execute_scenario_seed_entries(
     adapter: BaseAdapter,
     connection: Any,
 ) -> tuple[SeedExecutionResult, ...]:
-    """Load required project seeds into scenario-scoped seed targets."""
+    """Load required project seeds into scenario-scoped seed locations."""
 
     results: list[SeedExecutionResult] = []
     seed_entry: SeedPlanEntry

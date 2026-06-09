@@ -27,7 +27,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="first run table model produces create_table action",
         setup_sql=(),
-        model_targets={"orders": "staging"},
+        model_locations={"orders": "staging"},
         model_configs={"orders": {"materialized": "table"}},
         model_queries={"orders": "SELECT 1 AS id"},
         full_refresh=False,
@@ -44,7 +44,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="existing table with no change always rebuilds",
         setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
-        model_targets={"orders": "staging"},
+        model_locations={"orders": "staging"},
         model_configs={"orders": {"materialized": "table"}},
         model_queries={"orders": "SELECT 1 AS id"},
         full_refresh=False,
@@ -55,7 +55,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="full refresh forces create_table on existing table",
         setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
-        model_targets={"orders": "staging"},
+        model_locations={"orders": "staging"},
         model_configs={"orders": {"materialized": "table"}},
         model_queries={"orders": "SELECT 1 AS id"},
         full_refresh=True,
@@ -66,7 +66,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="view model produces create_view action",
         setup_sql=(),
-        model_targets={"orders_view": "staging"},
+        model_locations={"orders_view": "staging"},
         model_configs={"orders_view": {"materialized": "view"}},
         model_queries={"orders_view": "SELECT 1 AS id"},
         full_refresh=False,
@@ -77,7 +77,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="multiple models planned in correct order",
         setup_sql=(),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "fact_orders": "staging",
         },
@@ -102,10 +102,10 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="seed appears in plan output seed entries",
         setup_sql=(),
-        model_targets={"orders": "staging"},
+        model_locations={"orders": "staging"},
         model_configs={"orders": {"materialized": "table"}},
         model_queries={"orders": "SELECT 1 AS id"},
-        seed_targets={"country_codes": "staging"},
+        seed_locations={"country_codes": "staging"},
         full_refresh=False,
         expected_action={"orders": PlanAction.CREATE_TABLE},
         expected_reason={"orders": PlanReason.FIRST_RUN},
@@ -114,7 +114,7 @@ BUILD_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="select filters plan to selected models only",
         setup_sql=(),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "fact_orders": "staging",
         },
@@ -237,7 +237,7 @@ CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="heuristic cursor type mismatch produces warning",
         setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
-        model_targets={"events": "staging"},
+        model_locations={"events": "staging"},
         model_configs={
             "events": {
                 "materialized": "incremental",
@@ -262,7 +262,7 @@ CURSOR_TYPE_MISMATCH_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="sql_analysis cursor type mismatch produces error",
         setup_sql=("CREATE TABLE staging.events AS SELECT 1 AS event_id, 100 AS event_time",),
-        model_targets={"events": "staging"},
+        model_locations={"events": "staging"},
         model_configs={
             "events": {
                 "materialized": "incremental",
@@ -332,7 +332,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="upstream first run full cascades to existing downstream",
         setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "fact_orders": "staging",
         },
@@ -360,7 +360,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="upstream full cascade forces existing incremental downstream rebuild",
         setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "fact_orders": "staging",
         },
@@ -397,8 +397,8 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="changed SQL UDF cascades full rebuild to incremental downstream",
         setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-        model_targets={"fact_orders": "staging"},
-        function_targets={"is_priority_order": "staging"},
+        model_locations={"fact_orders": "staging"},
+        function_locations={"is_priority_order": "staging"},
         function_bodies={"is_priority_order": "value = 2"},
         previous_function_bodies={"is_priority_order": "value = 1"},
         function_replay_on_changes={"is_priority_order": "full"},
@@ -425,8 +425,8 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
     BuildExecutionPlanTestCase(
         description="changed Python UDF cascades full rebuild to incremental downstream",
         setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-        model_targets={"fact_orders": "staging"},
-        function_targets={"is_priority_order_py": "staging"},
+        model_locations={"fact_orders": "staging"},
+        function_locations={"is_priority_order_py": "staging"},
         function_languages={"is_priority_order_py": FunctionLanguage.PYTHON},
         function_bodies={
             "is_priority_order_py": "def main(value: int) -> int:\n    return value + 2",
@@ -463,7 +463,7 @@ CASCADE_PLAN_TEST_CASES: list[BuildExecutionPlanTestCase] = [
             "CREATE TABLE staging.fact_orders AS SELECT 1 AS id",
             "CREATE TABLE staging.order_metrics AS SELECT 1 AS id",
         ),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "fact_orders": "staging",
             "order_metrics": "staging",
@@ -588,7 +588,7 @@ FORMAT_PLAN_TEST_CASES: list[FormatPlanIntegrationTestCase] = [
     FormatPlanIntegrationTestCase(
         description="new project formats with first run group and seeds",
         setup_sql=(),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "dim_customers": "staging",
         },
@@ -600,7 +600,7 @@ FORMAT_PLAN_TEST_CASES: list[FormatPlanIntegrationTestCase] = [
             "stg_orders": "SELECT 1 AS id",
             "dim_customers": "SELECT 1 AS id",
         },
-        seed_targets={"country_codes": "staging"},
+        seed_locations={"country_codes": "staging"},
         full_refresh=False,
         expected_format_fragments=(
             "Plan ready (3 selected)",
@@ -617,7 +617,7 @@ FORMAT_PLAN_TEST_CASES: list[FormatPlanIntegrationTestCase] = [
     FormatPlanIntegrationTestCase(
         description="cascade formats with upstream changed group and cause line",
         setup_sql=("CREATE TABLE staging.fact_orders AS SELECT 1 AS id",),
-        model_targets={
+        model_locations={
             "stg_orders": "staging",
             "fact_orders": "staging",
         },

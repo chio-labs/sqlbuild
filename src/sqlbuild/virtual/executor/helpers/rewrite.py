@@ -81,7 +81,7 @@ def build_destination_from_physical_relation(
     relation: PhysicalRelationRecord,
     fallback_target: CompiledRelationLocation,
 ) -> CompiledRelationLocation:
-    """Rebuild a compiled target from a stored physical relation record."""
+    """Rebuild a compiled relation location from a stored physical relation record."""
 
     return CompiledRelationLocation(
         database=relation.database_name,
@@ -98,21 +98,21 @@ def build_destination_from_physical_relation(
     )
 
 
-def rewrite_project_model_targets(
+def rewrite_project_model_locations(
     *,
     project: CompiledProject,
-    rewritten_targets: dict[str, CompiledRelationLocation],
+    rewritten_locations: dict[str, CompiledRelationLocation],
 ) -> CompiledProject:
-    """Return a compiled project with selected model targets replaced."""
+    """Return a compiled project with selected model locations replaced."""
 
     rewritten_models: tuple[CompiledModel, ...] = tuple(
-        replace(model, destination=rewritten_targets.get(model.name, model.destination))
+        replace(model, destination=rewritten_locations.get(model.name, model.destination))
         for model in project.models
     )
     return replace(project, models=rewritten_models)
 
 
-def rewrite_project_function_targets(
+def rewrite_project_function_locations(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
@@ -150,26 +150,26 @@ def relation_type_for_model(materialized: str | None) -> str:
     return "table"
 
 
-def build_rewritten_model_targets(
+def build_rewritten_model_locations(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
     selected_model_version_hashes: dict[str, str],
     bound_physical_relations: dict[str, PhysicalRelationRecord],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build rewritten model targets for virtual build execution.
+    """Build rewritten model locations for virtual build execution.
 
     Selected models point to new physical version targets. Unselected models with
     existing bound physical relations point to those physical relations so
     downstream selected models resolve refs against the same physical lineage.
     """
 
-    rewritten_targets: dict[str, CompiledRelationLocation] = {}
+    rewritten_locations: dict[str, CompiledRelationLocation] = {}
     model: CompiledModel
     for model in project.models:
         selected_version_hash: str | None = selected_model_version_hashes.get(model.name)
         if selected_version_hash is not None:
-            rewritten_targets[model.name] = build_physical_destination(
+            rewritten_locations[model.name] = build_physical_destination(
                 adapter=adapter,
                 target=model.destination,
                 model_name=model.name,
@@ -178,9 +178,9 @@ def build_rewritten_model_targets(
             continue
         bound_relation: PhysicalRelationRecord | None = bound_physical_relations.get(model.name)
         if bound_relation is not None:
-            rewritten_targets[model.name] = build_destination_from_physical_relation(
+            rewritten_locations[model.name] = build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=bound_relation,
                 fallback_target=model.destination,
             )
-    return rewritten_targets
+    return rewritten_locations

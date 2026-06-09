@@ -29,7 +29,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
-    function_targets: dict[str, str],
+    function_locations: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
     reachable_mocks: set[str],
@@ -143,7 +143,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
             return None
 
         if function_name == SqlReferenceKind.UDF.function_name:
-            target: str | None = function_targets.get(referenced_name)
+            target: str | None = function_locations.get(referenced_name)
             if target is not None:
                 return target
             return None

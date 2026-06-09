@@ -67,13 +67,13 @@ def plan_test(
     """Build a test plan entry with chained resolution."""
 
     if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
-        function_targets: dict[str, CompiledRelationLocation] = {
+        function_locations: dict[str, CompiledRelationLocation] = {
             function.name: function.destination for function in project.functions
         }
         return (
             _plan_direct_logic_test(
                 test=test,
-                function_targets=function_targets,
+                function_locations=function_locations,
                 adapter=adapter,
                 sql_analysis_enabled=sql_analysis_enabled,
             ),
@@ -83,7 +83,7 @@ def plan_test(
     model_payload: CompiledModelSqlTestPayload = test.payload
 
     model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
-    function_targets: dict[str, CompiledRelationLocation] = {
+    function_locations: dict[str, CompiledRelationLocation] = {
         function.name: function.destination for function in project.functions
     }
     mock_refs: dict[str, str] = _extract_mock_refs(test)
@@ -140,7 +140,7 @@ def plan_test(
             helper_ctes=helper_ctes,
             resolved_chain=resolved,
             reachable_mocks=reachable_mocks,
-            function_targets=function_targets,
+            function_locations=function_locations,
             adapter=adapter,
         )
         resolved_value: str = f"({step_sql})"
@@ -152,9 +152,9 @@ def plan_test(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_targets={
+                    function_locations={
                         name: target.qualified_name
-                        for name, target in function_targets.items()
+                        for name, target in function_locations.items()
                         if target.qualified_name is not None
                     },
                     helper_ctes=helper_ctes,
@@ -201,7 +201,7 @@ def plan_test(
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
                     helper_ctes=helper_ctes,
-                    function_targets=function_targets,
+                    function_locations=function_locations,
                     adapter=adapter,
                 ),
             )
@@ -268,7 +268,7 @@ def plan_test(
 def _plan_direct_logic_test(
     *,
     test: CompiledSqlTest,
-    function_targets: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
@@ -280,13 +280,13 @@ def _plan_direct_logic_test(
     if test.payload.mode == SqlTestMode.UDF:
         actual_sql = resolve_udf_references(
             query_sql=actual_sql,
-            function_targets=function_targets,
+            function_locations=function_locations,
             adapter=adapter,
         )
     if test.payload.mode == SqlTestMode.TABLE_FN:
         actual_sql = resolve_table_function_references(
             query_sql=actual_sql,
-            function_targets=function_targets,
+            function_locations=function_locations,
             adapter=adapter,
         )
     label: str = test.payload.mode.value
@@ -336,7 +336,7 @@ def _resolve_assertion_sql(
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
-    function_targets: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     reachable_mocks: set[str] = set()
@@ -352,7 +352,7 @@ def _resolve_assertion_sql(
         helper_ctes=helper_ctes,
         resolved_chain=assertion_resolved_chain,
         reachable_mocks=reachable_mocks,
-        function_targets=function_targets,
+        function_locations=function_locations,
         adapter=adapter,
     )
 
@@ -398,7 +398,7 @@ def _resolve_test_model_sql(
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, str],
     reachable_mocks: set[str],
-    function_targets: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
     """Replace refs and sources in model SQL with mocks or chain outputs."""
@@ -459,7 +459,7 @@ def _resolve_test_model_sql(
     result = _DBT_REF_PATTERN.sub(_replace_dbt_ref, result)
     result = resolve_udf_references(
         query_sql=result,
-        function_targets=function_targets,
+        function_locations=function_locations,
         adapter=adapter,
     )
     return result

@@ -131,7 +131,7 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
         config=test_case.model_config,
         ref_names=test_case.ref_names,
     )
-    model_targets: dict[str, CompiledRelationLocation] = {
+    model_locations: dict[str, CompiledRelationLocation] = {
         ref_name: CompiledRelationLocation(
             database=None,
             schema="staging",
@@ -144,7 +144,7 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
     result: _ResolveResult = resolve_and_execute(
         model=model,
         snapshot=WarehouseSnapshot(),
-        model_targets=model_targets,
+        model_locations=model_locations,
         source_map={},
         source_warehouse_columns={},
         connection=connection,
@@ -211,7 +211,7 @@ def test_given_incremental_source_when_resolving_and_executing_then_returns_curs
     result: _ResolveResult = resolve_and_execute(
         model=model,
         snapshot=snapshot,
-        model_targets={},
+        model_locations={},
         source_map={
             "raw_events": SourceEntry(name="raw_events", schema="staging", table="raw_events")
         },
@@ -250,7 +250,7 @@ def test_given_sources_when_resolving_and_executing_then_returns_expected_rows_a
     result: _ResolveResult = resolve_and_execute(
         model=model,
         snapshot=WarehouseSnapshot(),
-        model_targets={},
+        model_locations={},
         source_map=test_case.source_map,
         source_warehouse_columns=test_case.source_warehouse_columns,
         connection=connection,

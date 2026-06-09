@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
-from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_targets
+from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_locations
 from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
@@ -91,7 +91,7 @@ def filter_models_with_changed_virtual_refs(
 def rewrite_project_to_physical_relations(
     *, adapter: BaseAdapter, project: CompiledProject, relations: dict[str, PhysicalRelationRecord]
 ) -> CompiledProject:
-    """Rewrite a project's model targets to tracked physical relations."""
+    """Rewrite a project's model locations to tracked physical relations."""
 
     targets: dict[str, CompiledRelationLocation] = {
         model.name: build_virtual_destination_from_physical_relation(
@@ -102,7 +102,7 @@ def rewrite_project_to_physical_relations(
         for model in project.models
         if model.name in relations
     }
-    return rewrite_virtual_project_model_targets(project=project, rewritten_targets=targets)
+    return rewrite_virtual_project_model_locations(project=project, rewritten_locations=targets)
 
 
 def non_finalized_target_names(

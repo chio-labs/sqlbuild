@@ -114,7 +114,7 @@ def record_python_run_state_results(
 def build_check_relation_targets(
     *, adapter: BaseAdapter, pipeline_result: CompilePipelineResult
 ) -> dict[SqlResourceRef, str]:
-    """Return SQL relation targets available to Python check dependencies."""
+    """Return SQL relation locations available to Python check dependencies."""
 
     return build_python_relation_targets(
         adapter=adapter,
@@ -362,7 +362,7 @@ def _validate_check_sql_ref_exists(
     ref: SqlResourceRef,
 ) -> None:
     if ref.kind == SqlResourceRefKind.MODEL:
-        target: CompiledRelationLocation | None = pipeline_result.plan_output.model_targets.get(
+        target: CompiledRelationLocation | None = pipeline_result.plan_output.model_locations.get(
             ref.name
         )
         if target is None:

@@ -215,7 +215,7 @@ def _build_local_execution_plan(
         model_entries.append(
             replace(
                 entry,
-                destination=relation_plan.model_targets[entry.name],
+                destination=relation_plan.model_locations[entry.name],
                 resolved_sql=local_sql,
                 pre_hooks=None,
                 post_hooks=None,
@@ -240,7 +240,7 @@ def _build_local_execution_plan(
         expected_expectations.append(
             replace(
                 expected_expectation,
-                actual_destination=relation_plan.model_targets[expected_expectation.model_name],
+                actual_destination=relation_plan.model_locations[expected_expectation.model_name],
                 expected_sql=expected_sql,
             )
         )
@@ -423,12 +423,12 @@ def _build_local_relation_plan(
     *, scenario_plan: ScenarioExecutionPlan, load_result: ScenarioLocalSnapshotLoadResult
 ) -> ScenarioRelationPlan:
     source_map: dict[str, SourceEntry] = dict(scenario_plan.relation_plan.source_map)
-    source_fixture_targets: dict[str, CompiledRelationLocation] = {}
-    ref_fixture_targets: dict[str, CompiledRelationLocation] = {}
-    dbt_ref_fixture_targets: dict[str, CompiledRelationLocation] = {}
-    seed_fixture_targets: dict[str, CompiledRelationLocation] = {}
-    seed_targets: dict[str, CompiledRelationLocation] = {}
-    model_targets: dict[str, CompiledRelationLocation] = {}
+    source_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    ref_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    dbt_ref_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    seed_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    seed_locations: dict[str, CompiledRelationLocation] = {}
+    model_locations: dict[str, CompiledRelationLocation] = {}
 
     loaded_targets: dict[tuple[ScenarioArtifactKind, str], CompiledRelationLocation] = {
         (relation.kind, relation.logical_name): _local_target(relation.table_name)
@@ -439,7 +439,7 @@ def _build_local_relation_plan(
         target: CompiledRelationLocation = loaded_targets[
             (ScenarioArtifactKind.SOURCE, source_name)
         ]
-        source_fixture_targets[source_name] = target
+        source_fixture_locations[source_name] = target
         source_entry: SourceEntry = source_map[source_name]
         source_map[source_name] = replace(
             source_entry,
@@ -452,34 +452,34 @@ def _build_local_relation_plan(
     ref_name: str
     for ref_name in scenario_plan.graph_plan.ref_fixture_names:
         target = loaded_targets[(ScenarioArtifactKind.REF, ref_name)]
-        ref_fixture_targets[ref_name] = target
-        model_targets[ref_name] = target
+        ref_fixture_locations[ref_name] = target
+        model_locations[ref_name] = target
     dbt_ref_name: str
     for dbt_ref_name in scenario_plan.graph_plan.dbt_ref_fixture_names:
-        dbt_ref_fixture_targets[dbt_ref_name] = loaded_targets[
+        dbt_ref_fixture_locations[dbt_ref_name] = loaded_targets[
             (ScenarioArtifactKind.DBT_REF, dbt_ref_name)
         ]
     seed_name: str
     for seed_name in scenario_plan.graph_plan.seed_names:
         target = loaded_targets[(ScenarioArtifactKind.SEED, seed_name)]
-        seed_targets[seed_name] = target
+        seed_locations[seed_name] = target
         if seed_name in scenario_plan.graph_plan.seed_fixture_names:
-            seed_fixture_targets[seed_name] = target
+            seed_fixture_locations[seed_name] = target
     model_name: str
     for model_name in scenario_plan.graph_plan.model_names:
-        model_targets[model_name] = _local_target(
+        model_locations[model_name] = _local_target(
             local_snapshot_table_name(kind=ScenarioArtifactKind.MODEL, logical_name=model_name)
         )
 
     return replace(
         scenario_plan.relation_plan,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         source_map=source_map,
-        source_fixture_targets=source_fixture_targets,
-        ref_fixture_targets=ref_fixture_targets,
-        dbt_ref_fixture_targets=dbt_ref_fixture_targets,
-        seed_fixture_targets=seed_fixture_targets,
+        source_fixture_locations=source_fixture_locations,
+        ref_fixture_locations=ref_fixture_locations,
+        dbt_ref_fixture_locations=dbt_ref_fixture_locations,
+        seed_fixture_locations=seed_fixture_locations,
     )
 
 
@@ -492,35 +492,35 @@ def _build_relation_replacements(
         for relation in load_result.relations
     }
     source_name: str
-    for source_name, target in scenario_plan.relation_plan.source_fixture_targets.items():
+    for source_name, target in scenario_plan.relation_plan.source_fixture_locations.items():
         _add_target_replacements(
             replacements,
             target=target,
             local_name=loaded_names[(ScenarioArtifactKind.SOURCE, source_name)],
         )
     ref_name: str
-    for ref_name, target in scenario_plan.relation_plan.ref_fixture_targets.items():
+    for ref_name, target in scenario_plan.relation_plan.ref_fixture_locations.items():
         _add_target_replacements(
             replacements,
             target=target,
             local_name=loaded_names[(ScenarioArtifactKind.REF, ref_name)],
         )
     dbt_ref_name: str
-    for dbt_ref_name, target in scenario_plan.relation_plan.dbt_ref_fixture_targets.items():
+    for dbt_ref_name, target in scenario_plan.relation_plan.dbt_ref_fixture_locations.items():
         _add_target_replacements(
             replacements,
             target=target,
             local_name=loaded_names[(ScenarioArtifactKind.DBT_REF, dbt_ref_name)],
         )
     seed_name: str
-    for seed_name, target in scenario_plan.relation_plan.seed_targets.items():
+    for seed_name, target in scenario_plan.relation_plan.seed_locations.items():
         _add_target_replacements(
             replacements,
             target=target,
             local_name=loaded_names[(ScenarioArtifactKind.SEED, seed_name)],
         )
     model_name: str
-    for model_name, target in scenario_plan.relation_plan.model_targets.items():
+    for model_name, target in scenario_plan.relation_plan.model_locations.items():
         if model_name in scenario_plan.graph_plan.ref_fixture_names:
             continue
         _add_target_replacements(

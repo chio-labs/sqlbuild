@@ -115,7 +115,7 @@ def run_virtual_plan_pipeline(
             bound_local_hashes,
             source_version_hashes,
             source_freshness_unchanged_source_names,
-            deferred_targets,
+            deferred_locations,
             deferred_relations,
             previous_query_sqls,
             previous_metadata_jsons,
@@ -206,7 +206,7 @@ def run_virtual_plan_pipeline(
                 local_config=discovered_inputs.local_config,
                 defer_sources_to=defer_sources_to,
                 source_deferral_enabled=source_deferral_enabled,
-                deferred_targets=deferred_targets,
+                deferred_locations=deferred_locations,
                 deferred_relations=deferred_relations,
             )
         else:
@@ -214,11 +214,11 @@ def run_virtual_plan_pipeline(
                 execution_order=tuple(graph.upstream_deps),
                 upstream_deps=graph.upstream_deps,
                 downstream_deps=graph.downstream_deps,
-                model_targets={model.name: model.destination for model in graph.project.models},
-                function_targets={
+                model_locations={model.name: model.destination for model in graph.project.models},
+                function_locations={
                     function.name: function.destination for function in graph.project.functions
                 },
-                seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
+                seed_locations={seed.name: seed.destination for seed in graph.project.seeds},
                 source_map={source.name: source.source_entry for source in graph.project.sources},
             )
         plan_output = rewrite_virtual_plan_entries(
@@ -360,7 +360,7 @@ def _read_bound_state(
             graph=graph,
             virtual_environment_name=target_name,
         )
-        model_targets: dict[str, CompiledRelationLocation] = {
+        model_locations: dict[str, CompiledRelationLocation] = {
             model.name: model.destination for model in graph.project.models
         }
         physical_relations: dict[str, PhysicalRelationRecord] = {}
@@ -373,14 +373,14 @@ def _read_bound_state(
             )
             if relation is not None:
                 physical_relations[model_name] = relation
-        deferred_targets: dict[str, CompiledRelationLocation] = {
+        deferred_locations: dict[str, CompiledRelationLocation] = {
             model_name: build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
-                fallback_target=model_targets[model_name],
+                fallback_target=model_locations[model_name],
             )
             for model_name, relation in physical_relations.items()
-            if model_name in model_targets
+            if model_name in model_locations
         }
         deferred_relations: dict[str, RelationInfo] = {
             model_name: RelationInfo(
@@ -396,7 +396,7 @@ def _read_bound_state(
             build_bound_local_hashes(model_versions),
             build_source_version_hashes(source_freshness_records),
             source_freshness_unchanged_source_names,
-            deferred_targets,
+            deferred_locations,
             deferred_relations,
             previous_query_sqls,
             previous_metadata_jsons,

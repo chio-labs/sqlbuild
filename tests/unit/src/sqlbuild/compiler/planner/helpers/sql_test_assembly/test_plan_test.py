@@ -196,7 +196,7 @@ PLAN_TEST_CASES: list[PlanTestChainTestCase] = [
         helper_ctes={},
         expected_model_names=("orders",),
         expected_chain_length=1,
-        function_targets={"is_ready": "main.is_ready"},
+        function_locations={"is_ready": "main.is_ready"},
         expected_sql_fragments={
             "orders": "main.is_ready(status) AS ready",
         },

@@ -48,7 +48,7 @@ SCENARIO_NAME: str = "revenue__customer_refund"
     "test_case",
     [
         ScenarioRelationPlanTestCase(
-            description="builds scenario relation targets for source ref seed and model artifacts",
+            description="builds scenario relation locations for fixtures and models",
             graph_plan=ScenarioGraphPlan(
                 key=build_scenario_relation_test_project().models[0].key,
                 name=SCENARIO_NAME,
@@ -75,7 +75,7 @@ SCENARIO_NAME: str = "revenue__customer_refund"
             },
         )
     ],
-    ids=["builds scenario relation targets for source ref seed and model artifacts"],
+    ids=["builds scenario relation locations for fixtures and models"],
 )
 def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_targets(
     test_case: ScenarioRelationPlanTestCase,
@@ -88,16 +88,16 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
     )
 
     assert {
-        name: target.qualified_name for name, target in result.model_targets.items()
+        name: target.qualified_name for name, target in result.model_locations.items()
     } == test_case.expected_model_target_names
     assert {
-        name: target.qualified_name for name, target in result.seed_targets.items()
+        name: target.qualified_name for name, target in result.seed_locations.items()
     } == test_case.expected_seed_target_names
     assert {
         name: source.expression for name, source in result.source_map.items()
     } == test_case.expected_source_expressions
     assert {
-        name: target.qualified_name for name, target in result.dbt_ref_fixture_targets.items()
+        name: target.qualified_name for name, target in result.dbt_ref_fixture_locations.items()
     } == test_case.expected_dbt_ref_target_names
 
 

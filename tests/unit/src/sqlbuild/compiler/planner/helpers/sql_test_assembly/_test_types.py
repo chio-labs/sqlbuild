@@ -16,7 +16,7 @@ class PlanTestChainTestCase:
     mock_dbt_ref_ctes: dict[str, str] = field(default_factory=dict)
     macro_mocks: dict[str, str] = field(default_factory=dict)
     loaded_macro_outputs: dict[str, str] = field(default_factory=dict)
-    function_targets: dict[str, str] = field(default_factory=dict)
+    function_locations: dict[str, str] = field(default_factory=dict)
     model_macro_source_queries: dict[str, str] = field(default_factory=dict)
     expected_sql_fragments: dict[str, str] = field(default_factory=dict)
     expected_warning_count: int = 0

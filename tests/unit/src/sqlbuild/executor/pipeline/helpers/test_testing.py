@@ -57,7 +57,7 @@ def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns
                 function_deps=(function_key,),
             ),
         ),
-        function_targets={
+        function_locations={
             "missing_function": CompiledRelationLocation(
                 database=None,
                 schema="main",

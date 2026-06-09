@@ -99,7 +99,7 @@ def _prepare_test_functions(
     for test_entry in plan.test_entries:
         dep: CompiledObjectKey
         for dep in test_entry.function_deps:
-            function_target: CompiledRelationLocation | None = plan.function_targets.get(dep.name)
+            function_target: CompiledRelationLocation | None = plan.function_locations.get(dep.name)
             if function_target is not None:
                 required_targets_by_key[dep] = function_target
     if not required_targets_by_key:

@@ -70,11 +70,11 @@ from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_n
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_destination_from_physical_relation,
-    build_rewritten_model_targets,
+    build_rewritten_model_locations,
     build_virtual_destination,
     relation_type_for_model,
-    rewrite_project_function_targets,
-    rewrite_project_model_targets,
+    rewrite_project_function_locations,
+    rewrite_project_model_locations,
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
 from sqlbuild.virtual.executor.models import (
@@ -268,17 +268,17 @@ def run_virtual_build(
         for model_name in selected_model_names
         if model_name in semantics.expected_version_hashes
     }
-    rewritten_targets: dict[str, CompiledRelationLocation] = build_rewritten_model_targets(
+    rewritten_locations: dict[str, CompiledRelationLocation] = build_rewritten_model_locations(
         project=graph.project,
         adapter=adapter,
         selected_model_version_hashes=selected_model_version_hashes,
         bound_physical_relations=bound_physical_relations,
     )
-    rewritten_project: CompiledProject = rewrite_project_model_targets(
+    rewritten_project: CompiledProject = rewrite_project_model_locations(
         project=graph.project,
-        rewritten_targets=rewritten_targets,
+        rewritten_locations=rewritten_locations,
     )
-    rewritten_project = rewrite_project_function_targets(
+    rewritten_project = rewrite_project_function_locations(
         project=rewritten_project,
         adapter=adapter,
         virtual_environment_name=target_vde_name,
@@ -346,7 +346,7 @@ def run_virtual_build(
             upstream_deps=graph.upstream_deps,
             downstream_deps=graph.downstream_deps,
             selected_keys=frozenset(),
-            model_targets={
+            model_locations={
                 model.name: (
                     build_destination_from_physical_relation(
                         adapter=adapter,
@@ -358,10 +358,10 @@ def run_virtual_build(
                 )
                 for model in graph.project.models
             },
-            function_targets={
+            function_locations={
                 function.name: function.destination for function in graph.project.functions
             },
-            seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
+            seed_locations={seed.name: seed.destination for seed in graph.project.seeds},
             source_map={source.name: source.source_entry for source in graph.project.sources},
         )
     plan_output = apply_virtual_plan_output(
@@ -1168,7 +1168,7 @@ def _create_logical_vde_views(
     final_version_hashes: dict[str, str],
 ) -> None:
     physical_targets: dict[str, CompiledRelationLocation] = {
-        model.name: plan_output.model_targets.get(model.name, model.destination)
+        model.name: plan_output.model_locations.get(model.name, model.destination)
         for model in project.models
     }
     connection: Any = adapter.connect(connection_config)

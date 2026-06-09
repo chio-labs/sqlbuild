@@ -251,7 +251,7 @@ def _execute_test(
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name
     )
-    model_targets: dict[str, CompiledRelationLocation] = {
+    model_locations: dict[str, CompiledRelationLocation] = {
         "orders": CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
@@ -264,8 +264,8 @@ def _execute_test(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map={},
         model_audits=model_audits,
         declared_columns=(),
