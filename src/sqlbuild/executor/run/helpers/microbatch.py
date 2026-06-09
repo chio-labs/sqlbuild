@@ -252,7 +252,7 @@ def execute_microbatch_entry(
             with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
                 adapter.drop(
                     connection,
-                    target=target_qualified,
+                    destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -294,13 +294,13 @@ def execute_microbatch_entry(
             ):
                 adapter.drop(
                     connection,
-                    target=delta_qualified,
+                    destination=delta_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
                 adapter.create_table_as(
                     connection,
-                    target=delta_qualified,
+                    destination=delta_qualified,
                     sql=batch_sql,
                     statement_recorder=statement_recorder,
                 )
@@ -443,7 +443,7 @@ def execute_microbatch_entry(
                 if is_full_refresh and completed_batches == 0:
                     adapter.create_table_as(
                         connection,
-                        target=target_qualified,
+                        destination=target_qualified,
                         sql=f"SELECT * FROM {delta_qualified}",
                         statement_recorder=statement_recorder,
                     )
@@ -478,7 +478,7 @@ def execute_microbatch_entry(
         ):
             adapter.drop(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )

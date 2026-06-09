@@ -214,7 +214,7 @@ def _write_local_function_artifacts(
             sql="\n\n".join(
                 _format_statement(statement)
                 for statement in adapter.render_create_function(
-                    target=function_entry.destination.qualified_name
+                    destination=function_entry.destination.qualified_name
                     or function_entry.destination.name,
                     arguments=function_entry.arguments,
                     returns=function_entry.returns,

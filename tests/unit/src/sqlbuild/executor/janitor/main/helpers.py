@@ -139,18 +139,18 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists, statement_recorder
-        self.dropped_targets.append(target)
+        self.dropped_targets.append(destination)
 
     def create_table_as(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
@@ -161,7 +161,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -171,7 +171,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
@@ -182,7 +182,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -194,7 +194,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -208,7 +208,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -219,7 +219,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -233,7 +233,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -243,7 +243,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -253,7 +253,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -359,12 +359,12 @@ class FailingDropAdapter(FakeJanitorAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists, statement_recorder
-        self.dropped_targets.append(target)
+        self.dropped_targets.append(destination)
         raise RuntimeError(self.message)
 
 

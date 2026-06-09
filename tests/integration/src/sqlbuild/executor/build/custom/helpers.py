@@ -167,7 +167,7 @@ def build_simple_fn() -> Callable[[MaterializationContext], MaterializationResul
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
@@ -196,7 +196,10 @@ def build_staging_fn() -> Callable[[MaterializationContext], MaterializationResu
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
-            ctx.connection, target=staging, sql=ctx.sql, statement_recorder=ctx.statement_recorder
+            ctx.connection,
+            destination=staging,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
         )
         ctx.adapter.rename(
             ctx.connection,
@@ -213,7 +216,10 @@ def build_audit_running_fn() -> Callable[[MaterializationContext], Materializati
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
-            ctx.connection, target=staging, sql=ctx.sql, statement_recorder=ctx.statement_recorder
+            ctx.connection,
+            destination=staging,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
         )
         audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
         ctx.adapter.rename(
@@ -235,7 +241,10 @@ def build_user_audit_fn(
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
-            ctx.connection, target=staging, sql=ctx.sql, statement_recorder=ctx.statement_recorder
+            ctx.connection,
+            destination=staging,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
         )
         audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
         has_error: bool = any(r.outcome == AuditOutcome.ERROR for r in audit_results)
@@ -265,13 +274,13 @@ def build_cleanup_fn(*, fail: bool) -> Callable[[MaterializationContext], Materi
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=staging,
+            destination=staging,
             sql="SELECT 1 AS cleanup_marker",
             statement_recorder=ctx.statement_recorder,
         )
@@ -307,7 +316,7 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
             ctx.log("building initial partition range")
             ctx.adapter.create_table_as(
                 ctx.connection,
-                target=ctx.destination,
+                destination=ctx.destination,
                 sql=full_sql,
                 statement_recorder=ctx.statement_recorder,
             )
@@ -335,7 +344,7 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
             partition_sql = partition_sql.replace("@@@partition_end", f"'{next_day}'")
             ctx.adapter.append(
                 ctx.connection,
-                target=ctx.destination,
+                destination=ctx.destination,
                 sql=partition_sql,
                 statement_recorder=ctx.statement_recorder,
             )
@@ -356,7 +365,7 @@ def build_existing_relation_capture_fn(
         captured["is_first_run"] = ctx.is_first_run
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
@@ -378,7 +387,7 @@ def build_placeholder_execution_fn(
             sql = sql.replace(f"@@@{placeholder_name}", placeholder_value)
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=sql,
             statement_recorder=ctx.statement_recorder,
         )

@@ -72,13 +72,13 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
         ctx.adapter.drop(
             ctx.connection,
-            target=staging,
+            destination=staging,
             if_exists=True,
             statement_recorder=ctx.statement_recorder,
         )
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=staging,
+            destination=staging,
             sql=partition_sql,
             statement_recorder=ctx.statement_recorder,
         )
@@ -114,7 +114,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
         ctx.adapter.merge(
             ctx.connection,
-            target=tracking_table,
+            destination=tracking_table,
             sql=(
                 f"SELECT '{partition_value}' AS partition_value, "
                 f"'{ctx.run_id}' AS run_id, CURRENT_TIMESTAMP AS built_at"
@@ -124,7 +124,10 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         )
 
     ctx.adapter.drop(
-        ctx.connection, target=staging, if_exists=True, statement_recorder=ctx.statement_recorder
+        ctx.connection,
+        destination=staging,
+        if_exists=True,
+        statement_recorder=ctx.statement_recorder,
     )
     return MaterializationResult(
         relation=ctx.destination,

@@ -128,7 +128,7 @@ def test_given_cursor_delete_insert_when_rendering_then_databricks_uses_replace_
     adapter: DatabricksAdapter = DatabricksAdapter()
 
     statements: tuple[str, ...] = adapter.render_delete_insert_cursor(
-        target=test_case.target,
+        destination=test_case.target,
         sql=test_case.sql,
         cursor_column=test_case.cursor_column,
         cursor_start=test_case.cursor_start,
@@ -251,7 +251,7 @@ def test_given_python_function_when_rendering_then_databricks_returns_expected_d
     adapter: DatabricksAdapter = DatabricksAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="`workspace`.`test`.`is_completed_order_py`",
+        destination="`workspace`.`test`.`is_completed_order_py`",
         arguments=(FunctionArgument(name="order_status", type="STRING"),),
         returns="BOOLEAN",
         body_sql=test_case.body_sql,
@@ -304,7 +304,7 @@ def test_given_table_function_when_rendering_then_databricks_returns_expected_dd
     adapter: DatabricksAdapter = DatabricksAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="`workspace`.`test`.`customer_orders`",
+        destination="`workspace`.`test`.`customer_orders`",
         arguments=(FunctionArgument(name="p_customer_id", type="INT"),),
         returns="TABLE",
         body_sql=(

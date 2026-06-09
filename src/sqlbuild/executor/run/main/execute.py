@@ -277,7 +277,7 @@ def _staged_lifecycle(
         ):
             adapter.drop(
                 connection,
-                target=staging_qualified,
+                destination=staging_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
@@ -293,7 +293,7 @@ def _staged_lifecycle(
             else:
                 adapter.create_table_as(
                     connection,
-                    target=staging_qualified,
+                    destination=staging_qualified,
                     sql=resolved_sql,
                     statement_recorder=statement_recorder,
                 )
@@ -413,7 +413,7 @@ def _staged_lifecycle(
                 )
                 adapter.drop(
                     connection,
-                    target=staging_qualified,
+                    destination=staging_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -430,7 +430,7 @@ def _staged_lifecycle(
                 )
                 adapter.drop(
                     connection,
-                    target=staging_qualified,
+                    destination=staging_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -553,7 +553,7 @@ def _direct_lifecycle(
             if reuse_origin_relation is not None:
                 adapter.drop(
                     connection,
-                    target=target_qualified,
+                    destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -568,7 +568,7 @@ def _direct_lifecycle(
             else:
                 adapter.create_table_as(
                     connection,
-                    target=target_qualified,
+                    destination=target_qualified,
                     sql=resolved_sql,
                     statement_recorder=statement_recorder,
                 )

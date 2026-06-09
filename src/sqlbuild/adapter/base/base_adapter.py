@@ -304,11 +304,11 @@ class BaseAdapter(StrictAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
@@ -319,7 +319,7 @@ class BaseAdapter(StrictAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -338,41 +338,43 @@ class BaseAdapter(StrictAdapter):
             raise AdapterUserError(f"Adapter '{type(self).__name__}' does not support Python UDFs")
         argument_sql: str = ", ".join(f"{arg.name} {arg.type}" for arg in arguments)
         return (
-            f"CREATE OR REPLACE FUNCTION {target}({argument_sql}) "
+            f"CREATE OR REPLACE FUNCTION {destination}({argument_sql}) "
             f"RETURNS {returns} LANGUAGE SQL AS $$\n{body_sql}\n$$",
         )
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         if columns is not None:
             col_list: str = ", ".join(self.render_identifier(column) for column in columns)
-            return (f"INSERT INTO {target} ({col_list}) {sql}",)
-        return (f"INSERT INTO {target} {sql}",)
+            return (f"INSERT INTO {destination} ({col_list}) {sql}",)
+        return (f"INSERT INTO {destination} {sql}",)
 
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         key_condition: str = " AND ".join(
-            f"{target}.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            f"{destination}.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
             for k in unique_key
         )
         delete_sql: str = (
-            f"DELETE FROM {target} WHERE EXISTS "
+            f"DELETE FROM {destination} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -380,20 +382,22 @@ class BaseAdapter(StrictAdapter):
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         delete_sql: str = (
-            f"DELETE FROM {target} "
+            f"DELETE FROM {destination} "
             f"WHERE {self.render_identifier(cursor_column)} >= '{cursor_start}' "
             f"AND {self.render_identifier(cursor_column)} < '{cursor_end}'"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP TABLE{exists_clause} {target}",)
+        return (f"DROP TABLE{exists_clause} {destination}",)
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {target}",)
+        return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {origin} RENAME TO {destination}",)
@@ -414,10 +418,10 @@ class BaseAdapter(StrictAdapter):
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -489,34 +493,37 @@ class BaseAdapter(StrictAdapter):
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
     ) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
             for col in columns
         )
 
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
 
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            f"ALTER TABLE {destination} ALTER COLUMN "
+            f"{self.render_identifier(col.name)} TYPE {col.type}"
             for col in columns
         )
 
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -535,7 +542,7 @@ class BaseAdapter(StrictAdapter):
             f"__source.{self.render_identifier(col)}" for col in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -563,7 +570,7 @@ class BaseAdapter(StrictAdapter):
             current_timestamp=self.render_current_timestamp(),
         )
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
@@ -736,7 +743,7 @@ class BaseAdapter(StrictAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_create_initial_historical_timestamp_changes_target(
         self,
@@ -757,7 +764,7 @@ class BaseAdapter(StrictAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
@@ -895,7 +902,7 @@ class BaseAdapter(StrictAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_check_snapshot_changes(
         self,
@@ -965,12 +972,12 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -980,11 +987,11 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -994,7 +1001,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1008,7 +1015,7 @@ class BaseAdapter(StrictAdapter):
     ) -> None:
         del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            target=target,
+            destination=destination,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
@@ -1027,11 +1034,11 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1041,11 +1048,13 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1152,7 +1161,7 @@ class BaseAdapter(StrictAdapter):
             origin=origin,
         )
         if remove_origin:
-            statements = (*statements, *self.render_drop(target=origin))
+            statements = (*statements, *self.render_drop(destination=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1162,7 +1171,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1176,12 +1185,14 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1191,7 +1202,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -1199,7 +1210,7 @@ class BaseAdapter(StrictAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target, sql=sql, unique_key=keys, columns=columns
+            destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
@@ -1211,7 +1222,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1220,7 +1231,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
@@ -1237,7 +1248,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1248,7 +1259,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -1258,7 +1269,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -1268,7 +1279,7 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:

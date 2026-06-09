@@ -865,19 +865,23 @@ def _build_logical_ddl_from_adapter(
     qualified_name: str = destination.qualified_name or destination.name
 
     if action == PlanAction.CREATE_VIEW:
-        return ";\n\n".join(adapter.render_create_view_as(target=qualified_name, sql=resolved_sql))
+        return ";\n\n".join(
+            adapter.render_create_view_as(destination=qualified_name, sql=resolved_sql)
+        )
 
     if action == PlanAction.CREATE_TABLE:
-        return ";\n\n".join(adapter.render_create_table_as(target=qualified_name, sql=resolved_sql))
+        return ";\n\n".join(
+            adapter.render_create_table_as(destination=qualified_name, sql=resolved_sql)
+        )
 
     if action == PlanAction.INCREMENTAL_APPEND:
-        return ";\n\n".join(adapter.render_append(target=qualified_name, sql=resolved_sql))
+        return ";\n\n".join(adapter.render_append(destination=qualified_name, sql=resolved_sql))
 
     if action == PlanAction.INCREMENTAL_DELETE_INSERT:
         if cursor_column is not None and cursor_bounds is not None:
             return ";\n\n".join(
                 adapter.render_delete_insert_cursor(
-                    target=qualified_name,
+                    destination=qualified_name,
                     sql=resolved_sql,
                     cursor_column=cursor_column,
                     cursor_start=cursor_bounds.start,
@@ -886,7 +890,7 @@ def _build_logical_ddl_from_adapter(
             )
         return ";\n\n".join(
             adapter.render_delete_insert(
-                target=qualified_name,
+                destination=qualified_name,
                 sql=resolved_sql,
                 unique_key=unique_key,
             )
@@ -896,7 +900,7 @@ def _build_logical_ddl_from_adapter(
         source_columns: tuple[str, ...] = tuple(col.name for col in warehouse_columns)
         return ";\n\n".join(
             adapter.render_merge(
-                target=qualified_name,
+                destination=qualified_name,
                 sql=resolved_sql,
                 unique_key=unique_key,
                 source_columns=source_columns,

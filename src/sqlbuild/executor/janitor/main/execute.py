@@ -41,7 +41,7 @@ def execute_janitor_plan(
     for candidate in plan.candidates:
         adapter.drop(
             connection,
-            target=candidate.key.display_name(),
+            destination=candidate.key.display_name(),
             if_exists=True,
             statement_recorder=recorder,
         )

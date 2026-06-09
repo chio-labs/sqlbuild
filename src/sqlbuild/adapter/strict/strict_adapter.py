@@ -153,12 +153,12 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         """Render SQL statements that create or replace a table from a query."""
         ...
 
     @abstractmethod
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         """Render SQL statements that create or replace a view from a query."""
         ...
 
@@ -176,7 +176,7 @@ class StrictAdapter(
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -191,16 +191,16 @@ class StrictAdapter(
 
     @abstractmethod
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
-        """Render SQL statements that insert query rows into a target."""
+        """Render SQL statements that insert query rows into a destination."""
         ...
 
     @abstractmethod
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -212,7 +212,7 @@ class StrictAdapter(
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -223,12 +223,12 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         """Render SQL statements that drop a relation."""
         ...
 
     @abstractmethod
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         """Render SQL statements that drop a view relation."""
         ...
 
@@ -237,7 +237,7 @@ class StrictAdapter(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -335,19 +335,21 @@ class StrictAdapter(
 
     @abstractmethod
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         """Render SQL statements that add columns to a table."""
         ...
 
     @abstractmethod
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         """Render SQL statements that drop columns from a table."""
         ...
 
     @abstractmethod
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         """Render SQL statements that alter column types on a table."""
         ...
@@ -356,12 +358,12 @@ class StrictAdapter(
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
-        """Render SQL statements that merge query rows into a target."""
+        """Render SQL statements that merge query rows into a destination."""
         ...
 
     @abstractmethod

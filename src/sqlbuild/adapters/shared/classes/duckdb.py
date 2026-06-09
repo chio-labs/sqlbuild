@@ -149,20 +149,20 @@ class DuckDbBackedAdapter(BaseAdapter):
             origin=origin,
         )
         if remove_origin:
-            statements = (*statements, *self.render_drop(target=origin))
+            statements = (*statements, *self.render_drop(destination=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             self.execute(connection, stmt)
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {target}",)
+        return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
     ) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_current_timestamp(self) -> str:
         return "CURRENT_TIMESTAMP"
@@ -171,11 +171,13 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -328,7 +330,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             current_timestamp=current_timestamp,
         )
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
@@ -416,7 +418,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=self._historical_timestamp_snapshot_select_sql(
                 source=source,
                 unique_key=unique_key,
@@ -441,7 +443,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=self._historical_timestamp_changes_select_sql(
                 source=source,
                 unique_key=unique_key,
@@ -652,7 +654,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=self._historical_check_snapshot_select_sql(
                 source=source,
                 unique_key=unique_key,
@@ -1072,11 +1074,11 @@ class DuckDbBackedAdapter(BaseAdapter):
             result[table_name].append(ColumnInfo(name=row[1], type=row[2]))
         return {k: tuple(v) for k, v in result.items()}
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
 
     def render_udf_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
@@ -1087,7 +1089,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1102,12 +1104,12 @@ class DuckDbBackedAdapter(BaseAdapter):
             if return_columns:
                 raise AdapterUserError("DuckDB table functions must use SQL language")
             parameter_types: str = ", ".join(str(arg.type) for arg in arguments)
-            return (f"REGISTER PYTHON FUNCTION {target}({parameter_types}) RETURNS {returns}",)
+            return (f"REGISTER PYTHON FUNCTION {destination}({parameter_types}) RETURNS {returns}",)
         del returns
         argument_sql: str = ", ".join(str(arg.name) for arg in arguments)
         if return_columns:
-            return (f"CREATE OR REPLACE MACRO {target}({argument_sql}) AS TABLE\n{body_sql}",)
-        return (f"CREATE OR REPLACE MACRO {target}({argument_sql}) AS (\n{body_sql}\n)",)
+            return (f"CREATE OR REPLACE MACRO {destination}({argument_sql}) AS TABLE\n{body_sql}",)
+        return (f"CREATE OR REPLACE MACRO {destination}({argument_sql}) AS (\n{body_sql}\n)",)
 
     def supports_python_functions(self) -> bool:
         return True
@@ -1128,7 +1130,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1143,7 +1145,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         if language != FunctionLanguage.PYTHON:
             del source_file_path
             statements: tuple[str, ...] = self.render_create_function(
-                target=target,
+                destination=destination,
                 arguments=arguments,
                 returns=returns,
                 body_sql=body_sql,
@@ -1161,8 +1163,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         del body_sql, runtime_version, packages
         if source_file_path is None or entry_point is None:
             raise AdapterUserError("DuckDB Python UDFs require source_file_path and entry_point")
-        function_name: str = target.split(".")[-1]
-        if target not in {function_name, f"main.{function_name}"}:
+        function_name: str = destination.split(".")[-1]
+        if destination not in {function_name, f"main.{function_name}"}:
             raise AdapterUserError(
                 f"DuckDB Python UDF '{function_name}' cannot set database or schema because "
                 "DuckDB registers Python UDFs as connection-scoped functions. Remove "
@@ -1200,36 +1202,38 @@ class DuckDbBackedAdapter(BaseAdapter):
         return udf_function
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         if columns is not None:
             col_list: str = ", ".join(self.render_identifier(column) for column in columns)
-            return (f"INSERT INTO {target} ({col_list}) {sql}",)
-        return (f"INSERT INTO {target} {sql}",)
+            return (f"INSERT INTO {destination} ({col_list}) {sql}",)
+        return (f"INSERT INTO {destination} {sql}",)
 
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         key_condition: str = " AND ".join(
-            f"{target}.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
+            f"{destination}.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
             for k in unique_key
         )
         delete_sql: str = (
-            f"DELETE FROM {target} WHERE EXISTS "
+            f"DELETE FROM {destination} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1237,27 +1241,29 @@ class DuckDbBackedAdapter(BaseAdapter):
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         delete_sql: str = (
-            f"DELETE FROM {target} "
+            f"DELETE FROM {destination} "
             f"WHERE {self.render_identifier(cursor_column)} >= '{cursor_start}' "
             f"AND {self.render_identifier(cursor_column)} < '{cursor_end}'"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP TABLE{exists_clause} {target}",)
+        return (f"DROP TABLE{exists_clause} {destination}",)
 
     def create_table_as(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1267,11 +1273,11 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1281,11 +1287,11 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1340,10 +1346,10 @@ class DuckDbBackedAdapter(BaseAdapter):
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -1419,7 +1425,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1432,14 +1438,14 @@ class DuckDbBackedAdapter(BaseAdapter):
         if replace:
             self.drop(
                 connection,
-                target=target,
+                destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
         read_csv_options: str = self._render_seed_csv_options(csv_settings)
         if infer_types:
             stmt: str = (
-                f"CREATE TABLE {target} AS SELECT * FROM read_csv('{file_path}', "
+                f"CREATE TABLE {destination} AS SELECT * FROM read_csv('{file_path}', "
                 f"auto_detect=true{read_csv_options})"
             )
             statement_recorder.record(stmt)
@@ -1448,8 +1454,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
         type_map: str = ", ".join(f"'{col.name}': '{col.type}'" for col in columns)
         statements: tuple[str, ...] = (
-            f"CREATE TABLE {target} ({column_defs})",
-            f"INSERT INTO {target} SELECT * FROM read_csv('{file_path}', "
+            f"CREATE TABLE {destination} ({column_defs})",
+            f"INSERT INTO {destination} SELECT * FROM read_csv('{file_path}', "
             f"columns={{{type_map}}}{read_csv_options})",
         )
         statement_recorder.record_many(statements)
@@ -1461,12 +1467,14 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1476,7 +1484,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -1484,7 +1492,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target, sql=sql, unique_key=keys, columns=columns
+            destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
@@ -1496,7 +1504,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1505,7 +1513,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
@@ -1522,7 +1530,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1530,7 +1538,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_merge(
-            target=target, sql=sql, unique_key=keys, source_columns=source_columns
+            destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1540,7 +1548,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -1559,7 +1567,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"__source.{self.render_identifier(col)}" for col in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -1567,24 +1575,27 @@ class DuckDbBackedAdapter(BaseAdapter):
         return (merge_sql,)
 
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
             for col in columns
         )
 
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
 
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            f"ALTER TABLE {destination} ALTER COLUMN "
+            f"{self.render_identifier(col.name)} TYPE {col.type}"
             for col in columns
         )
 
@@ -1592,11 +1603,13 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_add_columns(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1606,12 +1619,12 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop_columns(
-            target=target, column_names=column_names
+            destination=destination, column_names=column_names
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1622,11 +1635,13 @@ class DuckDbBackedAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_alter_column_types(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

@@ -286,7 +286,7 @@ def publish_function_versions(
                 continue
             adapter.create_function(
                 connection,
-                target=target.qualified_name,
+                destination=target.qualified_name,
                 arguments=decode_function_arguments(record),
                 returns=record.returns,
                 body_sql=decode_function_body_sql(record),

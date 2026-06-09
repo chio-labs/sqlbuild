@@ -63,7 +63,7 @@ def test_given_python_function_when_rendering_with_base_adapter_then_raises_clea
 
     with pytest.raises(AdapterUserError) as exc_info:
         adapter.render_create_function(
-            target="main.is_positive_int",
+            destination="main.is_positive_int",
             arguments=(FunctionArgument(name="a_string", type="VARCHAR"),),
             returns="BOOLEAN",
             body_sql="def main(a_string): return True",

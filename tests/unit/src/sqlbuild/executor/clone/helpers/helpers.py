@@ -43,9 +43,9 @@ class FakeCloneAdapter(BaseAdapter):
         del connection, database, schema, name
         return True
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP TABLE{exists_clause} {target}",)
+        return (f"DROP TABLE{exists_clause} {destination}",)
 
     def render_clone(
         self,

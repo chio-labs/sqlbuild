@@ -127,13 +127,13 @@ def execute_snapshot_entry(
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
             adapter.drop(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
             adapter.create_table_as(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 sql=entry.resolved_sql,
                 statement_recorder=statement_recorder,
             )
@@ -215,7 +215,7 @@ def execute_snapshot_entry(
             if entry.reason == PlanReason.FULL_REFRESH:
                 adapter.drop(
                     connection,
-                    target=target_qualified,
+                    destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -352,7 +352,7 @@ def execute_snapshot_entry(
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
         adapter.drop(
             connection,
-            target=delta_qualified,
+            destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
         )
@@ -801,7 +801,7 @@ def _apply_snapshot_schema_change(
 
     adapter.add_columns(
         connection,
-        target=target_qualified,
+        destination=target_qualified,
         columns=added,
         statement_recorder=statement_recorder,
     )

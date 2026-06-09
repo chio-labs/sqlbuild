@@ -336,7 +336,7 @@ def _cleanup_relations(
         try:
             adapter.drop(
                 connection,
-                target=relation,
+                destination=relation,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )

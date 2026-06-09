@@ -108,7 +108,7 @@ def adopt_into_virtual_state(
             if model_relation_type == "view":
                 adapter.drop_view(
                     connection,
-                    target=resolve_relation_location_qualified_name(
+                    destination=resolve_relation_location_qualified_name(
                         adapter=adapter, location=model.destination
                     ),
                     statement_recorder=recorder,
@@ -121,7 +121,7 @@ def adopt_into_virtual_state(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_relation_location_qualified_name(
+                destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
                 sql=(

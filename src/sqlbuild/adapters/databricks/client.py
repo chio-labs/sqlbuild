@@ -158,19 +158,21 @@ class DatabricksAdapter(BaseAdapter):
     def supports_unqualified_function_fingerprints(self) -> bool:
         return False
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {target}",)
+        return (f"DROP VIEW{exists_clause} {destination}",)
 
     def drop_view(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -180,7 +182,7 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -194,7 +196,7 @@ class DatabricksAdapter(BaseAdapter):
     ) -> None:
         del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            target=target,
+            destination=destination,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
@@ -321,7 +323,7 @@ class DatabricksAdapter(BaseAdapter):
             current_timestamp=current_timestamp,
         )
         return self.render_create_table_as(
-            target=target,
+            destination=target,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
@@ -418,7 +420,7 @@ class DatabricksAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_create_initial_historical_timestamp_changes_target(
         self,
@@ -439,7 +441,7 @@ class DatabricksAdapter(BaseAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
@@ -650,7 +652,7 @@ class DatabricksAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=target, sql=historical_sql)
 
     def render_apply_historical_check_snapshot_changes(
         self,
@@ -1095,11 +1097,11 @@ class DatabricksAdapter(BaseAdapter):
         for statement in statements:
             self.execute(connection, statement)
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {target} AS {sql}",)
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
 
     def supports_table_functions(self) -> bool:
         return True
@@ -1113,7 +1115,7 @@ class DatabricksAdapter(BaseAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1128,7 +1130,7 @@ class DatabricksAdapter(BaseAdapter):
                 raise AdapterUserError("Databricks table functions must use SQL language")
             del runtime_version
             return self._render_create_python_function(
-                target=target,
+                destination=destination,
                 arguments=arguments,
                 returns=returns,
                 body_sql=body_sql,
@@ -1140,12 +1142,12 @@ class DatabricksAdapter(BaseAdapter):
         if return_columns:
             del returns
             return (
-                f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+                f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
                 "RETURNS TABLE\n"
                 f"RETURN {body_sql}",
             )
         return (
-            f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+            f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
             f"RETURNS {returns}\n"
             f"RETURN {body_sql}",
         )
@@ -1153,7 +1155,7 @@ class DatabricksAdapter(BaseAdapter):
     def _render_create_python_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -1164,7 +1166,7 @@ class DatabricksAdapter(BaseAdapter):
         environment_sql: str = self._render_python_environment(packages=packages)
         body: str = self._databricks_python_body(body_sql=body_sql, entry_point=entry_point)
         return (
-            f"CREATE OR REPLACE FUNCTION {target}({argument_sql})\n"
+            f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
             f"RETURNS {returns}\n"
             "LANGUAGE PYTHON\n"
             f"{environment_sql}"
@@ -1213,33 +1215,33 @@ class DatabricksAdapter(BaseAdapter):
         return True
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         if columns is not None:
             return (
-                f"INSERT INTO {target} "
+                f"INSERT INTO {destination} "
                 f"({', '.join(self.render_identifier(column) for column in columns)}) {sql}",
             )
-        return (f"INSERT INTO {target} {sql}",)
+        return (f"INSERT INTO {destination} {sql}",)
 
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
         key_condition: str = " AND ".join(
-            f"{target}.{self.render_identifier(key)} = __source.{self.render_identifier(key)}"
+            f"{destination}.{self.render_identifier(key)} = __source.{self.render_identifier(key)}"
             for key in unique_key
         )
         delete_sql: str = (
-            f"DELETE FROM {target} WHERE EXISTS "
+            f"DELETE FROM {destination} WHERE EXISTS "
             f"(SELECT 1 FROM ({sql}) AS __source WHERE {key_condition})"
         )
         insert_statements: tuple[str, ...] = self.render_append(
-            target=target,
+            destination=destination,
             sql=sql,
             columns=columns,
         )
@@ -1252,17 +1254,17 @@ class DatabricksAdapter(BaseAdapter):
             return f"TIMESTAMP '{value}'"
         return f"'{value}'"
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (
-            f"DROP TABLE{exists_clause} {target}",
-            f"DROP VIEW{exists_clause} {target}",
+            f"DROP TABLE{exists_clause} {destination}",
+            f"DROP VIEW{exists_clause} {destination}",
         )
 
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1278,7 +1280,7 @@ class DatabricksAdapter(BaseAdapter):
         replace_where: str = (
             f"{quoted_cursor_column} >= {start_bound} AND {quoted_cursor_column} < {end_bound}"
         )
-        return (f"INSERT INTO {target}{column_list} REPLACE WHERE {replace_where} {sql}",)
+        return (f"INSERT INTO {destination}{column_list} REPLACE WHERE {replace_where} {sql}",)
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {origin} RENAME TO {destination}",)
@@ -1295,7 +1297,7 @@ class DatabricksAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         if not hard_copy:
             return (f"CREATE TABLE {destination} SHALLOW CLONE {origin}",)
-        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (f"CREATE TABLE {destination} DEEP CLONE {origin}",)
@@ -1343,41 +1345,42 @@ class DatabricksAdapter(BaseAdapter):
     def render_add_columns(
         self,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(column.name)} {column.type}"
+            f"ALTER TABLE {destination} ADD COLUMN "
+            f"{self.render_identifier(column.name)} {column.type}"
             for column in columns
         )
 
     def render_drop_columns(
         self,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(column_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(column_name)}"
             for column_name in column_names
         )
 
     def render_alter_column_types(
         self,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
     ) -> tuple[str, ...]:
         return tuple(
             "ALTER TABLE "
-            f"{target} ALTER COLUMN {self.render_identifier(column.name)} TYPE {column.type}"
+            f"{destination} ALTER COLUMN {self.render_identifier(column.name)} TYPE {column.type}"
             for column in columns
         )
 
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -1396,7 +1399,7 @@ class DatabricksAdapter(BaseAdapter):
             f"__source.{self.render_identifier(column)}" for column in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -1407,13 +1410,13 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
         del config
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1423,11 +1426,11 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1437,11 +1440,11 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1544,7 +1547,7 @@ class DatabricksAdapter(BaseAdapter):
             origin=origin,
         )
         if remove_origin:
-            statements = (*statements, *self.render_drop(target=origin))
+            statements = (*statements, *self.render_drop(destination=origin))
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1554,12 +1557,14 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1569,7 +1574,7 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -1577,7 +1582,7 @@ class DatabricksAdapter(BaseAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target,
+            destination=destination,
             sql=sql,
             unique_key=keys,
             columns=columns,
@@ -1591,7 +1596,7 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -1600,7 +1605,7 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
@@ -1616,7 +1621,7 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1628,21 +1633,21 @@ class DatabricksAdapter(BaseAdapter):
         if replace:
             self.drop(
                 connection,
-                target=target,
+                destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(
             f"{col.name} {self._to_databricks_type(col.type)}" for col in columns
         )
-        create_sql: str = f"CREATE TABLE {target} ({column_defs})"
+        create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
         self.execute(connection, create_sql)
 
         column_names: tuple[str, ...] = tuple(column.name for column in columns)
         placeholders: str = ", ".join(["?"] * len(column_names))
         insert_sql: str = (
-            f"INSERT INTO {target} ({', '.join(column_names)}) VALUES ({placeholders})"
+            f"INSERT INTO {destination} ({', '.join(column_names)}) VALUES ({placeholders})"
         )
         rows: list[tuple[object, ...]] = []
         with file_path.open(
@@ -1683,7 +1688,7 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1691,7 +1696,7 @@ class DatabricksAdapter(BaseAdapter):
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
         statements: tuple[str, ...] = self.render_merge(
-            target=target, sql=sql, unique_key=keys, source_columns=source_columns
+            destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         statement: str
@@ -1713,11 +1718,13 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_add_columns(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1727,12 +1734,12 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop_columns(
-            target=target, column_names=column_names
+            destination=destination, column_names=column_names
         )
         statement_recorder.record_many(statements)
         statement: str
@@ -1743,11 +1750,13 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_alter_column_types(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:

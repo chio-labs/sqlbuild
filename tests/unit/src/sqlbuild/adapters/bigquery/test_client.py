@@ -338,7 +338,7 @@ def test_given_python_function_when_rendering_then_bigquery_returns_expected_ddl
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="demo.udfs.is_positive_int",
+        destination="demo.udfs.is_positive_int",
         arguments=(FunctionArgument(name="a_string", type="STRING"),),
         returns="INT64",
         body_sql="def main(a_string):\n    return 1 if a_string else 0",
@@ -372,7 +372,7 @@ def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="demo.analytics.customer_orders",
+        destination="demo.analytics.customer_orders",
         arguments=(FunctionArgument(name="p_customer_id", type="INT64"),),
         returns="TABLE",
         body_sql=(
@@ -506,7 +506,7 @@ def test_given_bigquery_adapter_when_rendering_drop_view_then_quotes_target(
 ) -> None:
     adapter: BigQueryAdapter = BigQueryAdapter()
 
-    result: tuple[str, ...] = adapter.render_drop_view(target=test_case.target)
+    result: tuple[str, ...] = adapter.render_drop_view(destination=test_case.target)
 
     assert result == test_case.expected_statements
 
@@ -538,7 +538,7 @@ def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_delete_insert_cursor(
-        target="example-project.dev.events",
+        destination="example-project.dev.events",
         sql="SELECT id, event_time FROM delta_events",
         cursor_column="event_time",
         cursor_start="2026-01-01T00:00:00",

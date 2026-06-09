@@ -68,7 +68,7 @@ def refresh_logical_vde_views(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_relation_location_qualified_name(
+                destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
                 sql=(

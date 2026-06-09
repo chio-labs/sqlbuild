@@ -36,7 +36,7 @@ def execute_seed(
         )
         adapter.load_seed(
             connection,
-            target=target_qualified,
+            destination=target_qualified,
             file_path=seed_entry.file_path,
             columns=seed_entry.columns,
             csv_settings=seed_entry.csv_settings,

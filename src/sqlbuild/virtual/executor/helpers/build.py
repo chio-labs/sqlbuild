@@ -729,7 +729,9 @@ def _prepare_custom_virtual_version(
         schema=entry.destination.schema,
         name=entry.destination.name,
     ):
-        adapter.drop(connection, target=destination, if_exists=True, statement_recorder=recorder)
+        adapter.drop(
+            connection, destination=destination, if_exists=True, statement_recorder=recorder
+        )
     source: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=parent_relation.database_name,
@@ -1195,7 +1197,7 @@ def _create_logical_vde_views(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_relation_location_qualified_name(
+                destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
                 sql=(
