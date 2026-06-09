@@ -64,6 +64,7 @@ def build_cli_scenario_plan(
         project=pipeline_result.project,
         graph_plan=graph_plan,
         relation_map=relation_map,
+        render_qualified_name=adapter.render_qualified_name,
         database=database,
         schema=schema,
     )
