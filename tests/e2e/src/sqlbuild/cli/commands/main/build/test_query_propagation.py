@@ -112,7 +112,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   ),
                   incremental_mode microbatch,
                   batch_size 2d,
-                  query_change_backfill bounded-14d
+                  replay_on_change bounded-14d
                 );
 
                 SELECT
@@ -182,7 +182,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FUNCTION (
                   arguments (amount_cents INTEGER),
                   returns BOOLEAN,
-                  query_change_backfill full,
+                  replay_on_change full,
                 );
 
                 amount_cents > 100
@@ -290,7 +290,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   ),
                   incremental_mode microbatch,
                   batch_size 1d,
-                  query_change_backfill bounded-14d
+                  replay_on_change bounded-14d
                 );
 
                 SELECT
@@ -315,7 +315,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   ),
                   incremental_mode microbatch,
                   batch_size 2d,
-                  query_change_backfill bounded-14d
+                  replay_on_change bounded-14d
                 );
 
                 SELECT

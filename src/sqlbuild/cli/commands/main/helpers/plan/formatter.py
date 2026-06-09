@@ -708,14 +708,12 @@ def _append_cursor_detail(
 def _append_policy_line(lines: list[str], entry: ModelPlanEntry) -> None:
     """Append the policy line if a backfill policy triggered."""
 
-    if entry.backfill.action == BackfillAction.WARN_ONLY:
+    if entry.backfill.action == BackfillAction.FORWARD_ONLY:
         return
     duration: str = entry.backfill.duration or "full"
     policy_value: str = _backfill_value(entry.backfill.action, duration)
-    if entry.reason == PlanReason.QUERY_CHANGED:
-        lines.append(f"    policy: query_change_backfill={policy_value}")
-    elif entry.reason == PlanReason.SCHEMA_CHANGED:
-        lines.append(f"    policy: schema_change_backfill={policy_value}")
+    if entry.reason in (PlanReason.QUERY_CHANGED, PlanReason.SCHEMA_CHANGED):
+        lines.append(f"    policy: replay_on_change={policy_value}")
 
 
 def _append_schema_diff(lines: list[str], entry: ModelPlanEntry) -> None:
@@ -1007,10 +1005,10 @@ def _format_function_entry(
     elif function_entry.reason == PlanReason.FULL_REFRESH:
         lines.append("    reason: full refresh")
     elif function_entry.reason == PlanReason.QUERY_CHANGED:
-        if function_entry.backfill.action != BackfillAction.WARN_ONLY:
+        if function_entry.backfill.action != BackfillAction.FORWARD_ONLY:
             duration: str = function_entry.backfill.duration or "full"
             policy_value: str = _backfill_value(function_entry.backfill.action, duration)
-            lines.append(f"    policy: query_change_backfill={policy_value}")
+            lines.append(f"    policy: replay_on_change={policy_value}")
         if function_entry.previous_query_sql is not None:
             lines.append("    query diff:")
             lines.extend(

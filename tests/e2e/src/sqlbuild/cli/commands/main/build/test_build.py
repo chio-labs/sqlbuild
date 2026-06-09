@@ -500,7 +500,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\namount > 100\n"
+                "replay_on_change full);\n\namount > 100\n"
             ),
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT __udf("is_large_order")(150) AS is_large\n'

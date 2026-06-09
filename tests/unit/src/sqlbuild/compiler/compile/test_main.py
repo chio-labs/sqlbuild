@@ -654,12 +654,8 @@ incremental_strategy = "merge"
 incremental_mode = "microbatch"
 lookback = "1d"
 batch_size = "1h"
-query_change_backfill = "bounded-30d"
+replay_on_change = "bounded-30d"
 row_diff_exclude_columns = ["loaded_at", "run_id"]
-
-[defaults.schema_change_backfill]
-add_column = "bounded-7d"
-type_change = "full"
 
 [defaults.row_diff_tolerances]
 
@@ -694,11 +690,7 @@ absolute = 0.01
                 "cursor_grain": "second",
                 "lookback": "1d",
                 "batch_size": "1h",
-                "query_change_backfill": "bounded-30d",
-                "schema_change_backfill": {
-                    "add_column": "bounded-7d",
-                    "type_change": "full",
-                },
+                "replay_on_change": "bounded-30d",
                 "row_diff_exclude_columns": ("loaded_at", "run_id"),
                 "row_diff_tolerances": {
                     "by_column": {"revenue": {"absolute": 0.01}},
@@ -861,7 +853,7 @@ schema_prefix = "analytics_${user}"
 [defaults]
 database = "${schema_prefix}"
 schema = "marts"
-query_change_backfill = "${ENV:BACKFILL_POLICY}"
+replay_on_change = "${ENV:BACKFILL_POLICY}"
 row_diff_exclude_columns = ["${schema_prefix}_loaded_at"]
 
 [targets]
@@ -897,7 +889,7 @@ select 1
             {
                 "database": "dev_analytics_kevin",
                 "schema": "dev_kevin_marts",
-                "query_change_backfill": "bounded-30d",
+                "replay_on_change": "bounded-30d",
                 "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
                 "alias": "orders_dev",
                 "config": {
@@ -1452,7 +1444,7 @@ sources:
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
-        expected_sql_function_query_change_backfills=(None,),
+        expected_sql_function_replay_on_changes=(None,),
         expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={
@@ -1687,7 +1679,7 @@ FUNCTION (
   schema ${udf_schema},
   arguments (order_status ${status_type}),
   returns ${return_type},
-  query_change_backfill bounded-${backfill_days}d
+  replay_on_change bounded-${backfill_days}d
 );
 
 @status_match("order_status", "completed") AND order_status <> @@cancelled_status
@@ -1716,7 +1708,7 @@ FUNCTION (
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
-        expected_sql_function_query_change_backfills=("bounded-30d",),
+        expected_sql_function_replay_on_changes=("bounded-30d",),
         expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -1784,7 +1776,7 @@ WHERE customer_id = p_customer_id
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
-        expected_sql_function_query_change_backfills=(None,),
+        expected_sql_function_replay_on_changes=(None,),
         expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
@@ -1946,7 +1938,7 @@ def main(order_status):
         expected_sql_function_runtime_versions=("3.11",),
         expected_sql_function_entry_points=("main",),
         expected_sql_function_packages=(("faker",),),
-        expected_sql_function_query_change_backfills=(None,),
+        expected_sql_function_replay_on_changes=(None,),
         expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -2540,10 +2532,9 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     )
     assert (
         tuple(
-            function_input.query_change_backfill
-            for function_input in compile_inputs.sql_function_inputs
+            function_input.replay_on_change for function_input in compile_inputs.sql_function_inputs
         )
-        == test_case.expected_sql_function_query_change_backfills
+        == test_case.expected_sql_function_replay_on_changes
     )
     assert (
         tuple(

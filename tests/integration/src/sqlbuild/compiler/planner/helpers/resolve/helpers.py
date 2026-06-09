@@ -87,7 +87,7 @@ def resolve_and_execute(
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword="EXCLUDE",
-        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,

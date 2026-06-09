@@ -507,9 +507,9 @@ def build_sql_function_inputs(
                 schema=function_schema,
                 fingerprint_database=function_database,
                 fingerprint_schema=function_schema,
-                query_change_backfill=_parse_optional_function_header(
+                replay_on_change=_parse_optional_function_header(
                     header_values=header_values,
-                    key="query_change_backfill",
+                    key="replay_on_change",
                     effective_vars=effective_vars,
                     relative_path=function_file.relative_path,
                     language="SQL",
@@ -609,9 +609,9 @@ def build_sql_function_inputs(
             runtime_version=runtime_version,
             entry_point=entry_point,
             packages=packages,
-            query_change_backfill=_parse_optional_function_header(
+            replay_on_change=_parse_optional_function_header(
                 header_values=header_values,
-                key="query_change_backfill",
+                key="replay_on_change",
                 effective_vars=effective_vars,
                 relative_path=python_function_file.relative_path,
                 language="Python",
@@ -3242,10 +3242,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["lookback"] = defaults.lookback
     if defaults.batch_size is not None:
         values["batch_size"] = defaults.batch_size
-    if defaults.query_change_backfill is not None:
-        values["query_change_backfill"] = defaults.query_change_backfill
-    if defaults.schema_change_backfill:
-        values["schema_change_backfill"] = defaults.schema_change_backfill
+    if defaults.replay_on_change is not None:
+        values["replay_on_change"] = defaults.replay_on_change
     if defaults.row_diff_exclude_columns:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
     if defaults.row_diff_tolerances:

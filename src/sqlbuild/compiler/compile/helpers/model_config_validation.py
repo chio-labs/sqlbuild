@@ -45,7 +45,6 @@ _BUILTIN_MATERIALIZATION_TYPES: frozenset[str] = frozenset(
 )
 _INCREMENTAL_ONLY_KEYS: tuple[str, ...] = (
     "on_schema_change",
-    "schema_change_backfill",
     "append_cursor_inclusive",
 )
 _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
@@ -61,7 +60,6 @@ _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
 )
 _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "on_schema_change",
-    "schema_change_backfill",
     "incremental_strategy",
     "incremental_mode",
     "append_cursor_inclusive",
@@ -71,7 +69,6 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "cursor_grain",
     "cursor_inputs",
     "lookback",
-    "query_change_backfill",
 )
 
 

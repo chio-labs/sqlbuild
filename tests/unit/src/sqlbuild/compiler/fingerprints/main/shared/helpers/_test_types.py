@@ -36,6 +36,7 @@ class BuildInsertSqlTestCase:
     target_name: str | None
     run_id: str
     query_hash: str
+    version_hash: str
     schema_fingerprint: str
     query_sql: str
     metadata_json: str

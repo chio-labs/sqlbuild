@@ -28,7 +28,7 @@ class ChangeKind(StrEnum):
 class BackfillAction(StrEnum):
     FULL = "full"
     BOUNDED = "bounded"
-    WARN_ONLY = "warn_only"
+    FORWARD_ONLY = "forward"
 
 
 class OnSchemaChange(StrEnum):

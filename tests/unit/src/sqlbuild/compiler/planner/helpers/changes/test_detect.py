@@ -65,13 +65,13 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectModelChangesTestCase(
         description="detects query change when hash differs",
         model_name="orders",
         query_sql=_QUERY_SQL,
-        config_values={"query_change_backfill": "bounded-30d"},
+        config_values={"replay_on_change": "bounded-30d"},
         schema_columns=(),
         relation_exists=True,
         fingerprint_query_hash=_DIFFERENT_HASH,
@@ -86,7 +86,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         description="detects schema change when expected column is missing from warehouse",
         model_name="orders",
         query_sql=_QUERY_SQL,
-        config_values={"schema_change_backfill": {"add_column": "full"}},
+        config_values={"replay_on_change": "full"},
         schema_columns=(("id", "INTEGER"), ("status", "VARCHAR")),
         relation_exists=True,
         fingerprint_query_hash=_MATCHING_HASH,
@@ -125,7 +125,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=False,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectModelChangesTestCase(
         description="detects config change when version identity config differs",
@@ -141,7 +141,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.CONFIG_CHANGED,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectModelChangesTestCase(
         description="ignores unknown config differences",
@@ -157,7 +157,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
 ]
 

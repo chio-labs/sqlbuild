@@ -42,7 +42,7 @@ class BuildExecutionPlanTestCase:
     function_targets: dict[str, str] = field(default_factory=dict)
     function_bodies: dict[str, str] = field(default_factory=dict)
     previous_function_bodies: dict[str, str] = field(default_factory=dict)
-    function_query_change_backfills: dict[str, str] = field(default_factory=dict)
+    function_replay_on_changes: dict[str, str] = field(default_factory=dict)
     function_languages: dict[str, FunctionLanguage] = field(default_factory=dict)
     function_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     select: tuple[str, ...] = ()

@@ -49,3 +49,10 @@ class InvalidQuerySqlStorageTestCase:
     model_name: str
     raw_query_sql_storage: str
     expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldFingerprintSchemaTestCase:
+    description: str
+    schema: str
+    expected_error_fragments: tuple[str, ...]

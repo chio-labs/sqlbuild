@@ -839,7 +839,7 @@ def test_given_virtual_source_freshness_and_function_when_each_changes_then_mode
             + "\n",
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "amount > 9\n"
             ),
             "models/fact_orders.sql": (
@@ -874,7 +874,7 @@ def test_given_virtual_source_freshness_and_function_when_each_changes_then_mode
     ) == list(test_case.expected_initial_rows)
 
     (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n",
         encoding="utf-8",
     )
@@ -1304,14 +1304,14 @@ def test_given_virtual_incremental_change_when_building_then_it_seeds_new_physic
         tmp_path=tmp_path,
         project_name="virtual_seeded_delete_insert",
         incremental_strategy="delete_insert",
-        query_change_backfill="bounded-7d",
+        replay_on_change="bounded-7d",
     )
     initialize_virtual_seeded_project(project_dir=project_dir)
 
     rewrite_incremental_orders_model(
         project_dir=project_dir,
         incremental_strategy="delete_insert",
-        query_change_backfill="bounded-7d",
+        replay_on_change="bounded-7d",
         amount_expression="amount_cents + 1",
     )
     execute_duckdb(
@@ -1626,14 +1626,14 @@ def test_given_virtual_append_bounded_change_when_building_then_seed_excludes_re
         tmp_path=tmp_path,
         project_name="virtual_seeded_append",
         incremental_strategy="append",
-        query_change_backfill="bounded-7d",
+        replay_on_change="bounded-7d",
     )
     initialize_virtual_seeded_project(project_dir=project_dir)
 
     rewrite_incremental_orders_model(
         project_dir=project_dir,
         incremental_strategy="append",
-        query_change_backfill="bounded-7d",
+        replay_on_change="bounded-7d",
         amount_expression="amount_cents + 1",
     )
     execute_duckdb(
@@ -2248,7 +2248,7 @@ def test_given_function_change_when_promoting_then_it_publishes_target_function_
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "amount > 9\n"
             ),
         },
@@ -2261,7 +2261,7 @@ def test_given_function_change_when_promoting_then_it_publishes_target_function_
     ) == [(False,)]
 
     (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n",
         encoding="utf-8",
     )
@@ -2449,7 +2449,7 @@ def test_given_function_change_when_rolling_back_then_it_restores_checkpointed_d
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "amount > 9\n"
             ),
         },
@@ -2462,7 +2462,7 @@ def test_given_function_change_when_rolling_back_then_it_restores_checkpointed_d
     ) == [(False,)]
 
     (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n",
         encoding="utf-8",
     )

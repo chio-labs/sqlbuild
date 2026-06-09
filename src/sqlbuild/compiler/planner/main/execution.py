@@ -16,7 +16,10 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
-from sqlbuild.compiler.planner.helpers.changes_only import prune_unchanged_scope
+from sqlbuild.compiler.planner.helpers.changes_only import (
+    mark_version_identity_stale_actions,
+    prune_unchanged_scope,
+)
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
@@ -24,6 +27,10 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_source_freshness_result
+from sqlbuild.compiler.planner.helpers.version_identity import (
+    DirectModelVersionIdentities,
+    build_direct_model_version_identities,
+)
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
@@ -100,12 +107,18 @@ def build_execution_plan(
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
         on_progress("Generating plan...")
     plan_start: float = time.monotonic()
+    version_identities: DirectModelVersionIdentities = build_direct_model_version_identities(
+        functions=project.functions,
+        scope=scope,
+    )
 
     changes: PlannerChangeResults = detect_changes(
         project=project,
         scope=scope,
         snapshot=snapshot,
         full_refresh=full_refresh,
+        expected_version_hashes=version_identities.model_version_hashes,
+        expected_metadata_jsons=version_identities.model_metadata_jsons,
     )
     resolved_actions: PlannerResolvedActions = resolve_cascades(
         scope=scope,
@@ -126,6 +139,12 @@ def build_execution_plan(
             changes=changes,
             resolved_actions=resolved_actions,
             source_freshness=source_freshness,
+            expected_version_hashes=version_identities.model_version_hashes,
+        )
+        resolved_actions = mark_version_identity_stale_actions(
+            scope=scope,
+            resolved_actions=resolved_actions,
+            expected_version_hashes=version_identities.model_version_hashes,
         )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,

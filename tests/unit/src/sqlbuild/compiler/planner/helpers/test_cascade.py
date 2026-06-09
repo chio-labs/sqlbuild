@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.helpers.cascade import (
     build_self_cascade,
     resolve_cascade,
 )
-from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
@@ -27,7 +27,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
 CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ResolveCascadeTestCase(
         description="upstream full cascades to same cursor type downstream",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(("orders", BackfillAction.FULL, None, "timestamp"),),
@@ -38,7 +38,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="upstream bounded cascades to same cursor type downstream",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(("orders", BackfillAction.BOUNDED, "90d", "timestamp"),),
@@ -50,7 +50,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="upstream full cascades across cursor types",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="integer",
         upstream_entries=(("orders", BackfillAction.FULL, None, "timestamp"),),
@@ -61,7 +61,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="picks most aggressive upstream when multiple cascade",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(
@@ -76,7 +76,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="alphabetical tiebreak among equal upstream windows",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(
@@ -91,7 +91,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="full beats bounded in upstream comparison",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(
@@ -105,7 +105,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="local bounded policy replaces stronger upstream full",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(
@@ -121,7 +121,7 @@ CASCADE_RETURNS_RESULT_TEST_CASES: list[ResolveCascadeTestCase] = [
     ),
     ResolveCascadeTestCase(
         description="local full policy replaces weaker upstream bounded",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(("orders", BackfillAction.BOUNDED, "30d", "timestamp"),),
@@ -152,7 +152,7 @@ def test_given_upstream_cascade_when_resolving_then_returns_cascade_result(
     result: CascadeResult | None = resolve_cascade(
         model_name="test_model",
         own_backfill=BackfillResult(action=test_case.own_action, duration=test_case.own_duration),
-        local_backfill=resolve_query_change_backfill(query_change_backfill=test_case.local_policy),
+        local_backfill=resolve_replay_on_change(replay_on_change=test_case.local_policy),
         own_cursor_type=test_case.own_cursor_type,
         upstream_keys=upstream_keys,
         effective_cascades=effective_cascades,
@@ -169,23 +169,23 @@ def test_given_upstream_cascade_when_resolving_then_returns_cascade_result(
 CASCADE_RETURNS_NONE_TEST_CASES: list[ResolveCascadeTestCase] = [
     ResolveCascadeTestCase(
         description="no upstream produces no cascade",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
         upstream_entries=(),
         expected_cascade=False,
     ),
     ResolveCascadeTestCase(
-        description="upstream warn_only produces no cascade",
-        own_action=BackfillAction.WARN_ONLY,
+        description="upstream forward produces no cascade",
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="timestamp",
-        upstream_entries=(("orders", BackfillAction.WARN_ONLY, None, "timestamp"),),
+        upstream_entries=(("orders", BackfillAction.FORWARD_ONLY, None, "timestamp"),),
         expected_cascade=False,
     ),
     ResolveCascadeTestCase(
         description="upstream bounded does not cascade across cursor types",
-        own_action=BackfillAction.WARN_ONLY,
+        own_action=BackfillAction.FORWARD_ONLY,
         own_duration=None,
         own_cursor_type="integer",
         upstream_entries=(("orders", BackfillAction.BOUNDED, "90d", "timestamp"),),
@@ -236,7 +236,7 @@ def test_given_no_stronger_upstream_when_resolving_then_returns_none(
     result: CascadeResult | None = resolve_cascade(
         model_name="test_model",
         own_backfill=BackfillResult(action=test_case.own_action, duration=test_case.own_duration),
-        local_backfill=resolve_query_change_backfill(query_change_backfill=test_case.local_policy),
+        local_backfill=resolve_replay_on_change(replay_on_change=test_case.local_policy),
         own_cursor_type=test_case.own_cursor_type,
         upstream_keys=upstream_keys,
         effective_cascades=effective_cascades,
@@ -307,8 +307,8 @@ def test_given_multihop_cascade_when_resolving_then_preserves_root_cause(
 
     result: CascadeResult | None = resolve_cascade(
         model_name="daily_activity_rollup",
-        own_backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
-        local_backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        own_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        local_backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
         own_cursor_type="timestamp",
         upstream_keys=upstream_keys,
         effective_cascades=effective_cascades,

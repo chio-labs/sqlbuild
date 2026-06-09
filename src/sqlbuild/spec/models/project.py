@@ -97,8 +97,7 @@ class DefaultsConfig:
     cursor_start: object | None = None
     lookback: str | None = None
     batch_size: str | int | None = None
-    query_change_backfill: str | None = None
-    schema_change_backfill: dict[str, str] = field(default_factory=dict)
+    replay_on_change: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     tags: tuple[str, ...] = field(default_factory=tuple)

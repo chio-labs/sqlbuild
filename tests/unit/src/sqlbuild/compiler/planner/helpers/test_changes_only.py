@@ -4,9 +4,13 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.changes_only import prune_unchanged_scope
+from sqlbuild.compiler.planner.helpers.changes_only import (
+    mark_version_identity_stale_actions,
+    prune_unchanged_scope,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
+    CascadeResult,
     ChangeDetectionResult,
     FunctionChangeResult,
     PlannerChangeResults,
@@ -20,6 +24,7 @@ from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPropagationResult,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    MarkVersionIdentityStaleActionsTestCase,
     PruneUnchangedScopeTestCase,
 )
 
@@ -115,7 +120,7 @@ def test_given_mixed_change_results_when_pruning_unchanged_scope_then_keeps_only
                         model_name="unchanged_model",
                         change_kind=ChangeKind.NO_CHANGE,
                     ),
-                    backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+                    backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 ),
                 "changed_model": ResolvedModelAction(
                     change=ChangeDetectionResult(
@@ -177,7 +182,7 @@ def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
                         model_name="unchanged_model",
                         change_kind=ChangeKind.NO_CHANGE,
                     ),
-                    backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+                    backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 ),
             }
         ),
@@ -189,3 +194,103 @@ def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
     )
 
     assert result.selected_keys == test_case.expected_selected_keys
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MarkVersionIdentityStaleActionsTestCase(
+            description="composed version stale model adds upstream cascade",
+            model_key=MODEL_UNCHANGED,
+            change_kind=ChangeKind.NO_CHANGE,
+            previous_version_hash="old_version",
+            expected_version_hash="new_version",
+            expected_cascade_present=True,
+        )
+    ],
+    ids=["composed version stale model adds upstream cascade"],
+)
+def test_given_composed_version_stale_model_when_marking_actions_then_adds_upstream_cascade(
+    test_case: MarkVersionIdentityStaleActionsTestCase,
+) -> None:
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        selected_keys=frozenset({test_case.model_key}),
+        execution_order=(),
+    )
+    resolved_actions: PlannerResolvedActions = PlannerResolvedActions(
+        models={
+            test_case.model_key.name: ResolvedModelAction(
+                change=ChangeDetectionResult(
+                    model_name=test_case.model_key.name,
+                    change_kind=test_case.change_kind,
+                    previous_version_hash=test_case.previous_version_hash,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            ),
+        }
+    )
+
+    result: PlannerResolvedActions = mark_version_identity_stale_actions(
+        scope=scope,
+        resolved_actions=resolved_actions,
+        expected_version_hashes={test_case.model_key.name: test_case.expected_version_hash},
+    )
+
+    marked_action: ResolvedModelAction = result.models[test_case.model_key.name]
+    assert (marked_action.cascade is not None) == test_case.expected_cascade_present
+    assert marked_action.cascade is not None
+    cascade: CascadeResult = marked_action.cascade
+    assert cascade.effective_action == BackfillAction.FORWARD_ONLY
+    assert cascade.effective_duration is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MarkVersionIdentityStaleActionsTestCase(
+            description="locally changed model keeps existing reason",
+            model_key=MODEL_CHANGED,
+            change_kind=ChangeKind.QUERY_CHANGED,
+            previous_version_hash="old_version",
+            expected_version_hash="new_version",
+            expected_cascade_present=False,
+        )
+    ],
+    ids=["locally changed model keeps existing reason"],
+)
+def test_given_locally_changed_model_when_marking_actions_then_keeps_existing_reason(
+    test_case: MarkVersionIdentityStaleActionsTestCase,
+) -> None:
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        selected_keys=frozenset({test_case.model_key}),
+        execution_order=(),
+    )
+    resolved_actions: PlannerResolvedActions = PlannerResolvedActions(
+        models={
+            test_case.model_key.name: ResolvedModelAction(
+                change=ChangeDetectionResult(
+                    model_name=test_case.model_key.name,
+                    change_kind=test_case.change_kind,
+                    previous_version_hash=test_case.previous_version_hash,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            ),
+        }
+    )
+
+    result: PlannerResolvedActions = mark_version_identity_stale_actions(
+        scope=scope,
+        resolved_actions=resolved_actions,
+        expected_version_hashes={test_case.model_key.name: test_case.expected_version_hash},
+    )
+
+    marked_action: ResolvedModelAction = result.models[test_case.model_key.name]
+    assert (marked_action.cascade is not None) == test_case.expected_cascade_present

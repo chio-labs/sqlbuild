@@ -15,6 +15,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
     InvalidQuerySqlStorageTestCase,
     LatestResolutionTestCase,
+    OldFingerprintSchemaTestCase,
     ReadNonExistentTableTestCase,
     WriteAndReadTestCase,
     WriteCreatesTableTestCase,
@@ -36,6 +37,7 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
+                version_hash="version_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT id FROM orders",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -57,6 +59,7 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
+                version_hash="version_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT id FROM orders",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -68,6 +71,7 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="customers",
                 run_id="run_001",
                 query_hash="hash_b",
+                version_hash="version_b",
                 schema_fingerprint="schema_b",
                 query_sql="SELECT id FROM customers",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -89,6 +93,7 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
+                version_hash="version_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -142,6 +147,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     fp: Fingerprint
     for fp in test_case.fingerprints:
         assert result.fingerprints[fp.model_name].query_sql == fp.query_sql
+        assert result.fingerprints[fp.model_name].version_hash == fp.version_hash
 
 
 @pytest.mark.parametrize(
@@ -175,6 +181,71 @@ def test_given_no_table_when_reading_then_returns_empty_set(
 @pytest.mark.parametrize(
     "test_case",
     [
+        OldFingerprintSchemaTestCase(
+            description="old fingerprint table without version hash raises upgrade guidance",
+            schema="old_fingerprint_schema",
+            expected_error_fragments=(
+                "Unable to read fingerprints from old_fingerprint_schema._sqlbuild_fingerprints",
+                "upgrading from an older sqlbuild version",
+                "delete or rebuild the SQLBuild fingerprint table",
+            ),
+        )
+    ],
+    ids=["old fingerprint table without version hash raises upgrade guidance"],
+)
+def test_given_old_fingerprint_table_without_version_hash_when_reading_then_raises_upgrade_guidance(
+    test_case: OldFingerprintSchemaTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    schema: str = test_case.schema
+    connection.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    connection.execute(
+        f"CREATE TABLE {schema}.{FINGERPRINT_TABLE_NAME} ("
+        "model_name VARCHAR NOT NULL, "
+        "target_database VARCHAR, "
+        "target_schema VARCHAR, "
+        "target_name VARCHAR, "
+        "run_id VARCHAR NOT NULL, "
+        "query_hash VARCHAR NOT NULL, "
+        "schema_fingerprint VARCHAR NOT NULL, "
+        "query_sql_b64 VARCHAR NOT NULL, "
+        "metadata_json_b64 VARCHAR NOT NULL, "
+        "ts TIMESTAMP NOT NULL)"
+    )
+    connection.execute(
+        f"INSERT INTO {schema}.{FINGERPRINT_TABLE_NAME} VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "orders",
+            schema,
+            "orders",
+            "run_001",
+            "hash_a",
+            "schema_a",
+            "U0VMRUNUIDo=",
+            "e30=",
+            datetime(2026, 1, 15, 12, 0, 0),
+        ),
+    )
+
+    with pytest.raises(ValueError) as error_info:
+        read_latest_fingerprints(
+            connection=connection,
+            execute=execute,
+            database=None,
+            schema=schema,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+        )
+
+    message: str = str(error_info.value)
+    fragment: str
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         WriteCreatesTableTestCase(
             description="write creates table if it does not exist",
             database=None,
@@ -186,6 +257,7 @@ def test_given_no_table_when_reading_then_returns_empty_set(
                 target_name="orders",
                 run_id="run_001",
                 query_hash="hash_a",
+                version_hash="version_a",
                 schema_fingerprint="schema_a",
                 query_sql="SELECT 1",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -240,6 +312,7 @@ def test_given_no_table_when_writing_then_creates_table(
                     target_name="orders",
                     run_id="run_002",
                     query_hash="new_hash",
+                    version_hash="new_version",
                     schema_fingerprint="new_schema",
                     query_sql="SELECT 2",
                     ts=datetime(2026, 1, 15, 12, 0, 0),
@@ -251,6 +324,7 @@ def test_given_no_table_when_writing_then_creates_table(
                     target_name="orders",
                     run_id="run_001",
                     query_hash="old_hash",
+                    version_hash="old_version",
                     schema_fingerprint="old_schema",
                     query_sql="SELECT 1",
                     ts=datetime(2026, 1, 15, 10, 0, 0),
@@ -326,6 +400,7 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
         "target_name VARCHAR, "
         "run_id VARCHAR NOT NULL, "
         "query_hash VARCHAR NOT NULL, "
+        "version_hash VARCHAR NOT NULL, "
         "schema_fingerprint VARCHAR NOT NULL, "
         "query_sql_b64 VARCHAR NOT NULL, "
         "metadata_json_b64 VARCHAR NOT NULL, "
@@ -333,13 +408,14 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
     )
     connection.execute(
         f"INSERT INTO {test_case.schema}.{FINGERPRINT_TABLE_NAME} VALUES "
-        "(?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "(?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             test_case.model_name,
             test_case.schema,
             test_case.model_name,
             "run_001",
             "hash_a",
+            "version_a",
             "schema_a",
             test_case.raw_query_sql_storage,
             "e30=",

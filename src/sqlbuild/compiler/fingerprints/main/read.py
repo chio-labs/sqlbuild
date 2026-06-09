@@ -69,14 +69,14 @@ def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:
-    raw_ts: Any = row[9]
+    raw_ts: Any = row[10]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
     raw_target_database: Any = row[1]
     raw_target_schema: Any = row[2]
     raw_target_name: Any = row[3]
     model_name: str = str(row[0])
-    query_sql_storage: str = str(row[7])
-    metadata_json_storage: str = str(row[8])
+    query_sql_storage: str = str(row[8])
+    metadata_json_storage: str = str(row[9])
     try:
         query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
             "utf-8"
@@ -97,7 +97,8 @@ def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerp
         target_name=str(raw_target_name) if raw_target_name is not None else None,
         run_id=str(row[4]),
         query_hash=str(row[5]),
-        schema_fingerprint=str(row[6]),
+        version_hash=str(row[6]),
+        schema_fingerprint=str(row[7]),
         query_sql=query_sql,
         metadata_json=metadata_json,
         ts=ts,

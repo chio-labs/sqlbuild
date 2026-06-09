@@ -17,6 +17,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     COLUMN_TARGET_NAME,
     COLUMN_TARGET_SCHEMA,
     COLUMN_TIMESTAMP,
+    COLUMN_VERSION_HASH,
     FINGERPRINT_TABLE_NAME,
 )
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
@@ -64,6 +65,7 @@ def build_create_table_sql(
         f"{COLUMN_TARGET_NAME} {string_type}, "
         f"{COLUMN_RUN_ID} {string_type} NOT NULL, "
         f"{COLUMN_QUERY_HASH} {string_type} NOT NULL, "
+        f"{COLUMN_VERSION_HASH} {string_type} NOT NULL, "
         f"{COLUMN_SCHEMA_FINGERPRINT} {string_type} NOT NULL, "
         f"{COLUMN_QUERY_SQL_B64} {string_type} NOT NULL, "
         f"{COLUMN_METADATA_JSON_B64} {string_type} NOT NULL, "
@@ -90,6 +92,7 @@ def build_read_all_sql(
         f"{COLUMN_TARGET_NAME}, "
         f"{COLUMN_RUN_ID}, "
         f"{COLUMN_QUERY_HASH}, "
+        f"{COLUMN_VERSION_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
         f"{COLUMN_QUERY_SQL_B64}, "
         f"{COLUMN_METADATA_JSON_B64}, "
@@ -108,6 +111,7 @@ def build_insert_sql(
     target_name: str | None,
     run_id: str,
     query_hash: str,
+    version_hash: str,
     schema_fingerprint: str,
     query_sql: str,
     metadata_json: str,
@@ -134,6 +138,7 @@ def build_insert_sql(
         f"{COLUMN_TARGET_NAME}, "
         f"{COLUMN_RUN_ID}, "
         f"{COLUMN_QUERY_HASH}, "
+        f"{COLUMN_VERSION_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
         f"{COLUMN_QUERY_SQL_B64}, "
         f"{COLUMN_METADATA_JSON_B64}, "
@@ -145,6 +150,7 @@ def build_insert_sql(
         f"{target_name_literal}, "
         f"'{run_id}', "
         f"'{query_hash}', "
+        f"'{version_hash}', "
         f"'{schema_fingerprint}', "
         f"'{encoded_query_sql}', "
         f"'{encoded_metadata_json}', "

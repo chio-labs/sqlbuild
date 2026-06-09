@@ -61,6 +61,16 @@ class SourceColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class MarkVersionIdentityStaleActionsTestCase:
+    description: str
+    model_key: CompiledObjectKey
+    change_kind: ChangeKind
+    previous_version_hash: str
+    expected_version_hash: str
+    expected_cascade_present: bool
+
+
+@dataclass(frozen=True)
 class PlannerSourceFreshnessReadMapTestCase:
     description: str
     expected_observed_data_version: str
@@ -543,7 +553,7 @@ class DetectFunctionChangeTestCase:
     description: str
     body_sql: str
     previous_query_sql: str
-    query_change_backfill: str | None
+    replay_on_change: str | None
     expected_reason: PlanReason
     expected_action: BackfillAction
     expected_duration: str | None = None

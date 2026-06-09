@@ -198,7 +198,7 @@ def build_function_entry(
     name: str,
     language: FunctionLanguage = FunctionLanguage.SQL,
     reason: PlanReason = PlanReason.NO_CHANGE,
-    backfill_action: BackfillAction = BackfillAction.WARN_ONLY,
+    backfill_action: BackfillAction = BackfillAction.FORWARD_ONLY,
     backfill_duration: str | None = None,
     previous_query_sql: str | None = None,
 ) -> FunctionPlanEntry:

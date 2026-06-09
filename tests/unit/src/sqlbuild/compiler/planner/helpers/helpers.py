@@ -838,7 +838,7 @@ def build_strategy_error_change_result(
         change_kind=test_case.change_kind,
         query_changed=False,
         schema_findings=(),
-        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
     )
 
 
@@ -1047,7 +1047,7 @@ def build_cascade_upstream_state(
 
 
 def build_compiled_function(
-    *, body_sql: str, query_change_backfill: str | None = None, target_schema: str = "main"
+    *, body_sql: str, replay_on_change: str | None = None, target_schema: str = "main"
 ) -> CompiledFunction:
     """Build a minimal compiled function for planner tests."""
 
@@ -1074,7 +1074,7 @@ def build_compiled_function(
             name="is_completed_order",
             qualified_name=f"{target_schema}.is_completed_order",
         ),
-        query_change_backfill=query_change_backfill,
+        replay_on_change=replay_on_change,
     )
 
 
