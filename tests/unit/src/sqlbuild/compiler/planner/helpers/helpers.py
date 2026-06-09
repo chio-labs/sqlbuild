@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
@@ -52,6 +54,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    PlannerScope,
     PlanOutput,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
@@ -89,10 +92,158 @@ class PlannerTestAdapter(BaseAdapter):
         del connection
 
 
+class DirectReuseSourceTestResult:
+    """Minimal DB-API-style result for direct reuse source tests."""
+
+    def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
+        self._rows: tuple[tuple[object, ...], ...] = rows
+
+    def fetchall(self) -> tuple[tuple[object, ...], ...]:
+        return self._rows
+
+
+class DirectReuseSourceTestAdapter(PlannerTestAdapter):
+    """Adapter test double for direct reuse source snapshot tests."""
+
+    def __init__(
+        self,
+        *,
+        fingerprint_rows: tuple[tuple[object, ...], ...],
+        existing_relations: frozenset[tuple[str | None, str | None, str]],
+        fingerprint_table_exists: bool = True,
+        fingerprint_read_fails: bool = False,
+    ) -> None:
+        self.fingerprint_rows: tuple[tuple[object, ...], ...] = fingerprint_rows
+        self.existing_relations: frozenset[tuple[str | None, str | None, str]] = existing_relations
+        self.fingerprint_table_exists: bool = fingerprint_table_exists
+        self.fingerprint_read_fails: bool = fingerprint_read_fails
+
+    def execute(self, connection: object, sql: str) -> DirectReuseSourceTestResult:
+        del connection
+        if "WHERE 1 = 0" in sql:
+            if not self.fingerprint_table_exists:
+                raise RuntimeError("missing fingerprint table")
+            return DirectReuseSourceTestResult(())
+        if self.fingerprint_read_fails:
+            raise RuntimeError("cannot select fingerprint rows")
+        return DirectReuseSourceTestResult(self.fingerprint_rows)
+
+    def relation_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        del connection
+        return (database, schema, name) in self.existing_relations
+
+    def render_qualified_name(
+        self,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        if database is not None and schema is not None:
+            return f"{database}.{schema}.{name}"
+        if schema is not None:
+            return f"{schema}.{name}"
+        return name
+
+
 def model_key(name: str) -> CompiledObjectKey:
     """Build a model object key."""
 
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+
+
+def build_direct_reuse_source_project() -> CompiledProject:
+    """Build a minimal compiled project with two selected models."""
+
+    return CompiledProject(
+        run_id="test_run",
+        effective_target_name="dev",
+        effective_connection={},
+        effective_vars={},
+        effective_target_database=None,
+        effective_target_schema="dev_schema",
+        models=(
+            CompiledModel(
+                key=model_key("orders"),
+                deps=(),
+                name="orders",
+                relative_path=Path("models/orders.sql"),
+                query_sql="SELECT 1",
+                config=CompileModelConfig(logical_schema="analytics"),
+                destination=CompiledRelationDestination(
+                    database=None,
+                    schema="dev_schema",
+                    name="orders",
+                    qualified_name="dev_schema.orders",
+                    logical_schema="analytics",
+                ),
+            ),
+            CompiledModel(
+                key=model_key("customers"),
+                deps=(),
+                name="customers",
+                relative_path=Path("models/customers.sql"),
+                query_sql="SELECT 1",
+                config=CompileModelConfig(logical_schema="analytics"),
+                destination=CompiledRelationDestination(
+                    database=None,
+                    schema="dev_schema",
+                    name="customers",
+                    qualified_name="dev_schema.customers",
+                    logical_schema="analytics",
+                ),
+            ),
+        ),
+    )
+
+
+def build_direct_reuse_source_scope(
+    *, selected_model_names: frozenset[str] | None = None
+) -> PlannerScope:
+    """Build a minimal planner scope selecting two models."""
+
+    project: CompiledProject = build_direct_reuse_source_project()
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        model.key
+        for model in project.models
+        if selected_model_names is None or model.name in selected_model_names
+    )
+    return PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={model.name: model.key for model in project.models},
+        models_by_name=models_by_name,
+        selected_keys=selected_keys,
+        execution_order=tuple(model.key for model in project.models),
+    )
+
+
+def build_direct_reuse_fingerprint_row(*, model_name: str, version_hash: str) -> tuple[object, ...]:
+    """Build one valid fingerprint row tuple for read_latest_fingerprints."""
+
+    encoded_sql: str = base64.b64encode(b"SELECT 1").decode("ascii")
+    encoded_metadata: str = base64.b64encode(b"{}").decode("ascii")
+    return (
+        model_name,
+        None,
+        "prod_schema",
+        model_name,
+        "run_1",
+        f"{model_name}_query_hash",
+        version_hash,
+        f"{model_name}_schema_hash",
+        encoded_sql,
+        encoded_metadata,
+        datetime(2026, 1, 1, tzinfo=UTC),
+    )
 
 
 def source_key(name: str) -> CompiledObjectKey:

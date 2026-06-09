@@ -288,6 +288,26 @@ class DirectModelVersionIdentities:
 
 
 @dataclass(frozen=True)
+class DirectReuseSourceModelSnapshot:
+    """Source-target state for one model considered for direct target reuse."""
+
+    model_name: str
+    destination: CompiledRelationDestination
+    relation_exists: bool
+    built_version_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class DirectReuseSourceSnapshot:
+    """Resolved source-target state used to decide direct target reuse eligibility."""
+
+    target_name: str
+    fingerprint_database: str | None
+    fingerprint_schema: str
+    model_snapshots: dict[str, DirectReuseSourceModelSnapshot]
+
+
+@dataclass(frozen=True)
 class PlannerModelEntryResults:
     """Model plan-entry phase output."""
 

@@ -79,6 +79,34 @@ class DirectIdentityStaleModelNamesTestCase:
 
 
 @dataclass(frozen=True)
+class DirectReuseSourceSnapshotTestCase:
+    description: str
+    fingerprint_rows: tuple[tuple[object, ...], ...]
+    existing_relations: frozenset[tuple[str | None, str | None, str]]
+    expected_target_name: str
+    expected_fingerprint_schema: str
+    expected_model_relation_exists: dict[str, bool]
+    expected_model_built_version_hashes: dict[str, str | None]
+    expected_fingerprint_database: str | None = None
+    expected_model_names: tuple[str, ...] = ()
+    selected_model_names: frozenset[str] | None = None
+
+
+@dataclass(frozen=True)
+class DirectReuseSourceSnapshotErrorTestCase:
+    description: str
+    fingerprint_table_exists: bool
+    expected_error_fragment: str
+    fingerprint_read_fails: bool = False
+
+
+@dataclass(frozen=True)
+class DirectReuseSourceNoConfigTestCase:
+    description: str
+    expected_snapshot: object
+
+
+@dataclass(frozen=True)
 class VersionStalenessTestCase:
     description: str
     model_names: tuple[str, ...]
