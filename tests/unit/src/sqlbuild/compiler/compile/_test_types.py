@@ -102,6 +102,14 @@ class BuildEffectiveRuntimeConfigTestCase:
 
 
 @dataclass(frozen=True)
+class BuildEffectiveTargetConfigTestCase:
+    description: str
+    selected_target: str | None
+    expected_reuse_from: str | None
+    expected_reuse_hard_copy: bool
+
+
+@dataclass(frozen=True)
 class RunIdGenerationTestCase:
     description: str
     sample_count: int
@@ -131,6 +139,8 @@ class ResolveTargetConfigTestCase:
     expected_vars: dict[str, object]
     expected_database: str
     expected_schema: str
+    expected_reuse_from: str | None
+    expected_reuse_hard_copy: bool
     expected_allow_as_source: bool
     expected_allow_as_target: bool
 

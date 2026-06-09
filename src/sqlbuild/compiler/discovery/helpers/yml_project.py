@@ -441,6 +441,12 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
+            reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
+            reuse_hard_copy=_optional_bool(
+                mapping=target_mapping,
+                key="reuse_hard_copy",
+                default=False,
+            ),
             clone=ClonePolicy(
                 allow_as_source=_optional_bool(
                     mapping=clone_mapping,
@@ -500,6 +506,11 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
+            reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
+            reuse_hard_copy=_optional_nullable_bool(
+                mapping=target_mapping,
+                key="reuse_hard_copy",
+            ),
             clone=LocalClonePolicy(
                 allow_as_source=_optional_nullable_bool(
                     mapping=clone_mapping,
