@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class DirectSourceFreshnessPlanOutputTestCase:
+class StandardSourceFreshnessPlanOutputTestCase:
     description: str
     changes_only: bool
     expected_has_source_freshness: bool
@@ -15,7 +15,7 @@ class HookFunctionPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class DirectReuseSourcePlanOutputTestCase:
+class StandardReuseSourcePlanOutputTestCase:
     description: str
     expected_source_target_name: str
     expected_model_names: tuple[str, ...]
@@ -24,7 +24,7 @@ class DirectReuseSourcePlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class DirectReuseFullRefreshBypassTestCase:
+class StandardReuseFullRefreshBypassTestCase:
     description: str
     expected_reuse_source_metadata_present: bool
     expected_reuse_decision_metadata_present: bool

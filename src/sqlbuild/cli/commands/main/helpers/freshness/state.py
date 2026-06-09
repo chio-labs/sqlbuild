@@ -13,10 +13,10 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import SourceFreshnessRecord as VirtualSourceFreshnessRecord
 
 
-def read_direct_freshness_state_for_command(
+def read_standard_freshness_state_for_command(
     *, adapter: StrictAdapter, connection: Any, project: Any
 ) -> dict[SourceFreshnessIdentity, SourceFreshnessRecord]:
-    """Read direct source freshness state for all compiled target schemas."""
+    """Read standard source freshness state for all compiled target schemas."""
 
     records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {}
     state_database: str | None = _resolve_state_database(project=project)
@@ -65,13 +65,13 @@ def read_virtual_freshness_state_for_command(
             )
         )
         return {
-            record.source_name: _direct_record_from_virtual_record(record) for record in records
+            record.source_name: _standard_record_from_virtual_record(record) for record in records
         }
     finally:
         backend.close(state_connection)
 
 
-def _direct_record_from_virtual_record(
+def _standard_record_from_virtual_record(
     record: VirtualSourceFreshnessRecord,
 ) -> SourceFreshnessRecord:
     return SourceFreshnessRecord(

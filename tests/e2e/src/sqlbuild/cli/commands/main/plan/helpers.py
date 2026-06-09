@@ -141,7 +141,7 @@ def rewrite_direct_is_large_order_function(*, project_dir: Path, operator: str) 
     )
 
 
-def direct_model_version_hashes(*, db_path: Path, model_name: str) -> list[tuple[object, ...]]:
+def standard_model_version_hashes(*, db_path: Path, model_name: str) -> list[tuple[object, ...]]:
     return query_duckdb(
         db_path=db_path,
         sql=(

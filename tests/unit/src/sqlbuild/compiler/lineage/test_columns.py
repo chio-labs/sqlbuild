@@ -28,7 +28,7 @@ from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
 
 ANALYZER_TEST_CASES: list[ColumnLineageAnalyzerTestCase] = [
     ColumnLineageAnalyzerTestCase(
-        description="infers direct model column passthrough",
+        description="infers standard model column passthrough",
         model_name="orders_out",
         query_sql='SELECT order_id FROM __ref("orders")',
         inferred_columns=("order_id",),
@@ -189,7 +189,7 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
 
 FAST_ANALYZER_TEST_CASES: tuple[ColumnLineageAnalyzerTestCase, ...] = (
     ColumnLineageAnalyzerTestCase(
-        description="fast infers direct model column passthrough",
+        description="fast infers standard model column passthrough",
         model_name="orders_out",
         query_sql='SELECT order_id FROM __ref("orders")',
         inferred_columns=("order_id",),

@@ -24,7 +24,7 @@ def rewrite_virtual_plan_entries(
     previous_metadata_jsons: dict[str, str] | None = None,
     previous_function_query_sqls: dict[str, str] | None = None,
 ) -> PlanOutput:
-    """Rewrite direct planner entries with virtual-specific reasons and causes."""
+    """Rewrite standard planner entries with virtual-specific reasons and causes."""
 
     rewritten_entries: list[ModelPlanEntry] = []
     cause_reasons: dict[str, PlanReason] = stale_root_cause_reasons or stale_root_reasons

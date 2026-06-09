@@ -84,7 +84,7 @@ class PlanReason(StrEnum):
     DISABLED = "disabled"
 
 
-class DirectReuseDecisionKind(StrEnum):
+class StandardReuseDecisionKind(StrEnum):
     REUSE_CANDIDATE = "reuse_candidate"
     CURRENT = "current"
     SOURCE_FINGERPRINT_MISSING = "source_fingerprint_missing"

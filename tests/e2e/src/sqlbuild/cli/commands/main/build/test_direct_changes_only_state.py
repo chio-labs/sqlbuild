@@ -1,4 +1,4 @@
-"""E2E tests for direct changes-only state and downstream data correctness."""
+"""E2E tests for standard changes-only state and downstream data correctness."""
 
 from __future__ import annotations
 

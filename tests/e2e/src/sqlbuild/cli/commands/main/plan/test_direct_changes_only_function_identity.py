@@ -12,9 +12,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import (
     DirectFunctionSelectorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
-    direct_model_version_hashes,
     prepare_direct_function_identity_project,
     rewrite_direct_is_large_order_function,
+    standard_model_version_hashes,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 
@@ -44,7 +44,7 @@ def test_given_function_change_when_building_dependent_then_model_version_hash_c
         command=("--no-color", "build"), project_dir=project_dir
     )
     assert initial_build.returncode == 0, initial_build.stdout + initial_build.stderr
-    initial_hashes: list[tuple[object, ...]] = direct_model_version_hashes(
+    initial_hashes: list[tuple[object, ...]] = standard_model_version_hashes(
         db_path=db_path, model_name=test_case.expected_model_name
     )
     assert len(initial_hashes) == test_case.expected_initial_count
@@ -56,7 +56,7 @@ def test_given_function_change_when_building_dependent_then_model_version_hash_c
     )
 
     assert changed_build.returncode == 0, changed_build.stdout + changed_build.stderr
-    changed_hashes: list[tuple[object, ...]] = direct_model_version_hashes(
+    changed_hashes: list[tuple[object, ...]] = standard_model_version_hashes(
         db_path=db_path, model_name=test_case.expected_model_name
     )
     assert len(changed_hashes) == test_case.expected_changed_count + 1

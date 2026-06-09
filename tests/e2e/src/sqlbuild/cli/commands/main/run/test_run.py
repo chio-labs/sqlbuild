@@ -239,10 +239,10 @@ def test_given_source_freshness_when_running_changes_only_then_writes_state_afte
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="direct_source_freshness_changes_only_run",
+        project_name="standard_source_freshness_changes_only_run",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "direct_source_freshness_changes_only_run"\n'
+                'name = "standard_source_freshness_changes_only_run"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
@@ -400,10 +400,10 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="direct_source_freshness_failed_changes_only_run",
+        project_name="standard_source_freshness_failed_changes_only_run",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "direct_source_freshness_failed_changes_only_run"\n'
+                'name = "standard_source_freshness_failed_changes_only_run"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
@@ -487,10 +487,10 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_execut
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="direct_source_freshness_view_chain_run",
+        project_name="standard_source_freshness_view_chain_run",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "direct_source_freshness_view_chain_run"\n'
+                'name = "standard_source_freshness_view_chain_run"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'

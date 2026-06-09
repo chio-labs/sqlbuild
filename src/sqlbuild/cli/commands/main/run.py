@@ -9,16 +9,12 @@ from typing import Any, TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.main.helpers.source_freshness import (
-    append_eligible_direct_source_freshness_records,
+    append_eligible_standard_source_freshness_records,
 )
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
     ConnectionProgressReporter,
-)
-from sqlbuild.cli.commands.main.shared.helpers.direct_python_lifecycle import (
-    DirectPythonLifecycleState,
-    prepare_direct_python_lifecycle,
 )
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
     format_run_execution_json,
@@ -27,7 +23,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_direct_mode_command_support
+from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_standard_mode_command_support
 from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
@@ -45,6 +41,10 @@ from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
     enforce_snapshot_full_refresh_policy,
+)
+from sqlbuild.cli.commands.main.shared.helpers.standard_python_lifecycle import (
+    StandardPythonLifecycleState,
+    prepare_standard_python_lifecycle,
 )
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -91,7 +91,7 @@ def run_run(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    enforce_direct_mode_command_support(discovered_inputs=discovered_inputs, command_name="run")
+    enforce_standard_mode_command_support(discovered_inputs=discovered_inputs, command_name="run")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -203,7 +203,7 @@ def run_run(
 
     provider_session: Any = build_provider_session(discovered_inputs.providers)
     try:
-        python_lifecycle: DirectPythonLifecycleState = prepare_direct_python_lifecycle(
+        python_lifecycle: StandardPythonLifecycleState = prepare_standard_python_lifecycle(
             discovered_inputs=discovered_inputs,
             pipeline_result=pipeline_result,
             plan_output=plan_output,
@@ -261,7 +261,7 @@ def run_run(
             providers=provider_session.providers,
         )
         if changes_only:
-            append_eligible_direct_source_freshness_records(
+            append_eligible_standard_source_freshness_records(
                 plan=plan_output,
                 result=result,
                 adapter=adapter,

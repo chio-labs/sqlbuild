@@ -16,16 +16,16 @@ from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
 from sqlbuild.compiler.planner.main.version_identity_version_hash import (
     build_model_version_identity_hash,
 )
-from sqlbuild.compiler.planner.models import DirectModelVersionIdentities, PlannerScope
+from sqlbuild.compiler.planner.models import PlannerScope, StandardModelVersionIdentities
 
 
-def build_direct_model_version_identities(
+def build_standard_model_version_identities(
     *,
     functions: tuple[CompiledFunction, ...],
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
-) -> DirectModelVersionIdentities:
-    """Compute current direct model identities from code and upstream identities."""
+) -> StandardModelVersionIdentities:
+    """Compute current standard model identities from code and upstream identities."""
 
     function_local_hashes: dict[str, str] = build_function_local_hashes(functions=functions)
     model_metadata_jsons: dict[str, str] = {}
@@ -57,7 +57,7 @@ def build_direct_model_version_identities(
             source_version_hashes=source_hashes,
         )
 
-    return DirectModelVersionIdentities(
+    return StandardModelVersionIdentities(
         function_local_hashes=function_local_hashes,
         model_metadata_jsons=model_metadata_jsons,
         model_local_hashes=model_local_hashes,

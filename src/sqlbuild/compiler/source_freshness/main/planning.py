@@ -1,4 +1,4 @@
-"""Public direct source freshness planning entrypoint."""
+"""Public standard source freshness planning entrypoint."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from typing import Any
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness.helpers.planning import (
-    build_direct_source_freshness_planning_result as _build_direct_source_freshness_planning_result,
+    build_standard_source_freshness_planning_result as _build_planning_result,
 )
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def build_direct_source_freshness_planning_result(
+def build_standard_source_freshness_planning_result(
     *,
     adapter: StrictAdapter,
     connection: Any,
@@ -24,10 +24,10 @@ def build_direct_source_freshness_planning_result(
     observed_at: datetime,
     run_id: str,
     render_qualified_name: Callable[..., str | None],
-) -> DirectSourceFreshnessPlanningResult:
-    """Observe direct source freshness and compare it to latest append-only state."""
+) -> StandardSourceFreshnessPlanningResult:
+    """Observe standard source freshness and compare it to latest append-only state."""
 
-    return _build_direct_source_freshness_planning_result(
+    return _build_planning_result(
         adapter=adapter,
         connection=connection,
         sources=sources,

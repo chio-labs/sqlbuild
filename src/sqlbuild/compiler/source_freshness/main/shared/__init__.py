@@ -1,1 +1,1 @@
-"""Shared direct source freshness state helpers."""
+"""Shared standard source freshness state helpers."""

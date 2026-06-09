@@ -38,7 +38,7 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
@@ -278,8 +278,8 @@ class PlannerResolvedActions:
 
 
 @dataclass(frozen=True)
-class DirectModelVersionIdentities:
-    """Current direct model version identity values by model name."""
+class StandardModelVersionIdentities:
+    """Current standard model version identity values by model name."""
 
     function_local_hashes: dict[str, str]
     model_metadata_jsons: dict[str, str]
@@ -288,8 +288,8 @@ class DirectModelVersionIdentities:
 
 
 @dataclass(frozen=True)
-class DirectReuseSourceModelSnapshot:
-    """Source-target state for one model considered for direct target reuse."""
+class StandardReuseSourceModelSnapshot:
+    """Source-target state for one model considered for standard target reuse."""
 
     model_name: str
     destination: CompiledRelationDestination
@@ -298,18 +298,18 @@ class DirectReuseSourceModelSnapshot:
 
 
 @dataclass(frozen=True)
-class DirectReuseSourceSnapshot:
-    """Resolved source-target state used to decide direct target reuse eligibility."""
+class StandardReuseSourceSnapshot:
+    """Resolved source-target state used to decide standard target reuse eligibility."""
 
     target_name: str
     fingerprint_database: str | None
     fingerprint_schema: str
-    model_snapshots: dict[str, DirectReuseSourceModelSnapshot]
+    model_snapshots: dict[str, StandardReuseSourceModelSnapshot]
 
 
 @dataclass(frozen=True)
-class DirectReuseModelDecision:
-    """Planner-side direct reuse decision for one selected model."""
+class StandardReuseModelDecision:
+    """Planner-side standard reuse decision for one selected model."""
 
     model_name: str
     decision: str
@@ -320,11 +320,11 @@ class DirectReuseModelDecision:
 
 
 @dataclass(frozen=True)
-class DirectReuseDecisionResults:
-    """Planner-side direct reuse decisions for a reuse_from target."""
+class StandardReuseDecisionResults:
+    """Planner-side standard reuse decisions for a reuse_from target."""
 
     source_target_name: str
-    models: dict[str, DirectReuseModelDecision]
+    models: dict[str, StandardReuseModelDecision]
 
 
 @dataclass(frozen=True)
@@ -671,5 +671,5 @@ class PlanOutput:
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
-    source_freshness: DirectSourceFreshnessPlanningResult | None = None
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
     metadata: dict[str, object] = field(default_factory=dict)
