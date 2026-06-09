@@ -84,6 +84,15 @@ class PlanReason(StrEnum):
     DISABLED = "disabled"
 
 
+class DirectReuseDecisionKind(StrEnum):
+    REUSE_CANDIDATE = "reuse_candidate"
+    CURRENT = "current"
+    SOURCE_FINGERPRINT_MISSING = "source_fingerprint_missing"
+    SOURCE_RELATION_MISSING = "source_relation_missing"
+    SOURCE_VERSION_MISMATCH = "source_version_mismatch"
+    INELIGIBLE_MATERIALIZATION = "ineligible_materialization"
+
+
 class IncrementalStrategy(StrEnum):
     APPEND = "append"
     DELETE_INSERT = "delete_insert"

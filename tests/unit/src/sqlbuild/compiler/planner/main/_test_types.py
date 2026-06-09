@@ -19,3 +19,12 @@ class DirectReuseSourcePlanOutputTestCase:
     description: str
     expected_source_target_name: str
     expected_model_names: tuple[str, ...]
+    expected_reuse_candidate_names: tuple[str, ...]
+    expected_decisions: dict[str, str]
+
+
+@dataclass(frozen=True)
+class DirectReuseFullRefreshBypassTestCase:
+    description: str
+    expected_reuse_source_metadata_present: bool
+    expected_reuse_decision_metadata_present: bool
