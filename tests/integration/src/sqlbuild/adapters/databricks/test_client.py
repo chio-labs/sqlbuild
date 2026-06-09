@@ -792,6 +792,7 @@ def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_
     fingerprint_set: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=adapter.execute,
+        relation_exists=adapter.relation_exists,
         database=databricks_catalog,
         schema=databricks_schema,
         render_qualified_name=adapter.render_qualified_name,

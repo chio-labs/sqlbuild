@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.spec.models.schema import SchemaSeedEntry, SeedCsvSettings, default_seed_csv_settings
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -133,7 +134,8 @@ class FakeJanitorAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
-        return False
+        del connection, database, schema
+        return name == FINGERPRINT_TABLE_NAME
 
     def drop(
         self,

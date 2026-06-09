@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import CursorType, WarningSeverity
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot
 
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(
     {
         "TIMESTAMP",
@@ -220,7 +223,13 @@ def _classify_type_with_sqlglot(warehouse_type: str) -> CursorType | None:
 
     try:
         parsed: Any = sqlglot_module.parse_one(f"CAST(x AS {warehouse_type})")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "cursor type classification parse failed; falling back",
+            sqlbuild_warehouse_type=warehouse_type,
+            sqlbuild_error=str(error),
+        )
         return None
 
     to_type: Any | None = getattr(parsed, "to", None)

@@ -25,11 +25,17 @@ class FakeSourceFreshnessExecute:
         self._read_error: Exception | None = read_error
 
     def __call__(self, _connection: object, sql: str) -> Any:
-        if "WHERE 1 = 0" in sql:
-            return _FakeResult([])
+        del sql
         if self._read_error is not None:
             raise self._read_error
         return _FakeResult(self._rows)
+
+
+def freshness_table_relation_exists(
+    connection: Any, *, database: str | None, schema: str | None, name: str
+) -> bool:
+    del connection, database, schema, name
+    return True
 
 
 class _FakeResult:

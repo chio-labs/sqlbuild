@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, cast
 
@@ -109,6 +110,7 @@ from sqlbuild.shared.constants import (
 from sqlbuild.shared.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import (
     quoted_reference_call_pattern,
@@ -116,6 +118,7 @@ from sqlbuild.shared.helpers.sql_reference_patterns import (
 )
 from sqlbuild.shared.types import SqlReferenceKind
 
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
@@ -205,7 +208,12 @@ def analyze_columns_and_lineage_with_polyglot(
             cleaned_sql,
             dialect=profile.sql_analysis_dialect or "generic",
         )
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "column and lineage analysis parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return False
     analysis: (
         tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
@@ -230,7 +238,12 @@ def _infer_columns_with_polyglot(
         return False
     try:
         parsed: Any = polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "column inference parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return False
     return _infer_columns_from_polyglot_ast(
         parsed=parsed,

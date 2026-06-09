@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
@@ -20,19 +21,31 @@ def read_latest_fingerprints(
     *,
     connection: Any,
     execute: Any,
+    relation_exists: Callable[..., bool],
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
     require_table: bool = False,
 ) -> FingerprintSet:
-    """Read all fingerprints for a schema and resolve latest per model in memory."""
+    """Read all fingerprints for a schema and resolve latest per model in memory.
+
+    Fingerprint table existence is checked via adapter metadata (`relation_exists`)
+    rather than by swallowing probe-query errors, so operational failures propagate
+    instead of being misread as "no fingerprint state".
+    """
 
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
-    if not _table_exists(connection=connection, execute=execute, qualified_name=qualified_name):
+    table_exists: bool = relation_exists(
+        connection,
+        database=database,
+        schema=schema,
+        name=FINGERPRINT_TABLE_NAME,
+    )
+    if not table_exists:
         if require_table:
             raise FingerprintInputError(f"Unable to read fingerprints from {qualified_name}")
         return FingerprintSet(schema=schema, fingerprints={})
@@ -59,16 +72,6 @@ def read_latest_fingerprints(
         if model_name not in latest or fingerprint.ts > latest[model_name].ts:
             latest[model_name] = fingerprint
     return FingerprintSet(schema=schema, fingerprints=latest)
-
-
-def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool:
-    """Check whether the fingerprint table exists without raising on missing."""
-
-    try:
-        execute(connection, f"SELECT COUNT(*) FROM {qualified_name} WHERE 1 = 0")
-        return True
-    except Exception:
-        return False
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:

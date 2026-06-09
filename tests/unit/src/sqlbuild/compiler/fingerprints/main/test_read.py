@@ -14,6 +14,7 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
     FakeFingerprintExecute,
+    fingerprint_table_relation_exists,
     render_qualified_name,
 )
 
@@ -52,6 +53,7 @@ def test_given_encoded_fingerprint_row_when_reading_then_decodes_query_and_metad
     fingerprints: FingerprintSet = read_latest_fingerprints(
         connection=object(),
         execute=FakeFingerprintExecute(rows=test_case.rows),
+        relation_exists=fingerprint_table_relation_exists,
         database=None,
         schema="main",
         render_qualified_name=render_qualified_name,
@@ -81,6 +83,7 @@ def test_given_read_failure_when_reading_fingerprints_then_raises_operator_guida
         read_latest_fingerprints(
             connection=object(),
             execute=FakeFingerprintExecute(rows=[], read_error=test_case.read_error),
+            relation_exists=fingerprint_table_relation_exists,
             database=None,
             schema="main",
             render_qualified_name=render_qualified_name,

@@ -19,12 +19,17 @@ class FakeFingerprintExecute:
         self._read_error: Exception | None = read_error
 
     def __call__(self, connection: Any, sql: str) -> FakeFingerprintResult:
-        del connection
-        if "WHERE 1 = 0" in sql:
-            return FakeFingerprintResult([])
+        del connection, sql
         if self._read_error is not None:
             raise self._read_error
         return FakeFingerprintResult(self._rows)
+
+
+def fingerprint_table_relation_exists(
+    connection: Any, *, database: str | None, schema: str | None, name: str
+) -> bool:
+    del connection, database, schema, name
+    return True
 
 
 def render_qualified_name(*, database: str | None, schema: str | None, name: str) -> str | None:

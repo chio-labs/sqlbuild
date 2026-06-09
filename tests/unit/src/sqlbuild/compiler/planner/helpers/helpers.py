@@ -47,6 +47,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
@@ -119,11 +120,7 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         self.fingerprint_read_fails: bool = fingerprint_read_fails
 
     def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
-        del connection
-        if "WHERE 1 = 0" in sql:
-            if not self.fingerprint_table_exists:
-                raise RuntimeError("missing fingerprint table")
-            return StandardReuseFromTargetTestResult(())
+        del connection, sql
         if self.fingerprint_read_fails:
             raise RuntimeError("cannot select fingerprint rows")
         return StandardReuseFromTargetTestResult(self.fingerprint_rows)
@@ -137,6 +134,8 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         name: str,
     ) -> bool:
         del connection
+        if name == FINGERPRINT_TABLE_NAME:
+            return self.fingerprint_table_exists
         return (database, schema, name) in self.existing_relations
 
     def render_qualified_name(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import replace
 from typing import Any
@@ -58,11 +59,13 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
     SCENARIO_PLAN_UNKNOWN_SEED,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _REF_PATTERN: re.Pattern[str] = re.compile(
     rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"
     r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
@@ -722,7 +725,12 @@ def _try_resolve_project_source_refs_with_sql_analysis(
         return None
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "scenario source ref resolution parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     parsed_dict: dict[str, Any] = parsed.to_dict()
     expression_source_names: set[str] = set()
@@ -905,7 +913,12 @@ def _polyglot_relation_dict(
             f"SELECT * FROM {target_name}",
             dialect=sql_analysis_dialect or "generic",
         )
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "scenario relation dict parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     parsed_dict: dict[str, Any] = parsed.to_dict()
     select_payload: Any | None = parsed_dict.get("select")

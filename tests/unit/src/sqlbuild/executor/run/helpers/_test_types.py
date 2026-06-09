@@ -39,6 +39,23 @@ class RuntimeCursorStartTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeTargetMaxTestCase:
+    description: str
+    target_rows: tuple[object, ...]
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class RuntimeTargetProbeFailureTestCase:
+    description: str
+    expected_error_type: type[BaseException]
+
+
+@dataclass(frozen=True)
 class SnapshotAdapterRenderingTestCase:
     description: str
     expected_rendered_marker: str

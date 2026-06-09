@@ -112,16 +112,30 @@ def execute_table_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
             )
-        runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
-            adapter=adapter,
-            connection=connection,
-            target_relation=target_qualified,
-            cursor_column=entry.cursor_column,
-            cursor_type=entry.cursor_type,
-            cursor_grain=entry.cursor_grain,
-            cursor_start=entry.cursor_start,
-            cursor_input_relations=entry.cursor_input_relations,
-        )
+        try:
+            runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+                adapter=adapter,
+                connection=connection,
+                target_relation=target_qualified,
+                target_database=target_database,
+                target_schema=target_schema,
+                target_name=target_table,
+                cursor_column=entry.cursor_column,
+                cursor_type=entry.cursor_type,
+                cursor_grain=entry.cursor_grain,
+                cursor_start=entry.cursor_start,
+                cursor_input_relations=entry.cursor_input_relations,
+            )
+        except Exception as exc:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error=f"failed to resolve runtime cursor bounds: {exc}",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+            )
         if runtime_bounds is None:
             return build_failed_result(
                 entry=entry,
