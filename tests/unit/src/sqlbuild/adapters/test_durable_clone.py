@@ -91,8 +91,8 @@ def test_given_first_party_adapter_when_rendering_durable_clone_then_returns_exp
     test_case: AdapterDurableCloneTestCase,
 ) -> None:
     statements: tuple[str, ...] = test_case.adapter.render_durable_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
     )
 
     assert test_case.adapter.supports_durable_clone() is test_case.expected_supports_durable_clone

@@ -227,8 +227,10 @@ class SnowflakeAdapter(BaseAdapter):
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (f"DROP VIEW{exists_clause} {target}",)
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
@@ -378,11 +380,11 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -407,14 +409,14 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -426,13 +428,13 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -443,21 +445,21 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
-        source_parts: list[str] = source.split(".")
-        target_parts: list[str] = target.split(".")
+        origin_parts: list[str] = origin.split(".")
+        destination_parts: list[str] = destination.split(".")
         if (
-            remove_source
-            and len(source_parts) >= 2
-            and len(target_parts) >= 2
-            and source_parts[:-2] == target_parts[:-2]
+            remove_origin
+            and len(origin_parts) >= 2
+            and len(destination_parts) >= 2
+            and origin_parts[:-2] == destination_parts[:-2]
         ):
-            statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+            statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
@@ -466,11 +468,11 @@ class SnowflakeAdapter(BaseAdapter):
         if not allow_copy_fallback:
             raise AdapterUserError("Snowflake relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
-        if remove_source:
-            statements = (*statements, *self.render_drop(target=source))
+        if remove_origin:
+            statements = (*statements, *self.render_drop(target=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1507,8 +1509,8 @@ class SnowflakeAdapter(BaseAdapter):
             f"DROP VIEW{exists_clause} {target}",
         )
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"ALTER TABLE {source} RENAME TO {target}",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"ALTER TABLE {origin} RENAME TO {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {left} SWAP WITH {right}",)
@@ -1516,16 +1518,16 @@ class SnowflakeAdapter(BaseAdapter):
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         if hard_copy:
-            return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
-        return (f"CREATE OR REPLACE TABLE {target} CLONE {source}",)
+            return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
+        return (f"CREATE OR REPLACE TABLE {destination} CLONE {origin}",)
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {target} CLONE {source}",)
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {destination} CLONE {origin}",)
 
     def render_query_with_cursor_bounds(
         self,
@@ -1566,11 +1568,13 @@ class SnowflakeAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

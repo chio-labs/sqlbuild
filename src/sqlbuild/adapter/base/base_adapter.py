@@ -395,29 +395,29 @@ class BaseAdapter(StrictAdapter):
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (f"DROP VIEW{exists_clause} {target}",)
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"ALTER TABLE {source} RENAME TO {target}",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"ALTER TABLE {origin} RENAME TO {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         staging: str = f"{left}__swap_staging"
         return (
-            *self.render_rename(source=left, target=staging),
-            *self.render_rename(source=right, target=left),
-            *self.render_rename(source=staging, target=right),
+            *self.render_rename(origin=left, destination=staging),
+            *self.render_rename(origin=right, destination=left),
+            *self.render_rename(origin=staging, destination=right),
         )
 
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -486,8 +486,10 @@ class BaseAdapter(StrictAdapter):
     def _relation_names_match_impl(self, left: str, right: str) -> bool:
         return left.replace('"', "") == right.replace('"', "")
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
@@ -1053,11 +1055,11 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1082,14 +1084,14 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -1101,11 +1103,13 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1115,13 +1119,13 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1132,9 +1136,9 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -1144,11 +1148,11 @@ class BaseAdapter(StrictAdapter):
                 "to move or copy relations"
             )
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
-        if remove_source:
-            statements = (*statements, *self.render_drop(target=source))
+        if remove_origin:
+            statements = (*statements, *self.render_drop(target=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

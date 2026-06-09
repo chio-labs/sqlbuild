@@ -479,8 +479,8 @@ def test_given_clone_request_when_rendering_then_bigquery_uses_expected_clone_sq
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
         hard_copy=test_case.hard_copy,
     )
 

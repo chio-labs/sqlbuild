@@ -200,8 +200,8 @@ def build_staging_fn() -> Callable[[MaterializationContext], MaterializationResu
         )
         ctx.adapter.rename(
             ctx.connection,
-            source=staging,
-            target=ctx.destination,
+            origin=staging,
+            destination=ctx.destination,
             statement_recorder=ctx.statement_recorder,
         )
         return MaterializationResult(relation=ctx.destination, cleanup_relations=(staging,))
@@ -218,8 +218,8 @@ def build_audit_running_fn() -> Callable[[MaterializationContext], Materializati
         audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
         ctx.adapter.rename(
             ctx.connection,
-            source=staging,
-            target=ctx.destination,
+            origin=staging,
+            destination=ctx.destination,
             statement_recorder=ctx.statement_recorder,
         )
         return MaterializationResult(
@@ -249,8 +249,8 @@ def build_user_audit_fn(
             )
         ctx.adapter.rename(
             ctx.connection,
-            source=staging,
-            target=ctx.destination,
+            origin=staging,
+            destination=ctx.destination,
             statement_recorder=ctx.statement_recorder,
         )
         return MaterializationResult(

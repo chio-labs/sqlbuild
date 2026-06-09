@@ -263,8 +263,8 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         raise NotImplementedError
@@ -283,8 +283,8 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:

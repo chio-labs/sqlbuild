@@ -41,8 +41,8 @@ def clone_relation(
         )
         adapter.clone(
             target_connection,
-            source=source_qualified,
-            target=target_qualified,
+            origin=source_qualified,
+            destination=target_qualified,
             hard_copy=hard_copy,
             statement_recorder=recorder,
         )

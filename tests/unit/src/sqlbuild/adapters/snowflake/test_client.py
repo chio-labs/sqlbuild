@@ -178,8 +178,8 @@ def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_s
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     statements: tuple[str, ...] = adapter.render_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
         hard_copy=test_case.hard_copy,
     )
 
@@ -212,9 +212,9 @@ def test_given_cross_schema_table_move_when_moving_then_snowflake_uses_native_re
 
     adapter.move_or_copy_relation(
         connection,
-        source=test_case.source,
-        target=test_case.target,
-        remove_source=True,
+        origin=test_case.source,
+        destination=test_case.target,
+        remove_origin=True,
         allow_copy_fallback=False,
         statement_recorder=statement_recorder,
     )

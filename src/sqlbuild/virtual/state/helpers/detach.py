@@ -129,13 +129,13 @@ def detach_from_virtual_state(
             )
             adapter.move_or_copy_relation(
                 connection,
-                source=resolve_relation_location_qualified_name(
+                origin=resolve_relation_location_qualified_name(
                     adapter=adapter, location=physical_target
                 ),
-                target=resolve_relation_location_qualified_name(
+                destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=model.destination
                 ),
-                remove_source=False,
+                remove_origin=False,
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,
             )

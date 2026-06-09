@@ -438,23 +438,23 @@ class PostgresAdapter(BaseAdapter):
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         staging: str = f"{left}__swap_staging"
         return (
-            *self.render_rename(source=left, target=staging),
-            *self.render_rename(source=right, target=left),
-            *self.render_rename(source=staging, target=right),
+            *self.render_rename(origin=left, destination=staging),
+            *self.render_rename(origin=right, destination=left),
+            *self.render_rename(origin=staging, destination=right),
         )
 
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -491,8 +491,10 @@ class PostgresAdapter(BaseAdapter):
     def relation_names_match(self, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left, right)
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
         self, *, target: str, columns: tuple[ColumnInfo, ...]
@@ -642,11 +644,11 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -671,14 +673,14 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -690,11 +692,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -704,13 +708,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -721,39 +725,45 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
-        source_parent: str = source.rsplit(".", 1)[0] if "." in source else ""
-        target_parent: str = target.rsplit(".", 1)[0] if "." in target else ""
-        if remove_source and source_parent == target_parent:
+        origin_parent: str = origin.rsplit(".", 1)[0] if "." in origin else ""
+        destination_parent: str = destination.rsplit(".", 1)[0] if "." in destination else ""
+        if remove_origin and origin_parent == destination_parent:
             self.rename(
                 connection,
-                source=source,
-                target=target,
+                origin=origin,
+                destination=destination,
                 statement_recorder=statement_recorder,
             )
             return
-        source_parts: list[str] = source.split(".")
-        target_parts: list[str] = target.split(".")
+        origin_parts: list[str] = origin.split(".")
+        destination_parts: list[str] = destination.split(".")
         if (
-            remove_source
-            and len(source_parts) >= 2
-            and len(target_parts) >= 2
-            and source_parts[:-2] == target_parts[:-2]
+            remove_origin
+            and len(origin_parts) >= 2
+            and len(destination_parts) >= 2
+            and origin_parts[:-2] == destination_parts[:-2]
         ):
-            source_name: str = source_parts[-1]
-            target_schema: str = target_parts[-2]
-            target_name: str = target_parts[-1]
+            origin_name: str = origin_parts[-1]
+            destination_schema: str = destination_parts[-2]
+            destination_name: str = destination_parts[-1]
             statements: tuple[str, ...] = ()
-            moved_source: str = source
-            if source_name != target_name:
-                statements = (*statements, *self.render_rename(source=source, target=target))
-                moved_source = ".".join((*source_parts[:-1], target_name))
-            statements = (*statements, f"ALTER TABLE {moved_source} SET SCHEMA {target_schema}")
+            moved_origin: str = origin
+            if origin_name != destination_name:
+                statements = (
+                    *statements,
+                    *self.render_rename(origin=origin, destination=destination),
+                )
+                moved_origin = ".".join((*origin_parts[:-1], destination_name))
+            statements = (
+                *statements,
+                f"ALTER TABLE {moved_origin} SET SCHEMA {destination_schema}",
+            )
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
@@ -762,11 +772,11 @@ class PostgresAdapter(BaseAdapter):
         if not allow_copy_fallback:
             raise AdapterUserError("Postgres relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
-        if remove_source:
-            statements = (*statements, *self.render_drop(target=source))
+        if remove_origin:
+            statements = (*statements, *self.render_drop(target=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1464,9 +1474,9 @@ class PostgresAdapter(BaseAdapter):
             f"CREATE TABLE {target} AS {sql}",
         )
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        target_name: str = target.split(".")[-1]
-        return (f"ALTER TABLE {source} RENAME TO {target_name}",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        destination_name: str = destination.split(".")[-1]
+        return (f"ALTER TABLE {origin} RENAME TO {destination_name}",)
 
     def load_seed(
         self,
@@ -1483,7 +1493,10 @@ class PostgresAdapter(BaseAdapter):
         del infer_types
         if replace:
             self.drop(
-                connection, target=target, if_exists=True, statement_recorder=statement_recorder
+                connection,
+                target=target,
+                if_exists=True,
+                statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
         create_sql: str = f"CREATE TABLE {target} ({column_defs})"

@@ -96,10 +96,12 @@ def hydrate_relation(
     )
     adapter.durable_clone(
         target_connection,
-        source=resolve_relation_location_qualified_name(
+        origin=resolve_relation_location_qualified_name(
             adapter=adapter, location=clone_source_target
         ),
-        target=resolve_relation_location_qualified_name(adapter=adapter, location=target_target),
+        destination=resolve_relation_location_qualified_name(
+            adapter=adapter, location=target_target
+        ),
         statement_recorder=StatementRecorder(),
     )
     return "hydrated"

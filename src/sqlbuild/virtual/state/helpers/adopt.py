@@ -95,13 +95,13 @@ def adopt_into_virtual_state(
             )
             adapter.move_or_copy_relation(
                 connection,
-                source=resolve_relation_location_qualified_name(
+                origin=resolve_relation_location_qualified_name(
                     adapter=adapter, location=model.destination
                 ),
-                target=resolve_relation_location_qualified_name(
+                destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=physical_target
                 ),
-                remove_source=model_relation_type != "view",
+                remove_origin=model_relation_type != "view",
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,
             )

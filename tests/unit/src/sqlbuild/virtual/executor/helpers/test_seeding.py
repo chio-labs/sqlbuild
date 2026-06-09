@@ -42,8 +42,8 @@ class FakeSeedAdapter(BaseAdapter):
     def supports_durable_clone(self) -> bool:
         return self._supports_durable_clone
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"CREATE TABLE {target} DEEP CLONE {source}",)
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"CREATE TABLE {destination} DEEP CLONE {origin}",)
 
     def relation_exists(
         self,
@@ -150,8 +150,8 @@ def test_given_incremental_seed_context_when_seeding_then_selects_expected_strat
     strategy: str = _seed_physical_relation(
         adapter=adapter,
         connection=object(),
-        source="source_relation",
-        target="target_relation",
+        origin="source_relation",
+        destination="target_relation",
         entry=entry,
         statement_recorder=StatementRecorder(),
     )

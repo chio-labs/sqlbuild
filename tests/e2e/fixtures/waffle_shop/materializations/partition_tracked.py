@@ -98,8 +98,8 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             ctx.log("promoting first partition into target")
             ctx.adapter.rename(
                 ctx.connection,
-                source=staging,
-                target=ctx.destination,
+                origin=staging,
+                destination=ctx.destination,
                 statement_recorder=ctx.statement_recorder,
             )
             target_exists = True

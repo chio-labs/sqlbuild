@@ -1280,8 +1280,8 @@ class DatabricksAdapter(BaseAdapter):
         )
         return (f"INSERT INTO {target}{column_list} REPLACE WHERE {replace_where} {sql}",)
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"ALTER TABLE {source} RENAME TO {target}",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"ALTER TABLE {origin} RENAME TO {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         raise AdapterUserError("Databricks does not support atomic table swap")
@@ -1289,16 +1289,16 @@ class DatabricksAdapter(BaseAdapter):
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         if not hard_copy:
-            return (f"CREATE TABLE {target} SHALLOW CLONE {source}",)
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+            return (f"CREATE TABLE {destination} SHALLOW CLONE {origin}",)
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"CREATE TABLE {target} DEEP CLONE {source}",)
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"CREATE TABLE {destination} DEEP CLONE {origin}",)
 
     def render_query_with_cursor_bounds(
         self,
@@ -1335,8 +1335,10 @@ class DatabricksAdapter(BaseAdapter):
     def relation_names_match(self, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left, right)
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {source}",)
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}",)
 
     def render_add_columns(
         self,
@@ -1449,11 +1451,11 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1477,14 +1479,14 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -1496,11 +1498,13 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
@@ -1510,13 +1514,13 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
         statement_recorder.record_many(statements)
         statement: str
@@ -1527,20 +1531,20 @@ class DatabricksAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
         if not allow_copy_fallback:
             raise AdapterUserError("Databricks relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
-        if remove_source:
-            statements = (*statements, *self.render_drop(target=source))
+        if remove_origin:
+            statements = (*statements, *self.render_drop(target=origin))
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:

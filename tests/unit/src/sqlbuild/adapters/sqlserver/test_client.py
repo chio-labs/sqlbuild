@@ -178,9 +178,9 @@ def test_given_cross_schema_table_move_when_moving_then_sqlserver_uses_native_tr
 
     adapter.move_or_copy_relation(
         connection,
-        source=test_case.source,
-        target=test_case.target,
-        remove_source=True,
+        origin=test_case.source,
+        destination=test_case.target,
+        remove_origin=True,
         allow_copy_fallback=False,
         statement_recorder=statement_recorder,
     )

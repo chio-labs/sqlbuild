@@ -723,8 +723,8 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
     )
     adapter.replace_table_from_relation(
         connection,
-        target=table_target,
-        source=staging_target,
+        destination=table_target,
+        origin=staging_target,
         statement_recorder=recorder,
     )
 

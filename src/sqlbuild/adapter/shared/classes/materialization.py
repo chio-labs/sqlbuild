@@ -76,8 +76,8 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         """Rename a relation."""
@@ -100,8 +100,8 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -113,11 +113,11 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Clone/copy a relation into a durable independent target."""
+        """Clone/copy a relation into a durable independent destination."""
         ...
 
     @abstractmethod

@@ -281,11 +281,11 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -310,14 +310,14 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -1387,9 +1387,9 @@ class BigQueryAdapter(BaseAdapter):
         exists_clause: str = " IF EXISTS" if if_exists else ""
         return (f"DROP VIEW{exists_clause} {self._quote_identifier_path(target)}",)
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        target_name: str = self._strip_identifier_quotes(target).split(".")[-1]
-        return (f"ALTER TABLE {self._quote_identifier_path(source)} RENAME TO {target_name}",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        destination_name: str = self._strip_identifier_quotes(destination).split(".")[-1]
+        return (f"ALTER TABLE {self._quote_identifier_path(origin)} RENAME TO {destination_name}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         raise AdapterUserError("BigQuery does not support atomic table swap")
@@ -1397,21 +1397,21 @@ class BigQueryAdapter(BaseAdapter):
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         if not hard_copy:
             return (
-                f"CREATE TABLE {self._quote_identifier_path(target)} "
-                f"CLONE {self._quote_identifier_path(source)}",
+                f"CREATE TABLE {self._quote_identifier_path(destination)} "
+                f"CLONE {self._quote_identifier_path(origin)}",
             )
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+        return self.render_create_table_as(target=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (
-            f"CREATE TABLE {self._quote_identifier_path(target)} "
-            f"CLONE {self._quote_identifier_path(source)}",
+            f"CREATE TABLE {self._quote_identifier_path(destination)} "
+            f"CLONE {self._quote_identifier_path(origin)}",
         )
 
     def render_query_with_cursor_bounds(
@@ -1453,42 +1453,46 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
             self.execute(connection, stmt)
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
         return (
             "-- BigQuery execution copies this relation to the destination table with "
             "WRITE_TRUNCATE for staged atomic replace.\n"
-            f"CREATE OR REPLACE TABLE {self._quote_identifier_path(target)} AS "
-            f"SELECT * FROM {self._quote_identifier_path(source)}",
+            f"CREATE OR REPLACE TABLE {self._quote_identifier_path(destination)} AS "
+            f"SELECT * FROM {self._quote_identifier_path(origin)}",
         )
 
     def replace_table_from_relation(
         self,
         connection: _BigQueryConnection,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         from google.cloud import bigquery
 
-        source_table: str = self._strip_identifier_quotes(source)
-        destination_table: str = self._strip_identifier_quotes(target)
+        origin_table: str = self._strip_identifier_quotes(origin)
+        destination_table: str = self._strip_identifier_quotes(destination)
         job_config: Any = bigquery.CopyJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         )
-        statement_recorder.record(f"COPY WRITE_TRUNCATE {source} TO {target}")
+        statement_recorder.record(f"COPY WRITE_TRUNCATE {origin} TO {destination}")
         connection.client.copy_table(
-            source_table,
+            origin_table,
             destination_table,
             job_config=job_config,
             location=connection.location,
@@ -1498,9 +1502,9 @@ class BigQueryAdapter(BaseAdapter):
         self,
         connection: _BigQueryConnection,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -1508,12 +1512,12 @@ class BigQueryAdapter(BaseAdapter):
             raise AdapterUserError("BigQuery relation move/copy requires --allow-copy")
         self.replace_table_from_relation(
             connection,
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             statement_recorder=statement_recorder,
         )
-        if remove_source:
-            self.drop(connection, target=source, statement_recorder=statement_recorder)
+        if remove_origin:
+            self.drop(connection, target=origin, statement_recorder=statement_recorder)
 
     def relation_exists(
         self,

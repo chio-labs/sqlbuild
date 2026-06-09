@@ -424,8 +424,8 @@ def _staged_lifecycle(
             ):
                 adapter.replace_table_from_relation(
                     connection,
-                    target=target_qualified,
-                    source=staging_qualified,
+                    destination=target_qualified,
+                    origin=staging_qualified,
                     statement_recorder=statement_recorder,
                 )
                 adapter.drop(
@@ -440,8 +440,8 @@ def _staged_lifecycle(
             with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="rename"):
                 adapter.rename(
                     connection,
-                    source=staging_qualified,
-                    target=target_qualified,
+                    origin=staging_qualified,
+                    destination=target_qualified,
                     statement_recorder=statement_recorder,
                 )
     except Exception as exc:
