@@ -38,6 +38,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_scenario_relation_test_project,
     build_scenario_relation_test_project_with_unused_seed,
     build_scenario_relation_test_scenario,
+    quoting_render_qualified_name,
 )
 
 HASH_PREFIX: str = "51b385aebe20"
@@ -84,6 +85,7 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
         project=build_scenario_relation_test_project(),
         graph_plan=test_case.graph_plan,
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
@@ -99,6 +101,48 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
     assert {
         name: target.qualified_name for name, target in result.dbt_ref_fixture_locations.items()
     } == test_case.expected_dbt_ref_target_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioRelationPlanTestCase(
+            description="renders scenario relation names through the adapter renderer",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                seed_names=("country_codes",),
+            ),
+            expected_model_target_names={
+                "daily_revenue": '"scenario_schema"."__sqb_51b385aebe20__model__daily_revenue"',
+            },
+            expected_seed_target_names={
+                "country_codes": '"scenario_schema"."__sqb_51b385aebe20__seed__country_codes"',
+            },
+            expected_source_expressions={},
+        )
+    ],
+    ids=["renders scenario relation names through the adapter renderer"],
+)
+def test_given_quoting_renderer_when_building_relation_plan_then_renders_through_adapter(
+    test_case: ScenarioRelationPlanTestCase,
+) -> None:
+    result: ScenarioRelationPlan = build_scenario_relation_plan(
+        project=build_scenario_relation_test_project(),
+        graph_plan=test_case.graph_plan,
+        relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=quoting_render_qualified_name,
+        schema="scenario_schema",
+    )
+
+    assert {
+        name: target.qualified_name for name, target in result.model_locations.items()
+    } == test_case.expected_model_target_names
+    assert {
+        name: target.qualified_name for name, target in result.seed_locations.items()
+    } == test_case.expected_seed_target_names
 
 
 @pytest.mark.parametrize(
@@ -154,6 +198,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
         project=build_scenario_relation_test_project(),
         graph_plan=test_case.graph_plan,
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
@@ -161,6 +206,7 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
         scenario=build_scenario_relation_test_scenario(),
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
+        adapter=PlannerTestAdapter(),
     )
 
     assert {
@@ -258,6 +304,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         project=build_scenario_relation_test_project(),
         graph_plan=test_case.graph_plan,
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
@@ -265,6 +312,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
         scenario=scenario,
         graph_plan=test_case.graph_plan,
         relation_plan=relation_plan,
+        adapter=PlannerTestAdapter(),
         sql_analysis_enabled=test_case.sql_analysis_enabled,
         sql_analysis_dialect=test_case.sql_analysis_dialect,
     )
@@ -376,6 +424,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
         project=project,
         graph_plan=test_case.graph_plan,
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
@@ -479,6 +528,7 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
         project=project,
         graph_plan=test_case.graph_plan,
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
@@ -580,12 +630,14 @@ def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
             seed_fixture_names=("country_codes",),
         ),
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
     result: str = resolve_scenario_check_sql(
         sql=test_case.sql,
         relation_plan=relation_plan,
+        adapter=PlannerTestAdapter(),
         sql_analysis_enabled=test_case.sql_analysis_enabled,
         sql_analysis_dialect=test_case.sql_analysis_dialect,
     )
@@ -617,6 +669,7 @@ def test_given_missing_scenario_artifact_when_building_relation_plan_then_raises
             project=build_scenario_relation_test_project(),
             graph_plan=test_case.graph_plan,
             relation_map=build_scenario_relation_test_map(),
+            render_qualified_name=PlannerTestAdapter().render_qualified_name,
             schema="scenario_schema",
         )
 
@@ -644,6 +697,7 @@ def test_given_invalid_check_sql_when_sql_analysis_enabled_then_raises_without_r
             model_names=("daily_revenue",),
         ),
         relation_map=build_scenario_relation_test_map(),
+        render_qualified_name=PlannerTestAdapter().render_qualified_name,
         schema="scenario_schema",
     )
 
@@ -651,5 +705,6 @@ def test_given_invalid_check_sql_when_sql_analysis_enabled_then_raises_without_r
         resolve_scenario_check_sql(
             sql=test_case.sql,
             relation_plan=relation_plan,
+            adapter=PlannerTestAdapter(),
             sql_analysis_enabled=True,
         )

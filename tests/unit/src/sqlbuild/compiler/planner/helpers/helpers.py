@@ -726,6 +726,18 @@ def build_scenario_cli_identifier_limit_pipeline(
     return scenario, CompilePipelineResult(project=project, plan_output=PlanOutput())
 
 
+def quoting_render_qualified_name(
+    *, database: str | None, schema: str | None, name: str
+) -> str | None:
+    """Render qualified names with distinctive quoting to assert adapter pass-through."""
+
+    if database is not None and schema is not None:
+        return f'"{database}"."{schema}"."{name}"'
+    if schema is not None:
+        return f'"{schema}"."{name}"'
+    return None
+
+
 def build_scenario_relation_test_map() -> ScenarioRelationMap:
     """Build a relation map covering scenario relation planning tests."""
 
