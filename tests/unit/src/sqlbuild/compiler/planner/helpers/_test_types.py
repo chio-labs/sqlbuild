@@ -107,6 +107,12 @@ class DirectReuseSourceNoConfigTestCase:
 
 
 @dataclass(frozen=True)
+class DirectReuseDecisionTestCase:
+    description: str
+    expected_decisions: dict[str, str]
+
+
+@dataclass(frozen=True)
 class VersionStalenessTestCase:
     description: str
     model_names: tuple[str, ...]

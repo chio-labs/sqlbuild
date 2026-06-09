@@ -22,6 +22,9 @@ from sqlbuild.compiler.planner.helpers.changes_only import (
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
 )
+from sqlbuild.compiler.planner.helpers.direct_reuse_decisions import (
+    build_direct_reuse_decisions,
+)
 from sqlbuild.compiler.planner.helpers.direct_reuse_source import (
     build_direct_reuse_source_snapshot,
 )
@@ -39,6 +42,7 @@ from sqlbuild.compiler.planner.helpers.version_identity import (
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
+    DirectReuseDecisionResults,
     DirectReuseSourceSnapshot,
     PlannerChangeResults,
     PlannerModelEntryResults,
@@ -113,18 +117,30 @@ def build_execution_plan(
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
         on_progress("Generating plan...")
     plan_start: float = time.monotonic()
-    direct_reuse_source: DirectReuseSourceSnapshot | None = build_direct_reuse_source_snapshot(
-        project=project,
-        adapter=adapter,
-        connection=connection,
-        scope=scope,
-        project_config=project_config,
-        local_config=local_config,
+    direct_reuse_source: DirectReuseSourceSnapshot | None = (
+        None
+        if full_refresh
+        else build_direct_reuse_source_snapshot(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            scope=scope,
+            project_config=project_config,
+            local_config=local_config,
+        )
     )
     version_identities: DirectModelVersionIdentities = build_direct_model_version_identities(
         functions=project.functions,
         scope=scope,
     )
+    direct_reuse_decisions: DirectReuseDecisionResults | None = None
+    if direct_reuse_source is not None:
+        direct_reuse_decisions = build_direct_reuse_decisions(
+            scope=scope,
+            expected_version_hashes=version_identities.model_version_hashes,
+            built_fingerprints=snapshot.fingerprints,
+            source_snapshot=direct_reuse_source,
+        )
 
     changes: PlannerChangeResults = detect_changes(
         project=project,
@@ -219,7 +235,10 @@ def build_execution_plan(
             plan_output,
             metadata={
                 **plan_output.metadata,
-                "direct_reuse_source": _serialize_direct_reuse_source_metadata(direct_reuse_source),
+                **_serialize_direct_reuse_metadata(
+                    direct_reuse_source=direct_reuse_source,
+                    direct_reuse_decisions=direct_reuse_decisions,
+                ),
             },
         )
     if on_progress is not None:
@@ -252,22 +271,45 @@ def _serialize_direct_source_freshness_metadata(
     }
 
 
-def _serialize_direct_reuse_source_metadata(
+def _serialize_direct_reuse_metadata(
+    *,
     direct_reuse_source: DirectReuseSourceSnapshot,
+    direct_reuse_decisions: DirectReuseDecisionResults | None,
 ) -> dict[str, object]:
-    return {
+    metadata: dict[str, object] = {
+        "direct_reuse_source": {
+            "target_name": direct_reuse_source.target_name,
+            "fingerprint_database": direct_reuse_source.fingerprint_database,
+            "fingerprint_schema": direct_reuse_source.fingerprint_schema,
+            "models": {
+                model_name: {
+                    "database": model_snapshot.destination.database,
+                    "schema": model_snapshot.destination.schema,
+                    "name": model_snapshot.destination.name,
+                    "qualified_name": model_snapshot.destination.qualified_name,
+                    "relation_exists": model_snapshot.relation_exists,
+                    "built_version_present": model_snapshot.built_version_hash is not None,
+                }
+                for model_name, model_snapshot in sorted(
+                    direct_reuse_source.model_snapshots.items()
+                )
+            },
+        }
+    }
+    if direct_reuse_decisions is None:
+        return metadata
+    metadata["direct_reuse_decisions"] = {
         "target_name": direct_reuse_source.target_name,
-        "fingerprint_database": direct_reuse_source.fingerprint_database,
-        "fingerprint_schema": direct_reuse_source.fingerprint_schema,
+        "source_target_name": direct_reuse_decisions.source_target_name,
         "models": {
             model_name: {
-                "database": model_snapshot.destination.database,
-                "schema": model_snapshot.destination.schema,
-                "name": model_snapshot.destination.name,
-                "qualified_name": model_snapshot.destination.qualified_name,
-                "relation_exists": model_snapshot.relation_exists,
-                "built_version_present": model_snapshot.built_version_hash is not None,
+                "decision": decision.decision,
+                "source_target_name": decision.source_target_name,
+                "source_relation_exists": decision.source_relation_exists,
+                "source_built_version_present": decision.source_built_version_present,
+                "source_matches_expected": decision.source_matches_expected,
             }
-            for model_name, model_snapshot in sorted(direct_reuse_source.model_snapshots.items())
+            for model_name, decision in sorted(direct_reuse_decisions.models.items())
         },
     }
+    return metadata

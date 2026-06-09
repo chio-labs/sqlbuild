@@ -308,6 +308,26 @@ class DirectReuseSourceSnapshot:
 
 
 @dataclass(frozen=True)
+class DirectReuseModelDecision:
+    """Planner-side direct reuse decision for one selected model."""
+
+    model_name: str
+    decision: str
+    source_target_name: str
+    source_relation_exists: bool
+    source_built_version_present: bool
+    source_matches_expected: bool
+
+
+@dataclass(frozen=True)
+class DirectReuseDecisionResults:
+    """Planner-side direct reuse decisions for a reuse_from target."""
+
+    source_target_name: str
+    models: dict[str, DirectReuseModelDecision]
+
+
+@dataclass(frozen=True)
 class PlannerModelEntryResults:
     """Model plan-entry phase output."""
 

@@ -246,6 +246,71 @@ def build_direct_reuse_fingerprint_row(*, model_name: str, version_hash: str) ->
     )
 
 
+def build_direct_reuse_decision_scope(
+    *, selected_model_names: frozenset[str] | None = None
+) -> PlannerScope:
+    """Build a planner scope for direct reuse decision matrix tests."""
+
+    model_configs: tuple[tuple[str, dict[str, object]], ...] = (
+        ("candidate", {}),
+        ("current", {}),
+        ("missing_fingerprint", {}),
+        ("missing_relation", {}),
+        ("version_mismatch", {}),
+        ("ineligible_view", {"materialized": "view"}),
+        ("incremental_candidate", {"materialized": "incremental"}),
+        ("ineligible_custom", {"materialized": "custom_kind"}),
+        ("missing_expected", {}),
+        ("current_source_missing", {}),
+    )
+    models: tuple[CompiledModel, ...] = tuple(
+        CompiledModel(
+            key=model_key(model_name),
+            deps=(),
+            name=model_name,
+            relative_path=Path(f"models/{model_name}.sql"),
+            query_sql="SELECT 1",
+            config=CompileModelConfig(values=config_values),
+            destination=CompiledRelationDestination(
+                database=None,
+                schema="dev_schema",
+                name=model_name,
+                qualified_name=f"dev_schema.{model_name}",
+            ),
+        )
+        for model_name, config_values in model_configs
+    )
+    return PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={model.name: model.key for model in models},
+        models_by_name={model.name: model for model in models},
+        selected_keys=frozenset(
+            model.key
+            for model in models
+            if selected_model_names is None or model.name in selected_model_names
+        ),
+        execution_order=tuple(model.key for model in models),
+    )
+
+
+def build_direct_reuse_fingerprint(*, model_name: str, version_hash: str) -> Fingerprint:
+    """Build a minimal fingerprint for direct reuse decision tests."""
+
+    return Fingerprint(
+        model_name=model_name,
+        target_database=None,
+        target_schema="dev_schema",
+        target_name=model_name,
+        run_id="run_1",
+        query_hash="query_hash",
+        version_hash=version_hash,
+        schema_fingerprint="schema_hash",
+        query_sql="SELECT 1",
+        ts=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
 def source_key(name: str) -> CompiledObjectKey:
     """Build a source object key."""
 
