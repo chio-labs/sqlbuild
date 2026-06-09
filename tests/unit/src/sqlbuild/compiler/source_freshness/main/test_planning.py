@@ -25,6 +25,7 @@ from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessAdapterDefaultTestCase,
+    StandardSourceFreshnessDuplicateSchemaTestCase,
     StandardSourceFreshnessLagToleranceTestCase,
     StandardSourceFreshnessManagedSkipTestCase,
     StandardSourceFreshnessMultiSchemaTestCase,
@@ -444,3 +445,71 @@ def test_given_multiple_state_schemas_when_planning_then_merges_previous_records
 
     assert len(result.previous_records) == test_case.expected_previous_count
     assert len(result.unchanged_identities) == test_case.expected_unchanged_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardSourceFreshnessDuplicateSchemaTestCase(
+            description="uses newest duplicate source freshness record across state schemas",
+            expected_previous_data_version="2",
+            expected_changed_count=0,
+        )
+    ],
+    ids=["uses newest duplicate source freshness record across state schemas"],
+)
+def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_observation(
+    test_case: StandardSourceFreshnessDuplicateSchemaTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        connection.execute("CREATE SCHEMA state_a")
+        connection.execute("CREATE SCHEMA state_b")
+        write_previous_record_to_schema(
+            adapter=adapter,
+            connection=connection,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            schema="state_a",
+            source_name="raw.orders",
+            data_version="2",
+            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+        )
+        write_previous_record_to_schema(
+            adapter=adapter,
+            connection=connection,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            schema="state_b",
+            source_name="raw.orders",
+            data_version="1",
+            observed_at=datetime(2026, 1, 15, 10, 0, 0),
+        )
+
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(
+                    SourceEntry(
+                        name="raw.orders",
+                        freshness=SourceFreshnessConfig(
+                            strategy=SourceFreshnessStrategy.SQL,
+                            value_kind=SourceFreshnessValueKind.INTEGER,
+                            query="SELECT 2 AS data_version",
+                        ),
+                    ),
+                ),
+                state_database=None,
+                state_schemas=("state_a", "state_b"),
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
+        )
+    finally:
+        adapter.close(connection)
+
+    assert result.previous_records[0].data_version == test_case.expected_previous_data_version
+    assert len(result.changed_identities) == test_case.expected_changed_count

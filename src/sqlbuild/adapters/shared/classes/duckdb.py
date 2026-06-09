@@ -88,9 +88,12 @@ class DuckDbBackedAdapter(BaseAdapter):
     ) -> bool:
         """Return whether the named schema exists in the warehouse."""
 
-        query: str = f"SELECT 1 FROM information_schema.schemata WHERE schema_name = '{schema}'"
+        query: str = (
+            "SELECT 1 FROM information_schema.schemata "
+            f"WHERE schema_name = {_duckdb_string_literal(schema)}"
+        )
         if database is not None:
-            query += f" AND catalog_name = '{database}'"
+            query += f" AND catalog_name = {_duckdb_string_literal(database)}"
         cursor: Any = self.execute(connection, query)
         return cursor.fetchone() is not None
 
@@ -956,11 +959,14 @@ class DuckDbBackedAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
-        query: str = f"SELECT 1 FROM information_schema.tables WHERE table_name = '{name}'"
+        query: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_name = {_duckdb_string_literal(name)}"
+        )
         if schema is not None:
-            query += f" AND table_schema = '{schema}'"
+            query += f" AND table_schema = {_duckdb_string_literal(schema)}"
         if database is not None:
-            query += f" AND table_catalog = '{database}'"
+            query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         result: Any = self.execute(connection, query).fetchone()
         return result is not None
 
@@ -976,13 +982,13 @@ class DuckDbBackedAdapter(BaseAdapter):
             "SELECT table_name, table_schema, table_type FROM information_schema.tables WHERE 1=1"
         )
         if schemas is not None:
-            quoted: str = ", ".join(f"'{s}'" for s in schemas)
+            quoted: str = ", ".join(_duckdb_string_literal(schema) for schema in schemas)
             query += f" AND table_schema IN ({quoted})"
         if names:
-            quoted_names: str = ", ".join(f"'{name}'" for name in names)
+            quoted_names: str = ", ".join(_duckdb_string_literal(name) for name in names)
             query += f" AND table_name IN ({quoted_names})"
         if database is not None:
-            query += f" AND table_catalog = '{database}'"
+            query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
         return tuple(
             RelationInfo(
@@ -1006,13 +1012,13 @@ class DuckDbBackedAdapter(BaseAdapter):
             "SELECT function_name, schema_name, function_type FROM duckdb_functions() WHERE 1=1"
         )
         if schemas is not None:
-            quoted: str = ", ".join(f"'{s}'" for s in schemas)
+            quoted: str = ", ".join(_duckdb_string_literal(schema) for schema in schemas)
             query += f" AND schema_name IN ({quoted})"
         if names:
-            quoted_names: str = ", ".join(f"'{name}'" for name in names)
+            quoted_names: str = ", ".join(_duckdb_string_literal(name) for name in names)
             query += f" AND function_name IN ({quoted_names})"
         if database is not None:
-            query += f" AND database_name = '{database}'"
+            query += f" AND database_name = {_duckdb_string_literal(database)}"
         rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
         return tuple(
             FunctionInfo(
@@ -1034,12 +1040,12 @@ class DuckDbBackedAdapter(BaseAdapter):
     ) -> tuple[ColumnInfo, ...]:
         query: str = (
             "SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name = '{name}'"
+            f"WHERE table_name = {_duckdb_string_literal(name)}"
         )
         if schema is not None:
-            query += f" AND table_schema = '{schema}'"
+            query += f" AND table_schema = {_duckdb_string_literal(schema)}"
         if database is not None:
-            query += f" AND table_catalog = '{database}'"
+            query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         query += " ORDER BY ordinal_position"
         rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in rows)
@@ -1056,13 +1062,13 @@ class DuckDbBackedAdapter(BaseAdapter):
             "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE 1=1"
         )
         if schemas is not None:
-            quoted: str = ", ".join(f"'{s}'" for s in schemas)
+            quoted: str = ", ".join(_duckdb_string_literal(schema) for schema in schemas)
             query += f" AND table_schema IN ({quoted})"
         if names:
-            quoted_names: str = ", ".join(f"'{name}'" for name in names)
+            quoted_names: str = ", ".join(_duckdb_string_literal(name) for name in names)
             query += f" AND table_name IN ({quoted_names})"
         if database is not None:
-            query += f" AND table_catalog = '{database}'"
+            query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         query += " ORDER BY table_name, ordinal_position"
         rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
         result: dict[str, list[ColumnInfo]] = {}
@@ -2567,3 +2573,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             ") "
             f"AND EXISTS (SELECT 1 FROM __close_candidates WHERE {close_candidate_condition})"
         )
+
+
+def _duckdb_string_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"

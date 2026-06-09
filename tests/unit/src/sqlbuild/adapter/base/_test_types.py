@@ -33,3 +33,12 @@ class BaseAdapterDurableCloneTestCase:
     target: str
     expected_supports_durable_clone: bool
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BaseAdapterMetadataSqlTestCase:
+    description: str
+    database: str
+    schema: str
+    name: str
+    expected_sql: tuple[str, ...]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,7 +11,10 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.executor.scenario.models import ScenarioSnapshotColumn
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import SCENARIO_LOCAL_TYPE_INVALID
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.sqlglot import import_sqlglot_expressions
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
 @dataclass(frozen=True)
@@ -216,7 +220,14 @@ def _local_type_with_sqlglot(
             warehouse_type,
             dialect=sql_analysis_dialect,
         )
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "scenario snapshot type sqlglot conversion failed; falling back",
+            warehouse_type=warehouse_type,
+            sql_analysis_dialect=sql_analysis_dialect,
+            sqlbuild_error=str(error),
+        )
         return None
 
     type_name: str = _sqlglot_type_name(data_type)

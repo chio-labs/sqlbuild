@@ -1251,6 +1251,87 @@ TEST_CASES: list[CheckPathsTestCase] = [
         },
         expected_violation_codes=(),
     ),
+    CheckPathsTestCase(
+        description="reports silent broad exception probe answers in runtime code",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_examples(values: list[str]) -> tuple[object, ...]:
+                    try:
+                        missing_name: str | None = "present"
+                    except Exception:
+                        return None
+
+                    try:
+                        probe_flag: bool = True
+                    except Exception:
+                        return False
+
+                    try:
+                        probe_map: dict[str, str] = {"present": "yes"}
+                    except Exception:
+                        return {}
+
+                    try:
+                        probe_tuple: tuple[str, ...] = ("present",)
+                    except Exception:
+                        return ()
+
+                    found: list[str] = []
+                    for value in values:
+                        try:
+                            found.append(value)
+                        except Exception:
+                            continue
+                    return (missing_name, probe_flag, probe_map, probe_tuple, found)
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC044", "SC044", "SC044", "SC044", "SC044"),
+    ),
+    CheckPathsTestCase(
+        description="allows broad exception fallbacks that log or bind the exception",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_examples() -> tuple[bool, bool]:
+                    try:
+                        logged_probe: bool = True
+                    except Exception:
+                        log_debug_event("probe failed")
+                        logged_probe = False
+
+                    try:
+                        failed_result: bool = True
+                    except Exception as exc:
+                        failed_result = build_failed_result(exc)
+                    return (logged_probe, failed_result)
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows silent broad exception probe answers outside runtime code",
+        repo_files=compliant_repo_files()
+        | {
+            "scripts/check_probe.py": dedent(
+                """
+                def probe() -> bool:
+                    try:
+                        return True
+                    except Exception:
+                        return False
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
 ]
 
 

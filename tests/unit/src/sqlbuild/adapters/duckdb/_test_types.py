@@ -29,3 +29,12 @@ class DuckDbRenderIdentifierTestCase:
 class DuckDbRenderTableFunctionTestCase:
     description: str
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuckDbMetadataSqlTestCase:
+    description: str
+    database: str
+    schema: str
+    name: str
+    expected_sql: tuple[str, ...]

@@ -16,6 +16,7 @@ from sqlbuild.adapter.base.base_adapter import (
     _build_schemas_filter,
     _historical_hard_deleted_at_sql,
     _historical_timestamp_changes_new_records_cte_sql,
+    _quote_sql_string,
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
 )
@@ -566,8 +567,8 @@ class SqlServerAdapter(BaseAdapter):
         schema: str | None = parts[-2] if len(parts) >= 2 else None
         cursor: Any = connection.execute(
             "SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name = '{name}'"
-            + (f" AND table_schema = '{schema}'" if schema else "")
+            f"WHERE table_name = {_quote_sql_string(name)}"
+            + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
             + " ORDER BY ordinal_position"
         )
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
@@ -933,7 +934,7 @@ class SqlServerAdapter(BaseAdapter):
             "FROM information_schema.columns WHERE 1=1"
             + _build_schemas_filter(schemas)
             + _build_names_filter(names)
-            + (f" AND table_catalog = '{database}'" if database else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
             + " ORDER BY table_name, ordinal_position"
         )
         cursor: Any = connection.execute(query)
@@ -956,9 +957,9 @@ class SqlServerAdapter(BaseAdapter):
     ) -> tuple[ColumnInfo, ...]:
         query: str = (
             "SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name = '{name}'"
-            + (f" AND table_schema = '{schema}'" if schema else "")
-            + (f" AND table_catalog = '{database}'" if database else "")
+            f"WHERE table_name = {_quote_sql_string(name)}"
+            + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
             + " ORDER BY ordinal_position"
         )
         cursor: Any = connection.execute(query)
@@ -977,7 +978,7 @@ class SqlServerAdapter(BaseAdapter):
             "FROM information_schema.routines WHERE 1=1"
             + _build_schemas_filter(schemas, column_name="routine_schema")
             + _build_names_filter(names, column_name="routine_name")
-            + (f" AND routine_catalog = '{database}'" if database else "")
+            + (f" AND routine_catalog = {_quote_sql_string(database)}" if database else "")
         )
         cursor: Any = connection.execute(query)
         return tuple(
@@ -1003,7 +1004,7 @@ class SqlServerAdapter(BaseAdapter):
             "FROM information_schema.tables WHERE 1=1"
             + _build_schemas_filter(schemas)
             + _build_names_filter(names)
-            + (f" AND table_catalog = '{database}'" if database else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
         )
         cursor: Any = connection.execute(query)
         return tuple(
@@ -1052,9 +1053,9 @@ class SqlServerAdapter(BaseAdapter):
     ) -> bool:
         cursor: Any = connection.execute(
             "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_name = '{name}'"
-            + (f" AND table_schema = '{schema}'" if schema else "")
-            + (f" AND table_catalog = '{database}'" if database else "")
+            f"WHERE table_name = {_quote_sql_string(name)}"
+            + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
         )
         return cursor.fetchone() is not None
 
@@ -1974,9 +1975,12 @@ class SqlServerAdapter(BaseAdapter):
     ) -> bool:
         """Return whether the named schema exists in the warehouse."""
 
-        query: str = f"SELECT 1 FROM information_schema.schemata WHERE schema_name = '{schema}'"
+        query: str = (
+            "SELECT 1 FROM information_schema.schemata "
+            f"WHERE schema_name = {_quote_sql_string(schema)}"
+        )
         if database is not None:
-            query += f" AND catalog_name = '{database}'"
+            query += f" AND catalog_name = {_quote_sql_string(database)}"
         cursor: Any = self.execute(connection, query)
         return cursor.fetchone() is not None
 

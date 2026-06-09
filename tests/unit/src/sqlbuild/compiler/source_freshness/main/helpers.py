@@ -101,6 +101,7 @@ def write_previous_record_to_schema(
     schema: str,
     source_name: str,
     data_version: str,
+    observed_at: datetime = datetime(2026, 1, 15, 10, 0, 0),
 ) -> None:
     write_source_freshness_record(
         connection=connection,
@@ -122,7 +123,7 @@ def write_previous_record_to_schema(
                 value_kind=SourceFreshnessValueKind.INTEGER,
                 data_version=data_version,
             ),
-            observed_at=datetime(2026, 1, 15, 10, 0, 0),
+            observed_at=observed_at,
         ),
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,

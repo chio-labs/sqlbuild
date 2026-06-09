@@ -263,7 +263,12 @@ def _infer_columns_from_polyglot_ast(
     if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         try:
             select = parsed.find(_POLYGLOT_KIND_SELECT)
-        except Exception:
+        except Exception as error:
+            log_debug_event(
+                _DEBUG_LOGGER,
+                "column inference select lookup failed; falling back",
+                sqlbuild_error=str(error),
+            )
             return None
     if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return None
@@ -313,7 +318,12 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         try:
             select = parsed.find(_POLYGLOT_KIND_SELECT)
-        except Exception:
+        except Exception as error:
+            log_debug_event(
+                _DEBUG_LOGGER,
+                "column lineage select lookup failed; falling back",
+                sqlbuild_error=str(error),
+            )
             return None, (), False
     if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return None, (), False
@@ -460,7 +470,12 @@ def _polyglot_reference_alias_map(
     alias_map: dict[str, tuple[CompiledResourceType, str]] = {}
     try:
         tables: tuple[Any, ...] = tuple(parsed.find_all(_POLYGLOT_KIND_TABLE))
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "column lineage table discovery failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return alias_map
     table: Any
     for table in tables:
@@ -543,7 +558,12 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
         )
     try:
         payload: object = expression.to_dict()
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "column lineage expression payload extraction failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return ()
     refs: list[tuple[str, str]] = []
 
@@ -603,7 +623,12 @@ def _polyglot_lineage_transform_kind(expression: Any, *, has_upstream: bool) -> 
 def _polyglot_has_aggregation(expression: Any) -> bool:
     try:
         nodes: tuple[Any, ...] = tuple(expression.walk())
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "column lineage aggregation detection failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return False
     return any(str(getattr(node, "kind", "")) in _POLYGLOT_AGGREGATE_KINDS for node in nodes)
 
@@ -614,7 +639,12 @@ def _polyglot_cast_type(expression: Any) -> str | None:
         return None
     try:
         payload: object = expression.to_dict().get(kind, {})
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "column inference cast type extraction failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     if not isinstance(payload, dict):
         return None
