@@ -15,9 +15,9 @@ class HookFunctionPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class StandardReuseSourcePlanOutputTestCase:
+class StandardReuseFromTargetPlanOutputTestCase:
     description: str
-    expected_source_target_name: str
+    expected_reuse_from_target_name: str
     expected_model_names: tuple[str, ...]
     expected_reuse_candidate_names: tuple[str, ...]
     expected_decisions: dict[str, str]
@@ -26,5 +26,13 @@ class StandardReuseSourcePlanOutputTestCase:
 @dataclass(frozen=True)
 class StandardReuseFullRefreshBypassTestCase:
     description: str
-    expected_reuse_source_metadata_present: bool
+    expected_reuse_from_target_metadata_present: bool
     expected_reuse_decision_metadata_present: bool
+
+
+@dataclass(frozen=True)
+class StandardReuseFromSourceDeferralConflictTestCase:
+    description: str
+    defer_sources_to: str | None
+    target_defer_sources_to: str | None
+    expected_error_fragment: str

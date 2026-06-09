@@ -32,6 +32,7 @@ from sqlbuild.executor.run.helpers.microbatch import (
     execute_microbatch_entry as execute_microbatch_entry,
 )
 from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_origin
 from sqlbuild.executor.run.helpers.snapshot import (
     execute_snapshot_entry as execute_snapshot_entry,
 )
@@ -77,6 +78,14 @@ def execute_table_entry(
     target_table: str = entry.destination.name
     target_qualified: str = resolve_destination_qualified_name(
         adapter=adapter, target=entry.destination
+    )
+    reuse_origin_relation: str | None = (
+        resolve_destination_qualified_name(
+            adapter=adapter,
+            target=entry.reuse_origin,
+        )
+        if entry.reuse_origin is not None
+        else None
     )
     staging_table: str = f"{target_table}__staging"
     staging_qualified: str = resolve_qualified_name_parts(
@@ -184,6 +193,7 @@ def execute_table_entry(
             statement_recorder=statement_recorder,
             hook_results=hook_results,
             resolved_sql=resolved_sql,
+            reuse_origin_relation=reuse_origin_relation,
             hook_functions=hook_functions,
             effective_target_name=effective_target_name,
             effective_vars=effective_vars,
@@ -222,6 +232,7 @@ def execute_table_entry(
         statement_recorder=statement_recorder,
         hook_results=hook_results,
         resolved_sql=resolved_sql,
+        reuse_origin_relation=reuse_origin_relation,
         hook_functions=hook_functions,
         effective_target_name=effective_target_name,
         effective_vars=effective_vars,
@@ -252,6 +263,7 @@ def _staged_lifecycle(
     statement_recorder: StatementRecorder,
     hook_results: list[HookExecutionResult],
     resolved_sql: str,
+    reuse_origin_relation: str | None,
     hook_functions: tuple[DiscoveredHookFunction, ...],
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
@@ -269,12 +281,22 @@ def _staged_lifecycle(
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
-            adapter.create_table_as(
-                connection,
-                target=staging_qualified,
-                sql=resolved_sql,
-                statement_recorder=statement_recorder,
-            )
+            if reuse_origin_relation is not None:
+                create_relation_from_reuse_origin(
+                    adapter=adapter,
+                    connection=connection,
+                    origin_relation=reuse_origin_relation,
+                    destination_relation=staging_qualified,
+                    hard_copy=entry.reuse_hard_copy,
+                    statement_recorder=statement_recorder,
+                )
+            else:
+                adapter.create_table_as(
+                    connection,
+                    target=staging_qualified,
+                    sql=resolved_sql,
+                    statement_recorder=statement_recorder,
+                )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -503,6 +525,7 @@ def _direct_lifecycle(
     statement_recorder: StatementRecorder,
     hook_results: list[HookExecutionResult],
     resolved_sql: str,
+    reuse_origin_relation: str | None,
     hook_functions: tuple[DiscoveredHookFunction, ...],
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
@@ -527,12 +550,28 @@ def _direct_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_table"):
-            adapter.create_table_as(
-                connection,
-                target=target_qualified,
-                sql=resolved_sql,
-                statement_recorder=statement_recorder,
-            )
+            if reuse_origin_relation is not None:
+                adapter.drop(
+                    connection,
+                    target=target_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
+                create_relation_from_reuse_origin(
+                    adapter=adapter,
+                    connection=connection,
+                    origin_relation=reuse_origin_relation,
+                    destination_relation=target_qualified,
+                    hard_copy=entry.reuse_hard_copy,
+                    statement_recorder=statement_recorder,
+                )
+            else:
+                adapter.create_table_as(
+                    connection,
+                    target=target_qualified,
+                    sql=resolved_sql,
+                    statement_recorder=statement_recorder,
+                )
     except Exception as exc:
         return build_failed_result(
             entry=entry,

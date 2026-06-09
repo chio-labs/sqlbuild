@@ -288,23 +288,24 @@ class StandardModelVersionIdentities:
 
 
 @dataclass(frozen=True)
-class StandardReuseSourceModelSnapshot:
-    """Source-target state for one model considered for standard target reuse."""
+class StandardReuseFromTargetModelSnapshot:
+    """One model's relation and fingerprint state in the reuse_from target."""
 
     model_name: str
-    destination: CompiledRelationDestination
+    reuse_origin: CompiledRelationDestination
     relation_exists: bool
     built_version_hash: str | None = None
 
 
 @dataclass(frozen=True)
-class StandardReuseSourceSnapshot:
-    """Resolved source-target state used to decide standard target reuse eligibility."""
+class StandardReuseFromTargetSnapshot:
+    """Resolved reuse_from target state used to decide standard target reuse eligibility."""
 
-    target_name: str
+    reuse_from_target_name: str
     fingerprint_database: str | None
     fingerprint_schema: str
-    model_snapshots: dict[str, StandardReuseSourceModelSnapshot]
+    model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot]
+    hard_copy: bool = False
 
 
 @dataclass(frozen=True)
@@ -313,17 +314,17 @@ class StandardReuseModelDecision:
 
     model_name: str
     decision: str
-    source_target_name: str
-    source_relation_exists: bool
-    source_built_version_present: bool
-    source_matches_expected: bool
+    reuse_from_target_name: str
+    reuse_from_relation_exists: bool
+    reuse_from_built_version_present: bool
+    reuse_from_matches_expected: bool
 
 
 @dataclass(frozen=True)
 class StandardReuseDecisionResults:
     """Planner-side standard reuse decisions for a reuse_from target."""
 
-    source_target_name: str
+    reuse_from_target_name: str
     models: dict[str, StandardReuseModelDecision]
 
 
@@ -411,6 +412,8 @@ class ModelPlanEntry:
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
+    reuse_origin: CompiledRelationDestination | None = None
+    reuse_hard_copy: bool = False
 
 
 @dataclass(frozen=True)

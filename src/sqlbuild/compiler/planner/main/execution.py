@@ -32,8 +32,9 @@ from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_sou
 from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
     build_standard_reuse_decisions,
 )
-from sqlbuild.compiler.planner.helpers.standard_reuse_source import (
-    build_standard_reuse_source_snapshot,
+from sqlbuild.compiler.planner.helpers.standard_reuse_from_target import (
+    build_standard_reuse_from_target_snapshot,
+    enforce_standard_reuse_from_source_deferral_conflict,
 )
 from sqlbuild.compiler.planner.helpers.version_identity import (
     StandardModelVersionIdentities,
@@ -49,7 +50,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanOutput,
     StandardReuseDecisionResults,
-    StandardReuseSourceSnapshot,
+    StandardReuseFromTargetSnapshot,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
@@ -86,6 +87,13 @@ def build_execution_plan(
         auto_load_sources=auto_load_sources,
         selected_keys=selected_keys,
     )
+    enforce_standard_reuse_from_source_deferral_conflict(
+        project=project,
+        project_config=project_config,
+        local_config=local_config,
+        defer_sources_to=defer_sources_to,
+        source_deferral_enabled=source_deferral_enabled,
+    )
 
     warehouse_start: float = time.monotonic()
     if on_progress is not None:
@@ -117,10 +125,10 @@ def build_execution_plan(
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
         on_progress("Generating plan...")
     plan_start: float = time.monotonic()
-    standard_reuse_source: StandardReuseSourceSnapshot | None = (
+    standard_reuse_from_target: StandardReuseFromTargetSnapshot | None = (
         None
         if full_refresh
-        else build_standard_reuse_source_snapshot(
+        else build_standard_reuse_from_target_snapshot(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -134,12 +142,12 @@ def build_execution_plan(
         scope=scope,
     )
     standard_reuse_decisions: StandardReuseDecisionResults | None = None
-    if standard_reuse_source is not None:
+    if standard_reuse_from_target is not None:
         standard_reuse_decisions = build_standard_reuse_decisions(
             scope=scope,
             expected_version_hashes=version_identities.model_version_hashes,
             built_fingerprints=snapshot.fingerprints,
-            source_snapshot=standard_reuse_source,
+            reuse_from_snapshot=standard_reuse_from_target,
         )
 
     changes: PlannerChangeResults = detect_changes(
@@ -232,13 +240,13 @@ def build_execution_plan(
                 "standard_remaining_stale_model_names": standard_remaining_stale_model_names,
             },
         )
-    if standard_reuse_source is not None:
+    if standard_reuse_from_target is not None:
         plan_output = replace(
             plan_output,
             metadata={
                 **plan_output.metadata,
                 **_serialize_standard_reuse_metadata(
-                    standard_reuse_source=standard_reuse_source,
+                    standard_reuse_from_target=standard_reuse_from_target,
                     standard_reuse_decisions=standard_reuse_decisions,
                 ),
             },
@@ -275,25 +283,26 @@ def _serialize_standard_source_freshness_metadata(
 
 def _serialize_standard_reuse_metadata(
     *,
-    standard_reuse_source: StandardReuseSourceSnapshot,
+    standard_reuse_from_target: StandardReuseFromTargetSnapshot,
     standard_reuse_decisions: StandardReuseDecisionResults | None,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
-        "standard_reuse_source": {
-            "target_name": standard_reuse_source.target_name,
-            "fingerprint_database": standard_reuse_source.fingerprint_database,
-            "fingerprint_schema": standard_reuse_source.fingerprint_schema,
-            "models": {
+        "standard_reuse_from_target": {
+            "reuse_from_target_name": standard_reuse_from_target.reuse_from_target_name,
+            "hard_copy": standard_reuse_from_target.hard_copy,
+            "fingerprint_database": standard_reuse_from_target.fingerprint_database,
+            "fingerprint_schema": standard_reuse_from_target.fingerprint_schema,
+            "model_origins": {
                 model_name: {
-                    "database": model_snapshot.destination.database,
-                    "schema": model_snapshot.destination.schema,
-                    "name": model_snapshot.destination.name,
-                    "qualified_name": model_snapshot.destination.qualified_name,
+                    "database": model_snapshot.reuse_origin.database,
+                    "schema": model_snapshot.reuse_origin.schema,
+                    "name": model_snapshot.reuse_origin.name,
+                    "qualified_name": model_snapshot.reuse_origin.qualified_name,
                     "relation_exists": model_snapshot.relation_exists,
                     "built_version_present": model_snapshot.built_version_hash is not None,
                 }
                 for model_name, model_snapshot in sorted(
-                    standard_reuse_source.model_snapshots.items()
+                    standard_reuse_from_target.model_snapshots.items()
                 )
             },
         }
@@ -301,15 +310,14 @@ def _serialize_standard_reuse_metadata(
     if standard_reuse_decisions is None:
         return metadata
     metadata["standard_reuse_decisions"] = {
-        "target_name": standard_reuse_source.target_name,
-        "source_target_name": standard_reuse_decisions.source_target_name,
+        "reuse_from_target_name": standard_reuse_decisions.reuse_from_target_name,
         "models": {
             model_name: {
                 "decision": decision.decision,
-                "source_target_name": decision.source_target_name,
-                "source_relation_exists": decision.source_relation_exists,
-                "source_built_version_present": decision.source_built_version_present,
-                "source_matches_expected": decision.source_matches_expected,
+                "reuse_from_target_name": decision.reuse_from_target_name,
+                "reuse_from_relation_exists": decision.reuse_from_relation_exists,
+                "reuse_from_built_version_present": decision.reuse_from_built_version_present,
+                "reuse_from_matches_expected": decision.reuse_from_matches_expected,
             }
             for model_name, decision in sorted(standard_reuse_decisions.models.items())
         },

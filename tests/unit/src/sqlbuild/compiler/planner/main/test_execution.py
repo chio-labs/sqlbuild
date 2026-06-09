@@ -12,16 +12,23 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.version_identity import (
+    build_standard_model_version_identities,
+)
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput, StandardModelVersionIdentities
+from sqlbuild.compiler.planner.types import PlanAction
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
-    build_standard_reuse_source_project,
+    build_standard_reuse_from_target_project,
+    build_standard_reuse_from_target_scope,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     HookFunctionPlanOutputTestCase,
+    StandardReuseFromSourceDeferralConflictTestCase,
+    StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,
-    StandardReuseSourcePlanOutputTestCase,
     StandardSourceFreshnessPlanOutputTestCase,
 )
 
@@ -35,6 +42,21 @@ PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
         description="normal standard plan output omits source freshness result",
         changes_only=False,
         expected_has_source_freshness=False,
+    ),
+]
+
+SOURCE_DEFERRAL_CONFLICT_TEST_CASES: list[StandardReuseFromSourceDeferralConflictTestCase] = [
+    StandardReuseFromSourceDeferralConflictTestCase(
+        description="target source deferral conflicts with standard reuse",
+        defer_sources_to=None,
+        target_defer_sources_to="prod_sources",
+        expected_error_fragment="source deferral is active",
+    ),
+    StandardReuseFromSourceDeferralConflictTestCase(
+        description="cli source deferral conflicts with standard reuse",
+        defer_sources_to="prod_sources",
+        target_defer_sources_to=None,
+        expected_error_fragment="source deferral is active",
     ),
 ]
 
@@ -114,24 +136,29 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardReuseSourcePlanOutputTestCase(
-            description="execution plan carries standard reuse source metadata",
-            expected_source_target_name="prod",
+        StandardReuseFromTargetPlanOutputTestCase(
+            description="execution plan carries standard reuse_from metadata",
+            expected_reuse_from_target_name="prod",
             expected_model_names=("customers", "orders"),
-            expected_reuse_candidate_names=(),
+            expected_reuse_candidate_names=("orders",),
             expected_decisions={
-                "customers": "source_fingerprint_missing",
-                "orders": "source_version_mismatch",
+                "customers": "reuse_from_fingerprint_missing",
+                "orders": "reuse_candidate",
             },
         )
     ],
-    ids=["execution plan carries standard reuse source metadata"],
+    ids=["execution plan carries standard reuse_from metadata"],
 )
-def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_source_metadata(
-    test_case: StandardReuseSourcePlanOutputTestCase,
+def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_reuse_metadata(
+    test_case: StandardReuseFromTargetPlanOutputTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
+    project: CompiledProject = build_standard_reuse_from_target_project()
+    version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
+        functions=project.functions,
+        scope=build_standard_reuse_from_target_scope(),
+    )
     try:
         adapter.execute(connection, "CREATE SCHEMA dev_schema")
         adapter.execute(connection, "CREATE SCHEMA prod_schema")
@@ -155,7 +182,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_name="orders",
                 run_id="run_1",
                 query_hash="query_hash",
-                version_hash="orders_version_hash",
+                version_hash=version_identities.model_version_hashes["orders"],
                 schema_fingerprint="schema_hash",
                 query_sql="SELECT 1",
                 metadata_json="{}",
@@ -166,7 +193,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
         adapter.execute(connection, "CREATE TABLE prod_schema.orders AS SELECT 1 AS id")
 
         plan_output: PlanOutput = build_execution_plan(
-            project=build_standard_reuse_source_project(),
+            project=project,
             adapter=adapter,
             connection=connection,
             project_config=ProjectConfig(
@@ -183,11 +210,13 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
         adapter.close(connection)
 
     metadata: dict[str, object] = plan_output.metadata
-    reuse_metadata: object = metadata.get("standard_reuse_source")
+    reuse_metadata: object = metadata.get("standard_reuse_from_target")
     assert isinstance(reuse_metadata, dict)
     typed_reuse_metadata: dict[str, object] = cast(dict[str, object], reuse_metadata)
-    assert typed_reuse_metadata["target_name"] == test_case.expected_source_target_name
-    models_metadata: object = typed_reuse_metadata["models"]
+    assert (
+        typed_reuse_metadata["reuse_from_target_name"] == test_case.expected_reuse_from_target_name
+    )
+    models_metadata: object = typed_reuse_metadata["model_origins"]
     assert isinstance(models_metadata, dict)
     assert tuple(sorted(models_metadata)) == test_case.expected_model_names
     decisions_metadata: object = metadata.get("standard_reuse_decisions")
@@ -211,18 +240,57 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
         )
         == test_case.expected_reuse_candidate_names
     )
+    assert all(entry.action != PlanAction.REUSE_RELATION for entry in plan_output.model_entries)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_DEFERRAL_CONFLICT_TEST_CASES,
+    ids=[case.description for case in SOURCE_DEFERRAL_CONFLICT_TEST_CASES],
+)
+def test_given_reuse_from_and_source_deferral_when_planning_then_raises(
+    test_case: StandardReuseFromSourceDeferralConflictTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        with pytest.raises(PlannerInputError) as exc_info:
+            build_execution_plan(
+                project=build_standard_reuse_from_target_project(),
+                adapter=adapter,
+                connection=connection,
+                project_config=ProjectConfig(
+                    name="demo",
+                    adapter="duckdb",
+                    targets={
+                        "dev": TargetConfig(
+                            schema="dev_schema",
+                            reuse_from="prod",
+                            defer_sources_to=test_case.target_defer_sources_to,
+                        ),
+                        "prod": TargetConfig(schema="prod_schema"),
+                        "prod_sources": TargetConfig(schema="prod_sources_schema"),
+                    },
+                ),
+                local_config=LocalConfig(),
+                defer_sources_to=test_case.defer_sources_to,
+            )
+    finally:
+        adapter.close(connection)
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         StandardReuseFullRefreshBypassTestCase(
-            description="full refresh bypasses standard reuse source state",
-            expected_reuse_source_metadata_present=False,
+            description="full refresh bypasses standard reuse_from state",
+            expected_reuse_from_target_metadata_present=False,
             expected_reuse_decision_metadata_present=False,
         )
     ],
-    ids=["full refresh bypasses standard reuse source state"],
+    ids=["full refresh bypasses standard reuse_from state"],
 )
 def test_given_full_refresh_with_reuse_from_when_planning_then_reuse_state_is_skipped(
     test_case: StandardReuseFullRefreshBypassTestCase,
@@ -232,7 +300,7 @@ def test_given_full_refresh_with_reuse_from_when_planning_then_reuse_state_is_sk
     try:
         adapter.execute(connection, "CREATE SCHEMA dev_schema")
         plan_output: PlanOutput = build_execution_plan(
-            project=build_standard_reuse_source_project(),
+            project=build_standard_reuse_from_target_project(),
             adapter=adapter,
             connection=connection,
             full_refresh=True,
@@ -250,8 +318,8 @@ def test_given_full_refresh_with_reuse_from_when_planning_then_reuse_state_is_sk
         adapter.close(connection)
 
     assert (
-        "standard_reuse_source" in plan_output.metadata
-    ) is test_case.expected_reuse_source_metadata_present
+        "standard_reuse_from_target" in plan_output.metadata
+    ) is test_case.expected_reuse_from_target_metadata_present
     assert (
         "standard_reuse_decisions" in plan_output.metadata
     ) is test_case.expected_reuse_decision_metadata_present

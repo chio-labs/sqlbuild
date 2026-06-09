@@ -3,22 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
+    TableReuseExecutionTestCase,
     TableSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     ExtraAuditDefinition,
+    build_reuse_table_plan_entry,
     create_python_hook_data,
     fail_table_hook,
     insert_table_hook_log,
@@ -27,6 +31,16 @@ from tests.integration.src.sqlbuild.executor.run.helpers import (
     verify_failure_warehouse_state,
     verify_success_warehouse_state,
 )
+
+
+class ZeroCopyDuckDbAdapter(DuckDbAdapter):
+    """DuckDB test adapter that exercises the cheap-reuse executor path."""
+
+    adapter_name: ClassVar[str] = "duckdb_zero_copy_test"
+
+    def supports_zero_copy_clone(self) -> bool:
+        return True
+
 
 STAGED_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
     TableSuccessTestCase(
@@ -392,6 +406,33 @@ TYPE_ENFORCEMENT_TEST_CASES: list[TableSuccessTestCase] = [
     ),
 ]
 
+HARD_COPY_REUSE_TEST_CASES: list[TableReuseExecutionTestCase] = [
+    TableReuseExecutionTestCase(
+        description="staged hard-copy reuse promotes reused relation",
+        reuse_hard_copy=True,
+        promotion_mode=TablePromotionMode.STAGED,
+        expected_status=ExecutionStatus.SUCCESS.value,
+        expected_rows=((7,),),
+        expected_lifecycle_fragments=(
+            "DROP TABLE IF EXISTS staging.orders__staging",
+            "CREATE OR REPLACE TABLE staging.orders__staging AS SELECT * "
+            "FROM staging.orders_origin",
+            "RENAME TO orders",
+        ),
+    ),
+    TableReuseExecutionTestCase(
+        description="direct hard-copy reuse replaces target with reused relation",
+        reuse_hard_copy=True,
+        promotion_mode=TablePromotionMode.DIRECT,
+        expected_status=ExecutionStatus.SUCCESS.value,
+        expected_rows=((7,),),
+        expected_lifecycle_fragments=(
+            "DROP TABLE IF EXISTS staging.orders",
+            "CREATE OR REPLACE TABLE staging.orders AS SELECT * FROM staging.orders_origin",
+        ),
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -551,6 +592,163 @@ def test_given_type_enforcement_when_executing_staged_table_then_columns_match(
     verify_success_warehouse_state(
         result=result, test_case=test_case, adapter=adapter, connection=connection
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    HARD_COPY_REUSE_TEST_CASES,
+    ids=[case.description for case in HARD_COPY_REUSE_TEST_CASES],
+)
+def test_given_hard_copy_reuse_relation_when_executing_table_then_materializes_from_origin(
+    test_case: TableReuseExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT 7 AS id")
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=test_case.reuse_hard_copy,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_targets={"orders": entry.destination},
+        seed_targets={},
+        source_map={},
+        model_audits=(),
+        declared_columns=(),
+        promotion_mode=test_case.promotion_mode,
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+
+    rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
+    lifecycle_sql: tuple[str, ...] = tuple(event.content for event in result.lifecycle_events)
+    assert result.status == test_case.expected_status
+    assert rows == list(test_case.expected_rows)
+    for fragment in test_case.expected_lifecycle_fragments:
+        assert any(fragment in statement for statement in lifecycle_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseExecutionTestCase(
+            description="cheap reuse with adapter support materializes from origin",
+            reuse_hard_copy=False,
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((7,),),
+            expected_lifecycle_fragments=(
+                "CREATE OR REPLACE TABLE staging.orders__staging AS SELECT * "
+                "FROM staging.orders_origin",
+            ),
+        )
+    ],
+    ids=["cheap reuse with adapter support materializes from origin"],
+)
+def test_given_cheap_reuse_with_adapter_support_when_executing_table_then_materializes_from_origin(
+    test_case: TableReuseExecutionTestCase,
+    connection: Any,
+) -> None:
+    adapter: ZeroCopyDuckDbAdapter = ZeroCopyDuckDbAdapter()
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT 7 AS id")
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=test_case.reuse_hard_copy,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_targets={"orders": entry.destination},
+        seed_targets={},
+        source_map={},
+        model_audits=(),
+        declared_columns=(),
+        promotion_mode=test_case.promotion_mode,
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+
+    rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
+    lifecycle_sql: tuple[str, ...] = tuple(event.content for event in result.lifecycle_events)
+    assert result.status == test_case.expected_status
+    assert rows == list(test_case.expected_rows)
+    for fragment in test_case.expected_lifecycle_fragments:
+        assert any(fragment in statement for statement in lifecycle_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseExecutionTestCase(
+            description="cheap reuse without adapter support fails clearly",
+            reuse_hard_copy=False,
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_error_fragments=(
+                "does not support cheap relation reuse",
+                "reuse_hard_copy = true",
+            ),
+            expected_target_exists=False,
+        )
+    ],
+    ids=["cheap reuse without adapter support fails clearly"],
+)
+def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fails_clearly(
+    test_case: TableReuseExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT 7 AS id")
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=test_case.reuse_hard_copy,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_targets={"orders": entry.destination},
+        seed_targets={},
+        source_map={},
+        model_audits=(),
+        declared_columns=(),
+        promotion_mode=test_case.promotion_mode,
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+
+    assert result.status == test_case.expected_status
+    assert result.failed_phase == ExecutionPhase.STAGING
+    assert result.error_message is not None
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in result.error_message
+    target_exists: bool = connection.execute(
+        "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'staging' "
+        "AND table_name = 'orders'"
+    ).fetchone() != (0,)
+    assert target_exists is test_case.expected_target_exists
 
 
 @pytest.mark.parametrize(

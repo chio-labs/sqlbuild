@@ -79,7 +79,7 @@ class DirectIdentityStaleModelNamesTestCase:
 
 
 @dataclass(frozen=True)
-class StandardReuseSourceSnapshotTestCase:
+class StandardReuseFromTargetSnapshotTestCase:
     description: str
     fingerprint_rows: tuple[tuple[object, ...], ...]
     existing_relations: frozenset[tuple[str | None, str | None, str]]
@@ -93,7 +93,7 @@ class StandardReuseSourceSnapshotTestCase:
 
 
 @dataclass(frozen=True)
-class StandardReuseSourceSnapshotErrorTestCase:
+class StandardReuseFromTargetSnapshotErrorTestCase:
     description: str
     fingerprint_table_exists: bool
     expected_error_fragment: str
@@ -101,7 +101,7 @@ class StandardReuseSourceSnapshotErrorTestCase:
 
 
 @dataclass(frozen=True)
-class StandardReuseSourceNoConfigTestCase:
+class StandardReuseFromTargetNoConfigTestCase:
     description: str
     expected_snapshot: object
 

@@ -4,34 +4,36 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.standard_reuse_source import (
-    build_standard_reuse_source_snapshot,
+from sqlbuild.compiler.planner.helpers.standard_reuse_from_target import (
+    build_standard_reuse_from_target_snapshot,
 )
-from sqlbuild.compiler.planner.models import PlannerScope, StandardReuseSourceSnapshot
+from sqlbuild.compiler.planner.models import PlannerScope, StandardReuseFromTargetSnapshot
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
-    StandardReuseSourceNoConfigTestCase,
-    StandardReuseSourceSnapshotErrorTestCase,
-    StandardReuseSourceSnapshotTestCase,
+    StandardReuseFromTargetNoConfigTestCase,
+    StandardReuseFromTargetSnapshotErrorTestCase,
+    StandardReuseFromTargetSnapshotTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
-    StandardReuseSourceTestAdapter,
-    build_standard_reuse_fingerprint_row,
-    build_standard_reuse_source_project,
-    build_standard_reuse_source_scope,
+    StandardReuseFromTargetTestAdapter,
+    build_standard_reuse_from_target_fingerprint_row,
+    build_standard_reuse_from_target_project,
+    build_standard_reuse_from_target_scope,
 )
 
-STANDARD_REUSE_SOURCE_SNAPSHOT_ERROR_TEST_CASES: list[StandardReuseSourceSnapshotErrorTestCase] = [
-    StandardReuseSourceSnapshotErrorTestCase(
-        description="raises when source fingerprint table is missing",
+STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES: list[
+    StandardReuseFromTargetSnapshotErrorTestCase
+] = [
+    StandardReuseFromTargetSnapshotErrorTestCase(
+        description="raises when reuse_from fingerprint table is missing",
         fingerprint_table_exists=False,
-        expected_error_fragment="cannot read fingerprint state for source target 'prod'",
+        expected_error_fragment="cannot read fingerprint state for reuse_from target 'prod'",
     ),
-    StandardReuseSourceSnapshotErrorTestCase(
-        description="raises when source fingerprint rows cannot be read",
+    StandardReuseFromTargetSnapshotErrorTestCase(
+        description="raises when reuse_from fingerprint rows cannot be read",
         fingerprint_table_exists=True,
         fingerprint_read_fails=True,
-        expected_error_fragment="cannot read fingerprint state for source target 'prod'",
+        expected_error_fragment="cannot read fingerprint state for reuse_from target 'prod'",
     ),
 ]
 
@@ -39,10 +41,10 @@ STANDARD_REUSE_SOURCE_SNAPSHOT_ERROR_TEST_CASES: list[StandardReuseSourceSnapsho
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardReuseSourceSnapshotTestCase(
-            description="reads source fingerprints and relation existence",
+        StandardReuseFromTargetSnapshotTestCase(
+            description="reads reuse_from fingerprints and relation existence",
             fingerprint_rows=(
-                build_standard_reuse_fingerprint_row(
+                build_standard_reuse_from_target_fingerprint_row(
                     model_name="orders",
                     version_hash="orders_version_hash",
                 ),
@@ -57,19 +59,19 @@ STANDARD_REUSE_SOURCE_SNAPSHOT_ERROR_TEST_CASES: list[StandardReuseSourceSnapsho
             },
         )
     ],
-    ids=["reads source fingerprints and relation existence"],
+    ids=["reads reuse_from fingerprints and relation existence"],
 )
-def test_given_reuse_source_target_when_building_snapshot_then_reads_fingerprints_and_relations(
-    test_case: StandardReuseSourceSnapshotTestCase,
+def test_given_reuse_from_target_when_building_snapshot_then_reads_fingerprints_and_relations(
+    test_case: StandardReuseFromTargetSnapshotTestCase,
 ) -> None:
-    project: CompiledProject = build_standard_reuse_source_project()
-    scope: PlannerScope = build_standard_reuse_source_scope()
-    adapter: StandardReuseSourceTestAdapter = StandardReuseSourceTestAdapter(
+    project: CompiledProject = build_standard_reuse_from_target_project()
+    scope: PlannerScope = build_standard_reuse_from_target_scope()
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
         fingerprint_rows=test_case.fingerprint_rows,
         existing_relations=test_case.existing_relations,
     )
 
-    snapshot: StandardReuseSourceSnapshot | None = build_standard_reuse_source_snapshot(
+    snapshot: StandardReuseFromTargetSnapshot | None = build_standard_reuse_from_target_snapshot(
         project=project,
         adapter=adapter,
         connection=object(),
@@ -86,7 +88,7 @@ def test_given_reuse_source_target_when_building_snapshot_then_reads_fingerprint
     )
 
     assert snapshot is not None
-    assert snapshot.target_name == test_case.expected_target_name
+    assert snapshot.reuse_from_target_name == test_case.expected_target_name
     assert snapshot.fingerprint_database == test_case.expected_fingerprint_database
     assert snapshot.fingerprint_schema == test_case.expected_fingerprint_schema
     assert {
@@ -101,13 +103,13 @@ def test_given_reuse_source_target_when_building_snapshot_then_reads_fingerprint
 
 @pytest.mark.parametrize(
     "test_case",
-    STANDARD_REUSE_SOURCE_SNAPSHOT_ERROR_TEST_CASES,
-    ids=[case.description for case in STANDARD_REUSE_SOURCE_SNAPSHOT_ERROR_TEST_CASES],
+    STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES,
+    ids=[case.description for case in STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES],
 )
-def test_given_missing_source_fingerprint_state_when_building_snapshot_then_it_raises(
-    test_case: StandardReuseSourceSnapshotErrorTestCase,
+def test_given_missing_reuse_from_fingerprint_state_when_building_snapshot_then_it_raises(
+    test_case: StandardReuseFromTargetSnapshotErrorTestCase,
 ) -> None:
-    adapter: StandardReuseSourceTestAdapter = StandardReuseSourceTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
         fingerprint_table_exists=test_case.fingerprint_table_exists,
@@ -115,11 +117,11 @@ def test_given_missing_source_fingerprint_state_when_building_snapshot_then_it_r
     )
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
-        build_standard_reuse_source_snapshot(
-            project=build_standard_reuse_source_project(),
+        build_standard_reuse_from_target_snapshot(
+            project=build_standard_reuse_from_target_project(),
             adapter=adapter,
             connection=object(),
-            scope=build_standard_reuse_source_scope(),
+            scope=build_standard_reuse_from_target_scope(),
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
@@ -135,10 +137,10 @@ def test_given_missing_source_fingerprint_state_when_building_snapshot_then_it_r
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardReuseSourceSnapshotTestCase(
-            description="resolves templated source target namespace",
+        StandardReuseFromTargetSnapshotTestCase(
+            description="resolves templated reuse_from target namespace",
             fingerprint_rows=(
-                build_standard_reuse_fingerprint_row(
+                build_standard_reuse_from_target_fingerprint_row(
                     model_name="orders",
                     version_hash="orders_version_hash",
                 ),
@@ -154,21 +156,21 @@ def test_given_missing_source_fingerprint_state_when_building_snapshot_then_it_r
             },
         )
     ],
-    ids=["resolves templated source target namespace"],
+    ids=["resolves templated reuse_from target namespace"],
 )
-def test_given_templated_reuse_source_target_when_building_snapshot_then_resolves_namespace(
-    test_case: StandardReuseSourceSnapshotTestCase,
+def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_namespace(
+    test_case: StandardReuseFromTargetSnapshotTestCase,
 ) -> None:
-    adapter: StandardReuseSourceTestAdapter = StandardReuseSourceTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
         fingerprint_rows=test_case.fingerprint_rows,
         existing_relations=test_case.existing_relations,
     )
 
-    snapshot: StandardReuseSourceSnapshot | None = build_standard_reuse_source_snapshot(
-        project=build_standard_reuse_source_project(),
+    snapshot: StandardReuseFromTargetSnapshot | None = build_standard_reuse_from_target_snapshot(
+        project=build_standard_reuse_from_target_project(),
         adapter=adapter,
         connection=object(),
-        scope=build_standard_reuse_source_scope(),
+        scope=build_standard_reuse_from_target_scope(),
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",
@@ -196,10 +198,10 @@ def test_given_templated_reuse_source_target_when_building_snapshot_then_resolve
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardReuseSourceSnapshotTestCase(
+        StandardReuseFromTargetSnapshotTestCase(
             description="includes only selected models",
             fingerprint_rows=(
-                build_standard_reuse_fingerprint_row(
+                build_standard_reuse_from_target_fingerprint_row(
                     model_name="orders",
                     version_hash="orders_version_hash",
                 ),
@@ -216,18 +218,18 @@ def test_given_templated_reuse_source_target_when_building_snapshot_then_resolve
     ids=["includes only selected models"],
 )
 def test_given_scoped_plan_when_building_snapshot_then_includes_only_selected_models(
-    test_case: StandardReuseSourceSnapshotTestCase,
+    test_case: StandardReuseFromTargetSnapshotTestCase,
 ) -> None:
-    adapter: StandardReuseSourceTestAdapter = StandardReuseSourceTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
         fingerprint_rows=test_case.fingerprint_rows,
         existing_relations=test_case.existing_relations,
     )
 
-    snapshot: StandardReuseSourceSnapshot | None = build_standard_reuse_source_snapshot(
-        project=build_standard_reuse_source_project(),
+    snapshot: StandardReuseFromTargetSnapshot | None = build_standard_reuse_from_target_snapshot(
+        project=build_standard_reuse_from_target_project(),
         adapter=adapter,
         connection=object(),
-        scope=build_standard_reuse_source_scope(
+        scope=build_standard_reuse_from_target_scope(
             selected_model_names=test_case.selected_model_names
         ),
         project_config=ProjectConfig(
@@ -252,20 +254,20 @@ def test_given_scoped_plan_when_building_snapshot_then_includes_only_selected_mo
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardReuseSourceSnapshotErrorTestCase(
-            description="raises when source target resolves no fingerprint schema",
+        StandardReuseFromTargetSnapshotErrorTestCase(
+            description="raises when reuse_from target resolves no fingerprint schema",
             fingerprint_table_exists=True,
             expected_error_fragment=(
-                "source target 'prod' does not resolve to a fingerprint schema"
+                "reuse_from target 'prod' does not resolve to a fingerprint schema"
             ),
         )
     ],
-    ids=["raises when source target resolves no fingerprint schema"],
+    ids=["raises when reuse_from target resolves no fingerprint schema"],
 )
-def test_given_reuse_source_without_resolved_schema_when_building_snapshot_then_it_raises(
-    test_case: StandardReuseSourceSnapshotErrorTestCase,
+def test_given_reuse_from_without_resolved_schema_when_building_snapshot_then_it_raises(
+    test_case: StandardReuseFromTargetSnapshotErrorTestCase,
 ) -> None:
-    adapter: StandardReuseSourceTestAdapter = StandardReuseSourceTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
         fingerprint_table_exists=test_case.fingerprint_table_exists,
@@ -276,15 +278,15 @@ def test_given_reuse_source_without_resolved_schema_when_building_snapshot_then_
         effective_connection={},
         effective_vars={},
         effective_target_schema=None,
-        models=build_standard_reuse_source_project().models,
+        models=build_standard_reuse_from_target_project().models,
     )
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
-        build_standard_reuse_source_snapshot(
+        build_standard_reuse_from_target_snapshot(
             project=project,
             adapter=adapter,
             connection=object(),
-            scope=build_standard_reuse_source_scope(),
+            scope=build_standard_reuse_from_target_scope(),
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
@@ -300,7 +302,7 @@ def test_given_reuse_source_without_resolved_schema_when_building_snapshot_then_
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardReuseSourceNoConfigTestCase(
+        StandardReuseFromTargetNoConfigTestCase(
             description="returns none when active target has no reuse_from",
             expected_snapshot=None,
         )
@@ -308,18 +310,18 @@ def test_given_reuse_source_without_resolved_schema_when_building_snapshot_then_
     ids=["returns none when active target has no reuse_from"],
 )
 def test_given_no_reuse_from_when_building_snapshot_then_it_returns_none(
-    test_case: StandardReuseSourceNoConfigTestCase,
+    test_case: StandardReuseFromTargetNoConfigTestCase,
 ) -> None:
-    adapter: StandardReuseSourceTestAdapter = StandardReuseSourceTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
     )
 
-    snapshot: StandardReuseSourceSnapshot | None = build_standard_reuse_source_snapshot(
-        project=build_standard_reuse_source_project(),
+    snapshot: StandardReuseFromTargetSnapshot | None = build_standard_reuse_from_target_snapshot(
+        project=build_standard_reuse_from_target_project(),
         adapter=adapter,
         connection=object(),
-        scope=build_standard_reuse_source_scope(),
+        scope=build_standard_reuse_from_target_scope(),
         project_config=ProjectConfig(
             name="demo",
             adapter="duckdb",

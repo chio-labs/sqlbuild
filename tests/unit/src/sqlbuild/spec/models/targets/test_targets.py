@@ -20,13 +20,13 @@ from tests.unit.src.sqlbuild.spec.models.targets._test_types import (
 
 TARGET_CONFIG_REUSE_ERROR_TEST_CASES: list[TargetConfigReuseErrorTestCase] = [
     TargetConfigReuseErrorTestCase(
-        description="rejects unknown reuse source target",
+        description="rejects unknown reuse_from target",
         target_name="dev",
         reuse_from="missing",
         expected_error_fragment="Target 'dev' reuse_from references unknown target 'missing'",
     ),
     TargetConfigReuseErrorTestCase(
-        description="rejects self reuse source target",
+        description="rejects self reuse_from target",
         target_name="dev",
         reuse_from="dev",
         expected_error_fragment="Target 'dev' cannot reuse from itself",
@@ -126,13 +126,13 @@ def test_given_invalid_reuse_from_when_resolving_target_then_it_raises(
     "test_case",
     [
         TargetConfigReuseLocalSourceTestCase(
-            description="allows reuse source target defined only in local config",
+            description="allows reuse_from target defined only in local config",
             expected_reuse_from="prod_local",
         )
     ],
-    ids=["allows reuse source target defined only in local config"],
+    ids=["allows reuse_from target defined only in local config"],
 )
-def test_given_reuse_source_exists_only_in_local_config_when_resolving_then_it_is_allowed(
+def test_given_reuse_from_exists_only_in_local_config_when_resolving_then_it_is_allowed(
     test_case: TargetConfigReuseLocalSourceTestCase,
 ) -> None:
     target_config: TargetConfig = resolve_target_config(

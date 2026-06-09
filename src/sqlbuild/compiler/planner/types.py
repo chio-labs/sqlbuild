@@ -62,6 +62,7 @@ class SchemaColumnSource(StrEnum):
 class PlanAction(StrEnum):
     CREATE_VIEW = "create_view"
     CREATE_TABLE = "create_table"
+    REUSE_RELATION = "reuse_relation"
     INCREMENTAL_APPEND = "incremental_append"
     INCREMENTAL_DELETE_INSERT = "incremental_delete_insert"
     INCREMENTAL_MERGE = "incremental_merge"
@@ -87,9 +88,9 @@ class PlanReason(StrEnum):
 class StandardReuseDecisionKind(StrEnum):
     REUSE_CANDIDATE = "reuse_candidate"
     CURRENT = "current"
-    SOURCE_FINGERPRINT_MISSING = "source_fingerprint_missing"
-    SOURCE_RELATION_MISSING = "source_relation_missing"
-    SOURCE_VERSION_MISMATCH = "source_version_mismatch"
+    REUSE_FROM_FINGERPRINT_MISSING = "reuse_from_fingerprint_missing"
+    REUSE_FROM_RELATION_MISSING = "reuse_from_relation_missing"
+    REUSE_FROM_VERSION_MISMATCH = "reuse_from_version_mismatch"
     INELIGIBLE_MATERIALIZATION = "ineligible_materialization"
 
 

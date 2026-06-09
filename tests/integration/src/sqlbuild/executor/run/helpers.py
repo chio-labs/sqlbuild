@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,39 @@ def build_table_plan_entry(
         type_enforcement=type_enforcement,
         pre_hooks=pre_hooks,
         post_hooks=post_hooks,
+    )
+
+
+def build_reuse_table_plan_entry(
+    *,
+    name: str,
+    sql: str,
+    target_schema: str | None,
+    target_name: str,
+    origin_schema: str | None,
+    origin_name: str,
+    hard_copy: bool,
+) -> ModelPlanEntry:
+    """Build a table plan entry that reuses an origin relation."""
+
+    origin_qualified: str | None = (
+        f"{origin_schema}.{origin_name}" if origin_schema else origin_name
+    )
+    return dataclasses.replace(
+        build_table_plan_entry(
+            name=name,
+            sql=sql,
+            target_schema=target_schema,
+            target_name=target_name,
+        ),
+        action=PlanAction.REUSE_RELATION,
+        reuse_origin=CompiledRelationDestination(
+            database=None,
+            schema=origin_schema,
+            name=origin_name,
+            qualified_name=origin_qualified,
+        ),
+        reuse_hard_copy=hard_copy,
     )
 
 
