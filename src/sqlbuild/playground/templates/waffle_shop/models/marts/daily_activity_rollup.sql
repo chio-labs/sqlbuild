@@ -9,7 +9,7 @@ MODEL (
   ),
   incremental_mode microbatch,
   batch_size 2d,
-  query_change_backfill bounded-14d,
+  replay_on_change bounded-14d,
   tags [marts, acceptance],
   description "Downstream daily microbatch rollup with a wider batch size than its hourly upstream.",
   columns (

@@ -71,6 +71,14 @@ class MarkVersionIdentityStaleActionsTestCase:
 
 
 @dataclass(frozen=True)
+class DirectIdentityStaleModelNamesTestCase:
+    description: str
+    expected_version_hashes: dict[str, str]
+    built_version_hashes: dict[str, str | None]
+    expected_stale_model_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class PlannerSourceFreshnessReadMapTestCase:
     description: str
     expected_observed_data_version: str

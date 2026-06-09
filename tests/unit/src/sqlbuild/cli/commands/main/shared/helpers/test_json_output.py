@@ -60,6 +60,57 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
         ),
     ),
     JsonOutputTestCase(
+        description="plan json includes model identity diagnostics",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.QUERY_CHANGED,
+                    fingerprint_version_hash="expected_hash",
+                    previous_version_hash="built_hash",
+                ),
+                build_model_entry(
+                    name="dim_customers",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.FIRST_RUN,
+                    fingerprint_version_hash="expected_first_hash",
+                ),
+            ),
+        ),
+        expected_keys=("models",),
+        expected_fragments=(
+            '"expected_version_hash": "expected_hash"',
+            '"built_version_hash": "built_hash"',
+            '"built_version_present": true',
+            '"identity_status": "stale"',
+            '"expected_version_hash": "expected_first_hash"',
+            '"built_version_hash": null',
+            '"built_version_present": false',
+            '"identity_status": "missing"',
+        ),
+    ),
+    JsonOutputTestCase(
+        description="plan json reports unknown identity when expected hash is unavailable",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.NO_CHANGE,
+                    previous_version_hash="built_hash",
+                ),
+            ),
+        ),
+        expected_keys=("models",),
+        expected_fragments=(
+            '"expected_version_hash": null',
+            '"built_version_hash": "built_hash"',
+            '"built_version_present": true',
+            '"identity_status": "unknown"',
+        ),
+    ),
+    JsonOutputTestCase(
         description="plan json includes cascade when present",
         plan_output=build_plan_output(
             model_entries=(

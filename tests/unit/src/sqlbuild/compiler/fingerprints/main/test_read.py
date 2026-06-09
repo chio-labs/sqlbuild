@@ -31,6 +31,7 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
                     "orders",
                     "run_001",
                     "query_hash",
+                    "version_hash",
                     "schema_hash",
                     base64.b64encode(b"SELECT 1 AS order_id").decode("ascii"),
                     base64.b64encode(b'{"config":{"materialized":"table"}}').decode("ascii"),
@@ -38,6 +39,7 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
                 )
             ],
             expected_model_name="orders",
+            expected_version_hash="version_hash",
             expected_query_sql="SELECT 1 AS order_id",
             expected_metadata_json='{"config":{"materialized":"table"}}',
         )
@@ -56,6 +58,7 @@ def test_given_encoded_fingerprint_row_when_reading_then_decodes_query_and_metad
     )
 
     fingerprint: Fingerprint = fingerprints.fingerprints[test_case.expected_model_name]
+    assert fingerprint.version_hash == test_case.expected_version_hash
     assert fingerprint.query_sql == test_case.expected_query_sql
     assert fingerprint.metadata_json == test_case.expected_metadata_json
 

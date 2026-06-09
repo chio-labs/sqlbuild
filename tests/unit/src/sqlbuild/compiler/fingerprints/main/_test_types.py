@@ -6,6 +6,7 @@ class ReadLatestFingerprintsTestCase:
     description: str
     rows: list[tuple[object, ...]]
     expected_model_name: str
+    expected_version_hash: str
     expected_query_sql: str
     expected_metadata_json: str
 

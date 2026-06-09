@@ -69,7 +69,8 @@ TEST_CASES: list[DirectFunctionSelectorE2ETestCase] = [
         selector="is_large_order",
         expected_plan_fragment="Plan ready (",
         expected_fragments=("Changed functions (1)", "is_large_order"),
-        unexpected_fragments=("orders", "Upstream changed"),
+        unexpected_fragments=("Upstream changed",),
+        expected_remaining_stale_names=("orders",),
     ),
     DirectFunctionSelectorE2ETestCase(
         description="dependent upstream expansion includes changed function and model",
@@ -112,3 +113,8 @@ def test_given_function_change_when_planning_with_selector_then_respects_functio
         assert fragment in plan_result.stdout, plan_result.stdout
     for fragment in test_case.unexpected_fragments:
         assert fragment not in plan_result.stdout, plan_result.stdout
+    assert ("Remaining stale" in plan_result.stdout) == bool(
+        test_case.expected_remaining_stale_names
+    ), plan_result.stdout
+    for model_name in test_case.expected_remaining_stale_names:
+        assert model_name in plan_result.stdout, plan_result.stdout

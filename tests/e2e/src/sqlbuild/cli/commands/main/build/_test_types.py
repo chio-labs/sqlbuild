@@ -713,4 +713,6 @@ class RemoveColumnSemanticsBuildE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_reason: str
-    expected_warning_fragment: str
+    expected_backfill_action: str
+    expected_backfill_duration: str | None
+    expected_warning_count: int

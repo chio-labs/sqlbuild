@@ -57,6 +57,26 @@ def prune_unchanged_scope(
     return replace(scope, selected_keys=frozenset(selected_keys))
 
 
+def build_direct_identity_stale_model_names(
+    *,
+    scope: PlannerScope,
+    expected_version_hashes: dict[str, str],
+    built_version_hashes: dict[str, str | None],
+) -> frozenset[str]:
+    """Return all model names whose direct built identity is missing or stale."""
+
+    stale_model_names: set[str] = set()
+    model_name: str
+    for model_name in scope.models_by_name:
+        expected_version_hash: str | None = expected_version_hashes.get(model_name)
+        if expected_version_hash is None:
+            continue
+        built_version_hash: str | None = built_version_hashes.get(model_name)
+        if built_version_hash != expected_version_hash:
+            stale_model_names.add(model_name)
+    return frozenset(stale_model_names)
+
+
 def mark_version_identity_stale_actions(
     *,
     scope: PlannerScope,

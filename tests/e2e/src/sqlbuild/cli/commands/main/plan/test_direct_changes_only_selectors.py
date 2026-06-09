@@ -25,7 +25,8 @@ TEST_CASES: list[DirectChangesOnlySelectorE2ETestCase] = [
         selector="stg_orders",
         expected_selected_count=1,
         expected_model_names=("stg_orders",),
-        unexpected_model_names=("fact_orders",),
+        unexpected_model_names=(),
+        expected_remaining_stale_names=("fact_orders",),
     ),
     DirectChangesOnlySelectorE2ETestCase(
         description="name downstream expansion includes stale downstream",
@@ -46,7 +47,8 @@ TEST_CASES: list[DirectChangesOnlySelectorE2ETestCase] = [
         selector="tag:staging",
         expected_selected_count=1,
         expected_model_names=("stg_orders",),
-        unexpected_model_names=("fact_orders",),
+        unexpected_model_names=(),
+        expected_remaining_stale_names=("fact_orders",),
     ),
     DirectChangesOnlySelectorE2ETestCase(
         description="tag downstream expansion includes stale downstream",
@@ -60,7 +62,8 @@ TEST_CASES: list[DirectChangesOnlySelectorE2ETestCase] = [
         selector="path:models/staging",
         expected_selected_count=1,
         expected_model_names=("stg_orders",),
-        unexpected_model_names=("fact_orders",),
+        unexpected_model_names=(),
+        expected_remaining_stale_names=("fact_orders",),
     ),
     DirectChangesOnlySelectorE2ETestCase(
         description="path downstream expansion includes stale downstream",
@@ -119,3 +122,9 @@ def test_given_upstream_change_when_planning_with_selector_then_respects_selecto
         assert model_name in output, output
     for model_name in test_case.unexpected_model_names:
         assert model_name not in output, output
+    assert ("Remaining stale" in output) == bool(test_case.expected_remaining_stale_names), output
+    assert ("models outside selection" in output) == bool(
+        test_case.expected_remaining_stale_names
+    ), output
+    for model_name in test_case.expected_remaining_stale_names:
+        assert model_name in output, output

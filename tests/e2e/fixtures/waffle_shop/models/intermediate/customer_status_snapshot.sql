@@ -10,10 +10,6 @@ MODEL (
   ),
   replay_on_change full,
   on_schema_change sync_all_columns,
-  replay_on_change (
-    add_column bounded-30d,
-    type_change full,
-  ),
   tags [intermediate, acceptance],
   description "Merge-based customer snapshot with timestamp cursor and explicit backfill policies.",
   columns (

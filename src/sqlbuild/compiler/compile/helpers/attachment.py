@@ -3190,7 +3190,7 @@ def resolve_run_id(*, selected_run_id: str | None) -> str:
     if selected_run_id is not None:
         return selected_run_id
     timestamp_prefix: str = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    unique_suffix: str = uuid4().hex[:6]
+    unique_suffix: str = uuid4().hex[:12]
     return f"{timestamp_prefix}_{unique_suffix}"
 
 

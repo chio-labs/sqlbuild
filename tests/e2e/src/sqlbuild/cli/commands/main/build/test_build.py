@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     PythonBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,
@@ -684,6 +685,89 @@ def test_given_source_freshness_when_building_changes_only_then_writes_state_aft
     )
     assert "Plan ready (0 selected)" in steady_state_result.stdout
     assert "TOTAL=0" in steady_state_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="direct changes-only persists plan-time source freshness observation",
+            expected_exit_code=0,
+            expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
+            unexpected_output_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["direct changes-only persists plan-time source freshness observation"],
+)
+def test_given_source_freshness_changes_during_build_when_appending_then_persists_plan_time_value(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_source_freshness_plan_time_persistence",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_source_freshness_plan_time_persistence"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT data_version FROM source_version\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE TABLE source_version AS SELECT 1 AS data_version",
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        (
+            "MODEL (materialized table, "
+            'post_hooks [sql("UPDATE source_version SET data_version = 2")]);\n\n'
+            'SELECT * FROM __source("raw_orders")\n'
+        ),
+        encoding="utf-8",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    source_version_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT data_version FROM source_version",
+    )
+    freshness_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
+    )
+    assert source_version_rows == [(2,)]
+    assert freshness_rows == [("raw_orders", "1")]
 
 
 @pytest.mark.parametrize(

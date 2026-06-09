@@ -75,16 +75,21 @@ def source_freshness_identity() -> SourceFreshnessIdentity:
     )
 
 
-def source_freshness_record() -> SourceFreshnessRecord:
+def source_freshness_record(
+    *,
+    run_id: str = "planning",
+    data_version: str | None = "1",
+    data_version_hash: str = "hash",
+) -> SourceFreshnessRecord:
     return SourceFreshnessRecord(
         source_name="raw_orders",
         target_database=None,
         target_schema=None,
         target_name=None,
-        run_id="planning",
+        run_id=run_id,
         strategy="sql",
         value_kind="integer",
-        data_version="1",
-        data_version_hash="hash",
+        data_version=data_version,
+        data_version_hash=data_version_hash,
         observed_at=datetime(2026, 1, 1, 0, 0, 0),
     )
