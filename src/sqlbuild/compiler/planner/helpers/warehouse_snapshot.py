@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -35,10 +36,12 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
 
 @dataclass(frozen=True)
@@ -360,6 +363,7 @@ def _gather_fingerprints(
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=execute,
+            relation_exists=adapter.relation_exists,
             database=database,
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
@@ -591,7 +595,13 @@ def _execute_cursor_batch(
 
     try:
         result: Any = execute(connection, sql)
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "cursor bounds batch query failed; treating batch as unavailable",
+            sqlbuild_batch_tags=", ".join(query.tag for query in batch),
+            sqlbuild_error=str(error),
+        )
         return {}
     rows: list[Any] = result.fetchall()
     output: dict[str, str] = {}

@@ -105,8 +105,17 @@ def build_snapshot_execution_plan_entry(
 
 
 class FakeCursorAdapter:
+    def __init__(self, *, target_relation_exists: bool = False) -> None:
+        self.target_relation_exists: bool = target_relation_exists
+
     def execute(self, connection: Any, sql: str) -> Any:
         return connection.execute(sql)
+
+    def relation_exists(
+        self, connection: Any, *, database: str | None, schema: str | None, name: str
+    ) -> bool:
+        del connection, database, schema, name
+        return self.target_relation_exists
 
     def requires_derived_table_aliases(self) -> bool:
         return False

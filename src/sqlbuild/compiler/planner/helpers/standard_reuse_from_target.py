@@ -80,6 +80,7 @@ def build_standard_reuse_from_target_snapshot(
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=adapter.execute,
+            relation_exists=adapter.relation_exists,
             database=reuse_from_database,
             schema=reuse_from_schema,
             render_qualified_name=adapter.render_qualified_name,

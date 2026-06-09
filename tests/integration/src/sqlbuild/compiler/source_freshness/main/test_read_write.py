@@ -26,6 +26,7 @@ from tests.integration.src.sqlbuild.compiler.source_freshness.main._test_types i
 
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
 RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_framework_type
+RELATION_EXISTS: Callable[..., bool] = DuckDbAdapter().relation_exists
 
 SOURCE_FRESHNESS_ROUND_TRIP_TEST_CASES: list[SourceFreshnessRoundTripTestCase] = [
     SourceFreshnessRoundTripTestCase(
@@ -140,6 +141,7 @@ def test_given_source_freshness_records_when_writing_and_reading_then_returns_ex
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -175,6 +177,7 @@ def test_given_no_table_when_reading_source_freshness_then_returns_empty_set(
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -298,6 +301,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -382,6 +386,7 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -417,6 +422,7 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,

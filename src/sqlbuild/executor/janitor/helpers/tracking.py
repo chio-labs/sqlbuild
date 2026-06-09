@@ -29,6 +29,7 @@ def collect_tracked_relation_keys(
             fingerprint_set: FingerprintSet = read_latest_fingerprints(
                 connection=connection,
                 execute=adapter.execute,
+                relation_exists=adapter.relation_exists,
                 database=database,
                 schema=schema,
                 render_qualified_name=adapter.render_qualified_name,

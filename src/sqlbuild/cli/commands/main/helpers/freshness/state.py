@@ -26,6 +26,7 @@ def read_standard_freshness_state_for_command(
             read_latest_source_freshness(
                 connection=connection,
                 execute=adapter.execute,
+                relation_exists=adapter.relation_exists,
                 database=state_database,
                 schema=state_schema,
                 render_qualified_name=adapter.render_qualified_name,

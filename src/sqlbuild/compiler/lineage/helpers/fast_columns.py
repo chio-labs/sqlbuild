@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.models.core import (
@@ -38,7 +39,10 @@ from sqlbuild.shared.constants import (
     POLYGLOT_KIND_UNION,
     POLYGLOT_SET_OPERATION_KINDS,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")
 
 
 def build_fast_project_column_lineage(
@@ -138,7 +142,13 @@ def _build_polyglot_fast_model_column_lineage(
     normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
     try:
         parsed: Any = polyglot_module.parse_one(normalized_sql, dialect=dialect or "generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "fast column lineage parse failed; falling back",
+            sqlbuild_model=model.name,
+            sqlbuild_error=str(error),
+        )
         return None
     parsed_kind: str = str(getattr(parsed, "kind", ""))
     if parsed_kind == POLYGLOT_KIND_UNION:

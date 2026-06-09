@@ -146,6 +146,7 @@ def _read_previous_records(
         previous_set: SourceFreshnessSet = read_latest_source_freshness(
             connection=connection,
             execute=adapter.execute,
+            relation_exists=adapter.relation_exists,
             database=state_database,
             schema=state_schema,
             render_qualified_name=render_qualified_name,

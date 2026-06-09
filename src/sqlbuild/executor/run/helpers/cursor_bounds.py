@@ -33,6 +33,9 @@ def resolve_runtime_cursor_bounds(
     adapter: BaseAdapter,
     connection: Any,
     target_relation: str,
+    target_database: str | None,
+    target_schema: str | None,
+    target_name: str,
     cursor_column: str,
     cursor_type: str | None,
     cursor_grain: str | None,
@@ -55,6 +58,9 @@ def resolve_runtime_cursor_bounds(
         adapter=adapter,
         connection=connection,
         target_relation=target_relation,
+        target_database=target_database,
+        target_schema=target_schema,
+        target_name=target_name,
         cursor_column=cursor_column,
     )
 
@@ -135,13 +141,27 @@ def _query_target_max_raw(
     adapter: BaseAdapter,
     connection: Any,
     target_relation: str,
+    target_database: str | None,
+    target_schema: str | None,
+    target_name: str,
     cursor_column: str,
 ) -> object | None:
-    sql: str = f"SELECT MAX({cursor_column}) FROM {target_relation}"
-    try:
-        cursor: Any = adapter.execute(connection, sql)
-    except Exception:
+    """Read the target cursor high-water mark, or None when the target does not exist yet.
+
+    Existence is checked via adapter metadata rather than by swallowing query errors, so
+    operational failures (permissions, connectivity) propagate instead of silently widening
+    the replay window to the full upstream range.
+    """
+
+    if not adapter.relation_exists(
+        connection,
+        database=target_database,
+        schema=target_schema,
+        name=target_name,
+    ):
         return None
+    sql: str = f"SELECT MAX({cursor_column}) FROM {target_relation}"
+    cursor: Any = adapter.execute(connection, sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None:
         return None

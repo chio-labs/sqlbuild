@@ -23,6 +23,7 @@ from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types impor
 
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
 RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_framework_type
+RELATION_EXISTS: Callable[..., bool] = DuckDbAdapter().relation_exists
 
 WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
     WriteAndReadTestCase(
@@ -131,6 +132,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -170,6 +172,7 @@ def test_given_no_table_when_reading_then_returns_empty_set(
     result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -232,6 +235,7 @@ def test_given_old_fingerprint_table_without_version_hash_when_reading_then_rais
         read_latest_fingerprints(
             connection=connection,
             execute=execute,
+            relation_exists=RELATION_EXISTS,
             database=None,
             schema=schema,
             render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -357,6 +361,7 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
     result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
+        relation_exists=RELATION_EXISTS,
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -427,6 +432,7 @@ def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_err
         read_latest_fingerprints(
             connection=connection,
             execute=execute,
+            relation_exists=RELATION_EXISTS,
             database=None,
             schema=test_case.schema,
             render_qualified_name=RENDER_QUALIFIED_NAME,

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 
 
 def extract_top_level_ctes_with_sql_analysis(
@@ -18,7 +22,13 @@ def extract_top_level_ctes_with_sql_analysis(
         return None
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "top-level CTE extraction parse failed; falling back",
+            sqlbuild_file=file_label,
+            sqlbuild_error=str(error),
+        )
         return None
 
     with_expression: Any | None = parsed.args.get("with")
@@ -76,7 +86,12 @@ def _generate_cte_body(*, polyglot_module: Any, cte: dict[str, Any]) -> str | No
         return None
     try:
         generated: list[str] = polyglot_module.generate(body, dialect="generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "CTE body generation failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     if len(generated) != 1:
         return None
