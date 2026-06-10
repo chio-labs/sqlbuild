@@ -76,6 +76,7 @@ class _AuditDisplayEntry:
     total_row_count: int
     batch_pass: int
     batch_total: int
+    reused: bool = False
     executed_sql: str | None = None
 
 
@@ -426,6 +427,8 @@ class BuildProgressCallbacks:
             audit_status: str = self._style.status(_audit_outcome_display(entry.outcome))
             audit_name: str = _truncate_name(entry.display_name, sub_nw)
             audit_detail: str = ""
+            if entry.reused:
+                audit_detail = "  reused"
             if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
                 row_label: str = "row" if entry.total_row_count == 1 else "rows"
                 audit_detail = f"  {entry.total_row_count} {row_label}"
@@ -919,6 +922,7 @@ def _aggregate_audit_results(
         worst: AuditOutcome = _worst_audit_outcome(results)
         total_rows: int = sum(r.row_count for r in results)
         pass_count: int = sum(1 for r in results if r.outcome == AuditOutcome.PASS)
+        reused: bool = all(r.reused for r in results)
         label: str = _phase_label(_phase, has_delta_audits=has_delta, batch_count=len(results))
         entries.append(
             _AuditDisplayEntry(
@@ -928,6 +932,7 @@ def _aggregate_audit_results(
                 total_row_count=total_rows,
                 batch_pass=pass_count,
                 batch_total=len(results),
+                reused=reused,
                 executed_sql=results[0].executed_sql if results else None,
             )
         )

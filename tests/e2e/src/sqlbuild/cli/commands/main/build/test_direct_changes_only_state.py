@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_direct_changes_only_two_model_project,
     prepare_direct_custom_reuse_from_project,
+    prepare_direct_reuse_from_audit_project,
     prepare_direct_reuse_from_multi_schema_project,
     prepare_direct_reuse_from_project,
     prepare_direct_snapshot_reuse_from_project,
@@ -185,6 +186,54 @@ def test_given_reuse_from_target_when_building_dev_then_copies_prod_relation(
         )
         == prod_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectReuseFromBuildE2ETestCase(
+            description="dev reuse_from consumes prod audit proof",
+            project_name="direct_reuse_from_build_reuses_audit_proof",
+            expected_prod_build_exit_code=0,
+            expected_dev_build_exit_code=0,
+        )
+    ],
+    ids=["dev reuse_from consumes prod audit proof"],
+)
+def test_given_reuse_from_target_with_origin_audit_proof_when_building_dev_then_marks_audit_reused(
+    test_case: DirectReuseFromBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_direct_reuse_from_audit_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    execution_json_path: Path = project_dir / "target" / "dev-build.json"
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert prod_result.returncode == test_case.expected_prod_build_exit_code, (
+        prod_result.stdout + prod_result.stderr
+    )
+
+    execute_duckdb(db_path=db_path, sql="UPDATE prod.orders SET id = NULL")
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+    dev_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--json-output", str(execution_json_path)),
+        project_dir=project_dir,
+    )
+    payload: dict[str, object] = json.loads(execution_json_path.read_text(encoding="utf-8"))
+    checks: list[dict[str, object]] = payload["checks"]  # type: ignore[assignment]
+
+    assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
+        dev_result.stdout + dev_result.stderr
+    )
+    assert "reused" in dev_result.stdout
+    assert query_duckdb(db_path=db_path, sql="SELECT id FROM dev.orders") == [(None,)]
+    assert checks[0]["kind"] == "audit"
+    assert checks[0]["reused"] is True
 
 
 @pytest.mark.parametrize(

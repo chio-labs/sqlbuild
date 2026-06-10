@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
+    AuditOutcome,
     AuditRunScope,
     AuditSeverity,
 )
@@ -28,6 +29,10 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
     RelationReuseKind,
+)
+from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+    model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
@@ -236,6 +241,7 @@ def write_matching_reuse_origin_fingerprint(
     target_name: str,
     target_database: str | None = None,
     version_hash: str = "expected_version",
+    metadata_json: str = "{}",
 ) -> None:
     """Create reuse origin fingerprint state matching a reuse plan entry."""
 
@@ -262,7 +268,7 @@ def write_matching_reuse_origin_fingerprint(
             version_hash=version_hash,
             schema_fingerprint="schema_hash",
             query_sql="SELECT 1 AS id",
-            metadata_json="{}",
+            metadata_json=metadata_json,
             ts="2026-01-01T00:00:00+00:00",
             render_qualified_name=adapter.render_qualified_name,
         ),
@@ -293,6 +299,37 @@ def build_test_audit_plan_entry(
         requested_run_scope=AuditRunScope.FINAL,
         effective_run_scope=AuditRunScope.FINAL,
         attached_target_name=attached_target_name,
+    )
+
+
+def build_test_audit_result(
+    *, audit: AuditPlanEntry, outcome: AuditOutcome = AuditOutcome.PASS
+) -> AuditExecutionResult:
+    """Build a minimal audit execution result for fingerprint metadata tests."""
+
+    return AuditExecutionResult(
+        audit_name=audit.name,
+        attachment_kind=audit.attachment_kind,
+        severity=audit.severity,
+        outcome=outcome,
+        row_count=0 if outcome == AuditOutcome.PASS else 1,
+        executed_sql=audit.resolved_sql,
+        run_scope_phase=AuditRunScope.FINAL,
+        attached_target_name=audit.attached_target_name,
+        attached_column_name=audit.attached_column_name,
+    )
+
+
+def build_test_audit_gate_metadata(
+    *, audit: AuditPlanEntry, outcome: AuditOutcome = AuditOutcome.PASS
+) -> str:
+    """Build metadata JSON containing successful audit gate proof."""
+
+    return model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(audit,),
+        audit_results=(build_test_audit_result(audit=audit, outcome=outcome),),
+        run_id="reuse_from_run",
     )
 
 

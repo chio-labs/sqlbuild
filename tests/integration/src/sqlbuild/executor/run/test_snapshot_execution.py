@@ -12,7 +12,7 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.run.main.execute import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     SnapshotReuseExecutionTestCase,
@@ -21,6 +21,7 @@ from tests.integration.src.sqlbuild.executor.run._test_types import (
 )
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     build_reuse_snapshot_plan_entry,
+    build_test_audit_gate_metadata,
     build_test_audit_plan_entry,
     write_matching_reuse_origin_fingerprint,
 )
@@ -734,6 +735,96 @@ def test_given_snapshot_seed_reuse_with_schema_change_when_running_then_appends_
 
         assert result.status.value == test_case.expected_status
         assert rows == test_case.expected_rows
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotReuseVariantExecutionTestCase(
+            description="snapshot seed reuse executes audits despite accepted origin proof",
+            reuse_hard_copy=True,
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_rows=(),
+            expected_audit_count=1,
+        )
+    ],
+    ids=["snapshot seed reuse executes audits despite accepted origin proof"],
+)
+def test_given_snapshot_seed_reuse_with_origin_audit_proof_when_running_then_audit_still_executes(
+    test_case: SnapshotReuseVariantExecutionTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA prod")
+        adapter.execute(connection, "CREATE SCHEMA dev")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.account_snapshot AS "
+            "SELECT NULL::INTEGER AS account_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
+            "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE dev.raw_accounts AS "
+            "SELECT 1 AS account_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS updated_at WHERE 1 = 0",
+        )
+        origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+            name="account_snapshot_not_null",
+            unresolved_sql=(
+                'SELECT account_id FROM __ref("account_snapshot") WHERE account_id IS NULL'
+            ),
+            attached_target_name="account_snapshot",
+            resolved_target_name="prod.account_snapshot",
+            severity="error",
+        )
+        planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+            name="account_snapshot_not_null",
+            unresolved_sql=(
+                'SELECT account_id FROM __ref("account_snapshot") WHERE account_id IS NULL'
+            ),
+            attached_target_name="account_snapshot",
+            resolved_target_name="dev.account_snapshot",
+            severity="error",
+        )
+        write_matching_reuse_origin_fingerprint(
+            adapter=adapter,
+            connection=connection,
+            schema="prod",
+            model_name="account_snapshot",
+            target_name="account_snapshot",
+            metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
+        )
+        entry: ModelPlanEntry = build_reuse_snapshot_plan_entry(
+            name="account_snapshot",
+            sql="SELECT account_id, plan, updated_at FROM dev.raw_accounts",
+            target_schema="dev",
+            target_name="account_snapshot",
+            origin_schema="prod",
+            origin_name="account_snapshot",
+            hard_copy=test_case.reuse_hard_copy,
+        )
+
+        result: ModelExecutionResult = execute_snapshot_entry(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"account_snapshot": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=False,
+        )
+
+        assert result.status.value == test_case.expected_status
+        assert result.failed_phase == ExecutionPhase.AUDIT
+        assert len(result.audit_results) == test_case.expected_audit_count
+        assert result.audit_results[0].reused is False
     finally:
         adapter.close(connection)
 

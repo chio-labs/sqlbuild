@@ -25,6 +25,7 @@ def build_audit_result(
     row_count: int = 0,
     column_name: str | None = None,
     target_name: str | None = "test_model",
+    reused: bool = False,
 ) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=name,
@@ -36,6 +37,7 @@ def build_audit_result(
         run_scope_phase=run_scope_phase,
         attached_target_name=target_name,
         attached_column_name=column_name,
+        reused=reused,
     )
 
 

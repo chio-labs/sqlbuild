@@ -12,13 +12,15 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import ModelPlanEntry, RelationReusePlan
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.run.helpers.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.helpers import (
+    build_test_audit_gate_metadata,
+    build_test_audit_plan_entry,
     write_matching_reuse_origin_fingerprint,
 )
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
@@ -809,6 +811,108 @@ def test_given_cheap_seed_reuse_when_running_incremental_then_materializes_from_
     assert tuple(rows) == test_case.expected_rows
     for fragment in test_case.expected_lifecycle_fragments:
         assert any(fragment in statement for statement in lifecycle_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IncrementalSeedReuseFailureTestCase(
+            description="incremental seed reuse executes audits despite accepted origin proof",
+            origin_sql=(
+                "CREATE TABLE main.orders_origin AS "
+                "SELECT NULL::INTEGER AS order_id, TIMESTAMP '2026-01-01 00:00:00' AS ordered_at"
+            ),
+            input_sql=(
+                "CREATE TABLE main.raw_orders AS "
+                "SELECT 1 AS order_id, TIMESTAMP '2026-01-02 00:00:00' AS ordered_at WHERE 1 = 0"
+            ),
+            model_sql="SELECT order_id, ordered_at FROM main.raw_orders",
+            fingerprint_version_hash="expected_version",
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_error_fragments=("final audit for 'orders' failed",),
+            expected_target_exists=True,
+        )
+    ],
+    ids=["incremental seed reuse executes audits despite accepted origin proof"],
+)
+def test_given_incremental_reuse_with_origin_proof_when_running_then_audit_executes(
+    test_case: IncrementalSeedReuseFailureTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="main.orders_origin",
+        severity="error",
+    )
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="main.orders",
+        severity="error",
+    )
+    connection.execute(test_case.origin_sql)
+    connection.execute(test_case.input_sql)
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="main",
+        model_name="orders",
+        target_name="orders_origin",
+        metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
+    )
+    entry: ModelPlanEntry = dataclasses.replace(
+        build_incremental_plan_entry(
+            name="orders",
+            sql=test_case.model_sql,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+        ),
+        fingerprint_version_hash="expected_version",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders_origin",
+                qualified_name="main.orders_origin",
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=True,
+            fingerprint_database=None,
+            fingerprint_schema="main",
+        ),
+    )
+
+    result: ModelExecutionResult = execute_incremental_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+
+    target_exists: bool = connection.execute(
+        "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'main' AND table_name = 'orders'"
+    ).fetchone() != (0,)
+    assert result.status == test_case.expected_status
+    assert result.failed_phase == test_case.expected_failed_phase
+    assert result.error_message is not None
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in result.error_message
+    assert target_exists is test_case.expected_target_exists
+    assert len(result.audit_results) == 1
+    assert result.audit_results[0].reused is False
 
 
 @pytest.mark.parametrize(

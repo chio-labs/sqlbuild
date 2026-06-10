@@ -11,10 +11,15 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.audit_reuse import (
+    audit_plan_binding_key,
+    reused_final_audit_results_by_binding_key,
+)
 from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,
@@ -278,6 +283,7 @@ def _staged_lifecycle(
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
+    reuse_origin_fingerprint: Fingerprint | None = None
     try:
         with diagnostics_context(
             sqlbuild_phase="materialize", sqlbuild_action_name="create_staging"
@@ -292,7 +298,7 @@ def _staged_lifecycle(
                 entry.relation_reuse is not None
                 and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
             ):
-                create_relation_from_reuse_plan(
+                reuse_origin_fingerprint = create_relation_from_reuse_plan(
                     adapter=adapter,
                     connection=connection,
                     model_name=entry.name,
@@ -374,9 +380,23 @@ def _staged_lifecycle(
         )
 
     overrides: dict[str, str] = {entry.name: staging_qualified}
+    reused_audit_results_by_binding_key: dict[str, AuditExecutionResult] = (
+        reused_final_audit_results_by_binding_key(
+            metadata_json=reuse_origin_fingerprint.metadata_json,
+            model_audits=model_audits,
+        )
+        if reuse_origin_fingerprint is not None
+        else {}
+    )
     audit_error: bool = False
     audit: AuditPlanEntry
     for audit in model_audits:
+        reused_result: AuditExecutionResult | None = reused_audit_results_by_binding_key.get(
+            audit_plan_binding_key(audit)
+        )
+        if reused_result is not None:
+            audit_results.append(reused_result)
+            continue
         result: AuditExecutionResult = execute_audit(
             audit=audit,
             adapter=adapter,
@@ -507,6 +527,7 @@ def _direct_lifecycle(
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
+    reuse_origin_fingerprint: Fingerprint | None = None
     if entry.type_enforcement and declared_columns:
         return build_failed_result(
             entry=entry,
@@ -534,7 +555,7 @@ def _direct_lifecycle(
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
-                create_relation_from_reuse_plan(
+                reuse_origin_fingerprint = create_relation_from_reuse_plan(
                     adapter=adapter,
                     connection=connection,
                     model_name=entry.name,
@@ -561,9 +582,23 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
+    reused_audit_results_by_binding_key: dict[str, AuditExecutionResult] = (
+        reused_final_audit_results_by_binding_key(
+            metadata_json=reuse_origin_fingerprint.metadata_json,
+            model_audits=model_audits,
+        )
+        if reuse_origin_fingerprint is not None
+        else {}
+    )
     audit_error: bool = False
     audit: AuditPlanEntry
     for audit in model_audits:
+        reused_result: AuditExecutionResult | None = reused_audit_results_by_binding_key.get(
+            audit_plan_binding_key(audit)
+        )
+        if reused_result is not None:
+            audit_results.append(reused_result)
+            continue
         result: AuditExecutionResult = execute_audit(
             audit=audit,
             adapter=adapter,

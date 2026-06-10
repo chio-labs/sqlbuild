@@ -517,6 +517,7 @@ def _format_audit_checks(
                 "asset_name": result.attached_target_name,
                 "attached_column_name": result.attached_column_name,
                 "run_scope_phase": result.run_scope_phase.value,
+                "reused": result.reused,
             }
         )
         for result in results

@@ -66,6 +66,7 @@ class AuditAggregationTestCase:
     expected_outcomes: tuple[AuditOutcome, ...]
     expected_batch_totals: tuple[int, ...]
     expected_batch_passes: tuple[int, ...]
+    expected_reused: tuple[bool, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
