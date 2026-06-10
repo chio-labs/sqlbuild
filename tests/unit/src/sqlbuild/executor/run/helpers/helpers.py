@@ -5,13 +5,20 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditOutcome,
+    AuditRunScope,
+    AuditSeverity,
+)
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import HookContext
 
 
@@ -126,6 +133,50 @@ def build_name_test_adapter(adapter_name: str) -> DuckDbAdapter | BigQueryAdapte
     if adapter_name == "bigquery":
         return BigQueryAdapter()
     return DuckDbAdapter()
+
+
+def build_fingerprint_audit_plan_entry() -> AuditPlanEntry:
+    return build_fingerprint_audit_plan_entry_with_options()
+
+
+def build_fingerprint_audit_plan_entry_with_options(
+    *,
+    name: str = "not_null_orders",
+    severity: str = AuditSeverity.ERROR.value,
+    attached_column_name: str | None = "order_id",
+) -> AuditPlanEntry:
+    return AuditPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        name=name,
+        resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        attachment_kind=AuditAttachmentKind.MODEL,
+        severity=AuditSeverity(severity),
+        requested_run_scope=AuditRunScope.FINAL,
+        effective_run_scope=AuditRunScope.FINAL,
+        attached_target_name="orders",
+        attached_column_name=attached_column_name,
+    )
+
+
+def build_fingerprint_audit_result(
+    *,
+    outcome: str,
+    audit_name: str = "not_null_orders",
+    severity: str = AuditSeverity.ERROR.value,
+    attached_column_name: str | None = "order_id",
+) -> AuditExecutionResult:
+    return AuditExecutionResult(
+        audit_name=audit_name,
+        attachment_kind=AuditAttachmentKind.MODEL,
+        severity=AuditSeverity(severity),
+        outcome=AuditOutcome(outcome),
+        row_count=0 if outcome == AuditOutcome.PASS.value else 1,
+        executed_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        run_scope_phase=AuditRunScope.FINAL,
+        attached_target_name="orders",
+        attached_column_name=attached_column_name,
+    )
 
 
 class FakeRelationReuseAdapter(BaseAdapter):

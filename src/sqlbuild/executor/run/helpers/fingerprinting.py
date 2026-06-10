@@ -9,7 +9,11 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+    model_fingerprint_metadata_with_audit_gate,
+)
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
@@ -21,6 +25,8 @@ def try_write_fingerprint(
     run_id: str,
     query_change_tracking: bool,
     warnings: list[str],
+    model_audits: tuple[AuditPlanEntry, ...] = (),
+    audit_results: tuple[AuditExecutionResult, ...] = (),
 ) -> None:
     """Attempt best-effort fingerprint write after successful lifecycle."""
 
@@ -35,6 +41,12 @@ def try_write_fingerprint(
         return
     try:
         schema_fp: str = hashlib.sha256(b"").hexdigest()
+        metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+            metadata_json=entry.fingerprint_metadata_json,
+            model_audits=model_audits,
+            audit_results=audit_results,
+            run_id=run_id,
+        )
         fingerprint: Fingerprint = Fingerprint(
             model_name=entry.name,
             target_database=entry.destination.database,
@@ -46,7 +58,7 @@ def try_write_fingerprint(
             or compute_query_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
             query_sql=entry.fingerprint_query_sql,
-            metadata_json=entry.fingerprint_metadata_json or "{}",
+            metadata_json=metadata_json,
             ts=datetime.now(tz=UTC),
         )
         execute_fn: Any = adapter.execute

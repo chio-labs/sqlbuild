@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.executor.run.types import AuditGateStatus
 from sqlbuild.executor.shared.types import ExecutionPhase
 
 
@@ -156,6 +157,39 @@ class SnapshotSchemaChangeTestCase:
     delta_columns: tuple[ColumnInfo, ...]
     expected_valid: bool
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class FingerprintAuditGateMetadataTestCase:
+    description: str
+    audit_outcome: str
+    expected_status: AuditGateStatus
+    expected_result_count: int
+    expected_existing_field: str
+
+
+@dataclass(frozen=True)
+class FingerprintAuditGateNoAuditsTestCase:
+    description: str
+    expected_existing_field: str
+
+
+@dataclass(frozen=True)
+class FingerprintAuditGateEdgeTestCase:
+    description: str
+    plan_severity: str
+    result_outcome: str
+    result_audit_name: str
+    result_column_name: str | None
+    expected_status: AuditGateStatus
+    expected_result_count: int
+
+
+@dataclass(frozen=True)
+class TryWriteFingerprintAuditGateTestCase:
+    description: str
+    expected_status: AuditGateStatus
+    expected_result_count: int
 
 
 @dataclass(frozen=True)
