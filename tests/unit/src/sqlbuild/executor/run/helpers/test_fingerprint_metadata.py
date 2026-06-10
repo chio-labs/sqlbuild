@@ -14,9 +14,13 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers import fingerprinting
 from sqlbuild.executor.run.helpers.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
+    same_target_audit_gate_reuse_decision,
 )
-from sqlbuild.executor.run.types import AuditGateMode, AuditGateStatus
+from sqlbuild.executor.run.models import AuditGateReuseDecision
+from sqlbuild.executor.run.types import AuditGateMode, AuditGateReuseReason, AuditGateStatus
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
+    AuditGatePartialReuseDecisionTestCase,
+    AuditGateReuseDecisionTestCase,
     FingerprintAuditGateEdgeTestCase,
     FingerprintAuditGateMetadataTestCase,
     FingerprintAuditGateNoAuditsTestCase,
@@ -168,6 +172,240 @@ def test_given_edge_audit_results_when_building_fingerprint_metadata_then_status
 
     assert audit_gate["status"] == test_case.expected_status.value
     assert len(audit_gate["results"]) == test_case.expected_result_count  # type: ignore[arg-type]
+
+
+AUDIT_GATE_REUSE_DECISION_TEST_CASES: list[AuditGateReuseDecisionTestCase] = [
+    AuditGateReuseDecisionTestCase(
+        description="matching passed proof is reusable",
+        metadata_mode="written",
+        status=AuditGateStatus.PASSED,
+        planned_attached_column_name="order_id",
+        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        expected_reusable=True,
+        expected_reason=AuditGateReuseReason.REUSABLE,
+        expected_reusable_count=1,
+        expected_missing_count=0,
+    ),
+    AuditGateReuseDecisionTestCase(
+        description="failed proof is not reusable",
+        metadata_mode="written",
+        status=AuditGateStatus.FAILED,
+        planned_attached_column_name="order_id",
+        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        expected_reusable=False,
+        expected_reason=AuditGateReuseReason.NON_PASSING,
+        expected_reusable_count=0,
+        expected_missing_count=0,
+    ),
+    AuditGateReuseDecisionTestCase(
+        description="binding set change is not reusable",
+        metadata_mode="written",
+        status=AuditGateStatus.PASSED,
+        planned_attached_column_name="customer_id",
+        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        expected_reusable=False,
+        expected_reason=AuditGateReuseReason.BINDING_SET_CHANGED,
+        expected_reusable_count=0,
+        expected_missing_count=1,
+    ),
+    AuditGateReuseDecisionTestCase(
+        description="same binding with changed execution SQL is not reusable",
+        metadata_mode="written",
+        status=AuditGateStatus.PASSED,
+        planned_attached_column_name="order_id",
+        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id < 0",
+        expected_reusable=False,
+        expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
+        expected_reusable_count=0,
+        expected_missing_count=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    AUDIT_GATE_REUSE_DECISION_TEST_CASES,
+    ids=[case.description for case in AUDIT_GATE_REUSE_DECISION_TEST_CASES],
+)
+def test_given_prior_audit_gate_when_deciding_same_target_reuse_then_returns_decision(
+    test_case: AuditGateReuseDecisionTestCase,
+) -> None:
+    audit: AuditPlanEntry = build_fingerprint_audit_plan_entry()
+    audit_result: AuditExecutionResult = build_fingerprint_audit_result(outcome="pass")
+    metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(audit,),
+        audit_results=(audit_result,),
+        run_id="run_1",
+    )
+    metadata: dict[str, object] = json.loads(metadata_json)
+    audit_gate_value: object = metadata["audit_gate"]
+    assert isinstance(audit_gate_value, dict)
+    audit_gate: dict[str, object] = audit_gate_value
+    audit_gate["status"] = test_case.status.value
+    metadata_json = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+
+    planned_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        attached_column_name=test_case.planned_attached_column_name,
+        resolved_sql=test_case.planned_resolved_sql,
+    )
+
+    decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(
+        metadata_json=metadata_json,
+        model_audits=(planned_audit,),
+    )
+
+    assert decision.reusable is test_case.expected_reusable
+    assert decision.reason == test_case.expected_reason
+    assert len(decision.reusable_binding_keys) == test_case.expected_reusable_count
+    assert len(decision.missing_binding_keys) == test_case.expected_missing_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditGateReuseDecisionTestCase(
+            description="missing proof is not reusable",
+            metadata_mode="missing",
+            status=AuditGateStatus.PASSED,
+            planned_attached_column_name="order_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.MISSING,
+            expected_reusable_count=0,
+            expected_missing_count=0,
+        )
+    ],
+    ids=["missing proof is not reusable"],
+)
+def test_given_missing_audit_gate_when_deciding_same_target_reuse_then_returns_missing(
+    test_case: AuditGateReuseDecisionTestCase,
+) -> None:
+    planned_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        attached_column_name=test_case.planned_attached_column_name,
+        resolved_sql=test_case.planned_resolved_sql,
+    )
+
+    decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(
+        metadata_json="{}",
+        model_audits=(planned_audit,),
+    )
+
+    assert decision.reusable is test_case.expected_reusable
+    assert decision.reason == test_case.expected_reason
+    assert len(decision.reusable_binding_keys) == test_case.expected_reusable_count
+    assert len(decision.missing_binding_keys) == test_case.expected_missing_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditGateReuseDecisionTestCase(
+            description="malformed results are not reusable",
+            metadata_mode="malformed_results",
+            status=AuditGateStatus.PASSED,
+            planned_attached_column_name="order_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.MALFORMED,
+            expected_reusable_count=0,
+            expected_missing_count=0,
+        )
+    ],
+    ids=["malformed results are not reusable"],
+)
+def test_given_malformed_audit_gate_when_deciding_same_target_reuse_then_returns_malformed(
+    test_case: AuditGateReuseDecisionTestCase,
+) -> None:
+    audit: AuditPlanEntry = build_fingerprint_audit_plan_entry()
+    audit_result: AuditExecutionResult = build_fingerprint_audit_result(outcome="pass")
+    metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(audit,),
+        audit_results=(audit_result,),
+        run_id="run_1",
+    )
+    metadata: dict[str, object] = json.loads(metadata_json)
+    audit_gate_value: object = metadata["audit_gate"]
+    assert isinstance(audit_gate_value, dict)
+    audit_gate: dict[str, object] = audit_gate_value
+    audit_gate["results"] = {"not": "a list"}
+    metadata_json = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    planned_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        attached_column_name=test_case.planned_attached_column_name,
+        resolved_sql=test_case.planned_resolved_sql,
+    )
+
+    decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(
+        metadata_json=metadata_json,
+        model_audits=(planned_audit,),
+    )
+
+    assert decision.reusable is test_case.expected_reusable
+    assert decision.reason == test_case.expected_reason
+    assert len(decision.reusable_binding_keys) == test_case.expected_reusable_count
+    assert len(decision.missing_binding_keys) == test_case.expected_missing_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditGatePartialReuseDecisionTestCase(
+            description="one changed audit reports reusable and missing binding keys",
+            changed_resolved_sql="SELECT customer_id FROM analytics.orders WHERE customer_id < 0",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
+            expected_reusable_count=1,
+            expected_missing_count=1,
+        )
+    ],
+    ids=["one changed audit reports reusable and missing binding keys"],
+)
+def test_given_one_changed_audit_when_deciding_same_target_reuse_then_returns_partial_keys(
+    test_case: AuditGatePartialReuseDecisionTestCase,
+) -> None:
+    unchanged_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        name="not_null_orders",
+        attached_column_name="order_id",
+        resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+    )
+    changed_prior_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        name="not_null_customers",
+        attached_column_name="customer_id",
+        resolved_sql="SELECT customer_id FROM analytics.orders WHERE customer_id IS NULL",
+    )
+    metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(unchanged_audit, changed_prior_audit),
+        audit_results=(
+            build_fingerprint_audit_result(
+                outcome="pass",
+                audit_name="not_null_orders",
+                attached_column_name="order_id",
+            ),
+            build_fingerprint_audit_result(
+                outcome="pass",
+                audit_name="not_null_customers",
+                attached_column_name="customer_id",
+            ),
+        ),
+        run_id="run_1",
+    )
+    changed_current_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        name="not_null_customers",
+        attached_column_name="customer_id",
+        resolved_sql=test_case.changed_resolved_sql,
+    )
+
+    decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(
+        metadata_json=metadata_json,
+        model_audits=(unchanged_audit, changed_current_audit),
+    )
+
+    assert decision.reusable is test_case.expected_reusable
+    assert decision.reason == test_case.expected_reason
+    assert len(decision.reusable_binding_keys) == test_case.expected_reusable_count
+    assert len(decision.missing_binding_keys) == test_case.expected_missing_count
 
 
 @pytest.mark.parametrize(

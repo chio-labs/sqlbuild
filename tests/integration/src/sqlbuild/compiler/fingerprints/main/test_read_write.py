@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -104,6 +105,61 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         expected_latest_query_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
     ),
+    WriteAndReadTestCase(
+        description="writes and reads audit gate metadata from fingerprint storage",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                model_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_001",
+                query_hash="hash_a",
+                version_hash="version_a",
+                schema_fingerprint="schema_a",
+                query_sql="SELECT id FROM orders",
+                metadata_json=json.dumps(
+                    {
+                        "audit_gate": {
+                            "status": "passed",
+                            "binding_set_hash": "binding_hash",
+                            "blocking_set_hash": "blocking_hash",
+                            "mode": "executed",
+                            "run_id": "run_001",
+                            "results": [
+                                {
+                                    "binding_key": "binding_key",
+                                    "audit_name": "not_null_orders",
+                                    "definition_fingerprint": "definition_hash",
+                                    "execution_fingerprint": "execution_hash",
+                                    "severity": "error",
+                                    "run_scope_phase": "final",
+                                    "outcome": "pass",
+                                    "row_count": 0,
+                                    "attached_target_name": "orders",
+                                    "attached_column_name": "order_id",
+                                }
+                            ],
+                        },
+                        "config": {"materialized": "table"},
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+        ),
+        expected_model_names=("orders",),
+        expected_latest_query_hashes={"orders": "hash_a"},
+        expected_latest_target_names={"orders": "orders"},
+        expected_metadata_fragments=(
+            '"audit_gate":{"binding_set_hash":"binding_hash"',
+            '"execution_fingerprint":"execution_hash"',
+            '"attached_column_name":"order_id"',
+        ),
+    ),
 ]
 
 
@@ -150,6 +206,9 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     for fp in test_case.fingerprints:
         assert result.fingerprints[fp.model_name].query_sql == fp.query_sql
         assert result.fingerprints[fp.model_name].version_hash == fp.version_hash
+    fragment: str
+    for fragment in test_case.expected_metadata_fragments:
+        assert fragment in result.fingerprints[test_case.expected_model_names[0]].metadata_json
 
 
 @pytest.mark.parametrize(

@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult, StatementRecorder
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.run.types import AuditGateReuseReason, HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 
@@ -88,3 +88,13 @@ class ModelExecutionResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditGateReuseDecision:
+    """Conservative same-target audit gate proof reuse decision."""
+
+    reusable: bool
+    reason: AuditGateReuseReason
+    reusable_binding_keys: tuple[str, ...] = ()
+    missing_binding_keys: tuple[str, ...] = ()

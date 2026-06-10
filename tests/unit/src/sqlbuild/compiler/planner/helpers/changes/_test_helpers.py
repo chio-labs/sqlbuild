@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -105,6 +106,19 @@ def build_snapshot_for_metadata_test_case(
             )
         },
     )
+
+
+def build_metadata_json_with_audit_gate(metadata_json: str) -> str:
+    metadata: dict[str, object] = json.loads(metadata_json)
+    metadata["audit_gate"] = {
+        "status": "passed",
+        "binding_set_hash": "binding_hash",
+        "blocking_set_hash": "blocking_hash",
+        "mode": "executed",
+        "run_id": "run_001",
+        "results": [],
+    }
+    return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def build_project_for_function_metadata_detection() -> CompiledProject:

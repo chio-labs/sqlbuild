@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
-from sqlbuild.executor.run.types import AuditGateStatus
+from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus
 from sqlbuild.executor.shared.types import ExecutionPhase
 
 
@@ -190,6 +190,29 @@ class TryWriteFingerprintAuditGateTestCase:
     description: str
     expected_status: AuditGateStatus
     expected_result_count: int
+
+
+@dataclass(frozen=True)
+class AuditGateReuseDecisionTestCase:
+    description: str
+    metadata_mode: str
+    status: AuditGateStatus
+    planned_attached_column_name: str | None
+    planned_resolved_sql: str
+    expected_reusable: bool
+    expected_reason: AuditGateReuseReason
+    expected_reusable_count: int
+    expected_missing_count: int
+
+
+@dataclass(frozen=True)
+class AuditGatePartialReuseDecisionTestCase:
+    description: str
+    changed_resolved_sql: str
+    expected_reusable: bool
+    expected_reason: AuditGateReuseReason
+    expected_reusable_count: int
+    expected_missing_count: int
 
 
 @dataclass(frozen=True)
