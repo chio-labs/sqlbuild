@@ -2,23 +2,28 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
     build_standard_reuse_decisions,
 )
 from sqlbuild.compiler.planner.models import (
+    ModelCursorSnapshot,
     PlannerScope,
     StandardReuseDecisionResults,
-    StandardReuseFromTargetModelSnapshot,
     StandardReuseFromTargetSnapshot,
 )
 from sqlbuild.compiler.planner.types import StandardReuseDecisionKind
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
+    StandardSourceFreshnessPlanningResult,
+    StandardSourceFreshnessPropagationResult,
+)
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     StandardReuseDecisionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_decision_scope,
     build_standard_reuse_fingerprint,
+    build_standard_reuse_origin_snapshot,
 )
 
 
@@ -28,17 +33,17 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
         StandardReuseDecisionTestCase(
             description="classifies standard reuse decisions",
             expected_decisions={
-                "candidate": StandardReuseDecisionKind.REUSE_CANDIDATE.value,
+                "candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
                 "current": StandardReuseDecisionKind.CURRENT.value,
                 "missing_fingerprint": (
-                    StandardReuseDecisionKind.REUSE_FROM_FINGERPRINT_MISSING.value
+                    StandardReuseDecisionKind.REUSE_ORIGIN_FINGERPRINT_MISSING.value
                 ),
-                "missing_relation": StandardReuseDecisionKind.REUSE_FROM_RELATION_MISSING.value,
-                "version_mismatch": StandardReuseDecisionKind.REUSE_FROM_VERSION_MISMATCH.value,
+                "missing_relation": StandardReuseDecisionKind.REUSE_ORIGIN_RELATION_MISSING.value,
+                "version_mismatch": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
                 "ineligible_view": StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value,
-                "incremental_candidate": StandardReuseDecisionKind.REUSE_CANDIDATE.value,
+                "incremental_candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
                 "ineligible_custom": StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value,
-                "missing_expected": StandardReuseDecisionKind.REUSE_FROM_VERSION_MISMATCH.value,
+                "missing_expected": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
                 "current_reuse_from_missing": StandardReuseDecisionKind.CURRENT.value,
             },
         )
@@ -75,116 +80,35 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
         },
         reuse_from_snapshot=StandardReuseFromTargetSnapshot(
             reuse_from_target_name="prod",
-            fingerprint_database=None,
-            fingerprint_schema="prod_schema",
             model_snapshots={
-                "candidate": StandardReuseFromTargetModelSnapshot(
-                    model_name="candidate",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="candidate",
-                        qualified_name="prod_schema.candidate",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
-                ),
-                "current": StandardReuseFromTargetModelSnapshot(
-                    model_name="current",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="current",
-                        qualified_name="prod_schema.current",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
-                ),
-                "missing_fingerprint": StandardReuseFromTargetModelSnapshot(
+                "candidate": build_standard_reuse_origin_snapshot(model_name="candidate"),
+                "current": build_standard_reuse_origin_snapshot(model_name="current"),
+                "missing_fingerprint": build_standard_reuse_origin_snapshot(
                     model_name="missing_fingerprint",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="missing_fingerprint",
-                        qualified_name="prod_schema.missing_fingerprint",
-                    ),
-                    relation_exists=True,
                     built_version_hash=None,
                 ),
-                "missing_relation": StandardReuseFromTargetModelSnapshot(
+                "missing_relation": build_standard_reuse_origin_snapshot(
                     model_name="missing_relation",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="missing_relation",
-                        qualified_name="prod_schema.missing_relation",
-                    ),
                     relation_exists=False,
-                    built_version_hash="expected",
                 ),
-                "version_mismatch": StandardReuseFromTargetModelSnapshot(
+                "version_mismatch": build_standard_reuse_origin_snapshot(
                     model_name="version_mismatch",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="version_mismatch",
-                        qualified_name="prod_schema.version_mismatch",
-                    ),
-                    relation_exists=True,
                     built_version_hash="old",
                 ),
-                "ineligible_view": StandardReuseFromTargetModelSnapshot(
-                    model_name="ineligible_view",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="ineligible_view",
-                        qualified_name="prod_schema.ineligible_view",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
+                "ineligible_view": build_standard_reuse_origin_snapshot(
+                    model_name="ineligible_view"
                 ),
-                "incremental_candidate": StandardReuseFromTargetModelSnapshot(
-                    model_name="incremental_candidate",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="incremental_candidate",
-                        qualified_name="prod_schema.incremental_candidate",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
+                "incremental_candidate": build_standard_reuse_origin_snapshot(
+                    model_name="incremental_candidate"
                 ),
-                "ineligible_custom": StandardReuseFromTargetModelSnapshot(
-                    model_name="ineligible_custom",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="ineligible_custom",
-                        qualified_name="prod_schema.ineligible_custom",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
+                "ineligible_custom": build_standard_reuse_origin_snapshot(
+                    model_name="ineligible_custom"
                 ),
-                "missing_expected": StandardReuseFromTargetModelSnapshot(
-                    model_name="missing_expected",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="missing_expected",
-                        qualified_name="prod_schema.missing_expected",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
+                "missing_expected": build_standard_reuse_origin_snapshot(
+                    model_name="missing_expected"
                 ),
-                "current_reuse_from_missing": StandardReuseFromTargetModelSnapshot(
+                "current_reuse_from_missing": build_standard_reuse_origin_snapshot(
                     model_name="current_reuse_from_missing",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="current_reuse_from_missing",
-                        qualified_name="prod_schema.current_reuse_from_missing",
-                    ),
                     relation_exists=False,
                     built_version_hash=None,
                 ),
@@ -202,7 +126,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
     [
         StandardReuseDecisionTestCase(
             description="classifies only selected models",
-            expected_decisions={"candidate": StandardReuseDecisionKind.REUSE_CANDIDATE.value},
+            expected_decisions={"candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value},
         )
     ],
     ids=["classifies only selected models"],
@@ -216,30 +140,116 @@ def test_given_scoped_models_when_building_standard_reuse_decisions_then_classif
         built_fingerprints={},
         reuse_from_snapshot=StandardReuseFromTargetSnapshot(
             reuse_from_target_name="prod",
-            fingerprint_database=None,
-            fingerprint_schema="prod_schema",
             model_snapshots={
-                "candidate": StandardReuseFromTargetModelSnapshot(
-                    model_name="candidate",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="candidate",
-                        qualified_name="prod_schema.candidate",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
+                "candidate": build_standard_reuse_origin_snapshot(model_name="candidate"),
+                "current": build_standard_reuse_origin_snapshot(model_name="current"),
+            },
+        ),
+    )
+
+    assert {
+        model_name: decision.decision for model_name, decision in decisions.models.items()
+    } == test_case.expected_decisions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardReuseDecisionTestCase(
+            description="downgrades table reuse when source freshness is stale",
+            expected_decisions={
+                "candidate": StandardReuseDecisionKind.REUSE_FROM_SOURCE_FRESHNESS_STALE.value,
+                "incremental_candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
+            },
+        )
+    ],
+    ids=["downgrades table reuse when source freshness is stale"],
+)
+def test_given_stale_source_freshness_when_building_standard_reuse_decisions_then_table_builds(
+    test_case: StandardReuseDecisionTestCase,
+) -> None:
+    stale_identity: SourceFreshnessIdentity = SourceFreshnessIdentity(
+        source_name="raw_orders",
+        target_database=None,
+        target_schema="raw",
+        target_name="orders",
+    )
+
+    decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
+        scope=build_standard_reuse_decision_scope(
+            selected_model_names=frozenset({"candidate", "incremental_candidate"})
+        ),
+        expected_version_hashes={
+            "candidate": "expected",
+            "incremental_candidate": "expected",
+        },
+        built_fingerprints={},
+        reuse_from_snapshot=StandardReuseFromTargetSnapshot(
+            reuse_from_target_name="prod",
+            model_snapshots={
+                "candidate": build_standard_reuse_origin_snapshot(model_name="candidate"),
+                "incremental_candidate": build_standard_reuse_origin_snapshot(
+                    model_name="incremental_candidate"
                 ),
-                "current": StandardReuseFromTargetModelSnapshot(
-                    model_name="current",
-                    reuse_origin=CompiledRelationLocation(
-                        database=None,
-                        schema="prod_schema",
-                        name="current",
-                        qualified_name="prod_schema.current",
-                    ),
-                    relation_exists=True,
-                    built_version_hash="expected",
+            },
+        ),
+        reuse_from_source_freshness=StandardSourceFreshnessPlanningResult(
+            changed_identities=frozenset({stale_identity}),
+            propagation=StandardSourceFreshnessPropagationResult(
+                changed_source_model_names={
+                    stale_identity: frozenset({"candidate", "incremental_candidate"})
+                },
+                stale_model_names=frozenset({"candidate", "incremental_candidate"}),
+            ),
+        ),
+    )
+
+    assert {
+        model_name: decision.decision for model_name, decision in decisions.models.items()
+    } == test_case.expected_decisions
+    assert decisions.models["candidate"].reuse_from_source_freshness_current is False
+    assert decisions.models["incremental_candidate"].reuse_from_source_freshness_current is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardReuseDecisionTestCase(
+            description="keeps current incremental when destination cursor is numerically ahead",
+            expected_decisions={
+                "incremental_candidate": StandardReuseDecisionKind.CURRENT.value,
+            },
+        )
+    ],
+    ids=["keeps current incremental when destination cursor is numerically ahead"],
+)
+def test_given_destination_cursor_ahead_when_planning_incremental_reuse_then_stays_current(
+    test_case: StandardReuseDecisionTestCase,
+) -> None:
+    decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
+        scope=build_standard_reuse_decision_scope(
+            selected_model_names=frozenset({"incremental_candidate"})
+        ),
+        expected_version_hashes={"incremental_candidate": "expected"},
+        built_fingerprints={
+            "incremental_candidate": build_standard_reuse_fingerprint(
+                model_name="incremental_candidate",
+                version_hash="expected",
+            )
+        },
+        cursor_snapshots={
+            "incremental_candidate": ModelCursorSnapshot(
+                target_max="10",
+                upstream_mins=(),
+                upstream_maxes=(),
+            )
+        },
+        reuse_from_snapshot=StandardReuseFromTargetSnapshot(
+            reuse_from_target_name="prod",
+            model_snapshots={
+                "incremental_candidate": build_standard_reuse_origin_snapshot(
+                    model_name="incremental_candidate",
+                    reuse_origin_cursor_max="9",
                 ),
             },
         ),

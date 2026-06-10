@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -13,16 +14,19 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
-from sqlbuild.compiler.fingerprints.models import FingerprintSet
+from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     PlannerScope,
     StandardReuseFromTargetModelSnapshot,
     StandardReuseFromTargetSnapshot,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from sqlbuild.spec.models.targets import resolve_target_config
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
 
 def build_standard_reuse_from_target_snapshot(
@@ -56,45 +60,7 @@ def build_standard_reuse_from_target_snapshot(
         local_config=local_config,
         target_config=reuse_from_target,
     )
-    reuse_from_schema: str | None = _resolve_target_value(
-        target_value=reuse_from_target.schema,
-        logical_database=project.effective_target_database,
-        logical_schema=project.effective_target_schema,
-        default_value=project.effective_target_schema,
-        effective_vars=reuse_from_vars,
-    )
-    if reuse_from_schema is None:
-        raise PlannerInputError(
-            f"target '{project.effective_target_name}' has reuse_from = "
-            f"'{reuse_from_target_name}', but reuse_from target "
-            f"'{reuse_from_target_name}' does not resolve to a fingerprint schema"
-        )
-    reuse_from_database: str | None = _resolve_target_value(
-        target_value=reuse_from_target.database,
-        logical_database=project.effective_target_database,
-        logical_schema=project.effective_target_schema,
-        default_value=project.effective_target_database,
-        effective_vars=reuse_from_vars,
-    )
-    try:
-        fingerprint_set: FingerprintSet = read_latest_fingerprints(
-            connection=connection,
-            execute=adapter.execute,
-            relation_exists=adapter.relation_exists,
-            database=reuse_from_database,
-            schema=reuse_from_schema,
-            render_qualified_name=adapter.render_qualified_name,
-            require_table=True,
-        )
-    except FingerprintInputError as error:
-        raise PlannerInputError(
-            f"target '{project.effective_target_name}' has reuse_from = "
-            f"'{reuse_from_target_name}', but SQLBuild cannot read fingerprint state for "
-            f"reuse_from target '{reuse_from_target_name}'. Reuse requires access to the "
-            "reuse_from target fingerprint table so SQLBuild can prove the reuse_from "
-            "relation matches the expected version."
-        ) from error
-
+    fingerprint_sets: dict[tuple[str | None, str], FingerprintSet] = {}
     model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot] = {}
     model: CompiledModel
     for model in project.models:
@@ -106,28 +72,81 @@ def build_standard_reuse_from_target_snapshot(
             reuse_from_target=reuse_from_target,
             reuse_from_vars=reuse_from_vars,
         )
+        if reuse_origin.schema is None:
+            raise PlannerInputError(
+                f"target '{project.effective_target_name}' has reuse_from = "
+                f"'{reuse_from_target_name}', but model '{model.name}' reuse origin does not "
+                "resolve to a fingerprint schema"
+            )
+        fingerprint_set: FingerprintSet = _read_reuse_origin_fingerprints(
+            adapter=adapter,
+            connection=connection,
+            fingerprint_sets=fingerprint_sets,
+            active_target_name=project.effective_target_name,
+            reuse_from_target_name=reuse_from_target_name,
+            database=reuse_origin.database,
+            schema=reuse_origin.schema,
+        )
+        fingerprint: Fingerprint | None = fingerprint_set.fingerprints.get(model.name)
         model_snapshots[model.name] = StandardReuseFromTargetModelSnapshot(
             model_name=model.name,
             reuse_origin=reuse_origin,
+            reuse_origin_fingerprint_database=reuse_origin.database,
+            reuse_origin_fingerprint_schema=reuse_origin.schema,
             relation_exists=adapter.relation_exists(
                 connection,
                 database=reuse_origin.database,
                 schema=reuse_origin.schema,
                 name=reuse_origin.name,
             ),
-            built_version_hash=(
-                fingerprint_set.fingerprints[model.name].version_hash
-                if model.name in fingerprint_set.fingerprints
-                else None
+            built_version_hash=fingerprint.version_hash if fingerprint is not None else None,
+            reuse_origin_cursor_max=_read_reuse_origin_cursor_max(
+                adapter=adapter,
+                connection=connection,
+                model=model,
+                reuse_origin=reuse_origin,
             ),
         )
     return StandardReuseFromTargetSnapshot(
         reuse_from_target_name=reuse_from_target_name,
-        fingerprint_database=reuse_from_database,
-        fingerprint_schema=reuse_from_schema,
         model_snapshots=model_snapshots,
         hard_copy=active_target.reuse_hard_copy,
     )
+
+
+def _read_reuse_origin_fingerprints(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    fingerprint_sets: dict[tuple[str | None, str], FingerprintSet],
+    active_target_name: str,
+    reuse_from_target_name: str,
+    database: str | None,
+    schema: str,
+) -> FingerprintSet:
+    cache_key: tuple[str | None, str] = (database, schema)
+    cached: FingerprintSet | None = fingerprint_sets.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        fingerprint_set: FingerprintSet = read_latest_fingerprints(
+            connection=connection,
+            execute=adapter.execute,
+            relation_exists=adapter.relation_exists,
+            database=database,
+            schema=schema,
+            render_qualified_name=adapter.render_qualified_name,
+            require_table=True,
+        )
+    except FingerprintInputError as error:
+        raise PlannerInputError(
+            f"target '{active_target_name}' has reuse_from = '{reuse_from_target_name}', "
+            f"but SQLBuild cannot read fingerprint state for reuse origin schema '{schema}'. "
+            "Reuse requires access to the reuse origin fingerprint table so SQLBuild can "
+            "prove the reuse origin relation matches the expected version."
+        ) from error
+    fingerprint_sets[cache_key] = fingerprint_set
+    return fingerprint_set
 
 
 def enforce_standard_reuse_from_source_deferral_conflict(
@@ -196,6 +215,54 @@ def _reuse_origin_destination(
         logical_database=model.destination.logical_database,
         logical_schema=model.destination.logical_schema,
     )
+
+
+def _read_reuse_origin_cursor_max(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    model: CompiledModel,
+    reuse_origin: CompiledRelationLocation,
+) -> str | None:
+    cursor_column: str | None = _get_config_str(model, "cursor")
+    materialized: str | None = _get_config_str(model, "materialized")
+    if (
+        cursor_column is None
+        or materialized != "incremental"
+        or reuse_origin.qualified_name is None
+    ):
+        return None
+    if not adapter.relation_exists(
+        connection,
+        database=reuse_origin.database,
+        schema=reuse_origin.schema,
+        name=reuse_origin.name,
+    ):
+        return None
+    rendered_cursor_column: str = adapter.render_identifier(cursor_column)
+    sql: str = (
+        f"SELECT CAST(MAX({rendered_cursor_column}) AS VARCHAR) FROM {reuse_origin.qualified_name}"
+    )
+    try:
+        result: Any = adapter.execute(connection, sql)
+    except Exception as exc:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "reuse_from cursor high-water read failed; treating reuse origin cursor as unavailable",
+            sqlbuild_model_name=model.name,
+            sqlbuild_reuse_origin=reuse_origin.qualified_name,
+            sqlbuild_error=str(exc),
+        )
+        return None
+    row: Any = result.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return str(row[0])
+
+
+def _get_config_str(model: CompiledModel, key: str) -> str | None:
+    value: object | None = model.config.values.get(key)
+    return value if isinstance(value, str) else None
 
 
 def _build_reuse_from_target_vars(

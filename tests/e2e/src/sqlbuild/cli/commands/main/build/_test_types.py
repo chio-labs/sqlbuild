@@ -629,6 +629,14 @@ class DirectChangesOnlyStateBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DirectReuseFromBuildE2ETestCase:
+    description: str
+    project_name: str
+    expected_prod_build_exit_code: int
+    expected_dev_build_exit_code: int
+
+
+@dataclass(frozen=True)
 class MixedTimestampGrainBuildE2ETestCase:
     """Test case for mixed timestamp grain replay behavior."""
 

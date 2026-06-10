@@ -9,9 +9,11 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     DirectChangesOnlyStateBuildE2ETestCase,
+    DirectReuseFromBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_direct_changes_only_two_model_project,
+    prepare_direct_reuse_from_project,
     write_direct_changes_only_stg_orders,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -126,3 +128,53 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
         db_path=db_path,
         sql="SELECT amount_cents, amount_dollars FROM fact_orders ORDER BY order_id",
     ) == [(test_case.changed_amount_cents, test_case.expected_changed_amount_dollars)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectReuseFromBuildE2ETestCase(
+            description="dev build reuses prod table relation",
+            project_name="direct_reuse_from_build_copies_prod_relation",
+            expected_prod_build_exit_code=0,
+            expected_dev_build_exit_code=0,
+        )
+    ],
+    ids=["dev build reuses prod table relation"],
+)
+def test_given_reuse_from_target_when_building_dev_then_copies_prod_relation(
+    test_case: DirectReuseFromBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_direct_reuse_from_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert prod_result.returncode == test_case.expected_prod_build_exit_code, (
+        prod_result.stdout + prod_result.stderr
+    )
+
+    prod_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT reuse_marker FROM prod.orders",
+    )
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+    dev_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
+        dev_result.stdout + dev_result.stderr
+    )
+    assert (
+        query_duckdb(
+            db_path=db_path,
+            sql="SELECT reuse_marker FROM dev.orders",
+        )
+        == prod_rows
+    )

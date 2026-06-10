@@ -80,3 +80,27 @@ class IncrementalFailureTestCase:
         default_factory=tuple
     )
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class IncrementalSeedReuseTestCase:
+    description: str
+    origin_sql: str
+    input_sql: str
+    model_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    reuse_hard_copy: bool = True
+    expected_lifecycle_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class IncrementalSeedReuseFailureTestCase:
+    description: str
+    origin_sql: str
+    input_sql: str
+    model_sql: str
+    fingerprint_version_hash: str
+    expected_status: ExecutionStatus
+    expected_failed_phase: ExecutionPhase
+    expected_error_fragments: tuple[str, ...]
+    expected_target_exists: bool

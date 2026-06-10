@@ -18,6 +18,7 @@ from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableReuseExecutionTestCase,
+    TableReuseFailureExecutionTestCase,
     TableSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.helpers import (
@@ -30,6 +31,7 @@ from tests.integration.src.sqlbuild.executor.run.helpers import (
     run_success_test,
     verify_failure_warehouse_state,
     verify_success_warehouse_state,
+    write_matching_reuse_origin_fingerprint,
 )
 
 
@@ -207,6 +209,30 @@ DIRECT_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
         expected_error_fragment="final audit for 'orders' failed after target table was replaced",
         expected_promoted_relation="staging.orders",
         expected_audit_count=1,
+    ),
+]
+
+REUSE_FAILURE_TEST_CASES: list[TableReuseFailureExecutionTestCase] = [
+    TableReuseFailureExecutionTestCase(
+        description="fingerprint mismatch before table reuse fails before copy",
+        setup_sql=("CREATE TABLE staging.orders_origin AS SELECT 7 AS id",),
+        fingerprint_version_hash="stale_version",
+        expected_status=ExecutionStatus.FAILED.value,
+        expected_failed_phase=ExecutionPhase.STAGING,
+        expected_error_fragments=(
+            "cannot reuse from target 'prod'",
+            "reuse origin fingerprint changed after planning",
+        ),
+        expected_target_exists=False,
+    ),
+    TableReuseFailureExecutionTestCase(
+        description="missing origin relation fails before target exists",
+        setup_sql=(),
+        fingerprint_version_hash="expected_version",
+        expected_status=ExecutionStatus.FAILED.value,
+        expected_failed_phase=ExecutionPhase.STAGING,
+        expected_error_fragments=("orders_origin",),
+        expected_target_exists=False,
     ),
 ]
 
@@ -605,6 +631,13 @@ def test_given_hard_copy_reuse_relation_when_executing_table_then_materializes_f
     connection: Any,
 ) -> None:
     connection.execute("CREATE TABLE staging.orders_origin AS SELECT 7 AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+    )
     entry: ModelPlanEntry = build_reuse_table_plan_entry(
         name="orders",
         sql="SELECT 1 AS id",
@@ -660,6 +693,13 @@ def test_given_cheap_reuse_with_adapter_support_when_executing_table_then_materi
 ) -> None:
     adapter: ZeroCopyDuckDbAdapter = ZeroCopyDuckDbAdapter()
     connection.execute("CREATE TABLE staging.orders_origin AS SELECT 7 AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+    )
     entry: ModelPlanEntry = build_reuse_table_plan_entry(
         name="orders",
         sql="SELECT 1 AS id",
@@ -715,6 +755,13 @@ def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fai
     connection: Any,
 ) -> None:
     connection.execute("CREATE TABLE staging.orders_origin AS SELECT 7 AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+    )
     entry: ModelPlanEntry = build_reuse_table_plan_entry(
         name="orders",
         sql="SELECT 1 AS id",
@@ -749,6 +796,130 @@ def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fai
         "AND table_name = 'orders'"
     ).fetchone() != (0,)
     assert target_exists is test_case.expected_target_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    REUSE_FAILURE_TEST_CASES,
+    ids=[case.description for case in REUSE_FAILURE_TEST_CASES],
+)
+def test_given_invalid_reuse_origin_when_executing_table_then_fails_before_target_replacement(
+    test_case: TableReuseFailureExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+        version_hash=test_case.fingerprint_version_hash,
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.STAGED,
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+
+    target_exists: bool = connection.execute(
+        "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'staging' "
+        "AND table_name = 'orders'"
+    ).fetchone() != (0,)
+    assert result.status == test_case.expected_status
+    assert result.failed_phase == test_case.expected_failed_phase
+    assert result.error_message is not None
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in result.error_message
+    assert target_exists is test_case.expected_target_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseExecutionTestCase(
+            description="database-qualified reuse origin materializes destination",
+            reuse_hard_copy=True,
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((7,),),
+        )
+    ],
+    ids=["database-qualified reuse origin materializes destination"],
+)
+def test_given_database_qualified_reuse_origin_when_executing_table_then_materializes_destination(
+    test_case: TableReuseExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("ATTACH ':memory:' AS prod_db")
+    connection.execute("ATTACH ':memory:' AS dev_db")
+    connection.execute("CREATE SCHEMA prod_db.staging")
+    connection.execute("CREATE SCHEMA dev_db.staging")
+    connection.execute("CREATE TABLE prod_db.staging.orders_origin AS SELECT 7 AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        database="prod_db",
+        schema="staging",
+        model_name="orders",
+        target_database="prod_db",
+        target_name="orders_origin",
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_database="dev_db",
+        target_schema="staging",
+        target_name="orders",
+        origin_database="prod_db",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=test_case.reuse_hard_copy,
+        reuse_origin_fingerprint_database="prod_db",
+        reuse_origin_fingerprint_schema="staging",
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        declared_columns=(),
+        promotion_mode=test_case.promotion_mode,
+        run_id="test_run",
+        query_change_tracking=False,
+    )
+
+    rows: list[tuple[Any, ...]] = connection.execute(
+        "SELECT * FROM dev_db.staging.orders"
+    ).fetchall()
+    assert result.status == test_case.expected_status
+    assert tuple(rows) == test_case.expected_rows
 
 
 @pytest.mark.parametrize(

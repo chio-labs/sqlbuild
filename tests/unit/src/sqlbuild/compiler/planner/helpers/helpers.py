@@ -59,6 +59,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
+    StandardReuseFromTargetModelSnapshot,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
@@ -199,6 +200,24 @@ def build_standard_reuse_from_target_project() -> CompiledProject:
                     logical_schema="analytics",
                 ),
             ),
+            CompiledModel(
+                key=model_key("line_items"),
+                deps=(),
+                name="line_items",
+                relative_path=Path("models/line_items.sql"),
+                query_sql="SELECT 1",
+                config=CompileModelConfig(
+                    logical_schema="analytics",
+                    values={"materialized": "incremental", "incremental_strategy": "append"},
+                ),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="dev_schema",
+                    name="line_items",
+                    qualified_name="dev_schema.line_items",
+                    logical_schema="analytics",
+                ),
+            ),
         ),
     )
 
@@ -259,7 +278,10 @@ def build_standard_reuse_decision_scope(
         ("missing_relation", {}),
         ("version_mismatch", {}),
         ("ineligible_view", {"materialized": "view"}),
-        ("incremental_candidate", {"materialized": "incremental"}),
+        (
+            "incremental_candidate",
+            {"materialized": "incremental", "cursor_type": "integer"},
+        ),
         ("ineligible_custom", {"materialized": "custom_kind"}),
         ("missing_expected", {}),
         ("current_reuse_from_missing", {}),
@@ -309,6 +331,32 @@ def build_standard_reuse_fingerprint(*, model_name: str, version_hash: str) -> F
         schema_fingerprint="schema_hash",
         query_sql="SELECT 1",
         ts=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def build_standard_reuse_origin_snapshot(
+    *,
+    model_name: str,
+    schema: str = "prod_schema",
+    relation_exists: bool = True,
+    built_version_hash: str | None = "expected",
+    reuse_origin_cursor_max: str | None = None,
+) -> StandardReuseFromTargetModelSnapshot:
+    """Build one per-model reuse origin snapshot for decision tests."""
+
+    return StandardReuseFromTargetModelSnapshot(
+        model_name=model_name,
+        reuse_origin=CompiledRelationLocation(
+            database=None,
+            schema=schema,
+            name=model_name,
+            qualified_name=f"{schema}.{model_name}",
+        ),
+        reuse_origin_fingerprint_database=None,
+        reuse_origin_fingerprint_schema=schema,
+        relation_exists=relation_exists,
+        built_version_hash=built_version_hash,
+        reuse_origin_cursor_max=reuse_origin_cursor_max,
     )
 
 

@@ -293,8 +293,11 @@ class StandardReuseFromTargetModelSnapshot:
 
     model_name: str
     reuse_origin: CompiledRelationLocation
+    reuse_origin_fingerprint_database: str | None
+    reuse_origin_fingerprint_schema: str
     relation_exists: bool
     built_version_hash: str | None = None
+    reuse_origin_cursor_max: str | None = None
 
 
 @dataclass(frozen=True)
@@ -302,8 +305,6 @@ class StandardReuseFromTargetSnapshot:
     """Resolved reuse_from target state used to decide standard target reuse eligibility."""
 
     reuse_from_target_name: str
-    fingerprint_database: str | None
-    fingerprint_schema: str
     model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot]
     hard_copy: bool = False
 
@@ -315,9 +316,15 @@ class StandardReuseModelDecision:
     model_name: str
     decision: str
     reuse_from_target_name: str
-    reuse_from_relation_exists: bool
-    reuse_from_built_version_present: bool
-    reuse_from_matches_expected: bool
+    reuse_origin: CompiledRelationLocation
+    reuse_origin_fingerprint_database: str | None
+    reuse_origin_fingerprint_schema: str
+    reuse_origin_relation_exists: bool
+    reuse_origin_built_version_present: bool
+    reuse_origin_matches_expected: bool
+    reuse_from_source_freshness_current: bool = True
+    reuse_origin_cursor_max: str | None = None
+    destination_cursor_max: str | None = None
 
 
 @dataclass(frozen=True)
@@ -326,6 +333,7 @@ class StandardReuseDecisionResults:
 
     reuse_from_target_name: str
     models: dict[str, StandardReuseModelDecision]
+    hard_copy: bool = False
 
 
 @dataclass(frozen=True)
@@ -414,6 +422,9 @@ class ModelPlanEntry:
     custom_placeholders: dict[str, str] = field(default_factory=dict)
     reuse_origin: CompiledRelationLocation | None = None
     reuse_hard_copy: bool = False
+    reuse_from_target_name: str | None = None
+    reuse_origin_fingerprint_database: str | None = None
+    reuse_origin_fingerprint_schema: str | None = None
 
 
 @dataclass(frozen=True)
