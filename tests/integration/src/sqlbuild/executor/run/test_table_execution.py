@@ -741,8 +741,12 @@ def test_given_cheap_reuse_with_adapter_support_when_executing_table_then_materi
             promotion_mode=TablePromotionMode.STAGED,
             expected_status=ExecutionStatus.FAILED.value,
             expected_error_fragments=(
+                "adapter 'duckdb'",
                 "does not support cheap relation reuse",
+                "reuse_hard_copy = false",
+                "will not copy production relations automatically",
                 "reuse_hard_copy = true",
+                "remove reuse_from to build normally",
             ),
             expected_target_exists=False,
         )
@@ -791,6 +795,11 @@ def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fai
     assert result.error_message is not None
     for fragment in test_case.expected_error_fragments:
         assert fragment in result.error_message
+    fingerprint_rows: list[tuple[object, ...]] = connection.execute(
+        "SELECT model_name, target_name FROM staging._sqlbuild_fingerprints "
+        "WHERE model_name = 'orders' ORDER BY target_name"
+    ).fetchall()
+    assert fingerprint_rows == [("orders", "orders_origin")]
     target_exists: bool = connection.execute(
         "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'staging' "
         "AND table_name = 'orders'"

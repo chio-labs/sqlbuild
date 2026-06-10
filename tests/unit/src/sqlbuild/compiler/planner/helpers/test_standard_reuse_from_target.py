@@ -230,7 +230,7 @@ def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_
                 "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
                 "prod": TargetConfig(
                     database="${db}",
-                    schema="${schema_prefix}_${CTX:schema}",
+                    schema="${schema_prefix}_${CTX:model.schema}",
                     vars={"db": "warehouse", "schema_prefix": "prod"},
                 ),
             },
@@ -251,6 +251,47 @@ def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_
         model_name: model_snapshot.reuse_origin_fingerprint_database
         for model_name, model_snapshot in snapshot.model_snapshots.items()
     } == test_case.expected_model_fingerprint_databases
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardReuseFromTargetSnapshotErrorTestCase(
+            description="raises when reuse_from target uses shorthand schema CTX",
+            fingerprint_table_exists=True,
+            expected_error_fragment=(
+                r"unsupported context key '\${CTX:schema}'. Use '\${CTX:model.database}' "
+                r"or '\${CTX:model.schema}' instead"
+            ),
+        )
+    ],
+    ids=["raises when reuse_from target uses shorthand schema CTX"],
+)
+def test_given_shorthand_ctx_in_reuse_from_target_when_building_snapshot_then_it_raises(
+    test_case: StandardReuseFromTargetSnapshotErrorTestCase,
+) -> None:
+    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+        fingerprint_rows=(),
+        existing_relations=frozenset(),
+        fingerprint_table_exists=test_case.fingerprint_table_exists,
+    )
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        build_standard_reuse_from_target_snapshot(
+            project=build_standard_reuse_from_target_project(),
+            adapter=adapter,
+            connection=object(),
+            scope=build_standard_reuse_from_target_scope(),
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
+                    "prod": TargetConfig(schema="prod_${CTX:schema}"),
+                },
+            ),
+            local_config=LocalConfig(),
+        )
 
 
 @pytest.mark.parametrize(
@@ -325,7 +366,7 @@ def test_given_multi_schema_reuse_from_when_building_snapshot_then_tracks_origin
             adapter="duckdb",
             targets={
                 "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
-                "prod": TargetConfig(schema="prod_${CTX:schema}"),
+                "prod": TargetConfig(schema="prod_${CTX:model.schema}"),
             },
         ),
         local_config=LocalConfig(),

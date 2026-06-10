@@ -74,6 +74,20 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="reports ambiguous target reuse source terminology",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/compiler/planner/helpers/standard_reuse_example.py": (
+                "def build_origin() -> str:\n"
+                "    source"
+                '_relation = "prod.orders"\n'
+                "    return source"
+                "_relation\n"
+            )
+        },
+        expected_violation_codes=("SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
         description="reports flat runtime main module under nested package",
         repo_files=compliant_repo_files()
         | {

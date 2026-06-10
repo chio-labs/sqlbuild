@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
     SchemaChangeKind,
     WarningSeverity,
 )
@@ -29,6 +30,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
     build_plan_provider_usage,
+    build_relation_reuse_plan,
     build_schema_finding,
     build_seed_entry,
     build_source_load_entry,
@@ -75,6 +77,43 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "view",
         ),
         unexpected_fragments=("Normal",),
+    ),
+    FormatPlanTestCase(
+        description="relation reuse is visible and hash-free in plan output",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.TABLE,
+                    fingerprint_version_hash="expected_hash",
+                    relation_reuse=build_relation_reuse_plan(
+                        kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+                        hard_copy=True,
+                    ),
+                ),
+                build_model_entry(
+                    name="customer_snapshot",
+                    action=PlanAction.SNAPSHOT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.SNAPSHOT,
+                    snapshot_strategy="timestamp",
+                    relation_reuse=build_relation_reuse_plan(
+                        kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+                        origin_name="customer_snapshot",
+                        hard_copy=False,
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "orders",
+            "table (hard-copy reuse from prod)",
+            "customer_snapshot",
+            "snapshot (timestamp) (seeded cheap reuse from prod)",
+        ),
+        unexpected_fragments=("expected_hash", "version_hash"),
     ),
     FormatPlanTestCase(
         description="human plan output omits identity hashes",

@@ -16,6 +16,21 @@ from scripts.structure.structure_conventions.constants import (
 )
 from scripts.structure.structure_conventions.models import Violation
 
+_TARGET_REUSE_PATH_MARKERS: tuple[str, ...] = (
+    "standard_reuse",
+    "reuse.py",
+)
+_TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
+    "source_relation",
+    "source_cursor",
+    "source_fingerprint",
+    "source_version",
+    "target_relation",
+    "target_cursor",
+    "REUSE_RELATION",
+    "reuse_relation",
+)
+
 
 def parse_python_module(file_path: Path) -> ast.Module:
     """Parse a Python file into an AST module."""
@@ -39,6 +54,36 @@ def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Viola
                     ),
                 )
             )
+    return violations
+
+
+def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
+    """Reject ambiguous source/target wording in target-reuse implementation modules."""
+
+    path_text: str = file_path.as_posix()
+    if not any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS):
+        return []
+
+    violations: list[Violation] = []
+    lines: list[str] = file_path.read_text(encoding="utf-8").splitlines()
+    line_number: int
+    line: str
+    for line_number, line in enumerate(lines, start=1):
+        term: str
+        for term in _TARGET_REUSE_FORBIDDEN_TERMS:
+            if term in line:
+                violations.append(
+                    Violation(
+                        code="SC045",
+                        path=file_path,
+                        line=line_number,
+                        message=(
+                            f"target-reuse modules must not use ambiguous term '{term}'; "
+                            "use origin/destination/reuse_from terminology unless this is real "
+                            "SQLBuild source logic"
+                        ),
+                    )
+                )
     return violations
 
 

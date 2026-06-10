@@ -156,15 +156,15 @@ def build_execution_plan(
         scope=scope,
         changes=changes,
     )
-    source_freshness: StandardSourceFreshnessPlanningResult | None = None
-    if changes_only:
-        source_freshness = build_planner_source_freshness_result(
+    source_freshness: StandardSourceFreshnessPlanningResult | None = (
+        build_planner_source_freshness_result(
             project=project,
             adapter=adapter,
             connection=connection,
             scope=scope,
             relations=relations,
         )
+    )
     if changes_only and not full_refresh:
         standard_identity_stale_model_names: frozenset[str] = (
             build_standard_identity_stale_model_names(

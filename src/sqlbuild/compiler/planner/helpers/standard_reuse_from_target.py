@@ -288,8 +288,18 @@ def _resolve_target_value(
     if target_value is None or target_value == PRESERVE_TARGET_VALUE:
         return default_value
 
-    result: str = target_value.replace("${CTX:database}", logical_database or "")
-    result = result.replace("${CTX:schema}", logical_schema or "")
+    unsupported_ctx_keys: tuple[str, ...] = ("${CTX:database}", "${CTX:schema}")
+    unsupported_ctx_key: str
+    for unsupported_ctx_key in unsupported_ctx_keys:
+        if unsupported_ctx_key in target_value:
+            raise PlannerInputError(
+                f"reuse_from target value uses unsupported context key "
+                f"'{unsupported_ctx_key}'. Use '${{CTX:model.database}}' or "
+                "'${CTX:model.schema}' instead."
+            )
+
+    result: str = target_value.replace("${CTX:model.database}", logical_database or "")
+    result = result.replace("${CTX:model.schema}", logical_schema or "")
     variable_name: str
     variable_value: object
     for variable_name, variable_value in effective_vars.items():

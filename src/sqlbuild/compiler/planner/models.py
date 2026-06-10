@@ -383,6 +383,7 @@ class RelationReusePlan:
     hard_copy: bool
     fingerprint_database: str | None
     fingerprint_schema: str
+    destination_target_name: str | None = None
 
 
 @dataclass(frozen=True)

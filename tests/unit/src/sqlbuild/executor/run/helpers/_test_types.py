@@ -165,7 +165,7 @@ class RelationReuseOriginExecutionTestCase:
     supports_zero_copy_clone: bool
     expected_calls: tuple[str, ...]
     expected_sql: str | None = None
-    expected_error_fragment: str | None = None
+    expected_error_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

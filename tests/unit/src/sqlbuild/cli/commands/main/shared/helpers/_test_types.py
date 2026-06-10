@@ -43,6 +43,13 @@ class ExecutionJsonTestCase:
 
 
 @dataclass(frozen=True)
+class ExecutionJsonRelationReuseTestCase:
+    description: str
+    expected_asset_name: str
+    expected_relation_reuse: dict[str, object]
+
+
+@dataclass(frozen=True)
 class TruncateNameTestCase:
     description: str
     name: str
