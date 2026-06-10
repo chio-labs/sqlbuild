@@ -8,11 +8,12 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.shared.types import TypeDialect
 from sqlbuild.executor.scenario.models import ScenarioSnapshotColumn
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import SCENARIO_LOCAL_TYPE_INVALID
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot_expressions
+from sqlbuild.shared.helpers.polyglot import import_polyglot
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
@@ -86,6 +87,30 @@ _POSTGRES_VARCHAR_TYPES: frozenset[str] = frozenset(
         "VARBIT",
     }
 )
+_FALLBACK_POLYGLOT_BASE_TYPES: frozenset[str] = frozenset(
+    {
+        "BOOL",
+        "BOOLEAN",
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "INTEGER",
+        "BIGINT",
+        "FLOAT",
+        "DOUBLE",
+        "DECIMAL",
+        "NUMERIC",
+        "DATE",
+        "TIME",
+        "TIMESTAMP",
+        "DATETIME",
+        "VARCHAR",
+        "CHAR",
+        "TEXT",
+        "STRING",
+        "JSON",
+    }
+)
 
 
 def build_scenario_snapshot_columns(
@@ -130,17 +155,25 @@ def local_type_for_warehouse_type(
     if override_type is not None:
         return override_type
 
-    if sql_analysis_dialect == "postgres":
+    dialect: TypeDialect | None = _coerce_type_dialect(sql_analysis_dialect)
+    if dialect == TypeDialect.POSTGRES:
         postgres_type: str | None = _postgres_pre_local_type(warehouse_type)
         if postgres_type is not None:
             return postgres_type
 
-    sqlglot_local_type: str | None = _local_type_with_sqlglot(
+    dialect_type: str | None = _dialect_pre_local_type(
         warehouse_type=warehouse_type,
         sql_analysis_dialect=sql_analysis_dialect,
     )
-    if sqlglot_local_type is not None:
-        return sqlglot_local_type
+    if dialect_type is not None:
+        return dialect_type
+
+    polyglot_local_type: str | None = _local_type_with_polyglot(
+        warehouse_type=warehouse_type,
+        sql_analysis_dialect=sql_analysis_dialect,
+    )
+    if polyglot_local_type is not None:
+        return polyglot_local_type
 
     return _fallback_local_type_for_warehouse_type(warehouse_type)
 
@@ -208,52 +241,126 @@ def _postgres_pre_local_type(warehouse_type: str) -> str | None:
     return None
 
 
-def _local_type_with_sqlglot(
+def _dialect_pre_local_type(*, warehouse_type: str, sql_analysis_dialect: str | None) -> str | None:
+    pattern: _TypePattern = _parse_type_pattern(warehouse_type)
+    base: str = pattern.base
+    args: tuple[str, ...] = pattern.args
+    dialect: TypeDialect | None = _coerce_type_dialect(sql_analysis_dialect)
+    if dialect == TypeDialect.SNOWFLAKE:
+        return _snowflake_pre_local_type(base=base, args=args)
+    if dialect == TypeDialect.BIGQUERY:
+        return _bigquery_pre_local_type(base=base, args=args)
+    if dialect == TypeDialect.DATABRICKS:
+        return _databricks_pre_local_type(base=base, args=args)
+    if dialect == TypeDialect.DUCKDB:
+        return _duckdb_pre_local_type(base=base, args=args)
+    if dialect is None and base not in _FALLBACK_POLYGLOT_BASE_TYPES:
+        return "VARCHAR"
+    return None
+
+
+def _snowflake_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
+    if base == "NUMBER":
+        if len(args) >= 2:
+            return f"DECIMAL({args[0]}, {args[1]})"
+        if len(args) == 1:
+            return f"DECIMAL({args[0]})"
+        return "DECIMAL(38, 0)"
+    if base in {"FLOAT", "FLOAT8", "DOUBLE", "DOUBLE PRECISION"}:
+        return "DOUBLE"
+    if base == "FLOAT4":
+        return "REAL"
+    if base in {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
+        return "TIMESTAMPTZ"
+    if base == "TIMESTAMP_NTZ":
+        return f"TIMESTAMP({args[0]})" if args else "TIMESTAMP"
+    return None
+
+
+def _bigquery_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
+    if base == "BIGNUMERIC":
+        if len(args) >= 2:
+            return f"DECIMAL({args[0]}, {args[1]})"
+        return "DECIMAL(38, 5)"
+    if base in {"RANGE", "BYTES"}:
+        return "VARCHAR"
+    if base == "TIMESTAMP":
+        return "TIMESTAMPTZ"
+    return None
+
+
+def _databricks_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
+    if base == "TIMESTAMP":
+        return "TIMESTAMPTZ"
+    if base == "TIMESTAMP_NTZ":
+        return "TIMESTAMP"
+    if base == "VOID":
+        return "VARCHAR"
+    return None
+
+
+def _duckdb_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
+    if base == "HUGEINT":
+        return "INT128"
+    if base == "UHUGEINT":
+        return "UINT128"
+    if base == "BLOB":
+        return "VARCHAR"
+    if base == "LIST" and args:
+        inner_type: str = _fallback_local_type_for_warehouse_type(args[0])
+        if inner_type == "BIGINT" and args[0].strip().upper() == "INTEGER":
+            inner_type = "INT"
+        return inner_type + "[]"
+    return None
+
+
+def _local_type_with_polyglot(
     *, warehouse_type: str, sql_analysis_dialect: str | None
 ) -> str | None:
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if expressions_module is None:
+    polyglot_module: Any | None = import_polyglot()
+    if polyglot_module is None:
         return None
 
     try:
-        data_type: Any = expressions_module.DataType.build(
+        data_type: Any = polyglot_module.parse_data_type(
             warehouse_type,
-            dialect=sql_analysis_dialect,
+            dialect=sql_analysis_dialect or "generic",
         )
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "scenario snapshot type sqlglot conversion failed; falling back",
+            "scenario snapshot type polyglot conversion failed; falling back",
             warehouse_type=warehouse_type,
             sql_analysis_dialect=sql_analysis_dialect,
             sqlbuild_error=str(error),
         )
         return None
 
-    type_name: str = _sqlglot_type_name(data_type)
+    type_name: str = _polyglot_type_name(data_type)
     base_type: str = _parse_type_pattern(warehouse_type).base
-    if type_name == "BIGDECIMAL":
+    if type_name in {"BIGDECIMAL", "DECIMAL"}:
         rendered_bigdecimal_type: str = data_type.sql(dialect="duckdb").strip()
         if ")(" not in rendered_bigdecimal_type:
             return rendered_bigdecimal_type
-        return _decimal_local_type_from_sqlglot(data_type) or "VARCHAR"
+        return _decimal_local_type_from_polyglot(data_type) or "VARCHAR"
     if type_name in {"NULL", "RANGE", "XML"}:
         return "VARCHAR"
     if type_name == "OBJECT":
         return "JSON"
-    if type_name == "ARRAY" and not data_type.expressions:
+    if type_name == "ARRAY" and not _polyglot_element_type(data_type):
         return "JSON"
-    if type_name == "LIST" and data_type.expressions:
-        return data_type.expressions[0].sql(dialect="duckdb").strip() + "[]"
+    if type_name in {"ARRAY", "LIST"} and _polyglot_element_type(data_type):
+        return data_type.sql(dialect="duckdb").strip()
     if type_name in {"GEOGRAPHY", "GEOMETRY", "MONEY"}:
         return "VARCHAR"
-    if sql_analysis_dialect == "postgres" and base_type in _POSTGRES_VARCHAR_TYPES:
+    dialect: TypeDialect | None = _coerce_type_dialect(sql_analysis_dialect)
+    if dialect == TypeDialect.POSTGRES and base_type in _POSTGRES_VARCHAR_TYPES:
         return "VARCHAR"
-    if sql_analysis_dialect == "postgres" and base_type in _POSTGRES_SERIAL_TYPES:
+    if dialect == TypeDialect.POSTGRES and base_type in _POSTGRES_SERIAL_TYPES:
         return _postgres_serial_local_type(base_type)
-    if sql_analysis_dialect == "bigquery" and base_type == "BYTES" and data_type.expressions:
+    if dialect == TypeDialect.BIGQUERY and base_type == "BYTES" and data_type.expressions:
         return "VARCHAR"
-    if sql_analysis_dialect == "snowflake" and base_type == "VECTOR":
+    if dialect == TypeDialect.SNOWFLAKE and base_type == "VECTOR":
         return "JSON"
 
     local_type: str = data_type.sql(dialect="duckdb").strip()
@@ -393,37 +500,52 @@ def _decimal_local_type(normalized_type: str) -> str:
     return f"DECIMAL({precision_scale})"
 
 
-def _decimal_local_type_from_sqlglot(data_type: Any) -> str | None:
-    precision_scale: str | None = _sqlglot_precision_scale(data_type)
+def _decimal_local_type_from_polyglot(data_type: Any) -> str | None:
+    precision_scale: str | None = _polyglot_precision_scale(data_type)
     if precision_scale is None:
         return "DECIMAL"
     return f"DECIMAL({precision_scale})"
 
 
-def _sqlglot_precision_scale(data_type: Any) -> str | None:
-    values: list[str] = []
-    expression: Any
-    for expression in data_type.expressions:
-        value: Any = getattr(expression, "this", None)
-        text: str = getattr(value, "this", "")
-        if text == "":
-            return None
-        values.append(str(text))
+def _polyglot_precision_scale(data_type: Any) -> str | None:
+    args: dict[str, Any] = dict(getattr(data_type, "args", {}) or {})
+    values: list[str] = [
+        str(value) for value in (args.get("precision"), args.get("scale")) if value is not None
+    ]
     if not values:
         return None
     return ", ".join(values)
 
 
-def _sqlglot_type_name(data_type: Any) -> str:
-    data_type_kind: Any = getattr(data_type, "this", None)
-    return str(getattr(data_type_kind, "name", "")).upper()
+def _polyglot_type_name(data_type: Any) -> str:
+    args: dict[str, Any] = dict(getattr(data_type, "args", {}) or {})
+    data_type_name: str = str(args.get("data_type", "")).upper()
+    if data_type_name == "CUSTOM":
+        return str(args.get("name", "")).upper().replace(" ", "")
+    return data_type_name
+
+
+def _polyglot_element_type(data_type: Any) -> dict[str, Any] | None:
+    args: dict[str, Any] = dict(getattr(data_type, "args", {}) or {})
+    element_type: Any = args.get("element_type")
+    return element_type if isinstance(element_type, dict) else None
 
 
 def _should_widen_real_to_double(*, warehouse_type: str, sql_analysis_dialect: str | None) -> bool:
     normalized_type: str = warehouse_type.strip().upper()
     base_type: str = normalized_type.split("(", 1)[0].strip()
-    if sql_analysis_dialect == "snowflake":
+    dialect: TypeDialect | None = _coerce_type_dialect(sql_analysis_dialect)
+    if dialect == TypeDialect.SNOWFLAKE:
         return base_type in {"FLOAT", "FLOAT8", "DOUBLE", "DOUBLE PRECISION"}
-    if sql_analysis_dialect == "bigquery":
+    if dialect == TypeDialect.BIGQUERY:
         return base_type in {"FLOAT64"}
     return base_type in {"DOUBLE", "DOUBLE PRECISION", "FLOAT8"}
+
+
+def _coerce_type_dialect(dialect: str | None) -> TypeDialect | None:
+    if dialect is None:
+        return None
+    try:
+        return TypeDialect(dialect)
+    except ValueError:
+        return None

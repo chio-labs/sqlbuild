@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import CursorType, WarningSeverity
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.helpers.polyglot import import_polyglot
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(
@@ -30,7 +30,7 @@ _INTEGER_SUBSTRINGS: frozenset[str] = frozenset(
     }
 )
 
-_SQLGLOT_TIMESTAMP_TYPE_NAMES: frozenset[str] = frozenset(
+_POLYGLOT_TIMESTAMP_TYPE_NAMES: frozenset[str] = frozenset(
     {
         "TIMESTAMP",
         "TIMESTAMPNTZ",
@@ -48,11 +48,14 @@ _SQLGLOT_TIMESTAMP_TYPE_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_SQLGLOT_INTEGER_TYPE_NAMES: frozenset[str] = frozenset(
+_POLYGLOT_INTEGER_TYPE_NAMES: frozenset[str] = frozenset(
     {
         "INT",
+        "BIG_INT",
         "BIGINT",
+        "SMALL_INT",
         "SMALLINT",
+        "TINY_INT",
         "TINYINT",
         "MEDIUMINT",
         "INT128",
@@ -98,7 +101,7 @@ def check_cursor_type_consistency(
         return None
 
     if sql_analysis_enabled:
-        return _check_with_sqlglot(
+        return _check_with_polyglot(
             model_name=model_name,
             cursor_column=cursor_column,
             declared=declared,
@@ -136,7 +139,7 @@ def _parse_cursor_type(cursor_type: str) -> CursorType | None:
         return None
 
 
-def _check_with_sqlglot(
+def _check_with_polyglot(
     *,
     model_name: str,
     cursor_column: str,
@@ -145,7 +148,7 @@ def _check_with_sqlglot(
 ) -> PlanWarning | None:
     """Classify warehouse type via sql_analysis and return error on clear mismatch."""
 
-    detected: CursorType | None = _classify_type_with_sqlglot(warehouse_type)
+    detected: CursorType | None = _classify_type_with_polyglot(warehouse_type)
     if detected is None:
         return None
 
@@ -210,19 +213,19 @@ def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
     return None
 
 
-def _classify_type_with_sqlglot(warehouse_type: str) -> CursorType | None:
+def _classify_type_with_polyglot(warehouse_type: str) -> CursorType | None:
     """Classify a warehouse type string using sql_analysis type parsing.
 
     Returns the matching CursorType or None if sql_analysis is unavailable or the
     type cannot be classified.
     """
 
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
+    polyglot_module: Any | None = import_polyglot()
+    if polyglot_module is None:
         return None
 
     try:
-        parsed: Any = sqlglot_module.parse_one(f"CAST(x AS {warehouse_type})")
+        parsed: Any = polyglot_module.parse_data_type(warehouse_type, dialect="generic")
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
@@ -232,19 +235,14 @@ def _classify_type_with_sqlglot(warehouse_type: str) -> CursorType | None:
         )
         return None
 
-    to_type: Any | None = getattr(parsed, "to", None)
-    if to_type is None:
-        return None
+    args: dict[str, Any] = dict(getattr(parsed, "args", {}) or {})
+    type_name: str = str(args.get("data_type", "")).upper()
+    if type_name == "CUSTOM":
+        type_name = str(args.get("name", "")).upper().replace("_", "")
 
-    type_this: Any | None = getattr(to_type, "this", None)
-    if type_this is None:
-        return None
-
-    type_name: str = type_this.value if hasattr(type_this, "value") else str(type_this)
-
-    if type_name in _SQLGLOT_TIMESTAMP_TYPE_NAMES:
+    if type_name in _POLYGLOT_TIMESTAMP_TYPE_NAMES:
         return CursorType.TIMESTAMP
-    if type_name in _SQLGLOT_INTEGER_TYPE_NAMES:
+    if type_name in _POLYGLOT_INTEGER_TYPE_NAMES:
         return CursorType.INTEGER
 
     return None

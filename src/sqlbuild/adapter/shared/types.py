@@ -75,8 +75,11 @@ class TypeFamily(StrEnum):
 
 
 class TypeDialect(StrEnum):
+    GENERIC = "generic"
     BIGQUERY = "bigquery"
     SNOWFLAKE = "snowflake"
     DUCKDB = "duckdb"
     MOTHERDUCK = "motherduck"
     DATABRICKS = "databricks"
+    POSTGRES = "postgres"
+    TSQL = "tsql"

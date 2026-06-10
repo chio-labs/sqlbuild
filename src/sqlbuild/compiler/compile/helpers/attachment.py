@@ -97,7 +97,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.helpers.polyglot import import_polyglot
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
@@ -814,14 +814,11 @@ def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> N
     dialect: str | None = dialect_by_adapter.get(adapter_name)
     if dialect is None:
         return
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
+    polyglot_module: Any | None = import_polyglot()
+    if polyglot_module is None:
         return
     try:
-        sqlglot_module.parse_one(
-            f"CREATE TABLE __sqlbuild_type_check__ (__value__ {type_sql})",
-            read=dialect,
-        )
+        polyglot_module.parse_data_type(type_sql, dialect=dialect)
     except Exception as error:
         raise CompileInputError(
             f"{context} type '{type_sql}' is not valid for adapter '{adapter_name}' "
