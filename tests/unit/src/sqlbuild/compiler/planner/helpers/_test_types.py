@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner.models import (
+    CursorBounds,
     MissingUpstream,
     ParsedSelector,
     PathSelector,
@@ -577,6 +578,14 @@ class CursorStartBoundsTestCase:
     end_cursor_override: str | None
     expected_start: str | None
     expected_end: str | None
+
+
+@dataclass(frozen=True)
+class PlanEntryCursorOverrideTestCase:
+    description: str
+    start_cursor_override: str
+    end_cursor_override: str
+    expected_bounds: CursorBounds
 
 
 @dataclass(frozen=True)

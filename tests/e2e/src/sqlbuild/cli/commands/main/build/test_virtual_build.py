@@ -23,7 +23,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     count_virtual_physical_versions,
     initialize_virtual_seeded_project,
+    prepare_virtual_cursor_override_without_snapshot_project,
     prepare_virtual_seeded_incremental_project,
+    rewrite_cursor_override_without_snapshot_model,
     rewrite_incremental_orders_model,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
@@ -1347,6 +1349,67 @@ def test_given_virtual_incremental_change_when_building_then_it_seeds_new_physic
         ),
     )
     assert ancestry_rows == [("orders", "copy")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualBuildE2ETestCase(
+            description="explicit cursor overrides work without target or upstream snapshots",
+            expected_build_fragments=(),
+            expected_plan_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.orders ORDER BY id",
+                    ((1, 10), (2, 21), (3, 31)),
+                ),
+            ),
+            expected_ref_rows=(),
+        )
+    ],
+    ids=["explicit cursor overrides work without target or upstream snapshots"],
+)
+def test_given_virtual_incremental_without_cursor_snapshot_when_building_then_cli_bounds_apply(
+    test_case: VirtualBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_cursor_override_without_snapshot_project(
+        tmp_path=tmp_path,
+        project_name="virtual_cursor_override_without_snapshot",
+    )
+    initialize_virtual_seeded_project(project_dir=project_dir)
+
+    rewrite_cursor_override_without_snapshot_model(
+        project_dir=project_dir,
+        amount_expression="amount_cents + 1",
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "DELETE FROM raw.raw_orders WHERE id = 1; "
+            "INSERT INTO raw.raw_orders VALUES (3, '2026-01-03 00:00:00', 30)"
+        ),
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "build",
+            "--start-cursor-ts",
+            "2026-01-02T00:00:00",
+            "--end-cursor-ts",
+            "2026-01-04T00:00:00",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
 
 
 @pytest.mark.parametrize(
