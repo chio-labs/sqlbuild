@@ -62,6 +62,58 @@ def prepare_virtual_seeded_incremental_project(
     return project_dir
 
 
+def prepare_virtual_cursor_override_without_snapshot_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+) -> Path:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": _cursor_override_without_snapshot_model_sql(
+                amount_expression="amount_cents + 0"
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (
+              id INTEGER,
+              ordered_at TIMESTAMP,
+              amount_cents INTEGER
+            );
+            INSERT INTO raw.raw_orders VALUES
+              (1, '2026-01-01 00:00:00', 10),
+              (2, '2026-01-02 00:00:00', 20);
+            """
+        ).strip(),
+    )
+    return project_dir
+
+
+def rewrite_cursor_override_without_snapshot_model(
+    *, project_dir: Path, amount_expression: str
+) -> None:
+    (project_dir / "models" / "orders.sql").write_text(
+        _cursor_override_without_snapshot_model_sql(amount_expression=amount_expression),
+        encoding="utf-8",
+    )
+
+
 def initialize_virtual_seeded_project(*, project_dir: Path) -> None:
     init_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("state", "init"),
@@ -116,6 +168,28 @@ def incremental_orders_model_sql(
               cursor_type timestamp,
               cursor_grain day,
               replay_on_change {replay_on_change}
+            );
+
+            SELECT id, ordered_at, {amount_expression} AS amount_cents
+            FROM __source("raw_orders")
+            """
+        ).strip()
+        + "\n"
+    )
+
+
+def _cursor_override_without_snapshot_model_sql(*, amount_expression: str) -> str:
+    return (
+        dedent(
+            f"""
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              cursor ordered_at,
+              cursor_type timestamp,
+              cursor_grain day,
+              cursor_inputs (),
+              replay_on_change bounded-7d
             );
 
             SELECT id, ordered_at, {amount_expression} AS amount_cents
