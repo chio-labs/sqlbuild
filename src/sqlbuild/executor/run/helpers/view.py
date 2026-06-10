@@ -180,6 +180,8 @@ def execute_view_entry(
         run_id=run_id,
         query_change_tracking=query_change_tracking,
         warnings=warnings,
+        model_audits=model_audits,
+        audit_results=tuple(audit_results),
     )
 
     return ModelExecutionResult(
