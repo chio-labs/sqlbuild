@@ -86,11 +86,12 @@ class PlanReason(StrEnum):
 
 
 class StandardReuseDecisionKind(StrEnum):
-    REUSE_CANDIDATE = "reuse_candidate"
+    REUSE_ELIGIBLE = "reuse_eligible"
     CURRENT = "current"
-    REUSE_FROM_FINGERPRINT_MISSING = "reuse_from_fingerprint_missing"
-    REUSE_FROM_RELATION_MISSING = "reuse_from_relation_missing"
-    REUSE_FROM_VERSION_MISMATCH = "reuse_from_version_mismatch"
+    REUSE_ORIGIN_FINGERPRINT_MISSING = "reuse_origin_fingerprint_missing"
+    REUSE_ORIGIN_RELATION_MISSING = "reuse_origin_relation_missing"
+    REUSE_ORIGIN_VERSION_MISMATCH = "reuse_origin_version_mismatch"
+    REUSE_FROM_SOURCE_FRESHNESS_STALE = "reuse_from_source_freshness_stale"
     INELIGIBLE_MATERIALIZATION = "ineligible_materialization"
 
 

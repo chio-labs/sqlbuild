@@ -23,6 +23,10 @@ from sqlbuild.executor.run.helpers.cursor_bounds import (
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.reuse import (
+    create_relation_from_reuse_origin,
+    validate_reuse_origin_fingerprint,
+)
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
@@ -63,6 +67,14 @@ def execute_incremental_entry(
     target_table: str = entry.destination.name
     target_qualified: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
+    )
+    reuse_origin_relation: str | None = (
+        resolve_relation_location_qualified_name(
+            adapter=adapter,
+            location=entry.reuse_origin,
+        )
+        if entry.reuse_origin is not None
+        else None
     )
     delta_table: str = f"{target_table}__delta"
     delta_qualified: str = resolve_qualified_name_parts(
@@ -111,6 +123,36 @@ def execute_incremental_entry(
         )
 
     try:
+        adapter.ensure_schema(
+            connection,
+            database=target_database,
+            schema=target_schema,
+            statement_recorder=statement_recorder,
+        )
+        if reuse_origin_relation is not None:
+            validate_reuse_origin_fingerprint(
+                adapter=adapter,
+                connection=connection,
+                model_name=entry.name,
+                expected_version_hash=entry.fingerprint_version_hash,
+                reuse_from_target_name=entry.reuse_from_target_name,
+                reuse_origin_fingerprint_database=entry.reuse_origin_fingerprint_database,
+                reuse_origin_fingerprint_schema=entry.reuse_origin_fingerprint_schema,
+            )
+            adapter.drop(
+                connection,
+                destination=target_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            create_relation_from_reuse_origin(
+                adapter=adapter,
+                connection=connection,
+                origin_relation=reuse_origin_relation,
+                destination_relation=target_qualified,
+                hard_copy=entry.reuse_hard_copy,
+                statement_recorder=statement_recorder,
+            )
         if runtime_owned_cursor_bounds:
             if entry.cursor_column is None:
                 raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")

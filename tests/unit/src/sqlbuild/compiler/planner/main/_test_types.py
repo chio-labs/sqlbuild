@@ -19,8 +19,9 @@ class StandardReuseFromTargetPlanOutputTestCase:
     description: str
     expected_reuse_from_target_name: str
     expected_model_names: tuple[str, ...]
-    expected_reuse_candidate_names: tuple[str, ...]
+    expected_reuse_eligible_names: tuple[str, ...]
     expected_decisions: dict[str, str]
+    expected_actions: dict[str, str]
 
 
 @dataclass(frozen=True)

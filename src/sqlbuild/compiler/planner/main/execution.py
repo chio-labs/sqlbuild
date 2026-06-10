@@ -28,7 +28,10 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
 )
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_source_freshness_result
+from sqlbuild.compiler.planner.helpers.source_freshness import (
+    build_planner_source_freshness_result,
+    build_reuse_from_source_freshness_result,
+)
 from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
     build_standard_reuse_decisions,
 )
@@ -137,6 +140,16 @@ def build_execution_plan(
             local_config=local_config,
         )
     )
+    reuse_from_source_freshness: StandardSourceFreshnessPlanningResult | None = None
+    if standard_reuse_from_target is not None:
+        reuse_from_source_freshness = build_reuse_from_source_freshness_result(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            scope=scope,
+            relations=relations,
+            reuse_from_snapshot=standard_reuse_from_target,
+        )
     version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
         scope=scope,
@@ -148,6 +161,8 @@ def build_execution_plan(
             expected_version_hashes=version_identities.model_version_hashes,
             built_fingerprints=snapshot.fingerprints,
             reuse_from_snapshot=standard_reuse_from_target,
+            cursor_snapshots=snapshot.cursor_snapshots,
+            reuse_from_source_freshness=reuse_from_source_freshness,
         )
 
     changes: PlannerChangeResults = detect_changes(
@@ -205,6 +220,7 @@ def build_execution_plan(
         resolved_actions=resolved_actions,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
+        standard_reuse_decisions=standard_reuse_decisions,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
     )
@@ -290,14 +306,18 @@ def _serialize_standard_reuse_metadata(
         "standard_reuse_from_target": {
             "reuse_from_target_name": standard_reuse_from_target.reuse_from_target_name,
             "hard_copy": standard_reuse_from_target.hard_copy,
-            "fingerprint_database": standard_reuse_from_target.fingerprint_database,
-            "fingerprint_schema": standard_reuse_from_target.fingerprint_schema,
             "model_origins": {
                 model_name: {
                     "database": model_snapshot.reuse_origin.database,
                     "schema": model_snapshot.reuse_origin.schema,
                     "name": model_snapshot.reuse_origin.name,
                     "qualified_name": model_snapshot.reuse_origin.qualified_name,
+                    "reuse_origin_fingerprint_database": (
+                        model_snapshot.reuse_origin_fingerprint_database
+                    ),
+                    "reuse_origin_fingerprint_schema": (
+                        model_snapshot.reuse_origin_fingerprint_schema
+                    ),
                     "relation_exists": model_snapshot.relation_exists,
                     "built_version_present": model_snapshot.built_version_hash is not None,
                 }
@@ -315,9 +335,14 @@ def _serialize_standard_reuse_metadata(
             model_name: {
                 "decision": decision.decision,
                 "reuse_from_target_name": decision.reuse_from_target_name,
-                "reuse_from_relation_exists": decision.reuse_from_relation_exists,
-                "reuse_from_built_version_present": decision.reuse_from_built_version_present,
-                "reuse_from_matches_expected": decision.reuse_from_matches_expected,
+                "reuse_origin_relation_exists": decision.reuse_origin_relation_exists,
+                "reuse_origin_built_version_present": (decision.reuse_origin_built_version_present),
+                "reuse_origin_matches_expected": decision.reuse_origin_matches_expected,
+                "reuse_origin_fingerprint_database": (decision.reuse_origin_fingerprint_database),
+                "reuse_origin_fingerprint_schema": decision.reuse_origin_fingerprint_schema,
+                "reuse_from_source_freshness_current": (
+                    decision.reuse_from_source_freshness_current
+                ),
             }
             for model_name, decision in sorted(standard_reuse_decisions.models.items())
         },

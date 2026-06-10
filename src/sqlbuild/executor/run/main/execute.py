@@ -32,7 +32,10 @@ from sqlbuild.executor.run.helpers.microbatch import (
     execute_microbatch_entry as execute_microbatch_entry,
 )
 from sqlbuild.executor.run.helpers.results import build_failed_result
-from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_origin
+from sqlbuild.executor.run.helpers.reuse import (
+    create_relation_from_reuse_origin,
+    validate_reuse_origin_fingerprint,
+)
 from sqlbuild.executor.run.helpers.snapshot import (
     execute_snapshot_entry as execute_snapshot_entry,
 )
@@ -296,6 +299,15 @@ def _staged_lifecycle(
                 statement_recorder=statement_recorder,
             )
             if reuse_origin_relation is not None:
+                validate_reuse_origin_fingerprint(
+                    adapter=adapter,
+                    connection=connection,
+                    model_name=entry.name,
+                    expected_version_hash=entry.fingerprint_version_hash,
+                    reuse_from_target_name=entry.reuse_from_target_name,
+                    reuse_origin_fingerprint_database=entry.reuse_origin_fingerprint_database,
+                    reuse_origin_fingerprint_schema=entry.reuse_origin_fingerprint_schema,
+                )
                 create_relation_from_reuse_origin(
                     adapter=adapter,
                     connection=connection,
@@ -565,6 +577,15 @@ def _direct_lifecycle(
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_table"):
             if reuse_origin_relation is not None:
+                validate_reuse_origin_fingerprint(
+                    adapter=adapter,
+                    connection=connection,
+                    model_name=entry.name,
+                    expected_version_hash=entry.fingerprint_version_hash,
+                    reuse_from_target_name=entry.reuse_from_target_name,
+                    reuse_origin_fingerprint_database=entry.reuse_origin_fingerprint_database,
+                    reuse_origin_fingerprint_schema=entry.reuse_origin_fingerprint_schema,
+                )
                 adapter.drop(
                     connection,
                     destination=target_qualified,

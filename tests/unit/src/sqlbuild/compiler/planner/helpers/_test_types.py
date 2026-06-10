@@ -84,10 +84,10 @@ class StandardReuseFromTargetSnapshotTestCase:
     fingerprint_rows: tuple[tuple[object, ...], ...]
     existing_relations: frozenset[tuple[str | None, str | None, str]]
     expected_target_name: str
-    expected_fingerprint_schema: str
     expected_model_relation_exists: dict[str, bool]
     expected_model_built_version_hashes: dict[str, str | None]
-    expected_fingerprint_database: str | None = None
+    expected_model_fingerprint_schemas: dict[str, str] = field(default_factory=dict)
+    expected_model_fingerprint_databases: dict[str, str | None] = field(default_factory=dict)
     expected_model_names: tuple[str, ...] = ()
     selected_model_names: frozenset[str] | None = None
 
@@ -98,6 +98,14 @@ class StandardReuseFromTargetSnapshotErrorTestCase:
     fingerprint_table_exists: bool
     expected_error_fragment: str
     fingerprint_read_fails: bool = False
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetMultiSchemaTestCase:
+    description: str
+    expected_origin_schemas: dict[str, str]
+    expected_origin_fingerprint_schemas: dict[str, str]
+    expected_origin_fingerprint_databases: dict[str, str | None]
 
 
 @dataclass(frozen=True)

@@ -79,3 +79,14 @@ class TableReuseExecutionTestCase:
     expected_error_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_lifecycle_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_target_exists: bool = True
+
+
+@dataclass(frozen=True)
+class TableReuseFailureExecutionTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    fingerprint_version_hash: str
+    expected_status: str
+    expected_failed_phase: ExecutionPhase
+    expected_error_fragments: tuple[str, ...]
+    expected_target_exists: bool

@@ -17,7 +17,11 @@ from sqlbuild.compiler.planner.helpers.version_identity import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
-from sqlbuild.compiler.planner.models import PlanOutput, StandardModelVersionIdentities
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    PlanOutput,
+    StandardModelVersionIdentities,
+)
 from sqlbuild.compiler.planner.types import PlanAction
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
@@ -139,11 +143,17 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
         StandardReuseFromTargetPlanOutputTestCase(
             description="execution plan carries standard reuse_from metadata",
             expected_reuse_from_target_name="prod",
-            expected_model_names=("customers", "orders"),
-            expected_reuse_candidate_names=("orders",),
+            expected_model_names=("customers", "line_items", "orders"),
+            expected_reuse_eligible_names=("line_items", "orders"),
             expected_decisions={
-                "customers": "reuse_from_fingerprint_missing",
-                "orders": "reuse_candidate",
+                "customers": "reuse_origin_fingerprint_missing",
+                "line_items": "reuse_eligible",
+                "orders": "reuse_eligible",
+            },
+            expected_actions={
+                "customers": PlanAction.CREATE_TABLE.value,
+                "line_items": PlanAction.INCREMENTAL_APPEND.value,
+                "orders": PlanAction.REUSE_RELATION.value,
             },
         )
     ],
@@ -190,7 +200,27 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 render_qualified_name=adapter.render_qualified_name,
             ),
         )
+        adapter.execute(
+            connection,
+            build_insert_sql(
+                database=None,
+                schema="prod_schema",
+                model_name="line_items",
+                target_database=None,
+                target_schema="prod_schema",
+                target_name="line_items",
+                run_id="run_1",
+                query_hash="query_hash",
+                version_hash=version_identities.model_version_hashes["line_items"],
+                schema_fingerprint="schema_hash",
+                query_sql="SELECT 1",
+                metadata_json="{}",
+                ts="2026-01-01T00:00:00+00:00",
+                render_qualified_name=adapter.render_qualified_name,
+            ),
+        )
         adapter.execute(connection, "CREATE TABLE prod_schema.orders AS SELECT 1 AS id")
+        adapter.execute(connection, "CREATE TABLE prod_schema.line_items AS SELECT 1 AS id")
 
         plan_output: PlanOutput = build_execution_plan(
             project=project,
@@ -235,12 +265,26 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 model_name
                 for model_name, model_metadata in decision_models_metadata.items()
                 if isinstance(model_metadata, dict)
-                and cast(dict[str, object], model_metadata).get("decision") == "reuse_candidate"
+                and cast(dict[str, object], model_metadata).get("decision") == "reuse_eligible"
             )
         )
-        == test_case.expected_reuse_candidate_names
+        == test_case.expected_reuse_eligible_names
     )
-    assert all(entry.action != PlanAction.REUSE_RELATION for entry in plan_output.model_entries)
+    assert {entry.name: entry.action.value for entry in plan_output.model_entries} == (
+        test_case.expected_actions
+    )
+    reuse_entry: ModelPlanEntry | None = next(
+        (entry for entry in plan_output.model_entries if entry.name == "orders"), None
+    )
+    assert reuse_entry is not None
+    assert reuse_entry.reuse_origin is not None
+    assert reuse_entry.reuse_origin.qualified_name == "prod_schema.orders"
+    seed_entry: ModelPlanEntry | None = next(
+        (entry for entry in plan_output.model_entries if entry.name == "line_items"), None
+    )
+    assert seed_entry is not None
+    assert seed_entry.reuse_origin is not None
+    assert seed_entry.reuse_origin.qualified_name == "prod_schema.line_items"
 
 
 @pytest.mark.parametrize(
