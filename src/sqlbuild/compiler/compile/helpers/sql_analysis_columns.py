@@ -24,6 +24,63 @@ from sqlbuild.shared.constants import (
     POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
 )
 from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_CAST_TYPE as _POLYGLOT_ANALYSIS_CAST_TYPE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_CTES as _POLYGLOT_ANALYSIS_CTES,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_IS_STAR as _POLYGLOT_ANALYSIS_IS_STAR,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_RELATIONS as _POLYGLOT_ANALYSIS_RELATIONS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_SET_OPERATIONS as _POLYGLOT_ANALYSIS_SET_OPERATIONS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_SHAPE_SELECT as _POLYGLOT_ANALYSIS_SHAPE_SELECT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_SOURCE_NAME as _POLYGLOT_ANALYSIS_SOURCE_NAME,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TABLE as _POLYGLOT_ANALYSIS_TABLE,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION as _POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_CAST as _POLYGLOT_ANALYSIS_TRANSFORM_CAST,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT as _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_DIRECT as _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_STAR as _POLYGLOT_ANALYSIS_TRANSFORM_STAR,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS as _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
+)
+from sqlbuild.shared.constants import (
     POLYGLOT_CAST_KINDS as _POLYGLOT_CAST_KINDS,
 )
 from sqlbuild.shared.constants import (
@@ -203,6 +260,18 @@ def analyze_columns_and_lineage_with_polyglot(
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+    compact_analysis: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None
+    ) = _analyze_columns_and_lineage_with_compact_polyglot(
+        polyglot_module=polyglot_module,
+        cleaned_sql=cleaned_sql,
+        dialect=profile.sql_analysis_dialect,
+        references=references,
+        column_nullability_by_table=column_nullability_by_table or {},
+        inference_profile=profile,
+    )
+    if compact_analysis is not None:
+        return compact_analysis
     try:
         parsed: Any = polyglot_module.parse_one(
             cleaned_sql,
@@ -224,6 +293,201 @@ def analyze_columns_and_lineage_with_polyglot(
         inference_profile=profile,
     )
     return analysis
+
+
+def _analyze_columns_and_lineage_with_compact_polyglot(
+    *,
+    polyglot_module: Any,
+    cleaned_sql: str,
+    dialect: str | None,
+    references: tuple[CompileSqlReference, ...],
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    inference_profile: ExpressionInferenceProfile,
+) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None:
+    if _has_known_nullability(column_nullability_by_table):
+        return None
+    if inference_profile.function_nullability_rules:
+        return None
+    try:
+        analysis: Any = polyglot_module.analyze_query(cleaned_sql, dialect=dialect or "generic")
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "compact query analysis failed; falling back",
+            sqlbuild_error=str(error),
+        )
+        return None
+    if not isinstance(analysis, dict):
+        return None
+    projections: object = analysis.get(_POLYGLOT_ANALYSIS_PROJECTIONS)
+    if not isinstance(projections, list):
+        return None
+    if not _compact_analysis_is_eligible(analysis=analysis, projections=projections):
+        return None
+    reference_map: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(references)
+    relation_alias_by_name: dict[str, str | None] = _compact_relation_alias_by_name(analysis)
+    columns: list[InferredColumn] = []
+    lineage_columns: list[CompiledLineageColumnFact] = []
+    has_star: bool = False
+    for projection in projections:
+        if not isinstance(projection, dict):
+            return None
+        if bool(projection.get(_POLYGLOT_ANALYSIS_IS_STAR)):
+            has_star = True
+            return None
+        output_column: str = str(projection.get(_POLYGLOT_ANALYSIS_NAME) or "")
+        if not output_column or output_column == "*":
+            continue
+        columns.append(
+            InferredColumn(
+                name=output_column,
+                type=_compact_projection_cast_type(projection),
+            )
+        )
+        upstream_columns, confidence = _compact_lineage_upstream_columns(
+            projection=projection,
+            reference_map=reference_map,
+            relation_alias_by_name=relation_alias_by_name,
+        )
+        transform_kind: ColumnTransformKind = _compact_transform_kind(
+            projection=projection,
+            has_upstream=bool(upstream_columns),
+        )
+        lineage_columns.append(
+            CompiledLineageColumnFact(
+                output_column=output_column,
+                upstream_columns=upstream_columns,
+                transform_kind=transform_kind,
+                confidence=confidence
+                if upstream_columns or transform_kind == ColumnTransformKind.CONSTANT
+                else ColumnLineageConfidence.UNKNOWN,
+            )
+        )
+    return tuple(columns), tuple(lineage_columns), has_star
+
+
+def _compact_analysis_is_eligible(*, analysis: dict[str, Any], projections: list[object]) -> bool:
+    if analysis.get(_POLYGLOT_ANALYSIS_SHAPE) != _POLYGLOT_ANALYSIS_SHAPE_SELECT:
+        return False
+    ctes: object = analysis.get(_POLYGLOT_ANALYSIS_CTES)
+    if isinstance(ctes, list) and ctes:
+        return False
+    set_operations: object = analysis.get(_POLYGLOT_ANALYSIS_SET_OPERATIONS)
+    if isinstance(set_operations, list) and set_operations:
+        return False
+    projection: object
+    for projection in projections:
+        if not isinstance(projection, dict):
+            return False
+        projection_dict: dict[str, Any] = cast(dict[str, Any], projection)
+        if bool(projection_dict.get(_POLYGLOT_ANALYSIS_IS_STAR)):
+            return False
+        transform_kind: str = str(projection_dict.get(_POLYGLOT_ANALYSIS_TRANSFORM_KIND) or "")
+        if transform_kind in _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS:
+            return False
+        upstream_values: object = projection_dict.get(_POLYGLOT_ANALYSIS_UPSTREAM)
+        if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_CAST and (
+            not isinstance(upstream_values, list) or not upstream_values
+        ):
+            return False
+    return True
+
+
+def _lineage_reference_map(
+    references: tuple[CompileSqlReference, ...],
+) -> dict[str, tuple[CompiledResourceType, str]]:
+    reference_map: dict[str, tuple[CompiledResourceType, str]] = {}
+    reference: CompileSqlReference
+    for reference in references:
+        resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
+        if resource_type is None:
+            continue
+        reference_map[reference.ref_name] = (resource_type, reference.ref_name)
+    return reference_map
+
+
+def _compact_relation_alias_by_name(analysis: dict[str, Any]) -> dict[str, str | None]:
+    relations: object = analysis.get(_POLYGLOT_ANALYSIS_RELATIONS)
+    if not isinstance(relations, list):
+        return {}
+    alias_by_name: dict[str, str | None] = {}
+    relation: object
+    for relation in relations:
+        if not isinstance(relation, dict):
+            continue
+        name: object = relation.get(_POLYGLOT_ANALYSIS_NAME)
+        if not isinstance(name, str) or not name:
+            continue
+        alias: object = relation.get(_POLYGLOT_PAYLOAD_ALIAS)
+        alias_by_name[name] = alias if isinstance(alias, str) and alias else None
+    return alias_by_name
+
+
+def _compact_projection_cast_type(projection: dict[str, Any]) -> str | None:
+    cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
+    return str(cast_type) if isinstance(cast_type, str) and cast_type else None
+
+
+def _compact_lineage_upstream_columns(
+    *,
+    projection: dict[str, Any],
+    reference_map: dict[str, tuple[CompiledResourceType, str]],
+    relation_alias_by_name: dict[str, str | None],
+) -> tuple[tuple[CompiledLineageSourceFact, ...], ColumnLineageConfidence]:
+    upstream_values: object = projection.get(_POLYGLOT_ANALYSIS_UPSTREAM)
+    if not isinstance(upstream_values, list):
+        return (), ColumnLineageConfidence.UNKNOWN
+    columns: list[CompiledLineageSourceFact] = []
+    seen: set[tuple[CompiledResourceType, str, str]] = set()
+    confidence: ColumnLineageConfidence = ColumnLineageConfidence.HIGH
+    upstream: object
+    for upstream in upstream_values:
+        if not isinstance(upstream, dict):
+            continue
+        column_name: object = upstream.get(_POLYGLOT_PAYLOAD_COLUMN)
+        if not isinstance(column_name, str) or not column_name or column_name == "*":
+            continue
+        source_name: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_NAME) or upstream.get(
+            _POLYGLOT_ANALYSIS_TABLE
+        )
+        if not isinstance(source_name, str) or not source_name:
+            confidence = ColumnLineageConfidence.UNKNOWN
+            continue
+        resource: tuple[CompiledResourceType, str] | None = reference_map.get(source_name)
+        if resource is None:
+            continue
+        if relation_alias_by_name.get(source_name) is None:
+            confidence = ColumnLineageConfidence.MEDIUM
+        resource_type, resource_name = resource
+        key: tuple[CompiledResourceType, str, str] = (resource_type, resource_name, column_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        columns.append(
+            CompiledLineageSourceFact(
+                resource_type=resource_type,
+                resource_name=resource_name,
+                column_name=column_name,
+            )
+        )
+    return tuple(columns), confidence
+
+
+def _compact_transform_kind(
+    *, projection: dict[str, Any], has_upstream: bool
+) -> ColumnTransformKind:
+    transform_kind: str = str(projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_KIND) or "")
+    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_STAR:
+        return ColumnTransformKind.STAR
+    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_CAST:
+        return ColumnTransformKind.CAST
+    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION:
+        return ColumnTransformKind.AGGREGATION
+    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT or not has_upstream:
+        return ColumnTransformKind.CONSTANT
+    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT:
+        return ColumnTransformKind.DIRECT
+    return ColumnTransformKind.EXPRESSION
 
 
 def _infer_columns_with_polyglot(

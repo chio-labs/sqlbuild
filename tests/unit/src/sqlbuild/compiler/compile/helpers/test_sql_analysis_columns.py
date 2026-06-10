@@ -5,6 +5,7 @@ import pytest
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
     analyze_columns_and_lineage_with_polyglot,
+    import_polyglot_sql,
     infer_columns_with_sql_analysis,
     substitute_placeholder_defaults,
 )
@@ -264,6 +265,63 @@ INFER_COLUMNS_TEST_CASES: list[InferColumnsTestCase] = [
     ),
 ]
 
+COMPACT_ANALYSIS_EQUIVALENCE_TEST_CASES: list[PolyglotAnalysisTestCase] = [
+    PolyglotAnalysisTestCase(
+        description="matches AST fallback for unqualified single ref",
+        query_sql='SELECT order_id FROM __ref("orders")',
+        references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="matches AST fallback for qualified join refs",
+        query_sql=(
+            'SELECT o.order_id, c.name FROM __ref("orders") o '
+            'JOIN __ref("customers") c ON o.customer_id = c.customer_id'
+        ),
+        references=(
+            CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            CompileSqlReference(SqlReferenceKind.REF, "customers"),
+        ),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="matches AST fallback for source refs",
+        query_sql='SELECT payment_id FROM __source("stripe__payments")',
+        references=(CompileSqlReference(SqlReferenceKind.SOURCE, "stripe__payments"),),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="matches AST fallback for seed refs",
+        query_sql='SELECT lookup_id FROM __seed("order_statuses")',
+        references=(CompileSqlReference(SqlReferenceKind.SEED, "order_statuses"),),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="matches AST fallback for casted ref column",
+        query_sql='SELECT CAST(order_id AS BIGINT) AS order_id FROM __ref("orders")',
+        references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="matches AST fallback for arithmetic expression fallback",
+        query_sql='SELECT amount + tax AS total FROM __ref("orders")',
+        references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=False,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -324,6 +382,96 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
     assert columns == test_case.expected_columns
     assert lineage_columns == test_case.expected_lineage_columns
     assert has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="uses compact query analysis before AST fallback",
+            query_sql='SELECT order_id FROM __ref("orders")',
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            expected_columns=(InferredColumn(name="order_id"),),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="order_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="order_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.MEDIUM,
+                ),
+            ),
+            expected_has_star=False,
+        )
+    ],
+    ids=["uses compact query analysis before AST fallback"],
+)
+def test_given_compact_query_analysis_when_ast_parse_would_fail_then_returns_compact_facts(
+    test_case: PolyglotAnalysisTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    polyglot_module: object | None = import_polyglot_sql()
+    assert polyglot_module is not None
+
+    def raise_parse_error(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise AssertionError("AST parse should not be called")
+
+    monkeypatch.setattr(polyglot_module, "parse_one", raise_parse_error)
+
+    result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+    )
+
+    assert isinstance(result, tuple)
+    columns, lineage_columns, has_star = result
+    assert columns == test_case.expected_columns
+    assert lineage_columns == test_case.expected_lineage_columns
+    assert has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COMPACT_ANALYSIS_EQUIVALENCE_TEST_CASES,
+    ids=[case.description for case in COMPACT_ANALYSIS_EQUIVALENCE_TEST_CASES],
+)
+def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast_fallback(
+    test_case: PolyglotAnalysisTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compact_result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+    )
+    assert isinstance(compact_result, tuple)
+    assert compact_result[2] is test_case.expected_has_star
+
+    polyglot_module: object | None = import_polyglot_sql()
+    assert polyglot_module is not None
+
+    def raise_compact_error(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise ValueError("compact analysis disabled")
+
+    monkeypatch.setattr(polyglot_module, "analyze_query", raise_compact_error)
+    fallback_result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+    )
+
+    assert compact_result == fallback_result
 
 
 SUBSTITUTE_PLACEHOLDER_TEST_CASES: list[SubstitutePlaceholderDefaultsTestCase] = [
