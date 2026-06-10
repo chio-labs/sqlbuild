@@ -93,6 +93,16 @@ class TableReuseFailureExecutionTestCase:
 
 
 @dataclass(frozen=True)
+class TableReuseAuditProofExecutionTestCase:
+    description: str
+    expected_status: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_audit_count: int
+    expected_reused_count: int
+    expected_metadata_reused: bool
+
+
+@dataclass(frozen=True)
 class SnapshotReuseExecutionTestCase:
     description: str
     expected_status: str

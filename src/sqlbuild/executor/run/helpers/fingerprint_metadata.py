@@ -107,6 +107,58 @@ def same_target_audit_gate_reuse_decision(
     )
 
 
+def reuse_from_audit_gate_reuse_decision(
+    *, metadata_json: str | None, model_audits: tuple[AuditPlanEntry, ...]
+) -> AuditGateReuseDecision:
+    """Return whether reuse_from origin proof covers current blocking audits."""
+
+    blocking_audits: tuple[AuditPlanEntry, ...] = tuple(
+        audit for audit in model_audits if audit.severity == AuditSeverity.ERROR
+    )
+    if not blocking_audits:
+        return AuditGateReuseDecision(reusable=True, reason=AuditGateReuseReason.REUSABLE)
+    if any(audit.always_run for audit in blocking_audits):
+        return AuditGateReuseDecision(reusable=False, reason=AuditGateReuseReason.ALWAYS_RUN)
+    audit_gate: dict[str, object] | None = _read_audit_gate(metadata_json)
+    if audit_gate is None:
+        return AuditGateReuseDecision(reusable=False, reason=AuditGateReuseReason.MISSING)
+    if audit_gate.get("status") != AuditGateStatus.PASSED.value:
+        return AuditGateReuseDecision(reusable=False, reason=AuditGateReuseReason.NON_PASSING)
+
+    identity: AuditGateIdentity = build_audit_gate_identity(audits=blocking_audits)
+    prior_results: dict[str, dict[str, object]] | None = _audit_gate_results_by_binding_key(
+        audit_gate.get("results")
+    )
+    if prior_results is None:
+        return AuditGateReuseDecision(reusable=False, reason=AuditGateReuseReason.MALFORMED)
+
+    reusable_binding_keys: list[str] = []
+    missing_binding_keys: list[str] = []
+    audit: AuditIdentity
+    for audit in identity.audits:
+        prior_result: dict[str, object] | None = prior_results.get(audit.binding_key)
+        if (
+            prior_result is None
+            or prior_result.get("definition_fingerprint") != audit.definition_fingerprint
+            or prior_result.get("outcome") != AuditOutcome.PASS.value
+        ):
+            missing_binding_keys.append(audit.binding_key)
+            continue
+        reusable_binding_keys.append(audit.binding_key)
+    if missing_binding_keys:
+        return AuditGateReuseDecision(
+            reusable=False,
+            reason=AuditGateReuseReason.AUDIT_CHANGED,
+            reusable_binding_keys=tuple(reusable_binding_keys),
+            missing_binding_keys=tuple(missing_binding_keys),
+        )
+    return AuditGateReuseDecision(
+        reusable=True,
+        reason=AuditGateReuseReason.REUSABLE,
+        reusable_binding_keys=tuple(reusable_binding_keys),
+    )
+
+
 def _read_audit_gate(metadata_json: str | None) -> dict[str, object] | None:
     if metadata_json is None:
         return None
@@ -165,6 +217,7 @@ def _audit_result_payloads(
                 "attached_target_name": result.attached_target_name,
                 "attached_column_name": result.attached_column_name,
                 "always_run": audit_identity.always_run,
+                "reused": result.reused,
             }
         )
     return tuple(payloads)

@@ -23,7 +23,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+    PrepareVersionContext,
+)
 from sqlbuild.executor.run.helpers.custom import execute_custom_entry
 from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 
@@ -113,6 +117,7 @@ def run_custom_entry(
     target: str = "test",
     effective_vars: dict[str, object] | None = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute a custom materialization lifecycle with full control over parameters."""
 
@@ -126,6 +131,7 @@ def run_custom_entry(
         model_audits=model_audits,
         declared_columns=(),
         materialize_fn=materialize_fn,
+        prepare_version_fn=prepare_version_fn,
         run_id="test_run",
         query_change_tracking=True,
         target=target,

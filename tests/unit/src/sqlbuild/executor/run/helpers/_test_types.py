@@ -217,6 +217,21 @@ class AuditGatePartialReuseDecisionTestCase:
 
 
 @dataclass(frozen=True)
+class ReuseFromAuditGateDecisionTestCase:
+    description: str
+    origin_unresolved_sql: str
+    origin_resolved_sql: str
+    planned_unresolved_sql: str
+    planned_resolved_sql: str
+    severity: str
+    expected_reusable: bool
+    expected_reason: AuditGateReuseReason
+    expected_reusable_count: int
+    expected_missing_count: int
+    planned_always_run: bool = False
+
+
+@dataclass(frozen=True)
 class RelationReuseOriginExecutionTestCase:
     description: str
     hard_copy: bool

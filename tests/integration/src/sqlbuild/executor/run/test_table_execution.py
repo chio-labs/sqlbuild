@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -9,14 +11,16 @@ import pytest
 
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
+    TableReuseAuditProofExecutionTestCase,
     TableReuseExecutionTestCase,
     TableReuseFailureExecutionTestCase,
     TableSuccessTestCase,
@@ -24,6 +28,8 @@ from tests.integration.src.sqlbuild.executor.run._test_types import (
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     ExtraAuditDefinition,
     build_reuse_table_plan_entry,
+    build_test_audit_gate_metadata,
+    build_test_audit_plan_entry,
     create_python_hook_data,
     fail_table_hook,
     insert_table_hook_log,
@@ -929,6 +935,470 @@ def test_given_database_qualified_reuse_origin_when_executing_table_then_materia
     ).fetchall()
     assert result.status == test_case.expected_status
     assert tuple(rows) == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseAuditProofExecutionTestCase(
+            description="complete table reuse consumes accepted origin audit proof",
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((None,),),
+            expected_audit_count=1,
+            expected_reused_count=1,
+            expected_metadata_reused=True,
+        )
+    ],
+    ids=["complete table reuse consumes accepted origin audit proof"],
+)
+def test_given_complete_reuse_with_origin_audit_proof_when_executing_table_then_reuses_audit_gate(
+    test_case: TableReuseAuditProofExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders_origin",
+        severity="error",
+    )
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders",
+        severity="error",
+    )
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT NULL AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+        metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.STAGED,
+        run_id="test_run",
+        query_change_tracking=True,
+    )
+
+    rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
+    destination_metadata_json_b64: str = connection.execute(
+        "SELECT metadata_json_b64 FROM staging._sqlbuild_fingerprints "
+        "WHERE model_name = 'orders' AND target_name = 'orders' AND run_id = 'test_run'"
+    ).fetchone()[0]
+    destination_metadata_json: str = base64.b64decode(destination_metadata_json_b64).decode()
+    destination_metadata: Any = json.loads(destination_metadata_json)
+    destination_results: Any = destination_metadata["audit_gate"]["results"]
+    assert result.status == test_case.expected_status
+    assert tuple(rows) == test_case.expected_rows
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert (
+        sum(audit_result.reused for audit_result in result.audit_results)
+        == test_case.expected_reused_count
+    )
+    assert destination_results[0]["reused"] is test_case.expected_metadata_reused
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseAuditProofExecutionTestCase(
+            description="missing origin audit proof executes blocking audit and blocks promotion",
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_rows=(),
+            expected_audit_count=1,
+            expected_reused_count=0,
+            expected_metadata_reused=False,
+        )
+    ],
+    ids=["missing origin audit proof executes blocking audit and blocks promotion"],
+)
+def test_given_complete_reuse_without_origin_audit_proof_when_executing_table_then_blocks_bad_data(
+    test_case: TableReuseAuditProofExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders",
+        severity="error",
+    )
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT NULL AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.STAGED,
+        run_id="test_run",
+        query_change_tracking=True,
+    )
+
+    target_exists: bool = connection.execute(
+        "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'staging' "
+        "AND table_name = 'orders'"
+    ).fetchone() != (0,)
+    assert result.status.value == test_case.expected_status
+    assert result.failed_phase == ExecutionPhase.AUDIT
+    assert target_exists is False
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert (
+        sum(audit_result.reused for audit_result in result.audit_results)
+        == test_case.expected_reused_count
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseAuditProofExecutionTestCase(
+            description="failed origin audit proof executes blocking audit and blocks promotion",
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_rows=(),
+            expected_audit_count=1,
+            expected_reused_count=0,
+            expected_metadata_reused=False,
+        )
+    ],
+    ids=["failed origin audit proof executes blocking audit and blocks promotion"],
+)
+def test_given_complete_reuse_with_failed_origin_proof_when_executing_then_blocks_bad_data(
+    test_case: TableReuseAuditProofExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders_origin",
+        severity="error",
+    )
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders",
+        severity="error",
+    )
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT NULL AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+        metadata_json=build_test_audit_gate_metadata(
+            audit=origin_audit,
+            outcome=AuditOutcome.ERROR,
+        ),
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.STAGED,
+        run_id="test_run",
+        query_change_tracking=True,
+    )
+
+    target_exists: bool = connection.execute(
+        "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'staging' "
+        "AND table_name = 'orders'"
+    ).fetchone() != (0,)
+    assert result.status.value == test_case.expected_status
+    assert result.failed_phase == ExecutionPhase.AUDIT
+    assert target_exists is False
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert (
+        sum(audit_result.reused for audit_result in result.audit_results)
+        == test_case.expected_reused_count
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseAuditProofExecutionTestCase(
+            description="changed origin audit proof executes blocking audit and blocks promotion",
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_rows=(),
+            expected_audit_count=1,
+            expected_reused_count=0,
+            expected_metadata_reused=False,
+        )
+    ],
+    ids=["changed origin audit proof executes blocking audit and blocks promotion"],
+)
+def test_given_complete_reuse_with_changed_origin_proof_when_executing_then_blocks_bad_data(
+    test_case: TableReuseAuditProofExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id < 0',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders_origin",
+        severity="error",
+    )
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders",
+        severity="error",
+    )
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT NULL AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+        metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.STAGED,
+        run_id="test_run",
+        query_change_tracking=True,
+    )
+
+    target_exists: bool = connection.execute(
+        "SELECT COUNT(*) FROM duckdb_tables() WHERE schema_name = 'staging' "
+        "AND table_name = 'orders'"
+    ).fetchone() != (0,)
+    assert result.status.value == test_case.expected_status
+    assert result.failed_phase == ExecutionPhase.AUDIT
+    assert target_exists is False
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert (
+        sum(audit_result.reused for audit_result in result.audit_results)
+        == test_case.expected_reused_count
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseAuditProofExecutionTestCase(
+            description="warn audit under complete reuse executes rather than using proof",
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((None,),),
+            expected_audit_count=1,
+            expected_reused_count=0,
+            expected_metadata_reused=False,
+        )
+    ],
+    ids=["warn audit under complete reuse executes rather than using proof"],
+)
+def test_given_complete_reuse_with_warn_audit_when_executing_table_then_warn_audit_runs(
+    test_case: TableReuseAuditProofExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_warn",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders",
+        severity="warn",
+    )
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT NULL AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.STAGED,
+        run_id="test_run",
+        query_change_tracking=True,
+    )
+
+    rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
+    assert result.status.value == test_case.expected_status
+    assert tuple(rows) == test_case.expected_rows
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert result.audit_results[0].outcome == AuditOutcome.WARN
+    assert (
+        sum(audit_result.reused for audit_result in result.audit_results)
+        == test_case.expected_reused_count
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableReuseAuditProofExecutionTestCase(
+            description="direct complete reuse consumes accepted origin audit proof",
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((None,),),
+            expected_audit_count=1,
+            expected_reused_count=1,
+            expected_metadata_reused=True,
+        )
+    ],
+    ids=["direct complete reuse consumes accepted origin audit proof"],
+)
+def test_given_direct_complete_reuse_with_origin_proof_when_executing_then_reuses_gate(
+    test_case: TableReuseAuditProofExecutionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders_origin",
+        severity="error",
+    )
+    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="orders_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+        attached_target_name="orders",
+        resolved_target_name="staging.orders",
+        severity="error",
+    )
+    connection.execute("CREATE TABLE staging.orders_origin AS SELECT NULL AS id")
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="staging",
+        model_name="orders",
+        target_name="orders_origin",
+        metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
+    )
+    entry: ModelPlanEntry = build_reuse_table_plan_entry(
+        name="orders",
+        sql="SELECT 1 AS id",
+        target_schema="staging",
+        target_name="orders",
+        origin_schema="staging",
+        origin_name="orders_origin",
+        hard_copy=True,
+    )
+
+    result: ModelExecutionResult = execute_table_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={"orders": entry.destination},
+        seed_locations={},
+        source_map={},
+        model_audits=(planned_audit,),
+        declared_columns=(),
+        promotion_mode=TablePromotionMode.DIRECT,
+        run_id="test_run",
+        query_change_tracking=True,
+    )
+
+    rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
+    assert result.status.value == test_case.expected_status
+    assert tuple(rows) == test_case.expected_rows
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert (
+        sum(audit_result.reused for audit_result in result.audit_results)
+        == test_case.expected_reused_count
+    )
 
 
 @pytest.mark.parametrize(

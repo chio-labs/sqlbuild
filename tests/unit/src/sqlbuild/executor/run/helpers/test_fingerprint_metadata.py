@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -14,6 +15,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers import fingerprinting
 from sqlbuild.executor.run.helpers.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
+    reuse_from_audit_gate_reuse_decision,
     same_target_audit_gate_reuse_decision,
 )
 from sqlbuild.executor.run.models import AuditGateReuseDecision
@@ -24,6 +26,7 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     FingerprintAuditGateEdgeTestCase,
     FingerprintAuditGateMetadataTestCase,
     FingerprintAuditGateNoAuditsTestCase,
+    ReuseFromAuditGateDecisionTestCase,
     TryWriteFingerprintAuditGateTestCase,
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import (
@@ -413,6 +416,103 @@ def test_given_one_changed_audit_when_deciding_same_target_reuse_then_returns_pa
     decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(
         metadata_json=metadata_json,
         model_audits=(unchanged_audit, changed_current_audit),
+    )
+
+    assert decision.reusable is test_case.expected_reusable
+    assert decision.reason == test_case.expected_reason
+    assert len(decision.reusable_binding_keys) == test_case.expected_reusable_count
+    assert len(decision.missing_binding_keys) == test_case.expected_missing_count
+
+
+REUSE_FROM_AUDIT_GATE_DECISION_TEST_CASES: list[ReuseFromAuditGateDecisionTestCase] = [
+    ReuseFromAuditGateDecisionTestCase(
+        description="prod dev resolved SQL difference keeps target-neutral proof reusable",
+        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+        severity=AuditSeverity.ERROR.value,
+        expected_reusable=True,
+        expected_reason=AuditGateReuseReason.REUSABLE,
+        expected_reusable_count=1,
+        expected_missing_count=0,
+    ),
+    ReuseFromAuditGateDecisionTestCase(
+        description="changed unresolved SQL rejects origin proof",
+        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id < 0',
+        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id < 0",
+        severity=AuditSeverity.ERROR.value,
+        expected_reusable=False,
+        expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
+        expected_reusable_count=0,
+        expected_missing_count=1,
+    ),
+    ReuseFromAuditGateDecisionTestCase(
+        description="always_run rejects origin proof",
+        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+        severity=AuditSeverity.ERROR.value,
+        expected_reusable=False,
+        expected_reason=AuditGateReuseReason.ALWAYS_RUN,
+        expected_reusable_count=0,
+        expected_missing_count=0,
+        planned_always_run=True,
+    ),
+    ReuseFromAuditGateDecisionTestCase(
+        description="warn-only audit requires no blocking proof",
+        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+        severity=AuditSeverity.WARN.value,
+        expected_reusable=True,
+        expected_reason=AuditGateReuseReason.REUSABLE,
+        expected_reusable_count=0,
+        expected_missing_count=0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    REUSE_FROM_AUDIT_GATE_DECISION_TEST_CASES,
+    ids=[case.description for case in REUSE_FROM_AUDIT_GATE_DECISION_TEST_CASES],
+)
+def test_given_origin_audit_gate_when_deciding_reuse_from_proof_then_uses_definition_identity(
+    test_case: ReuseFromAuditGateDecisionTestCase,
+) -> None:
+    origin_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        name="not_null_orders",
+        severity=test_case.severity,
+        resolved_sql=test_case.origin_resolved_sql,
+    )
+    origin_audit = replace(origin_audit, unresolved_sql=test_case.origin_unresolved_sql)
+    origin_result: AuditExecutionResult = build_fingerprint_audit_result(
+        outcome="pass",
+        audit_name="not_null_orders",
+        severity=test_case.severity,
+    )
+    metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(origin_audit,),
+        audit_results=(origin_result,),
+        run_id="prod_run",
+    )
+    planned_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        name="not_null_orders",
+        severity=test_case.severity,
+        resolved_sql=test_case.planned_resolved_sql,
+        always_run=test_case.planned_always_run,
+    )
+    planned_audit = replace(planned_audit, unresolved_sql=test_case.planned_unresolved_sql)
+
+    decision: AuditGateReuseDecision = reuse_from_audit_gate_reuse_decision(
+        metadata_json=metadata_json,
+        model_audits=(planned_audit,),
     )
 
     assert decision.reusable is test_case.expected_reusable

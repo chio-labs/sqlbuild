@@ -7,7 +7,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
-from sqlbuild.compiler.fingerprints.models import FingerprintSet
+from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import RelationReusePlan
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
@@ -66,10 +66,10 @@ def create_relation_from_reuse_plan(
     relation_reuse: RelationReusePlan,
     destination_relation: str,
     statement_recorder: StatementRecorder,
-) -> None:
+) -> Fingerprint:
     """Validate and create a concrete destination relation from a reuse plan."""
 
-    validate_reuse_origin_fingerprint(
+    reuse_origin_fingerprint: Fingerprint = validate_reuse_origin_fingerprint(
         adapter=adapter,
         connection=connection,
         model_name=model_name,
@@ -91,6 +91,7 @@ def create_relation_from_reuse_plan(
         destination_target_name=relation_reuse.destination_target_name,
         reuse_from_target_name=relation_reuse.reuse_from_target_name,
     )
+    return reuse_origin_fingerprint
 
 
 def validate_reuse_origin_fingerprint(
@@ -102,7 +103,7 @@ def validate_reuse_origin_fingerprint(
     reuse_from_target_name: str | None,
     reuse_origin_fingerprint_database: str | None,
     reuse_origin_fingerprint_schema: str | None,
-) -> None:
+) -> Fingerprint:
     """Recheck reuse_from target fingerprint immediately before relation reuse."""
 
     if expected_version_hash is None:
@@ -124,13 +125,13 @@ def validate_reuse_origin_fingerprint(
         render_qualified_name=adapter.render_qualified_name,
         require_table=True,
     )
-    reuse_origin_version_hash: str | None = (
-        fingerprint_set.fingerprints[model_name].version_hash
-        if model_name in fingerprint_set.fingerprints
-        else None
-    )
-    if reuse_origin_version_hash != expected_version_hash:
+    reuse_origin_fingerprint: Fingerprint | None = fingerprint_set.fingerprints.get(model_name)
+    if (
+        reuse_origin_fingerprint is None
+        or reuse_origin_fingerprint.version_hash != expected_version_hash
+    ):
         raise ExecutorInputError(
             f"model '{model_name}' cannot reuse from target '{reuse_from_target_name}' because "
             "the reuse origin fingerprint changed after planning. Rerun the plan and try again."
         )
+    return reuse_origin_fingerprint

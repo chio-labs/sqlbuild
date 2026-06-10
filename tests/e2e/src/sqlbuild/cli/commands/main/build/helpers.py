@@ -251,6 +251,53 @@ def prepare_direct_reuse_from_project(*, tmp_path: Path, project_name: str) -> P
     )
 
 
+def prepare_direct_reuse_from_audit_project(*, tmp_path: Path, project_name: str) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[targets.prod]\n"
+                'schema = "prod"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n'
+                'reuse_from = "prod"\n'
+                "reuse_hard_copy = true\n"
+            ),
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  audits [
+                    expression_is_true (
+                      name "id is present",
+                      expression "id IS NOT NULL",
+                      severity error,
+                    ),
+                  ],
+                );
+
+                SELECT 1 AS id
+                """
+            ).strip()
+            + "\n",
+            "audits/generic/expression_is_true.sql": dedent(
+                """
+                AUDIT ();
+
+                SELECT * FROM __ref("@model") WHERE NOT (@expression)
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+
 def prepare_direct_snapshot_reuse_from_project(*, tmp_path: Path, project_name: str) -> Path:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,

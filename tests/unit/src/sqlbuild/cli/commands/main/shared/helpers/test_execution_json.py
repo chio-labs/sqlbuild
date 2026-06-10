@@ -7,6 +7,7 @@ import json
 import pytest
 
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_build_execution_json
+from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.build.models import BuildExecutionResult
@@ -23,6 +24,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     ExecutionJsonRelationReuseTestCase,
     ExecutionJsonTestCase,
 )
+from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import build_audit_result
 
 
 @pytest.mark.parametrize(
@@ -129,3 +131,46 @@ def test_given_reused_model_when_formatting_build_json_then_includes_relation_re
 
     assert assets[0]["name"] == test_case.expected_asset_name
     assert assets[0]["relation_reuse"] == test_case.expected_relation_reuse
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionJsonRelationReuseTestCase(
+            description="build json includes reused audit marker",
+            expected_asset_name="orders",
+            expected_relation_reuse={},
+        )
+    ],
+    ids=["build json includes reused audit marker"],
+)
+def test_given_reused_audit_when_formatting_build_json_then_includes_reused_marker(
+    test_case: ExecutionJsonRelationReuseTestCase,
+) -> None:
+    result: str = format_build_execution_json(
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="orders",
+                    status=ExecutionStatus.SUCCESS,
+                    promoted_relation="dev.orders",
+                    audit_results=(
+                        build_audit_result(
+                            name="orders_id_not_null",
+                            outcome=AuditOutcome.PASS,
+                            target_name="orders",
+                            reused=True,
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        plan=build_plan_output(model_entries=(build_model_entry(name="orders"),)),
+    )
+    payload: dict[str, object] = json.loads(result)
+    assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
+    checks: list[dict[str, object]] = payload["checks"]  # type: ignore[assignment]
+
+    assert assets[0]["name"] == test_case.expected_asset_name
+    assert checks[0]["reused"] is True
