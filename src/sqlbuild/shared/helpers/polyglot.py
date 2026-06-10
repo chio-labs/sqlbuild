@@ -1,17 +1,27 @@
-"""Optional Polyglot SQL import helper."""
+"""Shared optional Polyglot import helpers."""
 
 from __future__ import annotations
 
-from functools import cache
+from importlib import import_module
 from typing import Any
 
 
-@cache
-def import_polyglot_sql() -> Any | None:
-    """Return the polyglot_sql module when installed."""
+def import_polyglot() -> Any | None:
+    """Return the Polyglot SQL module when installed, otherwise None."""
 
     try:
-        import polyglot_sql
+        return import_module("polyglot_sql")
     except ImportError:
         return None
-    return polyglot_sql
+
+
+def import_polyglot_sql() -> Any | None:
+    """Return the Polyglot SQL module when installed, otherwise None."""
+
+    return import_polyglot()
+
+
+def is_polyglot_available() -> bool:
+    """Return whether Polyglot SQL can be imported."""
+
+    return import_polyglot() is not None

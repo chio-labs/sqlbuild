@@ -164,11 +164,11 @@ def test_given_type_string_when_normalizing_then_it_returns_expected_shape(
     FALLBACK_TYPE_NORMALIZATION_TEST_CASES,
     ids=[case.description for case in FALLBACK_TYPE_NORMALIZATION_TEST_CASES],
 )
-def test_given_type_string_when_normalizing_without_sqlglot_then_it_returns_expected_shape(
+def test_given_type_string_when_normalizing_without_polyglot_then_it_returns_expected_shape(
     test_case: TypeNormalizationTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "import_sqlglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_polyglot", lambda: None)
 
     result: NormalizedType = normalize_type(type_sql=test_case.raw_type, dialect=test_case.dialect)
 
@@ -197,11 +197,11 @@ def test_given_type_strings_when_comparing_then_it_returns_expected_equality(
     FALLBACK_TYPE_EQUALITY_TEST_CASES,
     ids=[case.description for case in FALLBACK_TYPE_EQUALITY_TEST_CASES],
 )
-def test_given_type_strings_when_comparing_without_sqlglot_then_it_returns_expected_equality(
+def test_given_type_strings_when_comparing_without_polyglot_then_it_returns_expected_equality(
     test_case: TypeEqualityTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "import_sqlglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_polyglot", lambda: None)
 
     result: bool = types_equal(
         left=test_case.left_type,
@@ -240,11 +240,11 @@ def test_given_type_string_when_resolving_numeric_family_then_it_returns_expecte
     ],
     ids=["fallback classifies float64 as float family"],
 )
-def test_given_type_string_without_sqlglot_when_resolving_numeric_family_then_it_returns_expected(
+def test_given_type_string_without_polyglot_when_resolving_numeric_family_then_it_returns_expected(
     test_case: NumericFamilyTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "import_sqlglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_polyglot", lambda: None)
 
     result: str | None = normalize_numeric_family(
         type_sql=test_case.raw_type,
