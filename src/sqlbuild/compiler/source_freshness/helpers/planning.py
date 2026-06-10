@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
@@ -66,12 +67,16 @@ def build_standard_source_freshness_planning_result(
             unknown_source_names.append(source.name)
             continue
 
-        observation: SourceFreshnessObservation = observe_configured_source_freshness(
-            adapter=adapter,
-            connection=connection,
-            source=observation_source,
-            observed_at=observed_at,
-        )
+        try:
+            observation: SourceFreshnessObservation = observe_configured_source_freshness(
+                adapter=adapter,
+                connection=connection,
+                source=observation_source,
+                observed_at=observed_at,
+            )
+        except AdapterUserError:
+            unknown_source_names.append(source.name)
+            continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(
             observation=observation,
             source=observation_source,
