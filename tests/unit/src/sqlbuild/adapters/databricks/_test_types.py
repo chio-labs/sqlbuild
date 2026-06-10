@@ -60,3 +60,11 @@ class DatabricksRenderTableFunctionTestCase:
 class DatabricksPythonFunctionSupportTestCase:
     description: str
     expected_supports_python_functions: bool
+
+
+@dataclass(frozen=True)
+class DatabricksStringTypeCastRenderingTestCase:
+    description: str
+    declared_type: str
+    expected_loader_fragment: str
+    expected_source_cast: str
