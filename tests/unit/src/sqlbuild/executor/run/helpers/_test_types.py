@@ -203,6 +203,7 @@ class AuditGateReuseDecisionTestCase:
     expected_reason: AuditGateReuseReason
     expected_reusable_count: int
     expected_missing_count: int
+    planned_always_run: bool = False
 
 
 @dataclass(frozen=True)

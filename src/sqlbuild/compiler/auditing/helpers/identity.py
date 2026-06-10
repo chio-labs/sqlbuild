@@ -20,6 +20,7 @@ def audit_identity(audit: AuditPlanEntry) -> AuditIdentity:
         "attached_column_name": audit.attached_column_name,
         "severity": audit.severity.value,
         "run_scope_phase": audit.effective_run_scope.value,
+        "always_run": audit.always_run,
     }
     definition_payload: dict[str, object] = {
         **payload,
@@ -39,6 +40,7 @@ def audit_identity(audit: AuditPlanEntry) -> AuditIdentity:
         attachment_kind=audit.attachment_kind.value,
         attached_target_name=audit.attached_target_name,
         attached_column_name=audit.attached_column_name,
+        always_run=audit.always_run,
     )
 
 
@@ -53,6 +55,7 @@ def binding_payload(audit: AuditIdentity) -> dict[str, object]:
         "attachment_kind": audit.attachment_kind,
         "attached_target_name": audit.attached_target_name,
         "attached_column_name": audit.attached_column_name,
+        "always_run": audit.always_run,
     }
 
 

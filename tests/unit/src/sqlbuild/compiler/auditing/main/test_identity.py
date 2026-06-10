@@ -188,6 +188,17 @@ SINGLE_FIELD_TEST_CASES: list[AuditGateSingleFieldIdentityTestCase] = [
         expected_definition_equal=False,
         expected_execution_equal=False,
     ),
+    AuditGateSingleFieldIdentityTestCase(
+        description="always_run changes identity",
+        left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+        right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+        left_always_run=False,
+        right_always_run=True,
+        expected_definition_equal=False,
+        expected_execution_equal=False,
+    ),
 ]
 
 
@@ -205,6 +216,7 @@ def test_given_single_audit_field_difference_when_building_identity_then_hashes_
         resolved_sql=test_case.left_resolved_sql,
         effective_run_scope=test_case.left_run_scope,
         attachment_kind=test_case.left_attachment_kind,
+        always_run=test_case.left_always_run,
     )
     right_audit: AuditPlanEntry = build_audit_plan_entry(
         name="not_null_orders",
@@ -212,6 +224,7 @@ def test_given_single_audit_field_difference_when_building_identity_then_hashes_
         resolved_sql=test_case.right_resolved_sql,
         effective_run_scope=test_case.right_run_scope,
         attachment_kind=test_case.right_attachment_kind,
+        always_run=test_case.right_always_run,
     )
 
     left_identity: AuditGateIdentity = build_audit_gate_identity(audits=(left_audit,))

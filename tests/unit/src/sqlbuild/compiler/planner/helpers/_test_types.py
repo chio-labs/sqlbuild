@@ -507,6 +507,8 @@ class PlanAuditTestCase:
     source_map_entries: dict[str, tuple[str | None, str, str | None]]
     expected_sql_fragment: str
     expected_error_fragment: str = ""
+    always_run: bool = False
+    expected_always_run: bool = False
 
 
 @dataclass(frozen=True)

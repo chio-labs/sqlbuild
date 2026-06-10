@@ -57,6 +57,11 @@ def same_target_audit_gate_reuse_decision(
             reusable=True,
             reason=AuditGateReuseReason.REUSABLE,
         )
+    if any(audit.always_run for audit in model_audits):
+        return AuditGateReuseDecision(
+            reusable=False,
+            reason=AuditGateReuseReason.ALWAYS_RUN,
+        )
     audit_gate: dict[str, object] | None = _read_audit_gate(metadata_json)
     if audit_gate is None:
         return AuditGateReuseDecision(reusable=False, reason=AuditGateReuseReason.MISSING)
@@ -159,6 +164,7 @@ def _audit_result_payloads(
                 "row_count": result.row_count,
                 "attached_target_name": result.attached_target_name,
                 "attached_column_name": result.attached_column_name,
+                "always_run": audit_identity.always_run,
             }
         )
     return tuple(payloads)

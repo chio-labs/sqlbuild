@@ -51,7 +51,7 @@ MODEL (
   columns (
     order_id (type VARCHAR),
   ),
-  audits [not_null (column order_id)],
+  audits [not_null (column order_id, always_run true)],
 );
 
 select * from __source('raw_orders')
@@ -104,6 +104,7 @@ SELECT 1
             (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
         ),
         expected_audit_attached_target_kinds=(AttachedAuditTargetKind.MODEL,),
+        expected_audit_always_runs=(True,),
         expected_test_names=("orders_test",),
         expected_test_scope_deps=(
             (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
@@ -112,6 +113,38 @@ SELECT 1
         expected_model_macro_deps=((),),
         expected_test_modes=("model",),
         expected_tested_macro_names=((),),
+    ),
+    AssembleCompiledProjectTestCase(
+        description="assembles standalone audit always_run header option",
+        repo_files=base_repo_files()
+        | {
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+            "audits/orders.sql": """
+AUDIT (always_run: true);
+
+SELECT order_id FROM __ref("orders") WHERE order_id IS NULL
+""".strip()
+            + "\n",
+        },
+        expected_model_names=("orders",),
+        expected_model_deps=((),),
+        expected_model_target_names=("orders",),
+        expected_model_target_schemas=(None,),
+        expected_source_names=(),
+        expected_seed_names=(),
+        expected_audit_names=("orders",),
+        expected_audit_scope_deps=(
+            (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        ),
+        expected_audit_attached_target_kinds=(None,),
+        expected_audit_always_runs=(True,),
+        expected_test_names=(),
+        expected_test_scope_deps=(),
+        expected_test_expected_model_names=(),
+        expected_model_macro_deps=((),),
+        expected_test_modes=(),
+        expected_tested_macro_names=(),
     ),
     AssembleCompiledProjectTestCase(
         description="assembles seed locations using local environment database templates",
@@ -467,6 +500,7 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         tuple(a.attached_target_kind for a in compiled.audits)
         == test_case.expected_audit_attached_target_kinds
     )
+    assert tuple(a.always_run for a in compiled.audits) == test_case.expected_audit_always_runs
     assert tuple(t.name for t in compiled.sql_tests) == test_case.expected_test_names
     assert tuple(t.scope_deps for t in compiled.sql_tests) == test_case.expected_test_scope_deps
     assert tuple(t.mode.value for t in compiled.sql_tests) == test_case.expected_test_modes

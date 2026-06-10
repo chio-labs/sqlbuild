@@ -58,6 +58,15 @@ PLAN_AUDIT_TEST_CASES: list[PlanAuditTestCase] = [
         },
         expected_sql_fragment=("SELECT id FROM raw_db.public.orders"),
     ),
+    PlanAuditTestCase(
+        description="propagates always_run to audit plan entry",
+        sql_body=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
+        model_locations={"orders": "staging.orders"},
+        source_map_entries={},
+        always_run=True,
+        expected_sql_fragment=("SELECT id FROM staging.orders WHERE id IS NULL"),
+        expected_always_run=True,
+    ),
 ]
 
 
@@ -87,6 +96,7 @@ def test_given_audit_when_planning_then_resolves_sql(
     )
 
     assert test_case.expected_sql_fragment in result.resolved_sql
+    assert result.always_run is test_case.expected_always_run
 
 
 @pytest.mark.parametrize(

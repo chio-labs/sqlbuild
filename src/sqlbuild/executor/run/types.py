@@ -27,3 +27,4 @@ class AuditGateReuseReason(StrEnum):
     NON_PASSING = "non_passing"
     BINDING_SET_CHANGED = "binding_set_changed"
     AUDIT_CHANGED = "audit_changed"
+    ALWAYS_RUN = "always_run"
