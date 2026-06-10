@@ -144,11 +144,12 @@ def build_fingerprint_audit_plan_entry_with_options(
     name: str = "not_null_orders",
     severity: str = AuditSeverity.ERROR.value,
     attached_column_name: str | None = "order_id",
+    resolved_sql: str = "SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
 ) -> AuditPlanEntry:
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
         name=name,
-        resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        resolved_sql=resolved_sql,
         unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity(severity),

@@ -513,8 +513,9 @@ def _check_no_if_statements(
                     path=file_path,
                     line=node.lineno,
                     message=(
-                        "test functions must not contain if statements; split scenarios into "
-                        "separate tests or parametrized cases"
+                        "test functions must not contain if statements; split distinct setup "
+                        "or assertion paths into separate test functions instead of hiding "
+                        "branches in helpers"
                     ),
                 )
             )

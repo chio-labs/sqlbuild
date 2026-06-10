@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.models import SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_helpers import (
+    build_metadata_json_with_audit_gate,
     build_model_from_metadata_test_case,
     build_model_from_test_case,
     build_project_for_function_metadata_detection,
@@ -212,6 +213,21 @@ DETECT_MODEL_METADATA_TEST_CASES: list[DetectModelMetadataTestCase] = [
         ),
         expected_change_kind=ChangeKind.CONFIG_CHANGED,
         expected_metadata_fragments=('"post_hooks":["SqlHookEntry',),
+    ),
+    DetectModelMetadataTestCase(
+        description="ignores runtime audit gate proof when version identity matches",
+        config_values={"materialized": "table"},
+        schema_columns=(),
+        deps=(),
+        function_local_hashes={},
+        previous_metadata_json=build_metadata_json_with_audit_gate(
+            build_version_identity_metadata_json(
+                model_name="orders",
+                config_values={"materialized": "table"},
+                execution_signature={},
+            )
+        ),
+        expected_change_kind=ChangeKind.NO_CHANGE,
     ),
 ]
 

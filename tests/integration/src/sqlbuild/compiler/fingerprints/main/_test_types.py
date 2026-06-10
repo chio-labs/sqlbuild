@@ -12,6 +12,7 @@ class WriteAndReadTestCase:
     expected_model_names: tuple[str, ...]
     expected_latest_query_hashes: dict[str, str]
     expected_latest_target_names: dict[str, str | None]
+    expected_metadata_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

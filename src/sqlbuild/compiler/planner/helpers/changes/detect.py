@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.config import get_config_str
+from sqlbuild.compiler.planner.helpers.changes.metadata import version_identity_metadata_payload
 from sqlbuild.compiler.planner.helpers.changes.policy import (
     pick_more_aggressive,
     resolve_replay_on_change,
@@ -149,7 +150,8 @@ def detect_model_changes(
     config_changed: bool = (
         fingerprint is not None
         and fingerprint.metadata_json != "{}"
-        and metadata_json != fingerprint.metadata_json
+        and version_identity_metadata_payload(metadata_json)
+        != version_identity_metadata_payload(fingerprint.metadata_json)
     )
     replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     if query_change_tracking and fingerprint is not None:

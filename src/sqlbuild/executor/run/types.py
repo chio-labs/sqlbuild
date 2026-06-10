@@ -18,3 +18,12 @@ class AuditGateStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     INCOMPLETE = "incomplete"
+
+
+class AuditGateReuseReason(StrEnum):
+    REUSABLE = "reusable"
+    MISSING = "missing"
+    MALFORMED = "malformed"
+    NON_PASSING = "non_passing"
+    BINDING_SET_CHANGED = "binding_set_changed"
+    AUDIT_CHANGED = "audit_changed"

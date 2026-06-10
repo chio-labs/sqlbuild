@@ -14,6 +14,7 @@ from tests.unit.scripts.testing.check_test_conventions._test_types import (
 from tests.unit.scripts.testing.check_test_conventions.helpers import (
     base_repo_files,
     collect_violation_codes,
+    collect_violation_messages,
     compliant_repo_files,
 )
 
@@ -555,6 +556,78 @@ def test_given_repo_slice_when_checking_paths_then_returns_expected_violation_co
     violation_codes: tuple[str, ...] = collect_violation_codes(tmp_path)
 
     assert violation_codes == test_case.expected_violation_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CheckPathsTestCase(
+            description="TC036 message recommends split tests over hidden helper branches",
+            repo_files=base_repo_files()
+            | {
+                "tests/unit/scripts/example_tool/_test_types.py": dedent(
+                    """
+                    from dataclasses import dataclass
+
+
+                    @dataclass(frozen=True)
+                    class ExampleTestCase:
+                        description: str
+                        raw_name: str
+                        expected_result: str
+                    """
+                ).strip()
+                + "\n",
+                "tests/unit/scripts/example_tool/test_parse_name.py": dedent(
+                    """
+                    import pytest
+
+                    from tests.unit.scripts.example_tool._test_types import ExampleTestCase
+
+
+                    @pytest.mark.parametrize(
+                        "test_case",
+                        [
+                            ExampleTestCase(
+                                description="strips surrounding whitespace",
+                                raw_name="  alice  ",
+                                expected_result="alice",
+                            )
+                        ],
+                        ids=["strips surrounding whitespace"],
+                    )
+                    def test_given_name_when_parsing_then_reports_conditional_logic(
+                        test_case: ExampleTestCase,
+                    ) -> None:
+                        result = test_case.raw_name.strip()
+
+                        if result == "alice":
+                            assert result == test_case.expected_result
+                    """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("TC036",),
+            expected_message_fragments=(
+                "split distinct setup or assertion paths into separate test functions",
+                "instead of hiding branches in helpers",
+            ),
+        )
+    ],
+    ids=["TC036 message recommends split tests over hidden helper branches"],
+)
+def test_given_if_statement_when_checking_paths_then_message_recommends_split_tests(
+    test_case: CheckPathsTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    violation_messages: tuple[str, ...] = collect_violation_messages(tmp_path)
+
+    fragment: str
+    for fragment in test_case.expected_message_fragments:
+        assert fragment in violation_messages[0]
 
 
 @pytest.mark.parametrize(
