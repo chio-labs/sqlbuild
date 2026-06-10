@@ -82,6 +82,15 @@ class BigQueryBuildFlowTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryRelationReuseCopyTestCase:
+    description: str
+    hard_copy: bool
+    destination_name: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
 class BigQueryMergeTestCase:
     description: str
     target_setup_sql: tuple[str, ...]

@@ -24,6 +24,7 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_origin
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
 from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
@@ -34,6 +35,7 @@ from tests.integration.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryFingerprintTestCase,
     BigQueryMergeTestCase,
     BigQueryQueryTestCase,
+    BigQueryRelationReuseCopyTestCase,
     BigQueryRowDiffSampleTestCase,
     BigQueryRowDiffTestCase,
     BigQuerySchemaDiffTestCase,
@@ -737,6 +739,69 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
     assert rows == test_case.expected_rows
     assert len(recorder.snapshot()) == test_case.expected_statement_count
     assert test_case.expected_recorded_fragment in recorder.snapshot()[-1].content
+
+
+RELATION_REUSE_COPY_TEST_CASES: tuple[BigQueryRelationReuseCopyTestCase, ...] = (
+    BigQueryRelationReuseCopyTestCase(
+        description="cheap reuse clones relation",
+        hard_copy=False,
+        destination_name="orders_cheap_reuse",
+        expected_rows=((1, "alice"), (2, "bob")),
+        expected_recorded_fragment=" CLONE ",
+    ),
+    BigQueryRelationReuseCopyTestCase(
+        description="hard copy reuse uses CTAS",
+        hard_copy=True,
+        destination_name="orders_hard_reuse",
+        expected_rows=((1, "alice"), (2, "bob")),
+        expected_recorded_fragment=" AS SELECT * FROM ",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RELATION_REUSE_COPY_TEST_CASES,
+    ids=[case.description for case in RELATION_REUSE_COPY_TEST_CASES],
+)
+def test_given_reuse_origin_when_creating_relation_then_bigquery_uses_expected_copy_mode(
+    test_case: BigQueryRelationReuseCopyTestCase,
+    adapter: BigQueryAdapter,
+    connection: Any,
+    bigquery_project: str,
+    bigquery_dataset: str,
+) -> None:
+    origin: str = qualified_name(
+        project=bigquery_project, dataset=bigquery_dataset, name="orders_reuse_origin"
+    )
+    destination: str = qualified_name(
+        project=bigquery_project, dataset=bigquery_dataset, name=test_case.destination_name
+    )
+    recorder: StatementRecorder = build_statement_recorder()
+    adapter.execute(
+        connection,
+        f"CREATE OR REPLACE TABLE {origin} AS "
+        "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
+    )
+
+    create_relation_from_reuse_origin(
+        adapter=adapter,
+        connection=connection,
+        origin_relation=origin,
+        destination_relation=destination,
+        hard_copy=test_case.hard_copy,
+        statement_recorder=recorder,
+    )
+
+    rows: tuple[tuple[object, ...], ...] = fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql=f"SELECT id, name FROM {destination} ORDER BY id",
+    )
+    recorded_sql: str = "\n".join(event.content for event in recorder.snapshot())
+
+    assert rows == test_case.expected_rows
+    assert test_case.expected_recorded_fragment in recorded_sql
 
 
 @pytest.mark.parametrize(
