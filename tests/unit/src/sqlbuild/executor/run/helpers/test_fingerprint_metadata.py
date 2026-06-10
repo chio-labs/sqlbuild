@@ -219,6 +219,18 @@ AUDIT_GATE_REUSE_DECISION_TEST_CASES: list[AuditGateReuseDecisionTestCase] = [
         expected_reusable_count=0,
         expected_missing_count=1,
     ),
+    AuditGateReuseDecisionTestCase(
+        description="always_run audit is not reusable",
+        metadata_mode="written",
+        status=AuditGateStatus.PASSED,
+        planned_attached_column_name="order_id",
+        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+        expected_reusable=False,
+        expected_reason=AuditGateReuseReason.ALWAYS_RUN,
+        expected_reusable_count=0,
+        expected_missing_count=0,
+        planned_always_run=True,
+    ),
 ]
 
 
@@ -248,6 +260,7 @@ def test_given_prior_audit_gate_when_deciding_same_target_reuse_then_returns_dec
     planned_audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
         attached_column_name=test_case.planned_attached_column_name,
         resolved_sql=test_case.planned_resolved_sql,
+        always_run=test_case.planned_always_run,
     )
 
     decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(

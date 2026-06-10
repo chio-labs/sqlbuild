@@ -68,10 +68,17 @@ def parse_audit_instance(
         key="run_scope",
         error_class=error_class,
     )
+    always_run: bool = _optional_named_bool(
+        raw_value=argument_mapping.get("always_run"),
+        file_path=file_path,
+        label=f"{label} audit '{definition_name}'",
+        key="always_run",
+        error_class=error_class,
+    )
     arguments: dict[str, object] = {
         key: value
         for key, value in argument_mapping.items()
-        if key not in {"name", "description", "severity", "run_scope"}
+        if key not in {"name", "description", "severity", "run_scope", "always_run"}
     }
     return SchemaAuditInstance(
         definition_name=definition_name,
@@ -80,6 +87,7 @@ def parse_audit_instance(
         description=description,
         severity=severity,
         run_scope=run_scope,
+        always_run=always_run,
     )
 
 
@@ -95,4 +103,19 @@ def _optional_named_string(
         return None
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise error_class(f"{file_path} {label} '{key}' must be a non-empty string")
+    return raw_value
+
+
+def _optional_named_bool(
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    key: str,
+    error_class: type[Exception],
+) -> bool:
+    if raw_value is None:
+        return False
+    if not isinstance(raw_value, bool):
+        raise error_class(f"{file_path} {label} '{key}' must be a boolean")
     return raw_value

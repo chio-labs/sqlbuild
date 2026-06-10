@@ -84,4 +84,5 @@ def plan_audit(
         scope_deps=audit.scope_deps,
         attached_target_name=attached_target_name,
         attached_column_name=audit.attached_column_name,
+        always_run=audit.always_run,
     )

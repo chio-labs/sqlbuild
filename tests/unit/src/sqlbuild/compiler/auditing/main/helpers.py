@@ -80,6 +80,7 @@ def build_audit_plan_entry(
     severity: AuditSeverity = AuditSeverity.ERROR,
     effective_run_scope: AuditRunScope = AuditRunScope.FINAL,
     attachment_kind: AuditAttachmentKind = AuditAttachmentKind.MODEL,
+    always_run: bool = False,
 ) -> AuditPlanEntry:
     """Build a minimal model-attached audit plan entry for identity tests."""
 
@@ -94,6 +95,7 @@ def build_audit_plan_entry(
         effective_run_scope=effective_run_scope,
         attached_target_name="orders",
         attached_column_name=attached_column_name,
+        always_run=always_run,
     )
 
 

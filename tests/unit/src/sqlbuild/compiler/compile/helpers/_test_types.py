@@ -164,6 +164,7 @@ class AssembleCompiledProjectTestCase:
     expected_source_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_source_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
+    expected_audit_always_runs: tuple[bool, ...] = ()
 
 
 @dataclass(frozen=True)

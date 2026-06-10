@@ -1182,6 +1182,7 @@ def build_audit_from_test_case(
         ),
         audit_block=DiscoveredAuditBlock(audit_index=0, header_values={}, sql_body=""),
         sql_body=test_case.sql_body,
+        always_run=test_case.always_run,
     )
 
 

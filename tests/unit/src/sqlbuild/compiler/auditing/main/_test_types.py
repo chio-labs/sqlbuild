@@ -48,3 +48,5 @@ class AuditGateSingleFieldIdentityTestCase:
     right_run_scope: AuditRunScope = AuditRunScope.FINAL
     left_attachment_kind: AuditAttachmentKind = AuditAttachmentKind.MODEL
     right_attachment_kind: AuditAttachmentKind = AuditAttachmentKind.MODEL
+    left_always_run: bool = False
+    right_always_run: bool = False

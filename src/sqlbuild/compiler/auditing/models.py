@@ -18,6 +18,7 @@ class AuditIdentity:
     attachment_kind: str
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+    always_run: bool = False
 
 
 @dataclass(frozen=True)

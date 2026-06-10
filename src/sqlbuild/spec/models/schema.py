@@ -45,6 +45,7 @@ class SchemaAuditInstance:
     description: str | None = None
     severity: str | None = None
     run_scope: str | None = None
+    always_run: bool = False
 
 
 @dataclass(frozen=True)

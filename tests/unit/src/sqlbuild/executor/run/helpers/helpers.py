@@ -145,6 +145,7 @@ def build_fingerprint_audit_plan_entry_with_options(
     severity: str = AuditSeverity.ERROR.value,
     attached_column_name: str | None = "order_id",
     resolved_sql: str = "SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+    always_run: bool = False,
 ) -> AuditPlanEntry:
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
@@ -157,6 +158,7 @@ def build_fingerprint_audit_plan_entry_with_options(
         effective_run_scope=AuditRunScope.FINAL,
         attached_target_name="orders",
         attached_column_name=attached_column_name,
+        always_run=always_run,
     )
 
 

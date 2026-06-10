@@ -562,6 +562,7 @@ class AuditPlanEntry:
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+    always_run: bool = False
 
 
 @dataclass(frozen=True)

@@ -483,6 +483,7 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
         attached_column_name=audit_input.attached_column_name,
         severity=audit_input.severity,
         run_scope=audit_input.run_scope,
+        always_run=audit_input.always_run,
     )
 
 

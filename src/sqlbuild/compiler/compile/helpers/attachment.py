@@ -1514,6 +1514,7 @@ def build_audit_inputs(
             )
             header_severity: str | None = _str_from_dict(audit_block.header_values, "severity")
             header_run_scope: str | None = _str_from_dict(audit_block.header_values, "run_scope")
+            header_always_run: bool = _bool_from_dict(audit_block.header_values, "always_run")
             resolved_severity: str = resolve_audit_severity(
                 instance_severity=header_severity,
                 default_severity=default_audit_severity,
@@ -1531,6 +1532,7 @@ def build_audit_inputs(
                     references=references,
                     severity=resolved_severity,
                     run_scope=resolved_run_scope,
+                    always_run=header_always_run,
                 )
             )
     model_input: CompileModelInput
@@ -1810,6 +1812,7 @@ def build_attached_audit_input(
         attached_column_name=attached_column_name,
         severity=resolved_severity,
         run_scope=resolved_run_scope,
+        always_run=audit_instance.always_run,
     )
 
 
@@ -3396,6 +3399,15 @@ def _str_from_dict(values: dict[str, object], key: str) -> str | None:
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _bool_from_dict(values: dict[str, object], key: str) -> bool:
+    raw: object | None = values.get(key)
+    if raw is None:
+        return False
+    if not isinstance(raw, bool):
+        raise CompileInputError(f"AUDIT() '{key}' must be a boolean")
+    return raw
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
