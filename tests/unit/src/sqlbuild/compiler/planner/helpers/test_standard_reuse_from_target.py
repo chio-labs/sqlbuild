@@ -63,21 +63,25 @@ STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES: list[
             existing_relations=frozenset({(None, "prod_schema", "orders")}),
             expected_target_name="prod",
             expected_model_relation_exists={
+                "account_snapshot": False,
                 "orders": True,
                 "customers": False,
                 "line_items": False,
             },
             expected_model_built_version_hashes={
+                "account_snapshot": None,
                 "orders": "orders_version_hash",
                 "customers": None,
                 "line_items": None,
             },
             expected_model_fingerprint_schemas={
+                "account_snapshot": "prod_schema",
                 "orders": "prod_schema",
                 "customers": "prod_schema",
                 "line_items": "prod_schema",
             },
             expected_model_fingerprint_databases={
+                "account_snapshot": None,
                 "orders": None,
                 "customers": None,
                 "line_items": None,
@@ -179,21 +183,25 @@ def test_given_missing_reuse_origin_fingerprint_state_when_building_snapshot_the
             existing_relations=frozenset({("warehouse", "prod_analytics", "orders")}),
             expected_target_name="prod",
             expected_model_relation_exists={
+                "account_snapshot": False,
                 "orders": True,
                 "customers": False,
                 "line_items": False,
             },
             expected_model_built_version_hashes={
+                "account_snapshot": None,
                 "orders": "orders_version_hash",
                 "customers": None,
                 "line_items": None,
             },
             expected_model_fingerprint_schemas={
+                "account_snapshot": "prod_analytics",
                 "orders": "prod_analytics",
                 "customers": "prod_analytics",
                 "line_items": "prod_analytics",
             },
             expected_model_fingerprint_databases={
+                "account_snapshot": "warehouse",
                 "orders": "warehouse",
                 "customers": "warehouse",
                 "line_items": "warehouse",

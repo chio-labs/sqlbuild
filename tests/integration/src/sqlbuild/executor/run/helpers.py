@@ -22,11 +22,12 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
 from sqlbuild.compiler.fingerprints.main.write import build_insert_sql
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
@@ -111,6 +112,14 @@ def build_reuse_table_plan_entry(
     hard_copy: bool,
     reuse_origin_fingerprint_database: str | None = None,
     reuse_origin_fingerprint_schema: str | None = None,
+    unique_key: tuple[str, ...] = ("account_id",),
+    snapshot_strategy: str = "timestamp",
+    updated_at_column: str | None = "updated_at",
+    check_columns: tuple[str, ...] = (),
+    contract_enforced: bool = False,
+    contract_columns: tuple[ColumnInfo, ...] = (),
+    pre_hooks: object = None,
+    post_hooks: object = None,
 ) -> ModelPlanEntry:
     """Build a table plan entry that reuses an origin relation."""
 
@@ -126,18 +135,94 @@ def build_reuse_table_plan_entry(
             target_schema=target_schema,
             target_name=target_name,
         ),
-        action=PlanAction.REUSE_RELATION,
-        reuse_origin=CompiledRelationLocation(
-            database=origin_database,
-            schema=origin_schema,
-            name=origin_name,
-            qualified_name=origin_qualified,
-        ),
-        reuse_hard_copy=hard_copy,
+        action=PlanAction.CREATE_TABLE,
         fingerprint_version_hash="expected_version",
-        reuse_from_target_name="prod",
-        reuse_origin_fingerprint_database=reuse_origin_fingerprint_database,
-        reuse_origin_fingerprint_schema=reuse_origin_fingerprint_schema or origin_schema,
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=origin_database,
+                schema=origin_schema,
+                name=origin_name,
+                qualified_name=origin_qualified,
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=hard_copy,
+            fingerprint_database=reuse_origin_fingerprint_database,
+            fingerprint_schema=reuse_origin_fingerprint_schema or origin_schema or "",
+        ),
+    )
+
+
+def build_reuse_snapshot_plan_entry(
+    *,
+    name: str,
+    sql: str,
+    target_database: str | None = None,
+    target_schema: str | None,
+    target_name: str,
+    origin_database: str | None = None,
+    origin_schema: str | None,
+    origin_name: str,
+    hard_copy: bool,
+    reuse_origin_fingerprint_database: str | None = None,
+    reuse_origin_fingerprint_schema: str | None = None,
+    unique_key: tuple[str, ...] = ("account_id",),
+    snapshot_strategy: str = "timestamp",
+    updated_at_column: str | None = "updated_at",
+    check_columns: tuple[str, ...] = (),
+    contract_enforced: bool = False,
+    contract_columns: tuple[ColumnInfo, ...] = (),
+    pre_hooks: object = None,
+    post_hooks: object = None,
+) -> ModelPlanEntry:
+    """Build a snapshot plan entry that seeds from an origin relation."""
+
+    destination_relation_parts: tuple[str, ...] = tuple(
+        part for part in (target_database, target_schema, target_name) if part is not None
+    )
+    origin_relation_parts: tuple[str, ...] = tuple(
+        part for part in (origin_database, origin_schema, origin_name) if part is not None
+    )
+    destination_qualified: str = ".".join(destination_relation_parts)
+    origin_qualified: str = ".".join(origin_relation_parts)
+    return ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
+        name=name,
+        relative_path=Path(f"models/{name}.sql"),
+        materialization_type=MaterializationType.SNAPSHOT,
+        action=PlanAction.SNAPSHOT,
+        reason=PlanReason.NO_CHANGE,
+        destination=CompiledRelationLocation(
+            database=target_database,
+            schema=target_schema,
+            name=target_name,
+            qualified_name=destination_qualified,
+        ),
+        fingerprint_query_sql=sql,
+        resolved_sql=sql,
+        logical_ddl="",
+        unique_key=unique_key,
+        snapshot_strategy=snapshot_strategy,
+        updated_at_column=updated_at_column,
+        check_columns=check_columns,
+        contract_enforced=contract_enforced,
+        contract_columns=contract_columns,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
+        fingerprint_version_hash="expected_version",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=origin_database,
+                schema=origin_schema,
+                name=origin_name,
+                qualified_name=origin_qualified,
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=hard_copy,
+            fingerprint_database=reuse_origin_fingerprint_database,
+            fingerprint_schema=reuse_origin_fingerprint_schema or origin_schema or "",
+        ),
     )
 
 

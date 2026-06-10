@@ -218,6 +218,29 @@ def build_standard_reuse_from_target_project() -> CompiledProject:
                     logical_schema="analytics",
                 ),
             ),
+            CompiledModel(
+                key=model_key("account_snapshot"),
+                deps=(),
+                name="account_snapshot",
+                relative_path=Path("models/account_snapshot.sql"),
+                query_sql="SELECT 1 AS account_id, CURRENT_TIMESTAMP AS updated_at",
+                config=CompileModelConfig(
+                    logical_schema="analytics",
+                    values={
+                        "materialized": "snapshot",
+                        "unique_key": ["account_id"],
+                        "snapshot_strategy": "timestamp",
+                        "updated_at": "updated_at",
+                    },
+                ),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="dev_schema",
+                    name="account_snapshot",
+                    qualified_name="dev_schema.account_snapshot",
+                    logical_schema="analytics",
+                ),
+            ),
         ),
     )
 
@@ -281,6 +304,15 @@ def build_standard_reuse_decision_scope(
         (
             "incremental_candidate",
             {"materialized": "incremental", "cursor_type": "integer"},
+        ),
+        (
+            "snapshot_candidate",
+            {
+                "materialized": "snapshot",
+                "unique_key": ["id"],
+                "snapshot_strategy": "timestamp",
+                "updated_at": "updated_at",
+            },
         ),
         ("ineligible_custom", {"materialized": "custom_kind"}),
         ("missing_expected", {}),

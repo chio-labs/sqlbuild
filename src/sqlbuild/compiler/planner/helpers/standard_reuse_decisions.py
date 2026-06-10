@@ -26,6 +26,7 @@ _REUSE_ELIGIBLE_MATERIALIZATIONS: frozenset[MaterializationType] = frozenset(
     {
         MaterializationType.TABLE,
         MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
     }
 )
 

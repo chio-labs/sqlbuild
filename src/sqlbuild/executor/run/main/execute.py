@@ -7,11 +7,12 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.adapter.shared.types import PromotionStrategy, TablePromotionMode
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
+from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
@@ -31,10 +32,10 @@ from sqlbuild.executor.run.helpers.incremental import (
 from sqlbuild.executor.run.helpers.microbatch import (
     execute_microbatch_entry as execute_microbatch_entry,
 )
+from sqlbuild.executor.run.helpers.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.reuse import (
-    create_relation_from_reuse_origin,
-    validate_reuse_origin_fingerprint,
+    create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run.helpers.snapshot import (
     execute_snapshot_entry as execute_snapshot_entry,
@@ -81,14 +82,6 @@ def execute_table_entry(
     target_table: str = entry.destination.name
     target_qualified: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
-    )
-    reuse_origin_relation: str | None = (
-        resolve_relation_location_qualified_name(
-            adapter=adapter,
-            location=entry.reuse_origin,
-        )
-        if entry.reuse_origin is not None
-        else None
     )
     staging_table: str = f"{target_table}__staging"
     staging_qualified: str = resolve_qualified_name_parts(
@@ -210,7 +203,6 @@ def execute_table_entry(
             statement_recorder=statement_recorder,
             hook_results=hook_results,
             resolved_sql=resolved_sql,
-            reuse_origin_relation=reuse_origin_relation,
             hook_functions=hook_functions,
             effective_target_name=effective_target_name,
             effective_vars=effective_vars,
@@ -249,7 +241,6 @@ def execute_table_entry(
         statement_recorder=statement_recorder,
         hook_results=hook_results,
         resolved_sql=resolved_sql,
-        reuse_origin_relation=reuse_origin_relation,
         hook_functions=hook_functions,
         effective_target_name=effective_target_name,
         effective_vars=effective_vars,
@@ -280,7 +271,6 @@ def _staged_lifecycle(
     statement_recorder: StatementRecorder,
     hook_results: list[HookExecutionResult],
     resolved_sql: str,
-    reuse_origin_relation: str | None,
     hook_functions: tuple[DiscoveredHookFunction, ...],
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
@@ -298,22 +288,17 @@ def _staged_lifecycle(
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
-            if reuse_origin_relation is not None:
-                validate_reuse_origin_fingerprint(
+            if (
+                entry.relation_reuse is not None
+                and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
+            ):
+                create_relation_from_reuse_plan(
                     adapter=adapter,
                     connection=connection,
                     model_name=entry.name,
                     expected_version_hash=entry.fingerprint_version_hash,
-                    reuse_from_target_name=entry.reuse_from_target_name,
-                    reuse_origin_fingerprint_database=entry.reuse_origin_fingerprint_database,
-                    reuse_origin_fingerprint_schema=entry.reuse_origin_fingerprint_schema,
-                )
-                create_relation_from_reuse_origin(
-                    adapter=adapter,
-                    connection=connection,
-                    origin_relation=reuse_origin_relation,
+                    relation_reuse=entry.relation_reuse,
                     destination_relation=staging_qualified,
-                    hard_copy=entry.reuse_hard_copy,
                     statement_recorder=statement_recorder,
                 )
             else:
@@ -422,54 +407,16 @@ def _staged_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="check_existing"):
-            existing: bool = adapter.relation_exists(
-                connection,
-                database=target_database,
-                schema=target_schema,
-                name=target_table,
+            promote_relation_to_destination(
+                adapter=adapter,
+                connection=connection,
+                origin_relation=staging_qualified,
+                destination_relation=target_qualified,
+                destination_database=target_database,
+                destination_schema=target_schema,
+                destination_name=target_table,
+                statement_recorder=statement_recorder,
             )
-        promotion_strategy: PromotionStrategy = adapter.default_promotion_strategy()
-        if existing and promotion_strategy == PromotionStrategy.ATOMIC_SWAP:
-            with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="atomic_swap"):
-                adapter.swap(
-                    connection,
-                    left=target_qualified,
-                    right=staging_qualified,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.drop(
-                    connection,
-                    destination=staging_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-        elif existing and promotion_strategy == PromotionStrategy.ATOMIC_REPLACE:
-            with diagnostics_context(
-                sqlbuild_phase="promote",
-                sqlbuild_action_name="atomic_replace",
-            ):
-                adapter.replace_table_from_relation(
-                    connection,
-                    destination=target_qualified,
-                    origin=staging_qualified,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.drop(
-                    connection,
-                    destination=staging_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-        elif existing:
-            raise ExecutorInputError(f"Unsupported promotion strategy: {promotion_strategy}")
-        else:
-            with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="rename"):
-                adapter.rename(
-                    connection,
-                    origin=staging_qualified,
-                    destination=target_qualified,
-                    statement_recorder=statement_recorder,
-                )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -551,7 +498,6 @@ def _direct_lifecycle(
     statement_recorder: StatementRecorder,
     hook_results: list[HookExecutionResult],
     resolved_sql: str,
-    reuse_origin_relation: str | None,
     hook_functions: tuple[DiscoveredHookFunction, ...],
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
@@ -576,28 +522,23 @@ def _direct_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_table"):
-            if reuse_origin_relation is not None:
-                validate_reuse_origin_fingerprint(
-                    adapter=adapter,
-                    connection=connection,
-                    model_name=entry.name,
-                    expected_version_hash=entry.fingerprint_version_hash,
-                    reuse_from_target_name=entry.reuse_from_target_name,
-                    reuse_origin_fingerprint_database=entry.reuse_origin_fingerprint_database,
-                    reuse_origin_fingerprint_schema=entry.reuse_origin_fingerprint_schema,
-                )
+            if (
+                entry.relation_reuse is not None
+                and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
+            ):
                 adapter.drop(
                     connection,
                     destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
-                create_relation_from_reuse_origin(
+                create_relation_from_reuse_plan(
                     adapter=adapter,
                     connection=connection,
-                    origin_relation=reuse_origin_relation,
+                    model_name=entry.name,
+                    expected_version_hash=entry.fingerprint_version_hash,
+                    relation_reuse=entry.relation_reuse,
                     destination_relation=target_qualified,
-                    hard_copy=entry.reuse_hard_copy,
                     statement_recorder=statement_recorder,
                 )
             else:

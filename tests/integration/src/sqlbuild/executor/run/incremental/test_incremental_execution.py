@@ -12,8 +12,8 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import OnSchemaChange
+from sqlbuild.compiler.planner.models import ModelPlanEntry, RelationReusePlan
+from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.run.helpers.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -677,16 +677,20 @@ def test_given_seeded_incremental_when_running_then_recomputes_cursor_bounds_aft
             cursor_input_relations=(("main.raw_orders", "ordered_at"),),
             cursor_inputs_model_backed=True,
         ),
-        reuse_origin=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders_origin",
-            qualified_name="main.orders_origin",
-        ),
-        reuse_hard_copy=test_case.reuse_hard_copy,
         fingerprint_version_hash="expected_version",
-        reuse_from_target_name="prod",
-        reuse_origin_fingerprint_schema="main",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders_origin",
+                qualified_name="main.orders_origin",
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=test_case.reuse_hard_copy,
+            fingerprint_database=None,
+            fingerprint_schema="main",
+        ),
     )
 
     result: ModelExecutionResult = execute_incremental_entry(
@@ -734,7 +738,9 @@ def test_given_seeded_incremental_when_running_then_recomputes_cursor_bounds_aft
             expected_rows=((1,), (2,)),
             reuse_hard_copy=False,
             expected_lifecycle_fragments=(
-                "CREATE OR REPLACE TABLE main.orders AS SELECT * FROM main.orders_origin",
+                "CREATE OR REPLACE TABLE main.orders__reuse_seed AS SELECT * "
+                "FROM main.orders_origin",
+                "ALTER TABLE main.orders__reuse_seed RENAME TO orders",
             ),
         )
     ],
@@ -766,16 +772,20 @@ def test_given_cheap_seed_reuse_when_running_incremental_then_materializes_from_
             cursor_input_relations=(("main.raw_orders", "ordered_at"),),
             cursor_inputs_model_backed=True,
         ),
-        reuse_origin=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders_origin",
-            qualified_name="main.orders_origin",
-        ),
-        reuse_hard_copy=test_case.reuse_hard_copy,
         fingerprint_version_hash="expected_version",
-        reuse_from_target_name="prod",
-        reuse_origin_fingerprint_schema="main",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders_origin",
+                qualified_name="main.orders_origin",
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=test_case.reuse_hard_copy,
+            fingerprint_database=None,
+            fingerprint_schema="main",
+        ),
     )
 
     result: ModelExecutionResult = execute_incremental_entry(
@@ -850,16 +860,20 @@ def test_given_stale_reuse_origin_fingerprint_when_running_incremental_then_seed
             target_name="orders",
             incremental_strategy="append",
         ),
-        reuse_origin=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders_origin",
-            qualified_name="main.orders_origin",
-        ),
-        reuse_hard_copy=True,
         fingerprint_version_hash="expected_version",
-        reuse_from_target_name="prod",
-        reuse_origin_fingerprint_schema="main",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders_origin",
+                qualified_name="main.orders_origin",
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=True,
+            fingerprint_database=None,
+            fingerprint_schema="main",
+        ),
     )
 
     result: ModelExecutionResult = execute_incremental_entry(

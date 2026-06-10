@@ -58,6 +58,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerResolvedActions,
     PlannerScope,
     PlanWarning,
+    RelationReusePlan,
     ResolvedModelAction,
     SchemaAction,
     StandardReuseDecisionResults,
@@ -74,6 +75,7 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
     StandardReuseDecisionKind,
 )
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
@@ -266,20 +268,22 @@ def build_plan_entries(
             if _can_use_relation_reuse(entry=entry, reuse_decision=reuse_decision):
                 entry = replace(
                     entry,
-                    action=PlanAction.REUSE_RELATION,
+                    action=PlanAction.CREATE_TABLE,
                     reason=PlanReason.NO_CHANGE,
                     logical_ddl="",
-                    **_reuse_entry_fields(
+                    relation_reuse=_relation_reuse_plan(
+                        kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
                         reuse_decision=reuse_decision,
                         standard_reuse_decisions=standard_reuse_decisions,
                     ),
                 )
-            elif _can_use_incremental_seed(entry=entry, reuse_decision=reuse_decision):
+            elif _can_use_seeded_relation_reuse(entry=entry, reuse_decision=reuse_decision):
                 entry = replace(
                     entry,
-                    action=_incremental_seed_action(entry),
-                    reason=PlanReason.NORMAL_INCREMENTAL,
-                    **_reuse_entry_fields(
+                    action=_seeded_relation_reuse_action(entry),
+                    reason=_seeded_relation_reuse_reason(entry),
+                    relation_reuse=_relation_reuse_plan(
+                        kind=RelationReuseKind.SEEDED_RELATION_REUSE,
                         reuse_decision=reuse_decision,
                         standard_reuse_decisions=standard_reuse_decisions,
                     ),
@@ -299,37 +303,50 @@ def _can_use_relation_reuse(
     return entry.materialization_type == MaterializationType.TABLE
 
 
-def _reuse_entry_fields(
+def _relation_reuse_plan(
     *,
+    kind: RelationReuseKind,
     reuse_decision: StandardReuseModelDecision,
     standard_reuse_decisions: StandardReuseDecisionResults,
-) -> dict[str, object]:
-    return {
-        "reuse_origin": reuse_decision.reuse_origin,
-        "reuse_hard_copy": standard_reuse_decisions.hard_copy,
-        "reuse_from_target_name": standard_reuse_decisions.reuse_from_target_name,
-        "reuse_origin_fingerprint_database": (reuse_decision.reuse_origin_fingerprint_database),
-        "reuse_origin_fingerprint_schema": reuse_decision.reuse_origin_fingerprint_schema,
-    }
+) -> RelationReusePlan:
+    return RelationReusePlan(
+        kind=kind,
+        origin=reuse_decision.reuse_origin,
+        reuse_from_target_name=standard_reuse_decisions.reuse_from_target_name,
+        hard_copy=standard_reuse_decisions.hard_copy,
+        fingerprint_database=reuse_decision.reuse_origin_fingerprint_database,
+        fingerprint_schema=reuse_decision.reuse_origin_fingerprint_schema,
+    )
 
 
-def _can_use_incremental_seed(
+def _can_use_seeded_relation_reuse(
     *, entry: ModelPlanEntry, reuse_decision: StandardReuseModelDecision | None
 ) -> bool:
     if reuse_decision is None:
         return False
     if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
         return False
-    return entry.materialization_type == MaterializationType.INCREMENTAL
+    return entry.materialization_type in {
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    }
 
 
-def _incremental_seed_action(entry: ModelPlanEntry) -> PlanAction:
+def _seeded_relation_reuse_action(entry: ModelPlanEntry) -> PlanAction:
+    if entry.materialization_type == MaterializationType.SNAPSHOT:
+        return PlanAction.SNAPSHOT
     action_map: dict[str, PlanAction] = {
         IncrementalStrategy.APPEND.value: PlanAction.INCREMENTAL_APPEND,
         IncrementalStrategy.DELETE_INSERT.value: PlanAction.INCREMENTAL_DELETE_INSERT,
         IncrementalStrategy.MERGE.value: PlanAction.INCREMENTAL_MERGE,
     }
     return action_map.get(entry.incremental_strategy or "", entry.action)
+
+
+def _seeded_relation_reuse_reason(entry: ModelPlanEntry) -> PlanReason:
+    if entry.materialization_type == MaterializationType.SNAPSHOT:
+        return entry.reason
+    return PlanReason.NORMAL_INCREMENTAL
 
 
 def plan_model_from_change(
