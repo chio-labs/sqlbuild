@@ -18,7 +18,7 @@ from sqlbuild.executor.build.main.external_source_loads import (
     run_external_source_loads_before_connections,
 )
 from sqlbuild.executor.build.models import BuildExecutionResult, ExternalSourceLoadResults
-from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
@@ -66,6 +66,8 @@ def run_build_pipeline(
     on_sub_progress: Callable[[str], None] | None = None,
     before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
+    custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
+    | None = None,
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
     loader_is_reload: bool = False,
     start_cursor_ts: datetime | None = None,
@@ -159,6 +161,7 @@ def run_build_pipeline(
             on_progress=on_progress,
             before_model_materialize=before_model_materialize,
             custom_materializations=custom_materializations,
+            custom_prepare_version_functions=custom_prepare_version_functions,
             loader_functions=loader_functions,
             loader_is_reload=loader_is_reload,
             start_cursor_ts=start_cursor_ts,

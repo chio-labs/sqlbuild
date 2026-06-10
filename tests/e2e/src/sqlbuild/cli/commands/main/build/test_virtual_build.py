@@ -1382,14 +1382,14 @@ def test_given_virtual_custom_materialization_when_model_changes_then_prepare_ve
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,
+    PrepareVersionContext,
 )
-from sqlbuild.virtual.executor.models import VersionPrepareContext
 
 
-def prepare_version(ctx: VersionPrepareContext) -> None:
+def prepare_version(ctx: PrepareVersionContext) -> None:
     ctx.execute_sql(
         f"CREATE TABLE {ctx.destination} AS "
-        f"SELECT id, amount_cents, 'prepared' AS version_marker FROM {ctx.prior_relation}"
+        f"SELECT id, amount_cents, 'prepared' AS version_marker FROM {ctx.origin_relation}"
     )
 
 

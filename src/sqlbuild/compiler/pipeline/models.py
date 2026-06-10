@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.executor.custom.models import PrepareVersionContext
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,9 @@ class CompilePipelineResult:
     plan_output: PlanOutput
     manifest: dict[str, object] = field(default_factory=dict)
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
+    custom_prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = field(
+        default_factory=dict
+    )
     python_node_names: frozenset[str] = field(default_factory=frozenset)
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
 

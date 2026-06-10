@@ -297,6 +297,7 @@ def run_build(
             on_node_complete=python_lifecycle.on_node_complete,
             on_sub_progress=callbacks.on_sub_progress,
             custom_materializations=pipeline_result.custom_materializations,
+            custom_prepare_version_functions=pipeline_result.custom_prepare_version_functions,
             loader_functions=python_lifecycle.loader_functions,
             loader_is_reload=reload_sources,
             precompleted_keys=python_lifecycle.precompleted_keys,

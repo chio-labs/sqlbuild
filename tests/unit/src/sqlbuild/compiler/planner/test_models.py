@@ -30,7 +30,7 @@ RELATION_REUSE_VALIDATION_TEST_CASES: list[RelationReuseValidationTestCase] = [
         action=PlanAction.CREATE_TABLE,
         reuse_kind=RelationReuseKind.SEEDED_RELATION_REUSE,
         expected_error_fragment=(
-            "seeded relation reuse requires incremental or snapshot materialization"
+            "seeded relation reuse requires incremental, snapshot, or custom materialization"
         ),
     ),
     RelationReuseValidationTestCase(

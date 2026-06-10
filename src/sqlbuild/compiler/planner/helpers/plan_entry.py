@@ -210,6 +210,7 @@ def build_plan_entries(
     cursor_overrides: CursorOverrides | None,
     full_refresh: bool,
     standard_reuse_decisions: StandardReuseDecisionResults | None = None,
+    custom_prepare_version_materializations: frozenset[str] = frozenset(),
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
 ) -> PlannerModelEntryResults:
@@ -290,6 +291,21 @@ def build_plan_entries(
                         standard_reuse_decisions=standard_reuse_decisions,
                     ),
                 )
+            elif _can_use_custom_relation_reuse(
+                entry=entry,
+                reuse_decision=reuse_decision,
+                custom_prepare_version_materializations=custom_prepare_version_materializations,
+            ):
+                entry = replace(
+                    entry,
+                    action=PlanAction.CUSTOM,
+                    relation_reuse=_relation_reuse_plan(
+                        kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+                        project=project,
+                        reuse_decision=reuse_decision,
+                        standard_reuse_decisions=standard_reuse_decisions,
+                    ),
+                )
         entries.append(entry)
         warnings.extend(entry_warnings)
     return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
@@ -334,6 +350,22 @@ def _can_use_seeded_relation_reuse(
         MaterializationType.INCREMENTAL,
         MaterializationType.SNAPSHOT,
     }
+
+
+def _can_use_custom_relation_reuse(
+    *,
+    entry: ModelPlanEntry,
+    reuse_decision: StandardReuseModelDecision | None,
+    custom_prepare_version_materializations: frozenset[str],
+) -> bool:
+    if reuse_decision is None:
+        return False
+    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+        return False
+    return (
+        entry.materialization_type == MaterializationType.CUSTOM
+        and entry.custom_materialization_name in custom_prepare_version_materializations
+    )
 
 
 def _seeded_relation_reuse_action(entry: ModelPlanEntry) -> PlanAction:
