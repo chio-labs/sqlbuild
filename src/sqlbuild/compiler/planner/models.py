@@ -462,11 +462,18 @@ class ModelPlanEntry:
             if self.materialization_type not in {
                 MaterializationType.INCREMENTAL,
                 MaterializationType.SNAPSHOT,
+                MaterializationType.CUSTOM,
             }:
                 raise PlannerInputError(
                     f"model '{self.name}' seeded relation reuse requires "
-                    "incremental or snapshot materialization"
+                    "incremental, snapshot, or custom materialization"
                 )
+            if self.materialization_type == MaterializationType.CUSTOM:
+                if self.action != PlanAction.CUSTOM:
+                    raise PlannerInputError(
+                        f"model '{self.name}' seeded relation reuse requires custom action"
+                    )
+                return
             incremental_actions: frozenset[PlanAction] = frozenset(
                 {
                     PlanAction.INCREMENTAL_APPEND,

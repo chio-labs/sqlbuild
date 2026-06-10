@@ -49,7 +49,11 @@ from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
-from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+    PrepareVersionContext,
+)
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
@@ -77,11 +81,7 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
     rewrite_project_model_locations,
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
-from sqlbuild.virtual.executor.models import (
-    VersionPrepareContext,
-    VirtualBuildExecutionHooks,
-    VirtualBuildPipelineResult,
-)
+from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
 from sqlbuild.virtual.freshness.main.current_records import (
     build_current_virtual_source_freshness_records,
 )
@@ -168,7 +168,7 @@ def run_virtual_build(
     custom_materializations: dict[
         str, Callable[[MaterializationContext], MaterializationResult]
     ] = load_custom_materializations(discovered_inputs.materialization_files)
-    prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]] = (
+    prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = (
         load_custom_prepare_version_functions(discovered_inputs.materialization_files)
     )
     physical_target_name: str | None = resolve_target_name(
@@ -557,7 +557,7 @@ def _build_before_model_materialize(
     config: StateBackendConfig,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
     expected_version_hashes: dict[str, str],
-    prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]],
+    prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]],
     run_id: str,
     environment: str,
     effective_vars: dict[str, object],
@@ -575,7 +575,7 @@ def _build_before_model_materialize(
             return
         state_connection: Any = backend.connect(config.connection)
         try:
-            prepare_version: Callable[[VersionPrepareContext], None] | None = (
+            prepare_version: Callable[[PrepareVersionContext], None] | None = (
                 prepare_version_functions.get(entry.custom_materialization_name or "")
                 if entry.action == PlanAction.CUSTOM
                 else None
@@ -708,7 +708,7 @@ def _prepare_custom_virtual_version(
     entry: ModelPlanEntry,
     parent_relation: PhysicalRelationRecord,
     version_hash: str,
-    prepare_version: Callable[[VersionPrepareContext], None],
+    prepare_version: Callable[[PrepareVersionContext], None],
     run_id: str,
     environment: str,
     effective_vars: dict[str, object],
@@ -739,10 +739,10 @@ def _prepare_custom_virtual_version(
         name=parent_relation.relation_name,
     )
     prepare_version(
-        VersionPrepareContext(
+        PrepareVersionContext(
             adapter=adapter,
             connection=connection,
-            prior_relation=source,
+            origin_relation=source,
             destination=destination,
             destination_database=entry.destination.database,
             destination_schema=entry.destination.schema,

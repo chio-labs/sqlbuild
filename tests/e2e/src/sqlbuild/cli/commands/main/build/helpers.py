@@ -232,6 +232,87 @@ def prepare_direct_snapshot_reuse_from_project(*, tmp_path: Path, project_name: 
     return project_dir
 
 
+def prepare_direct_custom_reuse_from_project(*, tmp_path: Path, project_name: str) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[targets.prod]\n"
+                'schema = "prod"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n'
+                'reuse_from = "prod"\n'
+                "reuse_hard_copy = true\n"
+            ),
+            "materializations/merge_by_id.py": dedent(
+                """
+                from sqlbuild.executor.custom.models import (
+                    MaterializationContext,
+                    MaterializationResult,
+                    PrepareVersionContext,
+                )
+
+
+                def prepare_version(ctx: PrepareVersionContext) -> None:
+                    ctx.execute_sql(f"DROP TABLE IF EXISTS {ctx.destination}")
+                    ctx.execute_sql(
+                        f"CREATE TABLE {ctx.destination} AS "
+                        "SELECT id, amount_cents, 'prepared_from_prod' AS prepare_marker, "
+                        f"materialize_marker FROM {ctx.origin_relation}"
+                    )
+
+
+                def materialize(ctx: MaterializationContext) -> MaterializationResult:
+                    exists = ctx.adapter.relation_exists(
+                        ctx.connection,
+                        database=ctx.destination_database,
+                        schema=ctx.destination_schema,
+                        name=ctx.destination_name,
+                    )
+                    if not exists:
+                        incoming = (
+                            "SELECT id, amount_cents, 'fresh' AS prepare_marker, "
+                            f"'finalized' AS materialize_marker FROM ({ctx.sql}) AS model_sql"
+                        )
+                        ctx.execute_sql(f"CREATE TABLE {ctx.destination} AS {incoming}")
+                    else:
+                        incoming = (
+                            "SELECT model_sql.id, model_sql.amount_cents, "
+                            "COALESCE(existing.prepare_marker, 'fresh') AS prepare_marker, "
+                            "'finalized' AS materialize_marker "
+                            f"FROM ({ctx.sql}) AS model_sql "
+                            f"LEFT JOIN {ctx.destination} AS existing USING (id)"
+                        )
+                        ctx.execute_sql(
+                            f"CREATE OR REPLACE TEMP TABLE sqb_custom_next AS {incoming}"
+                        )
+                        ctx.execute_sql(f"DELETE FROM {ctx.destination}")
+                        ctx.execute_sql(
+                            f"INSERT INTO {ctx.destination} SELECT * FROM sqb_custom_next"
+                        )
+                    return MaterializationResult(relation=ctx.destination)
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (materialized merge_by_id);
+
+                SELECT 1 AS id, 10 AS amount_cents
+                UNION ALL SELECT 2 AS id, 20 AS amount_cents
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+
 def prepare_direct_reuse_from_multi_schema_project(*, tmp_path: Path, project_name: str) -> Path:
     return prepare_inline_project(
         tmp_path=tmp_path,

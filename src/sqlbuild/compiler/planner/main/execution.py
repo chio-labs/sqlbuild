@@ -80,6 +80,7 @@ def build_execution_plan(
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    custom_prepare_version_materializations: frozenset[str] = frozenset(),
 ) -> PlanOutput:
     scope: PlannerScope = build_planner_scope(
         project=project,
@@ -142,6 +143,7 @@ def build_execution_plan(
         built_fingerprints=snapshot.fingerprints,
         cursor_snapshots=snapshot.cursor_snapshots,
         full_refresh=full_refresh,
+        custom_prepare_version_materializations=custom_prepare_version_materializations,
     )
 
     changes: PlannerChangeResults = detect_changes(
@@ -200,6 +202,7 @@ def build_execution_plan(
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
         standard_reuse_decisions=(standard_reuse.decisions if standard_reuse is not None else None),
+        custom_prepare_version_materializations=custom_prepare_version_materializations,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
     )

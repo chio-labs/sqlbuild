@@ -88,10 +88,12 @@ def relation_reuse_label(entry: ModelPlanEntry | None) -> str:
     if entry is None or entry.relation_reuse is None:
         return ""
     copy_mode: str = "hard-copy" if entry.relation_reuse.hard_copy else "cheap"
-    prefix: str = (
-        "seeded " if entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE else ""
+    reuse_noun: str = (
+        "baseline reuse"
+        if entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+        else "reuse"
     )
-    return f"{prefix}{copy_mode} reuse from {entry.relation_reuse.reuse_from_target_name}"
+    return f"{copy_mode} {reuse_noun} from {entry.relation_reuse.reuse_from_target_name}"
 
 
 def _append_reuse_label(base_label: str, reuse_label: str) -> str:

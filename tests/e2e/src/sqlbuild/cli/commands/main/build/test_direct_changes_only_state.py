@@ -14,6 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_direct_changes_only_two_model_project,
+    prepare_direct_custom_reuse_from_project,
     prepare_direct_reuse_from_multi_schema_project,
     prepare_direct_reuse_from_project,
     prepare_direct_snapshot_reuse_from_project,
@@ -184,6 +185,63 @@ def test_given_reuse_from_target_when_building_dev_then_copies_prod_relation(
         )
         == prod_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectReuseFromBuildE2ETestCase(
+            description="dev build prepares custom materialization from prod baseline",
+            project_name="direct_reuse_from_custom_prepare_version",
+            expected_prod_build_exit_code=0,
+            expected_dev_build_exit_code=0,
+        )
+    ],
+    ids=["dev build prepares custom materialization from prod baseline"],
+)
+def test_given_custom_reuse_from_target_when_building_dev_then_prepare_version_seeds_baseline(
+    test_case: DirectReuseFromBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_direct_custom_reuse_from_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert prod_result.returncode == test_case.expected_prod_build_exit_code, (
+        prod_result.stdout + prod_result.stderr
+    )
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT id, amount_cents, prepare_marker, materialize_marker "
+            "FROM prod.orders ORDER BY id"
+        ),
+    ) == [(1, 10, "fresh", "finalized"), (2, 20, "fresh", "finalized")]
+
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+    dev_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
+        dev_result.stdout + dev_result.stderr
+    )
+    assert "merge_by_id (custom) (hard-copy baseline reuse from prod)" in dev_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT id, amount_cents, prepare_marker, materialize_marker "
+            "FROM dev.orders ORDER BY id"
+        ),
+    ) == [
+        (1, 10, "prepared_from_prod", "finalized"),
+        (2, 20, "prepared_from_prod", "finalized"),
+    ]
 
 
 @pytest.mark.parametrize(

@@ -40,6 +40,7 @@ def build_standard_reuse_planning_result(
     built_fingerprints: dict[str, Fingerprint],
     cursor_snapshots: dict[str, ModelCursorSnapshot],
     full_refresh: bool,
+    custom_prepare_version_materializations: frozenset[str] = frozenset(),
 ) -> StandardReusePlanningResult | None:
     """Build snapshot, freshness, and decisions for standard target reuse."""
 
@@ -75,6 +76,7 @@ def build_standard_reuse_planning_result(
             reuse_from_snapshot=snapshot,
             cursor_snapshots=cursor_snapshots,
             reuse_from_source_freshness=source_freshness,
+            custom_prepare_version_materializations=custom_prepare_version_materializations,
         ),
     )
 

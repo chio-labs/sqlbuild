@@ -111,7 +111,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "orders",
             "table (hard-copy reuse from prod)",
             "customer_snapshot",
-            "snapshot (timestamp) (seeded cheap reuse from prod)",
+            "snapshot (timestamp) (cheap baseline reuse from prod)",
         ),
         unexpected_fragments=("expected_hash", "version_hash"),
     ),

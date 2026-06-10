@@ -39,6 +39,7 @@ def build_standard_reuse_decisions(
     reuse_from_snapshot: StandardReuseFromTargetSnapshot,
     cursor_snapshots: dict[str, ModelCursorSnapshot] | None = None,
     reuse_from_source_freshness: StandardSourceFreshnessPlanningResult | None = None,
+    custom_prepare_version_materializations: frozenset[str] = frozenset(),
 ) -> StandardReuseDecisionResults:
     """Classify selected models as reusable or explain why they are not."""
 
@@ -77,6 +78,7 @@ def build_standard_reuse_decisions(
                     model_name=model.name,
                     source_freshness=reuse_from_source_freshness,
                 ),
+                custom_prepare_version_materializations=custom_prepare_version_materializations,
             ),
             reuse_from_target_name=reuse_from_snapshot.reuse_from_target_name,
             reuse_origin=reuse_from_model.reuse_origin,
@@ -108,8 +110,14 @@ def _decision_for_model(
     reuse_from_model: StandardReuseFromTargetModelSnapshot,
     reuse_origin_matches_expected: bool,
     source_freshness_stale: bool,
+    custom_prepare_version_materializations: frozenset[str],
 ) -> str:
     materialization_type: MaterializationType = get_materialization_type(model)
+    custom_materialization_name: str | None = _custom_materialization_name(model)
+    custom_supports_prepare_version: bool = (
+        materialization_type == MaterializationType.CUSTOM
+        and custom_materialization_name in custom_prepare_version_materializations
+    )
     if (
         expected_version_hash is not None
         and built_fingerprint is not None
@@ -127,7 +135,10 @@ def _decision_for_model(
         ):
             return StandardReuseDecisionKind.REUSE_ELIGIBLE.value
         return StandardReuseDecisionKind.CURRENT.value
-    if materialization_type not in _REUSE_ELIGIBLE_MATERIALIZATIONS:
+    if (
+        materialization_type not in _REUSE_ELIGIBLE_MATERIALIZATIONS
+        and not custom_supports_prepare_version
+    ):
         return StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value
     if reuse_from_model.built_version_hash is None:
         return StandardReuseDecisionKind.REUSE_ORIGIN_FINGERPRINT_MISSING.value
@@ -177,6 +188,11 @@ def _reuse_origin_cursor_ahead(
 
 def _get_config_str(model: CompiledModel, key: str) -> str | None:
     value: object | None = model.config.values.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _custom_materialization_name(model: CompiledModel) -> str | None:
+    value: object | None = model.config.values.get("materialized")
     return value if isinstance(value, str) else None
 
 
