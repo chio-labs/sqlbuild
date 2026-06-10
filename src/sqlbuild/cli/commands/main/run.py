@@ -260,14 +260,13 @@ def run_run(
             use_color=use_color,
             providers=provider_session.providers,
         )
-        if changes_only:
-            append_eligible_standard_source_freshness_records(
-                plan=plan_output,
-                result=result,
-                adapter=adapter,
-                connection_config=connection_config,
-                run_id=pipeline_result.project.run_id,
-            )
+        append_eligible_standard_source_freshness_records(
+            plan=plan_output,
+            result=result,
+            adapter=adapter,
+            connection_config=connection_config,
+            run_id=pipeline_result.project.run_id,
+        )
         python_lifecycle.finalize()
         python_results: tuple[PythonNodeExecutionResult, ...] = python_lifecycle.python_results
         write_runtime_target(

@@ -61,7 +61,14 @@ def test_given_relation_reuse_origin_when_creating_relation_then_uses_expected_c
             hard_copy=False,
             supports_zero_copy_clone=False,
             expected_calls=("supports_zero_copy_clone",),
-            expected_error_fragment="does not support cheap relation reuse",
+            expected_error_fragments=(
+                "target 'dev' has reuse_from = 'prod'",
+                "adapter 'fake_relation_reuse' does not support cheap relation reuse",
+                "reuse_hard_copy = false",
+                "will not copy production relations automatically",
+                "reuse_hard_copy = true",
+                "remove reuse_from to build normally",
+            ),
         )
     ],
     ids=["cheap reuse fails clearly when adapter does not support zero copy"],
@@ -82,8 +89,10 @@ def test_given_relation_reuse_origin_when_cheap_reuse_is_unsupported_then_it_rai
             destination_relation="dev.orders",
             hard_copy=test_case.hard_copy,
             statement_recorder=recorder,
+            destination_target_name="dev",
+            reuse_from_target_name="prod",
         )
 
-    assert test_case.expected_error_fragment is not None
-    assert test_case.expected_error_fragment in str(exc_info.value)
+    for fragment in test_case.expected_error_fragments:
+        assert fragment in str(exc_info.value)
     assert tuple(adapter.calls) == test_case.expected_calls

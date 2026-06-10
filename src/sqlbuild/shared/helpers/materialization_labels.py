@@ -8,6 +8,7 @@ from sqlbuild.compiler.planner.types import (
     IncrementalMode,
     MaterializationType,
     PlanAction,
+    RelationReuseKind,
 )
 from sqlbuild.shared.types import ExecutionResourceKind
 
@@ -23,18 +24,19 @@ _INCREMENTAL_ACTIONS: frozenset[PlanAction] = frozenset(
 def model_materialization_label(entry: ModelPlanEntry) -> str:
     """Return the full materialization label used in plan summaries."""
 
+    reuse_label: str = relation_reuse_label(entry)
     if entry.materialization_type == MaterializationType.VIEW:
-        return MaterializationType.VIEW.value
+        return _append_reuse_label(MaterializationType.VIEW.value, reuse_label)
     if entry.materialization_type == MaterializationType.TABLE:
-        return MaterializationType.TABLE.value
+        return _append_reuse_label(MaterializationType.TABLE.value, reuse_label)
     if entry.materialization_type == MaterializationType.INCREMENTAL:
-        return _incremental_label(entry)
+        return _append_reuse_label(_incremental_label(entry), reuse_label)
     if entry.materialization_type == MaterializationType.SNAPSHOT:
-        return _snapshot_label(entry, include_prefix=True)
+        return _append_reuse_label(_snapshot_label(entry, include_prefix=True), reuse_label)
     if entry.materialization_type == MaterializationType.CUSTOM:
         custom_name: str = entry.custom_materialization_name or MaterializationType.CUSTOM.value
-        return f"{custom_name} (custom)"
-    return entry.materialization_type.value
+        return _append_reuse_label(f"{custom_name} (custom)", reuse_label)
+    return _append_reuse_label(entry.materialization_type.value, reuse_label)
 
 
 def model_resource_type(entry: ModelPlanEntry | None) -> str:
@@ -62,18 +64,44 @@ def model_execution_annotation(entry: ModelPlanEntry | None) -> str:
 
     if entry is None:
         return ""
+    reuse_label: str = relation_reuse_label(entry)
     if entry.materialization_type == MaterializationType.SNAPSHOT:
-        return _snapshot_label(entry, include_prefix=False)
+        snapshot_label: str = _snapshot_label(entry, include_prefix=False)
+        return _join_annotation_parts(snapshot_label, reuse_label)
     is_incremental: bool = (
         entry.action in _INCREMENTAL_ACTIONS
         or entry.materialization_type == MaterializationType.INCREMENTAL
     )
     if not is_incremental:
-        return ""
+        return reuse_label
     parts: list[str] = []
     if entry.incremental_strategy:
         parts.append(entry.incremental_strategy)
+    if reuse_label:
+        parts.append(reuse_label)
     return ", ".join(parts)
+
+
+def relation_reuse_label(entry: ModelPlanEntry | None) -> str:
+    """Return a concise human label for relation reuse behavior."""
+
+    if entry is None or entry.relation_reuse is None:
+        return ""
+    copy_mode: str = "hard-copy" if entry.relation_reuse.hard_copy else "cheap"
+    prefix: str = (
+        "seeded " if entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE else ""
+    )
+    return f"{prefix}{copy_mode} reuse from {entry.relation_reuse.reuse_from_target_name}"
+
+
+def _append_reuse_label(base_label: str, reuse_label: str) -> str:
+    if not reuse_label:
+        return base_label
+    return f"{base_label} ({reuse_label})"
+
+
+def _join_annotation_parts(*parts: str) -> str:
+    return ", ".join(part for part in parts if part)
 
 
 def _incremental_label(entry: ModelPlanEntry) -> str:

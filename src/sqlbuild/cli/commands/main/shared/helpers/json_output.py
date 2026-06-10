@@ -188,6 +188,13 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
 
     if entry.destination.qualified_name is not None:
         model["qualified_name"] = entry.destination.qualified_name
+    if entry.relation_reuse is not None:
+        model["relation_reuse"] = {
+            "kind": entry.relation_reuse.kind.value,
+            "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
+            "origin_relation": entry.relation_reuse.origin.qualified_name,
+            "hard_copy": entry.relation_reuse.hard_copy,
+        }
 
     return model
 

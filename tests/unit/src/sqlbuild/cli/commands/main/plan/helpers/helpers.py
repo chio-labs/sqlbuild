@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
+    RelationReusePlan,
     SchemaFinding,
     SeedPlanEntry,
     SourceLoadPlanEntry,
@@ -28,6 +29,7 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
     SchemaChangeKind,
     SchemaColumnSource,
     WarningSeverity,
@@ -60,6 +62,7 @@ def build_model_entry(
     schema_findings: tuple[SchemaFinding, ...] = (),
     cascade: CascadeResult | None = None,
     custom_materialization_name: str | None = None,
+    relation_reuse: RelationReusePlan | None = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for formatter tests."""
 
@@ -93,6 +96,30 @@ def build_model_entry(
         backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
         cascade=cascade,
         custom_materialization_name=custom_materialization_name,
+        relation_reuse=relation_reuse,
+    )
+
+
+def build_relation_reuse_plan(
+    *,
+    kind: RelationReuseKind = RelationReuseKind.COMPLETE_RELATION_REUSE,
+    reuse_from_target_name: str = "prod",
+    origin_schema: str = "prod",
+    origin_name: str = "orders",
+    hard_copy: bool = True,
+) -> RelationReusePlan:
+    return RelationReusePlan(
+        kind=kind,
+        origin=CompiledRelationLocation(
+            database=None,
+            schema=origin_schema,
+            name=origin_name,
+            qualified_name=f"{origin_schema}.{origin_name}",
+        ),
+        reuse_from_target_name=reuse_from_target_name,
+        hard_copy=hard_copy,
+        fingerprint_database=None,
+        fingerprint_schema=origin_schema,
     )
 
 

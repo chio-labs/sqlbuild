@@ -609,15 +609,15 @@ def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_rea
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="standard changes-only build appends source freshness after success",
+            description="standard normal build appends source freshness after success",
             expected_exit_code=0,
             expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
-            unexpected_output_fragments=("Plan ready (0 selected)",),
+            unexpected_output_fragments=(),
         )
     ],
-    ids=["standard changes-only build appends source freshness after success"],
+    ids=["standard normal build appends source freshness after success"],
 )
-def test_given_source_freshness_when_building_changes_only_then_writes_state_after_success(
+def test_given_source_freshness_when_building_normally_then_writes_state_after_success(
     test_case: DirectChangesOnlyBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -652,18 +652,9 @@ def test_given_source_freshness_when_building_changes_only_then_writes_state_aft
     assert initial_build_result.returncode == 0, (
         initial_build_result.stdout + initial_build_result.stderr
     )
-
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
-        project_dir=project_dir,
-    )
-
-    assert build_result.returncode == test_case.expected_exit_code, (
-        build_result.stdout + build_result.stderr
-    )
     fragment: str
     for fragment in test_case.expected_output_fragments:
-        assert fragment in build_result.stdout, build_result.stdout
+        assert fragment in initial_build_result.stdout, initial_build_result.stdout
     assert table_exists(
         db_path=project_dir / "warehouse.duckdb",
         table_name="_sqlbuild_source_freshness",
@@ -675,16 +666,16 @@ def test_given_source_freshness_when_building_changes_only_then_writes_state_aft
     )
     assert rows == [("raw_orders", "1")]
 
-    steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
 
-    assert steady_state_result.returncode == 0, (
-        steady_state_result.stdout + steady_state_result.stderr
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
     )
-    assert "Plan ready (0 selected)" in steady_state_result.stdout
-    assert "TOTAL=0" in steady_state_result.stdout
+    assert "Plan ready (0 selected)" in build_result.stdout
+    assert "TOTAL=0" in build_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -720,12 +711,16 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
                 "    freshness:\n"
                 "      strategy: sql\n"
                 "      type: integer\n"
-                "      query: SELECT data_version FROM source_version\n"
+                "      query: SELECT data_version FROM freshness_control\n"
             ),
             "models/orders.sql": (
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
         },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE TABLE freshness_control AS SELECT 0 AS data_version",
     )
     initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
@@ -736,12 +731,12 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
     )
     execute_duckdb(
         db_path=project_dir / "warehouse.duckdb",
-        sql="CREATE TABLE source_version AS SELECT 1 AS data_version",
+        sql="UPDATE freshness_control SET data_version = 1",
     )
     (project_dir / "models" / "orders.sql").write_text(
         (
             "MODEL (materialized table, "
-            'post_hooks [sql("UPDATE source_version SET data_version = 2")]);\n\n'
+            'post_hooks [sql("UPDATE freshness_control SET data_version = 2")]);\n\n'
             'SELECT * FROM __source("raw_orders")\n'
         ),
         encoding="utf-8",
@@ -758,16 +753,19 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
     fragment: str
     for fragment in test_case.expected_output_fragments:
         assert fragment in build_result.stdout, build_result.stdout
-    source_version_rows: list[tuple[Any, ...]] = query_duckdb(
+    freshness_control_rows: list[tuple[Any, ...]] = query_duckdb(
         db_path=project_dir / "warehouse.duckdb",
-        sql="SELECT data_version FROM source_version",
+        sql="SELECT data_version FROM freshness_control",
     )
     freshness_rows: list[tuple[Any, ...]] = query_duckdb(
         db_path=project_dir / "warehouse.duckdb",
-        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
+        sql=(
+            "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
+            "ORDER BY data_version"
+        ),
     )
-    assert source_version_rows == [(2,)]
-    assert freshness_rows == [("raw_orders", "1")]
+    assert freshness_control_rows == [(2,)]
+    assert freshness_rows == [("raw_orders", "0"), ("raw_orders", "1")]
 
 
 @pytest.mark.parametrize(

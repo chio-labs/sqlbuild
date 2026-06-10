@@ -21,6 +21,8 @@ def create_relation_from_reuse_origin(
     destination_relation: str,
     hard_copy: bool,
     statement_recorder: StatementRecorder,
+    destination_target_name: str | None = None,
+    reuse_from_target_name: str | None = None,
 ) -> None:
     """Create a destination relation from the configured reuse origin relation."""
 
@@ -33,9 +35,17 @@ def create_relation_from_reuse_origin(
         )
         return
     if not adapter.supports_zero_copy_clone():
+        target_context: str = (
+            f"target '{destination_target_name}' has reuse_from = '{reuse_from_target_name}', but "
+            if destination_target_name is not None and reuse_from_target_name is not None
+            else ""
+        )
         raise ExecutorInputError(
-            f"adapter '{adapter.adapter_name}' does not support cheap relation reuse. "
-            "Set reuse_hard_copy = true for this target to force copy-based reuse, "
+            f"{target_context}adapter '{adapter.adapter_name}' does not support cheap "
+            "relation reuse with reuse_hard_copy = false. "
+            "SQLBuild will not copy production relations automatically because copying large "
+            "tables can be expensive. Set reuse_hard_copy = true for this target to force "
+            "copy-based reuse, "
             "or remove reuse_from to build normally."
         )
     adapter.clone(
@@ -78,6 +88,8 @@ def create_relation_from_reuse_plan(
         destination_relation=destination_relation,
         hard_copy=relation_reuse.hard_copy,
         statement_recorder=statement_recorder,
+        destination_target_name=relation_reuse.destination_target_name,
+        reuse_from_target_name=relation_reuse.reuse_from_target_name,
     )
 
 

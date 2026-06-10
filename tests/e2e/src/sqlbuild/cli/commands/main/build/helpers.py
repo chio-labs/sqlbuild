@@ -232,6 +232,82 @@ def prepare_direct_snapshot_reuse_from_project(*, tmp_path: Path, project_name: 
     return project_dir
 
 
+def prepare_direct_reuse_from_multi_schema_project(*, tmp_path: Path, project_name: str) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                f"""
+                name = "{project_name}"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [path_defaults.staging]
+                schema = "prod_staging"
+                materialized = "table"
+
+                [path_defaults.intermediate]
+                schema = "prod_intermediate"
+                materialized = "table"
+
+                [path_defaults.marts]
+                schema = "prod_marts"
+                materialized = "table"
+
+                [targets.prod]
+                schema = "${{CTX:model.schema}}"
+
+                [targets.dev]
+                schema = "dev"
+                reuse_from = "prod"
+                reuse_hard_copy = true
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    expression: SELECT 1 AS order_id, 100 AS amount_cents
+                    freshness:
+                      strategy: sql
+                      type: integer
+                      query: SELECT 1 AS data_version
+                """
+            ).strip()
+            + "\n",
+            "models/staging/stg_orders.sql": dedent(
+                """
+                MODEL (materialized table, tags [staging]);
+
+                SELECT order_id, amount_cents FROM __source("raw_orders")
+                """
+            ).strip()
+            + "\n",
+            "models/intermediate/int_orders.sql": dedent(
+                """
+                MODEL (materialized table, tags [intermediate]);
+
+                SELECT order_id, amount_cents + 25 AS amount_cents FROM __ref("stg_orders")
+                """
+            ).strip()
+            + "\n",
+            "models/marts/fact_orders.sql": dedent(
+                """
+                MODEL (materialized table, tags [marts]);
+
+                SELECT order_id, amount_cents / 100.0 AS amount_dollars FROM __ref("int_orders")
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+
 def write_direct_changes_only_stg_orders(*, project_dir: Path, amount_cents: int) -> None:
     (project_dir / "models" / "stg_orders.sql").write_text(
         direct_changes_only_stg_orders_sql(amount_cents=amount_cents),

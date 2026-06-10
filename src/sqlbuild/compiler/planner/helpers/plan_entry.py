@@ -273,6 +273,7 @@ def build_plan_entries(
                     logical_ddl="",
                     relation_reuse=_relation_reuse_plan(
                         kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+                        project=project,
                         reuse_decision=reuse_decision,
                         standard_reuse_decisions=standard_reuse_decisions,
                     ),
@@ -284,6 +285,7 @@ def build_plan_entries(
                     reason=_seeded_relation_reuse_reason(entry),
                     relation_reuse=_relation_reuse_plan(
                         kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+                        project=project,
                         reuse_decision=reuse_decision,
                         standard_reuse_decisions=standard_reuse_decisions,
                     ),
@@ -306,6 +308,7 @@ def _can_use_relation_reuse(
 def _relation_reuse_plan(
     *,
     kind: RelationReuseKind,
+    project: CompiledProject,
     reuse_decision: StandardReuseModelDecision,
     standard_reuse_decisions: StandardReuseDecisionResults,
 ) -> RelationReusePlan:
@@ -316,6 +319,7 @@ def _relation_reuse_plan(
         hard_copy=standard_reuse_decisions.hard_copy,
         fingerprint_database=reuse_decision.reuse_origin_fingerprint_database,
         fingerprint_schema=reuse_decision.reuse_origin_fingerprint_schema,
+        destination_target_name=project.effective_target_name,
     )
 
 

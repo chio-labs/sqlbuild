@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
@@ -310,8 +310,10 @@ def _format_model_assets(
     *, results: tuple[ModelExecutionResult, ...], plan: PlanOutput | None
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
+    model_entries: dict[str, ModelPlanEntry] = {}
     if plan is not None:
         targets = {name: target.qualified_name for name, target in plan.model_locations.items()}
+        model_entries = {entry.name: entry for entry in plan.model_entries}
     return tuple(
         _drop_none(
             {
@@ -326,10 +328,22 @@ def _format_model_assets(
                 "error_help": result.error_help,
                 "error_message": result.error_message,
                 "warnings": result.warning_messages,
+                "relation_reuse": _format_relation_reuse(model_entries.get(result.model_name)),
             }
         )
         for result in results
     )
+
+
+def _format_relation_reuse(entry: ModelPlanEntry | None) -> dict[str, object] | None:
+    if entry is None or entry.relation_reuse is None:
+        return None
+    return {
+        "kind": entry.relation_reuse.kind.value,
+        "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
+        "origin_relation": entry.relation_reuse.origin.qualified_name,
+        "hard_copy": entry.relation_reuse.hard_copy,
+    }
 
 
 def _format_seed_assets(

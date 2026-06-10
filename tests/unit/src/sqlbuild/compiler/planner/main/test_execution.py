@@ -43,9 +43,9 @@ PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
         expected_has_source_freshness=True,
     ),
     StandardSourceFreshnessPlanOutputTestCase(
-        description="normal standard plan output omits source freshness result",
+        description="normal standard plan output carries source freshness result",
         changes_only=False,
-        expected_has_source_freshness=False,
+        expected_has_source_freshness=True,
     ),
 ]
 
@@ -70,7 +70,7 @@ SOURCE_DEFERRAL_CONFLICT_TEST_CASES: list[StandardReuseFromSourceDeferralConflic
     PLAN_OUTPUT_TEST_CASES,
     ids=[case.description for case in PLAN_OUTPUT_TEST_CASES],
 )
-def test_given_direct_plan_when_building_execution_plan_then_source_freshness_matches_changes_only(
+def test_given_direct_plan_when_building_execution_plan_then_source_freshness_is_available(
     test_case: StandardSourceFreshnessPlanOutputTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
