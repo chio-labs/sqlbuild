@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
@@ -125,3 +126,63 @@ def build_name_test_adapter(adapter_name: str) -> DuckDbAdapter | BigQueryAdapte
     if adapter_name == "bigquery":
         return BigQueryAdapter()
     return DuckDbAdapter()
+
+
+class FakeRelationReuseAdapter(BaseAdapter):
+    adapter_name: str = "fake_relation_reuse"
+
+    def __init__(self, *, supports_zero_copy_clone: bool) -> None:
+        self._supports_zero_copy_clone: bool = supports_zero_copy_clone
+        self.calls: list[str] = []
+        self.sql: str | None = None
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        return object()
+
+    def execute(self, connection: Any, sql: str) -> object:
+        del connection, sql
+        return object()
+
+    def close(self, connection: Any) -> None:
+        del connection
+
+    def supports_zero_copy_clone(self) -> bool:
+        self.calls.append("supports_zero_copy_clone")
+        return self._supports_zero_copy_clone
+
+    def clone(
+        self,
+        connection: Any,
+        *,
+        origin: str,
+        destination: str,
+        hard_copy: bool = False,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, origin, destination, hard_copy, statement_recorder
+        self.calls.append("clone")
+
+    def durable_clone(
+        self,
+        connection: Any,
+        *,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, origin, destination, statement_recorder
+        self.calls.append("durable_clone")
+
+    def create_table_as(
+        self,
+        connection: Any,
+        *,
+        destination: str,
+        sql: str,
+        config: dict[str, Any] | None = None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, destination, config, statement_recorder
+        self.calls.append("create_table_as")
+        self.sql = sql

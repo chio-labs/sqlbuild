@@ -7,10 +7,12 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, StatementRecorder
 from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_origin
 from tests.integration.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerBuildFlowTestCase,
     SqlServerMergeTestCase,
     SqlServerQueryTestCase,
+    SqlServerRelationReuseCopyTestCase,
     SqlServerSchemaIntrospectionTestCase,
     SqlServerSeedTestCase,
 )
@@ -107,6 +109,52 @@ def test_given_model_sql_when_building_then_sqlserver_creates_and_promotes_table
         adapter=adapter, connection=connection, sql=f"SELECT COUNT(*) FROM {target}"
     )
     assert rows[0][0] == test_case.expected_row_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerRelationReuseCopyTestCase(
+            description="hard copy reuse uses select into fallback",
+            expected_rows=((1, "alice"), (2, "bob")),
+            expected_recorded_fragment="SELECT * INTO",
+        )
+    ],
+    ids=["hard copy reuse uses select into fallback"],
+)
+def test_given_reuse_origin_when_creating_hard_copy_then_sqlserver_copies_rows(
+    test_case: SqlServerRelationReuseCopyTestCase,
+    adapter: SqlServerAdapter,
+    connection: Any,
+    sqlserver_schema: str,
+) -> None:
+    origin: str = qualified_name(schema=sqlserver_schema, name="orders_reuse_origin")
+    destination: str = qualified_name(schema=sqlserver_schema, name="orders_hard_reuse")
+    recorder: StatementRecorder = build_statement_recorder()
+    adapter.execute(
+        connection,
+        f"SELECT * INTO {origin} FROM "
+        "(SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob') AS origin_rows",
+    )
+
+    create_relation_from_reuse_origin(
+        adapter=adapter,
+        connection=connection,
+        origin_relation=origin,
+        destination_relation=destination,
+        hard_copy=True,
+        statement_recorder=recorder,
+    )
+
+    rows: tuple[tuple[object, ...], ...] = fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql=f"SELECT id, name FROM {destination} ORDER BY id",
+    )
+    recorded_sql: str = "\n".join(event.content for event in recorder.snapshot())
+
+    assert rows == test_case.expected_rows
+    assert test_case.expected_recorded_fragment in recorded_sql
 
 
 @pytest.mark.parametrize(

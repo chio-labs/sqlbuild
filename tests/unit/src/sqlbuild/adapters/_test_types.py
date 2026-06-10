@@ -11,3 +11,13 @@ class AdapterDurableCloneTestCase:
     target: str
     expected_statements: tuple[str, ...]
     expected_supports_durable_clone: bool
+
+
+@dataclass(frozen=True)
+class AdapterCloneModeTestCase:
+    description: str
+    adapter: StrictAdapter
+    source: str
+    target: str
+    hard_copy: bool
+    expected_statements: tuple[str, ...]

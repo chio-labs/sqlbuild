@@ -9,7 +9,10 @@ from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
 from sqlbuild.adapters.postgres.client import PostgresAdapter
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
-from tests.unit.src.sqlbuild.adapters._test_types import AdapterDurableCloneTestCase
+from tests.unit.src.sqlbuild.adapters._test_types import (
+    AdapterCloneModeTestCase,
+    AdapterDurableCloneTestCase,
+)
 
 DURABLE_CLONE_TEST_CASES: tuple[AdapterDurableCloneTestCase, ...] = (
     AdapterDurableCloneTestCase(
@@ -81,6 +84,96 @@ DURABLE_CLONE_TEST_CASES: tuple[AdapterDurableCloneTestCase, ...] = (
     ),
 )
 
+CLONE_MODE_TEST_CASES: tuple[AdapterCloneModeTestCase, ...] = (
+    AdapterCloneModeTestCase(
+        description="databricks cheap clone uses shallow clone",
+        adapter=DatabricksAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=("CREATE TABLE dev.fact_orders SHALLOW CLONE prod.fact_orders",),
+    ),
+    AdapterCloneModeTestCase(
+        description="databricks hard copy clone uses CTAS fallback",
+        adapter=DatabricksAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=True,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+        ),
+    ),
+    AdapterCloneModeTestCase(
+        description="snowflake cheap clone uses clone",
+        adapter=SnowflakeAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=("CREATE OR REPLACE TABLE dev.fact_orders CLONE prod.fact_orders",),
+    ),
+    AdapterCloneModeTestCase(
+        description="snowflake hard copy clone uses CTAS fallback",
+        adapter=SnowflakeAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=True,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+        ),
+    ),
+    AdapterCloneModeTestCase(
+        description="bigquery cheap clone uses clone",
+        adapter=BigQueryAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=("CREATE TABLE `dev.fact_orders` CLONE `prod.fact_orders`",),
+    ),
+    AdapterCloneModeTestCase(
+        description="bigquery hard copy clone uses CTAS fallback",
+        adapter=BigQueryAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=True,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE `dev.fact_orders` AS SELECT * FROM prod.fact_orders",
+        ),
+    ),
+    AdapterCloneModeTestCase(
+        description="postgres clone always uses CTAS fallback",
+        adapter=PostgresAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=(
+            "DROP TABLE IF EXISTS dev.fact_orders",
+            "CREATE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+        ),
+    ),
+    AdapterCloneModeTestCase(
+        description="sqlserver clone always uses select into fallback",
+        adapter=SqlServerAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=(
+            "DROP TABLE IF EXISTS dev.fact_orders",
+            "SELECT * INTO dev.fact_orders FROM "
+            "(SELECT * FROM prod.fact_orders) AS __create_source",
+        ),
+    ),
+    AdapterCloneModeTestCase(
+        description="duckdb clone always uses CTAS fallback",
+        adapter=DuckDbAdapter(),
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        expected_statements=(
+            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+        ),
+    ),
+)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -96,4 +189,21 @@ def test_given_first_party_adapter_when_rendering_durable_clone_then_returns_exp
     )
 
     assert test_case.adapter.supports_durable_clone() is test_case.expected_supports_durable_clone
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CLONE_MODE_TEST_CASES,
+    ids=[case.description for case in CLONE_MODE_TEST_CASES],
+)
+def test_given_first_party_adapter_when_rendering_clone_mode_then_returns_expected_sql(
+    test_case: AdapterCloneModeTestCase,
+) -> None:
+    statements: tuple[str, ...] = test_case.adapter.render_clone(
+        origin=test_case.source,
+        destination=test_case.target,
+        hard_copy=test_case.hard_copy,
+    )
+
     assert statements == test_case.expected_statements

@@ -25,10 +25,10 @@ def create_relation_from_reuse_origin(
     """Create a destination relation from the configured reuse origin relation."""
 
     if hard_copy:
-        adapter.durable_clone(
+        adapter.create_table_as(
             connection,
-            origin=origin_relation,
             destination=destination_relation,
+            sql=f"SELECT * FROM {origin_relation}",
             statement_recorder=statement_recorder,
         )
         return
