@@ -266,7 +266,7 @@ class DatabricksAdapter(BaseAdapter):
         if not rows:
             projections: str = ", ".join(
                 "CAST(NULL AS "
-                f"{column_sql_types.get(column_name, 'STRING')}) AS "
+                f"{self._loader_row_sql_type(column_sql_types.get(column_name))}) AS "
                 f"{self.render_identifier(column_name)}"
                 for column_name in column_names
             )
@@ -291,12 +291,18 @@ class DatabricksAdapter(BaseAdapter):
                 self.render_identifier(column_name)
                 if column_name not in column_sql_types
                 else "CAST("
-                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
+                f"{self.render_identifier(column_name)} AS "
+                f"{self._loader_row_sql_type(column_sql_types[column_name])}) "
                 f"AS {self.render_identifier(column_name)}"
             )
             for column_name in column_names
         )
         return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
+
+    def _loader_row_sql_type(self, column_type: str | None) -> str:
+        if column_type is None:
+            return "STRING"
+        return self._to_databricks_type(column_type)
 
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
@@ -1010,7 +1016,7 @@ class DatabricksAdapter(BaseAdapter):
     def render_source_expression_cast(
         self, *, expression: str, target_type: str, alias: str
     ) -> str:
-        return f"CAST({expression} AS {target_type}) AS {alias}"
+        return f"CAST({expression} AS {self._to_databricks_type(target_type)}) AS {alias}"
 
     def render_source_expression_relation(self, *, expression: str) -> str:
         stripped_expression: str = expression.strip().removesuffix(";").strip()

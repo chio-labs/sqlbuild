@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.adapter.shared.types import FunctionNullabilityRule
+from sqlbuild.adapter.shared.types import FunctionNullabilityRule, LoaderLogicalType
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,
@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksRenderDurableCloneTestCase,
     DatabricksRenderPythonFunctionTestCase,
     DatabricksRenderTableFunctionTestCase,
+    DatabricksStringTypeCastRenderingTestCase,
 )
 
 
@@ -61,6 +62,40 @@ def test_given_databricks_adapter_when_getting_inference_profile_then_returns_ex
         == test_case.expected_rule_results["IF"]
     )
     assert lower_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["LOWER"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksStringTypeCastRenderingTestCase(
+            description="normalizes varchar casts to string",
+            declared_type="VARCHAR",
+            expected_loader_fragment="CAST(`status` AS STRING) AS `status`",
+            expected_source_cast="CAST(status AS STRING) AS status",
+        )
+    ],
+    ids=["normalizes varchar casts to string"],
+)
+def test_given_databricks_string_declared_type_when_rendering_casts_then_uses_string(
+    test_case: DatabricksStringTypeCastRenderingTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    loader_sql: str = adapter.render_loader_rows_select(
+        rows=({"status": "placed"},),
+        column_names=("status",),
+        column_sql_types={"status": test_case.declared_type},
+        inferred_types={"status": LoaderLogicalType.STRING},
+    )
+    source_cast_sql: str = adapter.render_source_expression_cast(
+        expression="status",
+        target_type=test_case.declared_type,
+        alias="status",
+    )
+
+    assert test_case.expected_loader_fragment in loader_sql
+    assert test_case.declared_type not in loader_sql
+    assert source_cast_sql == test_case.expected_source_cast
 
 
 TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [
