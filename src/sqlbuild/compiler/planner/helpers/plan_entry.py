@@ -950,6 +950,8 @@ def _compute_plan_cursor_bounds(
         return None
     if full_refresh:
         return None
+    if start_cursor_override is not None and end_cursor_override is not None:
+        return CursorBounds(start=start_cursor_override, end=end_cursor_override)
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:

@@ -195,6 +195,8 @@ def _compute_model_cursor_bounds(
         cursor_inputs=_get_cursor_inputs(model),
     ):
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+    if start_cursor_override is not None and end_cursor_override is not None:
+        return CursorBounds(start=start_cursor_override, end=end_cursor_override)
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:

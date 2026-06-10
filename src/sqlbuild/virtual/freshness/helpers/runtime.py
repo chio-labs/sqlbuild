@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,
@@ -239,25 +240,28 @@ def _observe_unmanaged_source_freshness(
     source: SourceEntry,
     observed_at: datetime,
 ) -> SourceFreshnessObservation | None:
-    if source.freshness is not None:
-        return observe_configured_source_freshness(
-            adapter=adapter,
-            connection=connection,
-            source=source,
-            observed_at=observed_at,
-        )
-    if (
-        not source.managed
-        and source.expression is None
-        and source.table is not None
-        and adapter.supports_table_freshness_metadata()
-    ):
-        return observe_configured_source_freshness(
-            adapter=adapter,
-            connection=connection,
-            source=_source_with_adapter_freshness(source),
-            observed_at=observed_at,
-        )
+    try:
+        if source.freshness is not None:
+            return observe_configured_source_freshness(
+                adapter=adapter,
+                connection=connection,
+                source=source,
+                observed_at=observed_at,
+            )
+        if (
+            not source.managed
+            and source.expression is None
+            and source.table is not None
+            and adapter.supports_table_freshness_metadata()
+        ):
+            return observe_configured_source_freshness(
+                adapter=adapter,
+                connection=connection,
+                source=_source_with_adapter_freshness(source),
+                observed_at=observed_at,
+            )
+    except AdapterUserError:
+        return None
     return None
 
 
@@ -271,12 +275,15 @@ def _managed_loader_freshness_record(
     run_id: str | None,
 ) -> SourceFreshnessRecord | None:
     if source.freshness is not None:
-        observation: SourceFreshnessObservation = observe_configured_source_freshness(
-            adapter=adapter,
-            connection=connection,
-            source=source,
-            observed_at=observed_at,
-        )
+        try:
+            observation: SourceFreshnessObservation = observe_configured_source_freshness(
+                adapter=adapter,
+                connection=connection,
+                source=source,
+                observed_at=observed_at,
+            )
+        except AdapterUserError:
+            return None
         return source_freshness_record_from_observation(
             observation,
             virtual_environment_name=virtual_environment_name,

@@ -386,6 +386,40 @@ def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        BigQueryRenderTableFunctionTestCase(
+            description="quotes fully qualified function calls with hyphenated project ids",
+            expected_sql=(
+                "`project-d5f92072.europe_west2.customer_orders`(1)|"
+                "`project-d5f92072.europe_west2.is_completed_order`(status)"
+            ),
+        )
+    ],
+    ids=["quotes fully qualified function calls with hyphenated project ids"],
+)
+def test_given_bigquery_function_call_when_rendering_then_quotes_qualified_target(
+    test_case: BigQueryRenderTableFunctionTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    rendered_call: str = "|".join(
+        (
+            adapter.render_table_function_call(
+                target="project-d5f92072.europe_west2.customer_orders",
+                call_suffix_sql="(1)",
+            ),
+            adapter.render_udf_call(
+                target="project-d5f92072.europe_west2.is_completed_order",
+                call_suffix_sql="(status)",
+            ),
+        )
+    )
+
+    assert rendered_call == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
     BIGQUERY_SCHEMA_EXISTS_TEST_CASES,
     ids=[case.description for case in BIGQUERY_SCHEMA_EXISTS_TEST_CASES],
 )
