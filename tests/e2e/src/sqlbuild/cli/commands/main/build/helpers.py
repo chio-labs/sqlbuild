@@ -177,6 +177,61 @@ def prepare_direct_reuse_from_project(*, tmp_path: Path, project_name: str) -> P
     )
 
 
+def prepare_direct_snapshot_reuse_from_project(*, tmp_path: Path, project_name: str) -> Path:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[targets.prod]\n"
+                'schema = "prod"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n'
+                'reuse_from = "prod"\n'
+                "reuse_hard_copy = true\n"
+            ),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_accounts
+                    schema: raw
+                    table: raw_accounts
+                """
+            ).strip()
+            + "\n",
+            "models/account_snapshot.sql": dedent(
+                """
+                MODEL (
+                  materialized snapshot,
+                  unique_key [account_id],
+                  snapshot_strategy timestamp,
+                  updated_at updated_at
+                );
+
+                SELECT account_id, plan, updated_at FROM __source("raw_accounts")
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_accounts AS
+            SELECT 1 AS account_id, 'basic' AS plan, TIMESTAMP '2024-01-01 00:00:00' AS updated_at;
+            """
+        ).strip(),
+    )
+    return project_dir
+
+
 def write_direct_changes_only_stg_orders(*, project_dir: Path, amount_cents: int) -> None:
     (project_dir / "models" / "stg_orders.sql").write_text(
         direct_changes_only_stg_orders_sql(amount_cents=amount_cents),

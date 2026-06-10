@@ -14,9 +14,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_direct_changes_only_two_model_project,
     prepare_direct_reuse_from_project,
+    prepare_direct_snapshot_reuse_from_project,
     write_direct_changes_only_stg_orders,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     query_duckdb,
     run_sqb,
 )
@@ -178,3 +180,63 @@ def test_given_reuse_from_target_when_building_dev_then_copies_prod_relation(
         )
         == prod_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectReuseFromBuildE2ETestCase(
+            description="dev build reuses prod snapshot relation and catches up",
+            project_name="direct_reuse_from_build_seeds_snapshot",
+            expected_prod_build_exit_code=0,
+            expected_dev_build_exit_code=0,
+        )
+    ],
+    ids=["dev build reuses prod snapshot relation and catches up"],
+)
+def test_given_reuse_from_target_when_building_dev_snapshot_then_seeds_and_catches_up(
+    test_case: DirectReuseFromBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_direct_snapshot_reuse_from_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert prod_result.returncode == test_case.expected_prod_build_exit_code, (
+        prod_result.stdout + prod_result.stderr
+    )
+
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE OR REPLACE TABLE raw.raw_accounts AS "
+            "SELECT 1 AS account_id, 'pro' AS plan, "
+            "TIMESTAMP '2024-01-03 00:00:00' AS updated_at "
+            "UNION ALL SELECT 2 AS account_id, 'basic' AS plan, "
+            "TIMESTAMP '2024-01-02 00:00:00' AS updated_at"
+        ),
+    )
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+    dev_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
+        dev_result.stdout + dev_result.stderr
+    )
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT account_id, plan, CAST(valid_from AS VARCHAR), CAST(valid_to AS VARCHAR) "
+            "FROM dev.account_snapshot ORDER BY account_id, valid_from"
+        ),
+    ) == [
+        (1, "basic", "2024-01-01 00:00:00", "2024-01-03 00:00:00"),
+        (1, "pro", "2024-01-03 00:00:00", None),
+        (2, "basic", "2024-01-02 00:00:00", None),
+    ]

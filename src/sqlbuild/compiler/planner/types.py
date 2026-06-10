@@ -62,7 +62,6 @@ class SchemaColumnSource(StrEnum):
 class PlanAction(StrEnum):
     CREATE_VIEW = "create_view"
     CREATE_TABLE = "create_table"
-    REUSE_RELATION = "reuse_relation"
     INCREMENTAL_APPEND = "incremental_append"
     INCREMENTAL_DELETE_INSERT = "incremental_delete_insert"
     INCREMENTAL_MERGE = "incremental_merge"
@@ -93,6 +92,11 @@ class StandardReuseDecisionKind(StrEnum):
     REUSE_ORIGIN_VERSION_MISMATCH = "reuse_origin_version_mismatch"
     REUSE_FROM_SOURCE_FRESHNESS_STALE = "reuse_from_source_freshness_stale"
     INELIGIBLE_MATERIALIZATION = "ineligible_materialization"
+
+
+class RelationReuseKind(StrEnum):
+    COMPLETE_RELATION_REUSE = "complete_relation_reuse"
+    SEEDED_RELATION_REUSE = "seeded_relation_reuse"
 
 
 class IncrementalStrategy(StrEnum):

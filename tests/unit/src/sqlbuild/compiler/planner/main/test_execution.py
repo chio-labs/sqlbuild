@@ -22,7 +22,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     StandardModelVersionIdentities,
 )
-from sqlbuild.compiler.planner.types import PlanAction
+from sqlbuild.compiler.planner.types import PlanAction, RelationReuseKind
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_project,
@@ -143,17 +143,19 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
         StandardReuseFromTargetPlanOutputTestCase(
             description="execution plan carries standard reuse_from metadata",
             expected_reuse_from_target_name="prod",
-            expected_model_names=("customers", "line_items", "orders"),
-            expected_reuse_eligible_names=("line_items", "orders"),
+            expected_model_names=("account_snapshot", "customers", "line_items", "orders"),
+            expected_reuse_eligible_names=("account_snapshot", "line_items", "orders"),
             expected_decisions={
+                "account_snapshot": "reuse_eligible",
                 "customers": "reuse_origin_fingerprint_missing",
                 "line_items": "reuse_eligible",
                 "orders": "reuse_eligible",
             },
             expected_actions={
+                "account_snapshot": PlanAction.SNAPSHOT.value,
                 "customers": PlanAction.CREATE_TABLE.value,
                 "line_items": PlanAction.INCREMENTAL_APPEND.value,
-                "orders": PlanAction.REUSE_RELATION.value,
+                "orders": PlanAction.CREATE_TABLE.value,
             },
         )
     ],
@@ -219,8 +221,33 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 render_qualified_name=adapter.render_qualified_name,
             ),
         )
+        adapter.execute(
+            connection,
+            build_insert_sql(
+                database=None,
+                schema="prod_schema",
+                model_name="account_snapshot",
+                target_database=None,
+                target_schema="prod_schema",
+                target_name="account_snapshot",
+                run_id="run_1",
+                query_hash="query_hash",
+                version_hash=version_identities.model_version_hashes["account_snapshot"],
+                schema_fingerprint="schema_hash",
+                query_sql="SELECT 1 AS account_id, CURRENT_TIMESTAMP AS updated_at",
+                metadata_json="{}",
+                ts="2026-01-01T00:00:00+00:00",
+                render_qualified_name=adapter.render_qualified_name,
+            ),
+        )
         adapter.execute(connection, "CREATE TABLE prod_schema.orders AS SELECT 1 AS id")
         adapter.execute(connection, "CREATE TABLE prod_schema.line_items AS SELECT 1 AS id")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod_schema.account_snapshot AS "
+            "SELECT 1 AS account_id, TIMESTAMP '2026-01-01 00:00:00' AS updated_at, "
+            "TIMESTAMP '2026-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
+        )
 
         plan_output: PlanOutput = build_execution_plan(
             project=project,
@@ -277,14 +304,23 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
         (entry for entry in plan_output.model_entries if entry.name == "orders"), None
     )
     assert reuse_entry is not None
-    assert reuse_entry.reuse_origin is not None
-    assert reuse_entry.reuse_origin.qualified_name == "prod_schema.orders"
+    assert reuse_entry.relation_reuse is not None
+    assert reuse_entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
+    assert reuse_entry.relation_reuse.origin.qualified_name == "prod_schema.orders"
     seed_entry: ModelPlanEntry | None = next(
         (entry for entry in plan_output.model_entries if entry.name == "line_items"), None
     )
     assert seed_entry is not None
-    assert seed_entry.reuse_origin is not None
-    assert seed_entry.reuse_origin.qualified_name == "prod_schema.line_items"
+    assert seed_entry.relation_reuse is not None
+    assert seed_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+    assert seed_entry.relation_reuse.origin.qualified_name == "prod_schema.line_items"
+    snapshot_entry: ModelPlanEntry | None = next(
+        (entry for entry in plan_output.model_entries if entry.name == "account_snapshot"), None
+    )
+    assert snapshot_entry is not None
+    assert snapshot_entry.relation_reuse is not None
+    assert snapshot_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+    assert snapshot_entry.relation_reuse.origin.qualified_name == "prod_schema.account_snapshot"
 
 
 @pytest.mark.parametrize(

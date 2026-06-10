@@ -42,6 +42,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
                 "version_mismatch": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
                 "ineligible_view": StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value,
                 "incremental_candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
+                "snapshot_candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
                 "ineligible_custom": StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value,
                 "missing_expected": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
                 "current_reuse_from_missing": StandardReuseDecisionKind.CURRENT.value,
@@ -65,6 +66,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
             "version_mismatch": "expected",
             "ineligible_view": "expected",
             "incremental_candidate": "expected",
+            "snapshot_candidate": "expected",
             "ineligible_custom": "expected",
             "current_reuse_from_missing": "expected",
         },
@@ -100,6 +102,9 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 ),
                 "incremental_candidate": build_standard_reuse_origin_snapshot(
                     model_name="incremental_candidate"
+                ),
+                "snapshot_candidate": build_standard_reuse_origin_snapshot(
+                    model_name="snapshot_candidate"
                 ),
                 "ineligible_custom": build_standard_reuse_origin_snapshot(
                     model_name="ineligible_custom"

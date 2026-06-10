@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
     ScenarioArtifactKind,
     SchemaActionKind,
     SchemaChangeKind,
@@ -337,6 +338,15 @@ class StandardReuseDecisionResults:
 
 
 @dataclass(frozen=True)
+class StandardReusePlanningResult:
+    """Complete planner-side standard reuse analysis for one plan build."""
+
+    snapshot: StandardReuseFromTargetSnapshot
+    decisions: StandardReuseDecisionResults
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
+
+
+@dataclass(frozen=True)
 class PlannerModelEntryResults:
     """Model plan-entry phase output."""
 
@@ -361,6 +371,18 @@ class PlanWarning:
     severity: WarningSeverity
     message: str
     code: str | None = None
+
+
+@dataclass(frozen=True)
+class RelationReusePlan:
+    """Execution metadata for copying or cloning an origin relation."""
+
+    kind: RelationReuseKind
+    origin: CompiledRelationLocation
+    reuse_from_target_name: str
+    hard_copy: bool
+    fingerprint_database: str | None
+    fingerprint_schema: str
 
 
 @dataclass(frozen=True)
@@ -420,11 +442,46 @@ class ModelPlanEntry:
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
-    reuse_origin: CompiledRelationLocation | None = None
-    reuse_hard_copy: bool = False
-    reuse_from_target_name: str | None = None
-    reuse_origin_fingerprint_database: str | None = None
-    reuse_origin_fingerprint_schema: str | None = None
+    relation_reuse: RelationReusePlan | None = None
+
+    def __post_init__(self) -> None:
+        if self.relation_reuse is None:
+            return
+        if self.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE:
+            if self.materialization_type != MaterializationType.TABLE:
+                raise PlannerInputError(
+                    f"model '{self.name}' complete relation reuse requires table materialization"
+                )
+            if self.action != PlanAction.CREATE_TABLE:
+                raise PlannerInputError(
+                    f"model '{self.name}' complete relation reuse requires create_table action"
+                )
+            return
+        if self.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE:
+            if self.materialization_type not in {
+                MaterializationType.INCREMENTAL,
+                MaterializationType.SNAPSHOT,
+            }:
+                raise PlannerInputError(
+                    f"model '{self.name}' seeded relation reuse requires "
+                    "incremental or snapshot materialization"
+                )
+            incremental_actions: frozenset[PlanAction] = frozenset(
+                {
+                    PlanAction.INCREMENTAL_APPEND,
+                    PlanAction.INCREMENTAL_DELETE_INSERT,
+                    PlanAction.INCREMENTAL_MERGE,
+                }
+            )
+            snapshot_action: bool = (
+                self.materialization_type == MaterializationType.SNAPSHOT
+                and self.action == PlanAction.SNAPSHOT
+            )
+            if not snapshot_action and self.action not in incremental_actions:
+                raise PlannerInputError(
+                    f"model '{self.name}' seeded relation reuse requires an incremental "
+                    "or snapshot action"
+                )
 
 
 @dataclass(frozen=True)

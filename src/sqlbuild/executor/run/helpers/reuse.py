@@ -8,7 +8,9 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import FingerprintSet
+from sqlbuild.compiler.planner.models import RelationReusePlan
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 
 
 def create_relation_from_reuse_origin(
@@ -41,6 +43,40 @@ def create_relation_from_reuse_origin(
         origin=origin_relation,
         destination=destination_relation,
         hard_copy=False,
+        statement_recorder=statement_recorder,
+    )
+
+
+def create_relation_from_reuse_plan(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    model_name: str,
+    expected_version_hash: str | None,
+    relation_reuse: RelationReusePlan,
+    destination_relation: str,
+    statement_recorder: StatementRecorder,
+) -> None:
+    """Validate and create a concrete destination relation from a reuse plan."""
+
+    validate_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        model_name=model_name,
+        expected_version_hash=expected_version_hash,
+        reuse_from_target_name=relation_reuse.reuse_from_target_name,
+        reuse_origin_fingerprint_database=relation_reuse.fingerprint_database,
+        reuse_origin_fingerprint_schema=relation_reuse.fingerprint_schema,
+    )
+    create_relation_from_reuse_origin(
+        adapter=adapter,
+        connection=connection,
+        origin_relation=resolve_relation_location_qualified_name(
+            adapter=adapter,
+            location=relation_reuse.origin,
+        ),
+        destination_relation=destination_relation,
+        hard_copy=relation_reuse.hard_copy,
         statement_recorder=statement_recorder,
     )
 

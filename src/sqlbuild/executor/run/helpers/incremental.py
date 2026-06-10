@@ -11,7 +11,7 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
-from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
+from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
@@ -22,10 +22,10 @@ from sqlbuild.executor.run.helpers.cursor_bounds import (
 )
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.results import build_failed_result
 from sqlbuild.executor.run.helpers.reuse import (
-    create_relation_from_reuse_origin,
-    validate_reuse_origin_fingerprint,
+    create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
@@ -68,20 +68,19 @@ def execute_incremental_entry(
     target_qualified: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )
-    reuse_origin_relation: str | None = (
-        resolve_relation_location_qualified_name(
-            adapter=adapter,
-            location=entry.reuse_origin,
-        )
-        if entry.reuse_origin is not None
-        else None
-    )
     delta_table: str = f"{target_table}__delta"
     delta_qualified: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=target_database,
         schema=target_schema,
         name=delta_table,
+    )
+    seed_table: str = f"{target_table}__reuse_seed"
+    seed_qualified: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=target_database,
+        schema=target_schema,
+        name=seed_table,
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
@@ -129,28 +128,33 @@ def execute_incremental_entry(
             schema=target_schema,
             statement_recorder=statement_recorder,
         )
-        if reuse_origin_relation is not None:
-            validate_reuse_origin_fingerprint(
+        if (
+            entry.relation_reuse is not None
+            and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+        ):
+            adapter.drop(
+                connection,
+                destination=seed_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            create_relation_from_reuse_plan(
                 adapter=adapter,
                 connection=connection,
                 model_name=entry.name,
                 expected_version_hash=entry.fingerprint_version_hash,
-                reuse_from_target_name=entry.reuse_from_target_name,
-                reuse_origin_fingerprint_database=entry.reuse_origin_fingerprint_database,
-                reuse_origin_fingerprint_schema=entry.reuse_origin_fingerprint_schema,
-            )
-            adapter.drop(
-                connection,
-                destination=target_qualified,
-                if_exists=True,
+                relation_reuse=entry.relation_reuse,
+                destination_relation=seed_qualified,
                 statement_recorder=statement_recorder,
             )
-            create_relation_from_reuse_origin(
+            promote_relation_to_destination(
                 adapter=adapter,
                 connection=connection,
-                origin_relation=reuse_origin_relation,
+                origin_relation=seed_qualified,
                 destination_relation=target_qualified,
-                hard_copy=entry.reuse_hard_copy,
+                destination_database=target_database,
+                destination_schema=target_schema,
+                destination_name=target_table,
                 statement_recorder=statement_recorder,
             )
         if runtime_owned_cursor_bounds:
