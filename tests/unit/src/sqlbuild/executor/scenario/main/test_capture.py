@@ -107,7 +107,7 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                 ColumnInfo(name="amount", type="DECIMAL(10,2)"),
             )
         if "__sqb_51b385aebe20__ref__stg_customers" in relation:
-            return (ColumnInfo(name="customer_id", type="NUMBER"),)
+            return (ColumnInfo(name="customer_id", type="DECIMAL(38,0)"),)
         if "__sqb_51b385aebe20__seed__country_codes" in relation:
             return (ColumnInfo(name="country_code", type="VARCHAR"),)
         raise RuntimeError(f"unexpected describe: {relation}")
@@ -157,8 +157,8 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
                             columns=(
                                 ScenarioSnapshotColumn(
                                     name="customer_id",
-                                    warehouse_type="NUMBER",
-                                    local_type="DECIMAL",
+                                    warehouse_type="DECIMAL(38,0)",
+                                    local_type="DECIMAL(38, 0)",
                                 ),
                             ),
                         ),

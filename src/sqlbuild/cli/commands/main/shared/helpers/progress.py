@@ -428,7 +428,7 @@ class BuildProgressCallbacks:
             audit_name: str = _truncate_name(entry.display_name, sub_nw)
             audit_detail: str = ""
             if entry.reused:
-                audit_detail = "  reused"
+                audit_detail = "  proof reused"
             if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
                 row_label: str = "row" if entry.total_row_count == 1 else "rows"
                 audit_detail = f"  {entry.total_row_count} {row_label}"

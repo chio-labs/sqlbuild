@@ -225,15 +225,15 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
     "test_case",
     [
         RunE2ETestCase(
-            description="run changes-only appends source freshness after success",
+            description="run changes-only reads source freshness written by normal run",
             expected_exit_code=0,
             expected_table_names=("orders",),
             expected_view_names=(),
         )
     ],
-    ids=["run changes-only appends source freshness after success"],
+    ids=["run changes-only reads normal-run source freshness state"],
 )
-def test_given_source_freshness_when_running_changes_only_then_writes_state_after_success(
+def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_state(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -277,7 +277,8 @@ def test_given_source_freshness_when_running_changes_only_then_writes_state_afte
     assert run_result.returncode == test_case.expected_exit_code, (
         run_result.stdout + run_result.stderr
     )
-    assert "Plan ready (1 selected)" in run_result.stdout
+    assert "Plan ready (0 selected)" in run_result.stdout
+    assert "TOTAL=0" in run_result.stdout
     assert table_exists(
         db_path=project_dir / "warehouse.duckdb",
         table_name="_sqlbuild_source_freshness",
@@ -473,15 +474,15 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
     "test_case",
     [
         RunE2ETestCase(
-            description="run changes-only source freshness propagates through view downstream",
+            description="run changes-only skips view chain when source freshness is unchanged",
             expected_exit_code=0,
             expected_table_names=("fact_orders",),
             expected_view_names=("stg_orders",),
         )
     ],
-    ids=["run changes-only source freshness propagates through view downstream"],
+    ids=["run changes-only skips view chain when source freshness is unchanged"],
 )
-def test_given_source_freshness_view_chain_when_running_changes_only_then_executes_downstream(
+def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_downstream(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -528,9 +529,8 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_execut
     assert run_result.returncode == test_case.expected_exit_code, (
         run_result.stdout + run_result.stderr
     )
-    assert "Plan ready (2 selected)" in run_result.stdout
-    assert "stg_orders" in run_result.stdout
-    assert "fact_orders" in run_result.stdout
+    assert "Plan ready (0 selected)" in run_result.stdout
+    assert "TOTAL=0" in run_result.stdout
     assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name="stg_orders")
     assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name="fact_orders")
 

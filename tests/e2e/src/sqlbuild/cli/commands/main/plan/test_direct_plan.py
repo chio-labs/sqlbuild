@@ -735,23 +735,21 @@ def test_given_built_direct_project_when_planning_changes_only_json_then_selecte
     "test_case",
     [
         DirectPlanE2ETestCase(
-            description="standard changes-only observes freshness without writing state",
+            description="standard changes-only observes freshness written by normal build",
             expected_fragments=(
-                "Plan ready (1 selected)",
+                "Plan ready (0 selected)",
                 "Source freshness",
                 "observed: 1",
-                "changed: 1",
-                "source-stale models: orders",
-                "orders",
+                "changed: 0",
+                "unchanged: 1",
+                "unchanged set: raw_orders",
             ),
-            unexpected_fragments=("Plan ready (0 selected)",),
+            unexpected_fragments=("source-stale models: orders",),
         )
     ],
-    ids=[
-        "standard changes-only plan conservatively keeps source-stale model without writing state"
-    ],
+    ids=["standard changes-only plan reads normal-build source freshness state"],
 )
-def test_given_observable_source_freshness_when_planning_changes_only_then_does_not_write_state(
+def test_given_observable_source_freshness_when_planning_changes_only_then_reads_build_state(
     test_case: DirectPlanE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -794,7 +792,7 @@ def test_given_observable_source_freshness_when_planning_changes_only_then_does_
     fragment: str
     for fragment in test_case.expected_fragments:
         assert fragment in plan_result.stdout, plan_result.stdout
-    assert not table_exists(
+    assert table_exists(
         db_path=project_dir / "warehouse.duckdb",
         table_name="_sqlbuild_source_freshness",
     )
@@ -808,9 +806,10 @@ def test_given_observable_source_freshness_when_planning_changes_only_then_does_
     payload: dict[str, Any] = json.loads(json_plan_result.stdout)
     source_metadata: dict[str, Any] = payload["metadata"]["standard_source_freshness"]
     assert source_metadata["observed_source_names"] == ["raw_orders"]
-    assert source_metadata["changed_source_names"] == ["raw_orders"]
+    assert source_metadata["changed_source_names"] == []
+    assert source_metadata["unchanged_source_names"] == ["raw_orders"]
     assert source_metadata["unknown_source_names"] == []
-    assert source_metadata["stale_model_names"] == ["orders"]
+    assert source_metadata["stale_model_names"] == []
 
 
 @pytest.mark.parametrize(
@@ -916,20 +915,20 @@ def test_given_timestamp_lag_tolerance_when_planning_changes_only_then_skips_wit
     "test_case",
     [
         DirectPlanE2ETestCase(
-            description="standard source freshness propagates through view downstream",
+            description="standard source freshness skips view downstream when unchanged",
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready (0 selected)",
                 "Source freshness",
-                "source-stale models: fact_orders, stg_orders",
-                "stg_orders",
-                "fact_orders",
+                "changed: 0",
+                "unchanged: 1",
+                "unchanged set: raw_orders",
             ),
-            unexpected_fragments=("Plan ready (0 selected)",),
+            unexpected_fragments=("source-stale models: fact_orders, stg_orders",),
         )
     ],
-    ids=["standard source freshness propagates through view downstream"],
+    ids=["standard source freshness skips view downstream when unchanged"],
 )
-def test_given_source_freshness_view_chain_when_planning_changes_only_then_keeps_downstream(
+def test_given_source_freshness_view_chain_when_planning_changes_only_then_skips_downstream(
     test_case: DirectPlanE2ETestCase,
     tmp_path: Path,
 ) -> None:
