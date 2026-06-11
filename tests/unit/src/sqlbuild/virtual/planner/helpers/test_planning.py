@@ -40,6 +40,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
@@ -475,6 +476,93 @@ def test_given_seed_identity_change_when_comparing_bound_hashes_then_dependent_m
 
     assert bool(stale_model_names) is test_case.expected_hashes_differ
     assert stale_model_names == ("stg_orders", "fact_orders")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="old seed-composed bound model versions are stale",
+            upstream_query_sql='SELECT order_id FROM __source("raw.orders")',
+            downstream_query_sql="SELECT id FROM stg_orders",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["old seed-composed bound model versions are stale"],
+)
+def test_given_bound_model_versions_composed_with_old_seed_when_semantics_then_models_are_stale(
+    test_case: ExpectedVersionHashesTestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_seed_file: Path = tmp_path / "baseline_statuses.csv"
+    changed_seed_file: Path = tmp_path / "changed_statuses.csv"
+    baseline_seed_file.write_text("status\nplaced\n", encoding="utf-8")
+    changed_seed_file.write_text("status\nplaced\nshipped\n", encoding="utf-8")
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_seed_file_path=baseline_seed_file,
+    )
+    changed_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_seed_file_path=changed_seed_file,
+    )
+    baseline_local_hashes: dict[str, str] = build_expected_local_hashes(graph=baseline_graph)
+    source_records: tuple[SourceFreshnessRecord, ...] = (
+        SourceFreshnessRecord(
+            virtual_environment_name="dev",
+            source_name="raw.orders",
+            strategy="sql",
+            value_kind="integer",
+            data_version="1",
+            data_version_hash="source-hash",
+            observed_at=datetime(2026, 6, 11, tzinfo=UTC),
+        ),
+    )
+    source_version_hashes: dict[str, str] = build_source_version_hashes(source_records)
+    baseline_version_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=baseline_local_hashes,
+        source_version_hashes=source_version_hashes,
+    )
+    baseline_seed_hashes: dict[str, str] = build_expected_seed_version_hashes(graph=baseline_graph)
+
+    semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
+        graph=changed_graph,
+        bound_refs=tuple(
+            VirtualEnvironmentModelRefRecord(
+                virtual_environment_name="dev",
+                model_name=model.name,
+                version_hash=baseline_version_hashes[model.name],
+            )
+            for model in baseline_graph.project.models
+        ),
+        bound_model_versions={
+            model.name: ModelVersionRecord(
+                model_name=model.name,
+                version_hash=baseline_version_hashes[model.name],
+                definition_identity_hash=baseline_local_hashes[model.name],
+                identity_metadata_hash="metadata-hash",
+                status=ModelVersionStatus.READY,
+            )
+            for model in baseline_graph.project.models
+        },
+        bound_seed_refs=tuple(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name="dev",
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            for seed_name, version_hash in baseline_seed_hashes.items()
+        ),
+        source_freshness_records=source_records,
+    )
+
+    assert bool(semantics.stale_model_names) is test_case.expected_hashes_differ
+    assert semantics.stale_seed_names == ("order_statuses",)
+    assert semantics.stale_model_names == ("fact_orders", "stg_orders")
+    assert semantics.default_selection == ("fact_orders", "stg_orders")
 
 
 @pytest.mark.parametrize(
