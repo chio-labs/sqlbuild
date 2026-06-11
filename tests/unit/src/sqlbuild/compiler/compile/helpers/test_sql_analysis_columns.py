@@ -359,7 +359,7 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
                         ),
                     ),
                     transform_kind=ColumnTransformKind.DIRECT,
-                    confidence=ColumnLineageConfidence.MEDIUM,
+                    confidence=ColumnLineageConfidence.HIGH,
                 ),
             ),
             expected_has_star=False,
@@ -403,7 +403,7 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
                         ),
                     ),
                     transform_kind=ColumnTransformKind.DIRECT,
-                    confidence=ColumnLineageConfidence.MEDIUM,
+                    confidence=ColumnLineageConfidence.HIGH,
                 ),
             ),
             expected_has_star=False,
@@ -438,12 +438,200 @@ def test_given_compact_query_analysis_when_ast_parse_would_fail_then_returns_com
     assert has_star is test_case.expected_has_star
 
 
+COMPACT_ANALYSIS_NO_AST_TEST_CASES: list[PolyglotAnalysisTestCase] = [
+    PolyglotAnalysisTestCase(
+        description="uses compact analysis for aggregate transforms",
+        query_sql='SELECT COUNT(*) AS n, SUM(amount) AS total FROM __ref("orders")',
+        references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+        expected_columns=(InferredColumn(name="n"), InferredColumn(name="total")),
+        expected_lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="n",
+                upstream_columns=(),
+                transform_kind=ColumnTransformKind.AGGREGATION,
+                confidence=ColumnLineageConfidence.UNKNOWN,
+            ),
+            CompiledLineageColumnFact(
+                output_column="total",
+                upstream_columns=(
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="amount",
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.AGGREGATION,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+        ),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="uses compact analysis for expression transforms",
+        query_sql='SELECT amount + tax AS total FROM __ref("orders")',
+        references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+        expected_columns=(InferredColumn(name="total"),),
+        expected_lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="total",
+                upstream_columns=(
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="amount",
+                    ),
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="tax",
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.EXPRESSION,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+        ),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="uses compact analysis for cte lineage",
+        query_sql=('WITH base AS (SELECT order_id FROM __ref("orders")) SELECT order_id FROM base'),
+        references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+        expected_columns=(InferredColumn(name="order_id"),),
+        expected_lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="order_id",
+                upstream_columns=(
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="order_id",
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.DIRECT,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+        ),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="uses compact analysis for set operation branch lineage",
+        query_sql=(
+            'SELECT order_id FROM __ref("orders") UNION ALL SELECT return_id FROM __ref("returns")'
+        ),
+        references=(
+            CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            CompileSqlReference(SqlReferenceKind.REF, "returns"),
+        ),
+        expected_columns=(InferredColumn(name="order_id"),),
+        expected_lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="order_id",
+                upstream_columns=(
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="order_id",
+                    ),
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="returns",
+                        column_name="return_id",
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.DIRECT,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+        ),
+        expected_has_star=False,
+    ),
+    PolyglotAnalysisTestCase(
+        description="uses compact analysis for qualified stars",
+        query_sql=(
+            'SELECT o.* FROM __ref("orders") o JOIN __ref("customers") c ON o.customer_id = c.id'
+        ),
+        references=(
+            CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            CompileSqlReference(SqlReferenceKind.REF, "customers"),
+        ),
+        expected_columns=(),
+        expected_lineage_columns=(),
+        expected_has_star=True,
+    ),
+    PolyglotAnalysisTestCase(
+        description="uses compact schema metadata for unqualified column resolution",
+        query_sql=(
+            'SELECT amount FROM __ref("orders") o JOIN __ref("customers") c ON o.customer_id = c.id'
+        ),
+        references=(
+            CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            CompileSqlReference(SqlReferenceKind.REF, "customers"),
+        ),
+        column_nullability_by_table={
+            "orders": {
+                "amount": InferredNullability.UNKNOWN,
+                "customer_id": InferredNullability.UNKNOWN,
+            },
+            "customers": {"id": InferredNullability.UNKNOWN},
+        },
+        expected_columns=(InferredColumn(name="amount"),),
+        expected_lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="amount",
+                upstream_columns=(
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="amount",
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.DIRECT,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+        ),
+        expected_has_star=False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COMPACT_ANALYSIS_NO_AST_TEST_CASES,
+    ids=[case.description for case in COMPACT_ANALYSIS_NO_AST_TEST_CASES],
+)
+def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_analysis_facts(
+    test_case: PolyglotAnalysisTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    polyglot_module: object | None = import_polyglot_sql()
+    assert polyglot_module is not None
+
+    def raise_parse_error(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise AssertionError("AST parse should not be called")
+
+    monkeypatch.setattr(polyglot_module, "parse_one", raise_parse_error)
+
+    result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+    )
+
+    assert isinstance(result, tuple)
+    columns, lineage_columns, has_star = result
+    assert columns == test_case.expected_columns
+    assert lineage_columns == test_case.expected_lineage_columns
+    assert has_star is test_case.expected_has_star
+
+
 @pytest.mark.parametrize(
     "test_case",
     COMPACT_ANALYSIS_EQUIVALENCE_TEST_CASES,
     ids=[case.description for case in COMPACT_ANALYSIS_EQUIVALENCE_TEST_CASES],
 )
-def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast_fallback(
+def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast_facts(
     test_case: PolyglotAnalysisTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -471,7 +659,20 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
         references=test_case.references,
     )
 
-    assert compact_result == fallback_result
+    assert isinstance(fallback_result, tuple)
+    assert compact_result[0] == fallback_result[0]
+    assert compact_result[2] == fallback_result[2]
+    compact_lineage_columns: tuple[CompiledLineageColumnFact, ...] = compact_result[1]
+    fallback_lineage_columns: tuple[CompiledLineageColumnFact, ...] = fallback_result[1]
+    assert len(compact_lineage_columns) == len(fallback_lineage_columns)
+    for compact_fact, fallback_fact in zip(
+        compact_lineage_columns,
+        fallback_lineage_columns,
+        strict=True,
+    ):
+        assert compact_fact.output_column == fallback_fact.output_column
+        assert compact_fact.upstream_columns == fallback_fact.upstream_columns
+        assert compact_fact.transform_kind == fallback_fact.transform_kind
 
 
 SUBSTITUTE_PLACEHOLDER_TEST_CASES: list[SubstitutePlaceholderDefaultsTestCase] = [
