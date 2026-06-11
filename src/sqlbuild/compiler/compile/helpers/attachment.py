@@ -3244,6 +3244,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["batch_size"] = defaults.batch_size
     if defaults.replay_on_change is not None:
         values["replay_on_change"] = defaults.replay_on_change
+    if defaults.run_despite_unchanged is not None:
+        values["run_despite_unchanged"] = defaults.run_despite_unchanged
     if defaults.row_diff_exclude_columns:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
     if defaults.row_diff_tolerances:

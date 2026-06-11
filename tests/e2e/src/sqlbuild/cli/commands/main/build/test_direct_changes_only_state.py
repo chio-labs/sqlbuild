@@ -141,6 +141,148 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
 @pytest.mark.parametrize(
     "test_case",
     [
+        DirectChangesOnlyStateBuildE2ETestCase(
+            description="changes-only build runs table configured duration despite unchanged",
+            project_name="direct_build_run_despite_unchanged_duration",
+            initial_amount_cents=100,
+            changed_amount_cents=100,
+            expected_initial_amount_dollars=1.0,
+            expected_changed_amount_dollars=1.0,
+        )
+    ],
+    ids=["changes-only build runs table configured duration despite unchanged"],
+)
+def test_given_run_despite_unchanged_duration_when_building_changes_only_then_rebuilds_downstream(
+    test_case: DirectChangesOnlyStateBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id, 100 AS amount_cents\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: timestamp\n"
+                "      query: SELECT CURRENT_TIMESTAMP AS data_version\n"
+                "      lag_tolerance: 30d\n"
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged 30d);\n\n"
+                "SELECT order_id, amount_cents, CURRENT_TIMESTAMP AS refreshed_at "
+                'FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars, refreshed_at "
+                'FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    assert "Plan ready (2 selected)" in build_result.stdout
+    assert "table     rolling_orders" in build_result.stdout
+    assert "orders_mart" in build_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT amount_dollars FROM orders_mart ORDER BY order_id",
+    ) == [(test_case.expected_changed_amount_dollars,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyStateBuildE2ETestCase(
+            description=(
+                "scoped run_despite_unchanged build leaves downstream stale then catches up"
+            ),
+            project_name="direct_build_run_despite_unchanged_scoped",
+            initial_amount_cents=100,
+            changed_amount_cents=100,
+            expected_initial_amount_dollars=1.0,
+            expected_changed_amount_dollars=1.0,
+        )
+    ],
+    ids=["scoped run_despite_unchanged build leaves downstream stale then catches up"],
+)
+def test_given_scoped_run_despite_unchanged_build_when_building_later_then_downstream_catches_up(
+    test_case: DirectChangesOnlyStateBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id, 100 AS amount_cents\n"
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged always);\n\n"
+                "SELECT order_id, amount_cents, CURRENT_TIMESTAMP AS refreshed_at "
+                'FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars, refreshed_at "
+                'FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    scoped_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only", "--select", "rolling_orders"),
+        project_dir=project_dir,
+    )
+    assert scoped_result.returncode == 0, scoped_result.stdout + scoped_result.stderr
+    assert "Plan ready (1 selected)" in scoped_result.stdout
+
+    later_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert later_result.returncode == 0, later_result.stdout + later_result.stderr
+    assert "Plan ready (2 selected)" in later_result.stdout
+    assert "orders_mart" in later_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT amount_dollars FROM orders_mart ORDER BY order_id",
+    ) == [(test_case.expected_changed_amount_dollars,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DirectReuseFromBuildE2ETestCase(
             description="dev build reuses prod table relation",
             project_name="direct_reuse_from_build_copies_prod_relation",

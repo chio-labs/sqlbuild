@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -19,6 +20,7 @@ from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner.helpers.changes_only import (
     build_standard_identity_stale_model_names,
+    mark_run_despite_unchanged_actions,
     mark_version_identity_stale_actions,
     prune_unchanged_scope,
 )
@@ -27,6 +29,9 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_planner_relations_context,
 )
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
+from sqlbuild.compiler.planner.helpers.run_despite_unchanged import (
+    build_run_despite_unchanged_planning_result,
+)
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.source_freshness import (
     build_planner_source_freshness_result,
@@ -51,6 +56,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerResolvedActions,
     PlannerScope,
     PlanOutput,
+    RunDespiteUnchangedPlanningResult,
     StandardReusePlanningResult,
     WarehouseSnapshot,
 )
@@ -178,11 +184,31 @@ def build_execution_plan(
                 },
             )
         )
+        source_stale_model_names: frozenset[str] = (
+            source_freshness.propagation.stale_model_names
+            if source_freshness.propagation is not None
+            else frozenset()
+        )
+        run_despite_unchanged: RunDespiteUnchangedPlanningResult = (
+            build_run_despite_unchanged_planning_result(
+                scope=scope,
+                source_freshness=source_freshness,
+                already_stale_model_names=(
+                    standard_identity_stale_model_names | source_stale_model_names
+                ),
+                now=(
+                    source_freshness.observed_records[0].observed_at
+                    if source_freshness.observed_records
+                    else datetime.now(UTC)
+                ),
+            )
+        )
         scope = prune_unchanged_scope(
             scope=scope,
             changes=changes,
             resolved_actions=resolved_actions,
             source_freshness=source_freshness,
+            run_despite_unchanged=run_despite_unchanged,
             expected_version_hashes=version_identities.model_version_hashes,
         )
         resolved_actions = mark_version_identity_stale_actions(
@@ -190,8 +216,14 @@ def build_execution_plan(
             resolved_actions=resolved_actions,
             expected_version_hashes=version_identities.model_version_hashes,
         )
+        resolved_actions = mark_run_despite_unchanged_actions(
+            scope=scope,
+            resolved_actions=resolved_actions,
+            run_despite_unchanged=run_despite_unchanged,
+        )
     else:
         standard_identity_stale_model_names = frozenset()
+        run_despite_unchanged = RunDespiteUnchangedPlanningResult()
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
@@ -202,6 +234,7 @@ def build_execution_plan(
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
         standard_reuse_decisions=(standard_reuse.decisions if standard_reuse is not None else None),
+        run_despite_unchanged=run_despite_unchanged,
         custom_prepare_version_materializations=custom_prepare_version_materializations,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -219,7 +252,7 @@ def build_execution_plan(
     if source_freshness is not None:
         standard_remaining_stale_model_names: tuple[str, ...] = tuple(
             sorted(
-                standard_identity_stale_model_names
+                (standard_identity_stale_model_names | run_despite_unchanged.stale_model_names)
                 - frozenset(
                     key.name
                     for key in scope.selected_keys
@@ -236,6 +269,9 @@ def build_execution_plan(
                     source_freshness
                 ),
                 "standard_remaining_stale_model_names": standard_remaining_stale_model_names,
+                "standard_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
+                    run_despite_unchanged
+                ),
             },
         )
     if standard_reuse is not None:
@@ -273,4 +309,22 @@ def _serialize_standard_source_freshness_metadata(
         "unchanged_source_names": unchanged_source_names,
         "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
         "stale_model_names": stale_model_names,
+    }
+
+
+def _serialize_run_despite_unchanged_metadata(
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult,
+) -> dict[str, object]:
+    return {
+        "root_model_names": tuple(sorted(run_despite_unchanged.root_model_names)),
+        "stale_model_names": tuple(sorted(run_despite_unchanged.stale_model_names)),
+        "decisions": {
+            model_name: {
+                "mode": decision.mode.value,
+                "duration": decision.duration,
+                "newest_source_name": decision.newest_source_name,
+                "newest_source_data_age_seconds": (decision.newest_source_data_age_seconds),
+            }
+            for model_name, decision in sorted(run_despite_unchanged.decisions.items())
+        },
     }

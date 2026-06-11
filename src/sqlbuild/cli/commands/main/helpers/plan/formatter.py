@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
+    RunDespiteUnchangedDecision,
     SchemaFinding,
     SourceLoadPlanEntry,
 )
@@ -39,6 +40,7 @@ _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
     PlanReason.CONFIG_CHANGED,
     PlanReason.SCHEMA_CHANGED,
+    PlanReason.RUN_DESPITE_UNCHANGED,
     PlanReason.FIRST_RUN,
 )
 
@@ -46,6 +48,7 @@ _REASON_GROUP_LABELS: dict[PlanReason, str] = {
     PlanReason.QUERY_CHANGED: "Query changed",
     PlanReason.CONFIG_CHANGED: "Config changed",
     PlanReason.SCHEMA_CHANGED: "Schema changed",
+    PlanReason.RUN_DESPITE_UNCHANGED: "Runs despite unchanged",
     PlanReason.FIRST_RUN: "First run",
 }
 
@@ -673,6 +676,7 @@ def _format_detail_entry(
         show_range=entry.backfill.action != BackfillAction.FULL,
     )
     _append_policy_line(lines, entry)
+    _append_run_despite_unchanged_detail(lines, entry)
     _append_schema_diff(lines, entry)
     _append_config_diff(lines, entry)
     _append_query_diff(lines, entry)
@@ -798,6 +802,8 @@ def _cascade_cause_description(cascade: CascadeResult) -> str:
     """Format the cause line content for an upstream-changed entry."""
 
     root: str = cascade.root_cause or "unknown"
+    if cascade.root_reason == PlanReason.RUN_DESPITE_UNCHANGED:
+        return f"{root} ran despite unchanged inputs"
     if cascade.root_reason is not None:
         reason_text: str = _plan_reason_text(cascade.root_reason)
         if reason_text:
@@ -827,7 +833,32 @@ def _plan_reason_text(reason: PlanReason) -> str:
         return "first run"
     if reason == PlanReason.FULL_REFRESH:
         return "full refresh"
+    if reason == PlanReason.RUN_DESPITE_UNCHANGED:
+        return "ran despite unchanged inputs"
     return ""
+
+
+def _append_run_despite_unchanged_detail(lines: list[str], entry: ModelPlanEntry) -> None:
+    decision: RunDespiteUnchangedDecision | None = entry.run_despite_unchanged
+    if decision is None:
+        return
+    detail: str = decision.duration or decision.mode.value
+    lines.append(f"    run_despite_unchanged: {detail}")
+    if decision.newest_source_data_age_seconds is not None:
+        lines.append(
+            "    newest source data age: "
+            f"{_format_age_seconds(decision.newest_source_data_age_seconds)}"
+        )
+
+
+def _format_age_seconds(age_seconds: int) -> str:
+    if age_seconds % 86400 == 0:
+        return f"{age_seconds // 86400}d"
+    if age_seconds % 3600 == 0:
+        return f"{age_seconds // 3600}h"
+    if age_seconds % 60 == 0:
+        return f"{age_seconds // 60}m"
+    return f"{age_seconds}s"
 
 
 def _schema_change_suffix(entry: ModelPlanEntry) -> str:

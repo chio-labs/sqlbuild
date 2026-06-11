@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
+    RunDespiteUnchangedDecision,
     SeedPlanEntry,
     SourceLoadPlanEntry,
 )
@@ -194,6 +195,14 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
             "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
             "origin_relation": entry.relation_reuse.origin.qualified_name,
             "hard_copy": entry.relation_reuse.hard_copy,
+        }
+    if entry.run_despite_unchanged is not None:
+        decision: RunDespiteUnchangedDecision = entry.run_despite_unchanged
+        model["run_despite_unchanged"] = {
+            "mode": decision.mode.value,
+            "duration": decision.duration,
+            "newest_source_name": decision.newest_source_name,
+            "newest_source_data_age_seconds": decision.newest_source_data_age_seconds,
         }
 
     return model

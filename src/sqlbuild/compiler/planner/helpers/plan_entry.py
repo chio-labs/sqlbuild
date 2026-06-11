@@ -60,6 +60,8 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
     RelationReusePlan,
     ResolvedModelAction,
+    RunDespiteUnchangedDecision,
+    RunDespiteUnchangedPlanningResult,
     SchemaAction,
     StandardReuseDecisionResults,
     StandardReuseModelDecision,
@@ -210,6 +212,7 @@ def build_plan_entries(
     cursor_overrides: CursorOverrides | None,
     full_refresh: bool,
     standard_reuse_decisions: StandardReuseDecisionResults | None = None,
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
@@ -260,6 +263,12 @@ def build_plan_entries(
         )
         if resolved.cascade is not None:
             entry = replace(entry, cascade=resolved.cascade)
+        if run_despite_unchanged is not None:
+            run_decision: RunDespiteUnchangedDecision | None = run_despite_unchanged.decisions.get(
+                entry.name
+            )
+            if run_decision is not None:
+                entry = replace(entry, run_despite_unchanged=run_decision)
         reuse_decision: StandardReuseModelDecision | None = (
             standard_reuse_decisions.models.get(entry.name)
             if standard_reuse_decisions is not None

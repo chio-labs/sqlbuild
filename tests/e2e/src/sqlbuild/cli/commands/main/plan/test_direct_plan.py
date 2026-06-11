@@ -1041,6 +1041,373 @@ def test_given_unknown_source_freshness_when_planning_changes_only_then_keeps_do
     "test_case",
     [
         DirectPlanE2ETestCase(
+            description="run_despite_unchanged duration keeps recent rolling table and downstream",
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "run_despite_unchanged: 30d",
+                "newest source data age:",
+                "Upstream changed (1)",
+                "orders_mart",
+                "cause: rolling_orders ran despite unchanged inputs",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["run_despite_unchanged duration keeps recent rolling table and downstream"],
+)
+def test_given_recent_source_data_when_planning_changes_only_then_runs_despite_unchanged(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_despite_unchanged_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_despite_unchanged_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: timestamp\n"
+                "      query: SELECT CURRENT_TIMESTAMP AS data_version\n"
+                "      lag_tolerance: 30d\n"
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged 30d);\n\n"
+                'SELECT order_id, CURRENT_TIMESTAMP AS refreshed_at FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, refreshed_at FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
+
+    json_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--changes-only", "--json"),
+        project_dir=project_dir,
+    )
+    assert json_plan_result.returncode == 0, json_plan_result.stdout + json_plan_result.stderr
+    payload: dict[str, Any] = json.loads(json_plan_result.stdout)
+    models: dict[str, dict[str, Any]] = {str(model["name"]): model for model in payload["models"]}
+    decision: dict[str, Any] = models["rolling_orders"]["run_despite_unchanged"]
+    assert models["rolling_orders"]["reason"] == "run_despite_unchanged"
+    assert decision["mode"] == "duration"
+    assert decision["duration"] == "30d"
+    assert decision["newest_source_name"] == "raw_orders"
+    assert isinstance(decision["newest_source_data_age_seconds"], int)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="expired run_despite_unchanged duration keeps unchanged table skipped",
+            expected_fragments=("Plan ready (0 selected)", "Source freshness"),
+            unexpected_fragments=("Runs despite unchanged", "rolling_orders"),
+        )
+    ],
+    ids=["expired run_despite_unchanged duration skips unchanged table"],
+)
+def test_given_old_source_data_when_planning_changes_only_then_skips_unchanged_table(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_despite_unchanged_expired_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_despite_unchanged_expired_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: timestamp\n"
+                "      query: SELECT CAST('2000-01-01 00:00:00' AS TIMESTAMP) AS data_version\n"
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged 30d);\n\n"
+                'SELECT order_id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="run_despite_unchanged duration fails without timestamp source freshness",
+            expected_fragments=(
+                "run_despite_unchanged = 30d",
+                "cannot determine upstream source freshness age",
+                "Configure timestamp source freshness",
+            ),
+            unexpected_fragments=("Plan ready",),
+        )
+    ],
+    ids=["run_despite_unchanged duration fails without timestamp source freshness"],
+)
+def test_given_duration_without_source_freshness_when_planning_changes_only_then_fails(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_despite_unchanged_missing_freshness_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_despite_unchanged_missing_freshness_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS order_id\n"
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged 30d);\n\n"
+                'SELECT order_id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    output: str = plan_result.stdout + plan_result.stderr
+
+    assert plan_result.returncode != 0, output
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="run_despite_unchanged default applies to table model",
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "run_despite_unchanged: always",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["run_despite_unchanged default applies to table model"],
+)
+def test_given_run_despite_unchanged_default_when_planning_changes_only_then_runs_table(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_despite_unchanged_default_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_despite_unchanged_default_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[defaults]\n"
+                'run_despite_unchanged = "always"\n'
+            ),
+            "models/rolling_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id\n"),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="path default run_despite_unchanged applies to matching table",
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "run_despite_unchanged: always",
+            ),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["path default run_despite_unchanged applies to matching table"],
+)
+def test_given_run_despite_unchanged_path_default_when_planning_then_runs_matching_table(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_despite_unchanged_path_default_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_despite_unchanged_path_default_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                '[path_defaults."rolling"]\n'
+                'run_despite_unchanged = "always"\n'
+            ),
+            "models/rolling/rolling_orders.sql": (
+                "MODEL (materialized table);\n\nSELECT 1 AS order_id\n"
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description="scoped run_despite_unchanged plan reports downstream remaining stale",
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "Remaining stale",
+                "model set: orders_mart",
+            ),
+            unexpected_fragments=("Plan ready (2 selected)",),
+        )
+    ],
+    ids=["scoped run_despite_unchanged plan reports downstream remaining stale"],
+)
+def test_given_scoped_run_despite_unchanged_when_planning_then_reports_remaining_stale(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_despite_unchanged_scoped_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_despite_unchanged_scoped_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged always);\n\n"
+                "SELECT 1 AS order_id\n"
+            ),
+            "models/orders_mart.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--select", "rolling_orders"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in plan_result.stdout, plan_result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in plan_result.stdout, plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
             description="standard changes-only plan surfaces explicit source freshness errors",
             expected_fragments=(
                 "column freshness requires a physical table source",
