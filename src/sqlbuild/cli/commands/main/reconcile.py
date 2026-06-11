@@ -24,6 +24,7 @@ def run_reconcile(
     virtual_environment: str | None,
     reconcile_command: str | None,
     model_name: str | None,
+    seed_name: str | None,
     physical_relation_name: str | None,
     auto_approve: bool = False,
     cli_vars: dict[str, object] | None = None,
@@ -67,6 +68,7 @@ def run_reconcile(
             virtual_environment_name=virtual_environment,
             command=reconcile_command,
             model_name=model_name,
+            seed_name=seed_name,
             physical_relation_name=physical_relation_name,
         )
         status.complete("Reconciled virtual environment.")

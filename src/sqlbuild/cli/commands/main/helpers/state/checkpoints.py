@@ -11,15 +11,14 @@ from sqlbuild.shared.helpers.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.targets import resolve_target_name
-from sqlbuild.virtual.state.main.checkpoint_model_refs import (
-    get_virtual_environment_checkpoint_model_refs,
-)
-from sqlbuild.virtual.state.main.environment_model_refs import get_virtual_environment_model_refs
 from sqlbuild.virtual.state.main.list_checkpoints import list_virtual_environment_checkpoints
+from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 
 
@@ -69,19 +68,18 @@ def run_state_checkpoints(
     if command == "show":
         if checkpoint_id is None:
             raise CliUserError("state checkpoints show requires checkpoint id", code="C904")
-        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
-            get_virtual_environment_checkpoint_model_refs(
-                project_dir=effective_project_dir,
-                discovered_inputs=discovered_inputs,
-                checkpoint_id=checkpoint_id,
-            )
+        refs, seed_refs = _read_checkpoint_refs(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+            checkpoint_id=checkpoint_id,
         )
-        if not refs:
+        if not refs and not seed_refs:
             raise CliUserError(f"unknown checkpoint '{checkpoint_id}'", code="C905")
         print(
             _format_checkpoint_show(
                 checkpoint_id=checkpoint_id,
                 refs=refs,
+                seed_refs=seed_refs,
                 style=style,
             )
         )
@@ -89,28 +87,26 @@ def run_state_checkpoints(
     if command == "diff":
         if checkpoint_id is None:
             raise CliUserError("state checkpoints diff requires checkpoint id", code="C907")
-        checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
-            get_virtual_environment_checkpoint_model_refs(
-                project_dir=effective_project_dir,
-                discovered_inputs=discovered_inputs,
-                checkpoint_id=checkpoint_id,
-            )
+        checkpoint_model_refs, checkpoint_seed_refs = _read_checkpoint_refs(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+            checkpoint_id=checkpoint_id,
         )
-        if not checkpoint_model_refs:
+        if not checkpoint_model_refs and not checkpoint_seed_refs:
             raise CliUserError(f"unknown checkpoint '{checkpoint_id}'", code="C905")
-        current_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
-            get_virtual_environment_model_refs(
-                project_dir=effective_project_dir,
-                discovered_inputs=discovered_inputs,
-                virtual_environment_name=resolved_target_name,
-            )
+        current_refs, current_seed_refs = _read_current_refs(
+            project_dir=effective_project_dir,
+            discovered_inputs=discovered_inputs,
+            virtual_environment_name=resolved_target_name,
         )
         print(
             _format_checkpoint_diff(
                 virtual_environment_name=resolved_target_name,
                 checkpoint_id=checkpoint_id,
                 current_refs=current_refs,
+                current_seed_refs=current_seed_refs,
                 checkpoint_model_refs=checkpoint_model_refs,
+                checkpoint_seed_refs=checkpoint_seed_refs,
                 style=style,
             )
         )
@@ -148,6 +144,7 @@ def _format_checkpoint_show(
     *,
     checkpoint_id: str,
     refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+    seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
     style: CliStyle,
 ) -> str:
     document: CliDocument = CliDocument(style)
@@ -162,6 +159,15 @@ def _format_checkpoint_show(
         document.line(
             f"  {style.object_name(f'{ref.model_name:<24}')} {style.muted(ref.version_hash)}"
         )
+    if seed_refs:
+        document.blank()
+        document.line(style.success("Seed refs"))
+        seed_ref: VirtualEnvironmentCheckpointSeedRefRecord
+        for seed_ref in seed_refs:
+            document.line(
+                f"  {style.object_name(f'{seed_ref.seed_name:<24}')} "
+                f"{style.muted(seed_ref.version_hash)}"
+            )
     document.blank()
     return document.render(trailing_newline=False)
 
@@ -171,12 +177,20 @@ def _format_checkpoint_diff(
     virtual_environment_name: str,
     checkpoint_id: str,
     current_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
+    current_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
     checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+    checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
     style: CliStyle,
 ) -> str:
     current_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in current_refs}
     checkpoint_ref_map: dict[str, str] = {
         ref.model_name: ref.version_hash for ref in checkpoint_model_refs
+    }
+    current_seed_ref_map: dict[str, str] = {
+        ref.seed_name: ref.version_hash for ref in current_seed_refs
+    }
+    checkpoint_seed_ref_map: dict[str, str] = {
+        ref.seed_name: ref.version_hash for ref in checkpoint_seed_refs
     }
     changed: tuple[str, ...] = tuple(
         sorted(
@@ -191,6 +205,28 @@ def _format_checkpoint_diff(
     checkpoint_only: tuple[str, ...] = tuple(
         sorted(model_name for model_name in checkpoint_ref_map if model_name not in current_ref_map)
     )
+    changed_seed_refs: tuple[str, ...] = tuple(
+        sorted(
+            seed_name
+            for seed_name, version_hash in current_seed_ref_map.items()
+            if seed_name in checkpoint_seed_ref_map
+            and checkpoint_seed_ref_map[seed_name] != version_hash
+        )
+    )
+    current_only_seed_refs: tuple[str, ...] = tuple(
+        sorted(
+            seed_name
+            for seed_name in current_seed_ref_map
+            if seed_name not in checkpoint_seed_ref_map
+        )
+    )
+    checkpoint_only_seed_refs: tuple[str, ...] = tuple(
+        sorted(
+            seed_name
+            for seed_name in checkpoint_seed_ref_map
+            if seed_name not in current_seed_ref_map
+        )
+    )
     document: CliDocument = CliDocument(style)
     document.blank()
     document.header(
@@ -201,6 +237,11 @@ def _format_checkpoint_diff(
     document.line(f"  {'changed refs':<16} {style.accent(f'{len(changed):,}')}")
     document.line(f"  {'current only':<16} {style.accent(f'{len(current_only):,}')}")
     document.line(f"  {'checkpoint only':<16} {style.accent(f'{len(checkpoint_only):,}')}")
+    document.line(f"  {'changed seeds':<16} {style.accent(f'{len(changed_seed_refs):,}')}")
+    document.line(f"  {'current seeds':<16} {style.accent(f'{len(current_only_seed_refs):,}')}")
+    document.line(
+        f"  {'checkpoint seeds':<16} {style.accent(f'{len(checkpoint_only_seed_refs):,}')}"
+    )
     _append_ref_diff_lines(
         document, "Changed refs", changed, current_ref_map, checkpoint_ref_map, style
     )
@@ -209,6 +250,30 @@ def _format_checkpoint_diff(
     )
     _append_ref_diff_lines(
         document, "Checkpoint only", checkpoint_only, current_ref_map, checkpoint_ref_map, style
+    )
+    _append_ref_diff_lines(
+        document,
+        "Changed seed refs",
+        changed_seed_refs,
+        current_seed_ref_map,
+        checkpoint_seed_ref_map,
+        style,
+    )
+    _append_ref_diff_lines(
+        document,
+        "Current only seed refs",
+        current_only_seed_refs,
+        current_seed_ref_map,
+        checkpoint_seed_ref_map,
+        style,
+    )
+    _append_ref_diff_lines(
+        document,
+        "Checkpoint only seed refs",
+        checkpoint_only_seed_refs,
+        current_seed_ref_map,
+        checkpoint_seed_ref_map,
+        style,
     )
     document.blank()
     return document.render(trailing_newline=False)
@@ -233,3 +298,59 @@ def _append_ref_diff_lines(
         current_label: str = style.muted(current_hash)
         checkpoint_label: str = style.muted(checkpoint_hash)
         document.line(f"  {model_label} {current_label} -> {checkpoint_label}")
+
+
+def _read_checkpoint_refs(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    checkpoint_id: str,
+) -> tuple[
+    tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+    tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
+]:
+    config, backend = build_state_runtime(
+        discovered_inputs=discovered_inputs, project_dir=project_dir
+    )
+    connection = backend.connect(config.connection)
+    try:
+        return (
+            backend.get_virtual_environment_checkpoint_model_refs(
+                connection, schema=config.schema, checkpoint_id=checkpoint_id
+            ),
+            backend.get_virtual_environment_checkpoint_seed_refs(
+                connection, schema=config.schema, checkpoint_id=checkpoint_id
+            ),
+        )
+    finally:
+        backend.close(connection)
+
+
+def _read_current_refs(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    virtual_environment_name: str,
+) -> tuple[
+    tuple[VirtualEnvironmentModelRefRecord, ...],
+    tuple[VirtualEnvironmentSeedRefRecord, ...],
+]:
+    config, backend = build_state_runtime(
+        discovered_inputs=discovered_inputs, project_dir=project_dir
+    )
+    connection = backend.connect(config.connection)
+    try:
+        return (
+            backend.get_virtual_environment_model_refs(
+                connection,
+                schema=config.schema,
+                virtual_environment_name=virtual_environment_name,
+            ),
+            backend.get_virtual_environment_seed_refs(
+                connection,
+                schema=config.schema,
+                virtual_environment_name=virtual_environment_name,
+            ),
+        )
+    finally:
+        backend.close(connection)

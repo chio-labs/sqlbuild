@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -38,8 +40,10 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
+    PhysicalArtifactType,
     StateOperationStatus,
     StateOperationType,
     VirtualEnvironmentStatus,
@@ -150,6 +154,20 @@ def run_virtual_promote(
                 virtual_environment_name=from_virtual_environment_name,
             )
         )
+        from_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=from_virtual_environment_name,
+            )
+        )
+        to_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=to_virtual_environment_name,
+            )
+        )
         if not source_refs:
             raise PlannerInputError(
                 f"unknown source virtual environment '{from_virtual_environment_name}'",
@@ -197,11 +215,13 @@ def run_virtual_promote(
             graph=graph,
             bound_refs=source_refs,
             bound_model_versions=source_versions,
+            bound_seed_refs=from_seed_refs,
         )
         target_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
             graph=graph,
             bound_refs=target_refs,
             bound_model_versions=target_versions,
+            bound_seed_refs=to_seed_refs,
         )
         selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
             graph=graph,
@@ -223,7 +243,16 @@ def run_virtual_promote(
                     code="S018",
                     help="Use --select for a coherent partial promotion from a working source VDE.",
                 )
+        selected_seed_names: tuple[str, ...] = _selected_upstream_seed_names(
+            graph=graph,
+            selected_model_names=selected_model_names,
+            all_seed_names=tuple(seed.name for seed in graph.project.seeds),
+            include_all=not select,
+        )
         source_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in source_refs}
+        from_seed_ref_map: dict[str, str] = {
+            ref.seed_name: ref.version_hash for ref in from_seed_refs
+        }
         missing_source_refs: tuple[str, ...] = tuple(
             model_name for model_name in selected_model_names if model_name not in source_ref_map
         )
@@ -233,11 +262,25 @@ def run_virtual_promote(
                 + ", ".join(missing_source_refs),
                 code="S015",
             )
+        missing_from_seed_refs: tuple[str, ...] = tuple(
+            seed_name for seed_name in selected_seed_names if seed_name not in from_seed_ref_map
+        )
+        if missing_from_seed_refs:
+            raise PlannerInputError(
+                "source virtual environment is missing selected seed refs: "
+                + ", ".join(missing_from_seed_refs),
+                code="S015",
+            )
         final_version_hashes: dict[str, str] = {
             ref.model_name: ref.version_hash for ref in target_refs
         }
+        final_seed_hashes: dict[str, str] = {
+            ref.seed_name: ref.version_hash for ref in to_seed_refs
+        }
         for model_name in selected_model_names:
             final_version_hashes[model_name] = source_ref_map[model_name]
+        for seed_name in selected_seed_names:
+            final_seed_hashes[seed_name] = from_seed_ref_map[seed_name]
         stale_after: tuple[str, ...] = tuple(
             model.name
             for model in graph.project.models
@@ -260,8 +303,21 @@ def run_virtual_promote(
             )
         if stale_upstreams:
             selected_model_names = tuple(sorted({*selected_model_names, *stale_upstreams}))
+            selected_seed_names = _selected_upstream_seed_names(
+                graph=graph,
+                selected_model_names=selected_model_names,
+                all_seed_names=tuple(seed.name for seed in graph.project.seeds),
+                include_all=False,
+            )
             for model_name in stale_upstreams:
                 final_version_hashes[model_name] = source_ref_map[model_name]
+            for seed_name in selected_seed_names:
+                if seed_name not in from_seed_ref_map:
+                    raise PlannerInputError(
+                        "source virtual environment is missing selected seed refs: " + seed_name,
+                        code="S015",
+                    )
+                final_seed_hashes[seed_name] = from_seed_ref_map[seed_name]
             stale_after = tuple(
                 model.name
                 for model in graph.project.models
@@ -303,6 +359,20 @@ def run_virtual_promote(
             virtual_environment_name=to_virtual_environment_name,
             refs=refs,
         )
+        seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=to_virtual_environment_name,
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            for seed_name, version_hash in sorted(final_seed_hashes.items())
+        )
+        backend.replace_virtual_environment_seed_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=to_virtual_environment_name,
+            refs=seed_refs,
+        )
         function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = ()
         function_versions: dict[str, FunctionVersionRecord] = {}
         if not select:
@@ -337,12 +407,19 @@ def run_virtual_promote(
                 virtual_environment_name=to_virtual_environment_name,
                 refs=refs,
                 function_refs=function_refs,
+                seed_refs=seed_refs,
             )
         physical_relations: dict[str, PhysicalRelationRecord] = _read_physical_relations(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             refs=refs,
+        )
+        seed_physical_relations: dict[str, PhysicalRelationRecord] = _read_seed_physical_relations(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            refs=seed_refs,
         )
         refresh_start: float = time.perf_counter()
         if on_progress is not None:
@@ -354,6 +431,7 @@ def run_virtual_promote(
             virtual_environment_name=to_virtual_environment_name,
             unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             physical_relations=physical_relations,
+            seed_physical_relations=seed_physical_relations,
             on_connection_start=on_connection_start,
             on_connection_complete=on_connection_complete,
             on_connection_error=on_connection_error,
@@ -442,3 +520,51 @@ def _read_physical_relations(
         if relation is not None:
             relations[ref.model_name] = relation
     return relations
+
+
+def _read_seed_physical_relations(
+    *,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
+) -> dict[str, PhysicalRelationRecord]:
+    relations: dict[str, PhysicalRelationRecord] = {}
+    for ref in refs:
+        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+            state_connection,
+            schema=schema,
+            artifact_type=PhysicalArtifactType.SEED,
+            artifact_name=ref.seed_name,
+            version_hash=ref.version_hash,
+        )
+        if relation is not None:
+            relations[ref.seed_name] = relation
+    return relations
+
+
+def _selected_upstream_seed_names(
+    *,
+    graph: ProjectGraph,
+    selected_model_names: tuple[str, ...],
+    all_seed_names: tuple[str, ...],
+    include_all: bool,
+) -> tuple[str, ...]:
+    if include_all:
+        return all_seed_names
+    selected: set[str] = set()
+    pending: list[CompiledObjectKey] = [
+        model.key for model in graph.project.models if model.name in selected_model_names
+    ]
+    seen: set[CompiledObjectKey] = set()
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        for upstream_key in graph.upstream_deps.get(key, ()):
+            if upstream_key.resource_type == CompiledResourceType.SEED:
+                selected.add(upstream_key.name)
+                continue
+            pending.append(upstream_key)
+    return tuple(sorted(selected))

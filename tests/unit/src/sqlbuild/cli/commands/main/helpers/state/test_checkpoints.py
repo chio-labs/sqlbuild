@@ -13,7 +13,9 @@ from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.helpers.state._test_types import (
     CheckpointColorOutputTestCase,
@@ -64,7 +66,9 @@ def test_given_checkpoints_when_formatting_list_without_color_then_preserves_out
             expected_rendered="\nVirtual environment checkpoint\n\n"
             "  checkpoint           cp_1\n\n"
             "Refs\n"
-            "  model_a                  hash_a\n",
+            "  model_a                  hash_a\n\n"
+            "Seed refs\n"
+            "  seed_a                   seed_hash_a\n",
         )
     ],
     ids=["preserves no-color checkpoint show output"],
@@ -77,6 +81,11 @@ def test_given_checkpoint_model_refs_when_formatting_show_without_color_then_pre
         refs=(
             VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1", model_name="model_a", version_hash="hash_a"
+            ),
+        ),
+        seed_refs=(
+            VirtualEnvironmentCheckpointSeedRefRecord(
+                checkpoint_id="cp_1", seed_name="seed_a", version_hash="seed_hash_a"
             ),
         ),
         style=CliStyle(use_color=False),
@@ -94,13 +103,22 @@ def test_given_checkpoint_model_refs_when_formatting_show_without_color_then_pre
             "  checkpoint       cp_1\n"
             "  changed refs     1\n"
             "  current only     1\n"
-            "  checkpoint only  1\n\n"
+            "  checkpoint only  1\n"
+            "  changed seeds    1\n"
+            "  current seeds    1\n"
+            "  checkpoint seeds 1\n\n"
             "Changed refs\n"
             "  shared                   current_hash -> checkpoint_hash\n\n"
             "Current only\n"
             "  current_only             current_only_hash -> <missing>\n\n"
             "Checkpoint only\n"
-            "  checkpoint_only          <missing> -> checkpoint_only_hash\n",
+            "  checkpoint_only          <missing> -> checkpoint_only_hash\n\n"
+            "Changed seed refs\n"
+            "  seed_a                   current_seed_hash -> checkpoint_seed_hash\n\n"
+            "Current only seed refs\n"
+            "  seed_current_only        current_only_seed_hash -> <missing>\n\n"
+            "Checkpoint only seed refs\n"
+            "  seed_checkpoint_only     <missing> -> checkpoint_only_seed_hash\n",
         )
     ],
     ids=["preserves no-color checkpoint diff output"],
@@ -121,6 +139,18 @@ def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_pre
                 version_hash="current_only_hash",
             ),
         ),
+        current_seed_refs=(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name="dev",
+                seed_name="seed_a",
+                version_hash="current_seed_hash",
+            ),
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name="dev",
+                seed_name="seed_current_only",
+                version_hash="current_only_seed_hash",
+            ),
+        ),
         checkpoint_model_refs=(
             VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1", model_name="shared", version_hash="checkpoint_hash"
@@ -129,6 +159,16 @@ def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_pre
                 checkpoint_id="cp_1",
                 model_name="checkpoint_only",
                 version_hash="checkpoint_only_hash",
+            ),
+        ),
+        checkpoint_seed_refs=(
+            VirtualEnvironmentCheckpointSeedRefRecord(
+                checkpoint_id="cp_1", seed_name="seed_a", version_hash="checkpoint_seed_hash"
+            ),
+            VirtualEnvironmentCheckpointSeedRefRecord(
+                checkpoint_id="cp_1",
+                seed_name="seed_checkpoint_only",
+                version_hash="checkpoint_only_seed_hash",
             ),
         ),
         style=CliStyle(use_color=False),
@@ -146,8 +186,11 @@ def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_pre
                 "\033[32m\033[1mVirtual environment checkpoint\033[0m",
                 "\033[34mcp_1\033[0m",
                 "\033[32mRefs\033[0m",
+                "\033[32mSeed refs\033[0m",
                 "\033[34m\033[1mmodel_a",
+                "\033[34m\033[1mseed_a",
                 "\033[2mhash_a\033[0m",
+                "\033[2mseed_hash_a\033[0m",
             ),
         )
     ],
@@ -161,6 +204,11 @@ def test_given_checkpoint_model_refs_when_formatting_with_color_then_uses_semant
         refs=(
             VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1", model_name="model_a", version_hash="hash_a"
+            ),
+        ),
+        seed_refs=(
+            VirtualEnvironmentCheckpointSeedRefRecord(
+                checkpoint_id="cp_1", seed_name="seed_a", version_hash="seed_hash_a"
             ),
         ),
         style=CliStyle(use_color=True),

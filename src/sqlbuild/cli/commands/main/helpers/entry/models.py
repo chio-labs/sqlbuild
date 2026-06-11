@@ -351,6 +351,7 @@ class CliEntrypointHandlers:
             str | None,
             str | None,
             str | None,
+            str | None,
             bool,
             dict[str, object],
         ],

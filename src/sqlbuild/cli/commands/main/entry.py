@@ -249,13 +249,15 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     reconcile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RECONCILE)
     reconcile_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
     reconcile_parser.add_argument("--model", dest="reconcile_model", default=None)
+    reconcile_parser.add_argument("--seed", dest="reconcile_seed", default=None)
     reconcile_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     reconcile_subparsers = reconcile_parser.add_subparsers(dest="reconcile_command")
     reconcile_repair_view_parser: argparse.ArgumentParser = reconcile_subparsers.add_parser(
         "repair-view"
     )
     reconcile_repair_view_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    reconcile_repair_view_parser.add_argument("--model", dest="reconcile_model", required=True)
+    reconcile_repair_view_parser.add_argument("--model", dest="reconcile_model", default=None)
+    reconcile_repair_view_parser.add_argument("--seed", dest="reconcile_seed", default=None)
     reconcile_attach_parser: argparse.ArgumentParser = reconcile_subparsers.add_parser("attach")
     reconcile_attach_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
     reconcile_attach_parser.add_argument("--model", dest="reconcile_model", required=True)
@@ -821,8 +823,9 @@ def _main_with_dependencies(
                 args.no_color,
                 args.virtual_env,
                 args.reconcile_command,
-                args.reconcile_model,
-                args.reconcile_physical_relation,
+                getattr(args, "reconcile_model", None),
+                getattr(args, "reconcile_seed", None),
+                getattr(args, "reconcile_physical_relation", None),
                 getattr(args, "auto_approve", False),
                 args.vars,
             )

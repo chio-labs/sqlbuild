@@ -23,7 +23,7 @@ def render_virtual_clone_output(
         doc.line(f"  destination VDE         {result.destination_virtual_environment}")
     doc.line("  origin state            not used")
     doc.line("  destination refs        unchanged")
-    doc.line(f"  selected models      {_count(result.selected_count, style=style)}")
+    doc.line(f"  selected artifacts   {_count(result.selected_count, style=style)}")
     doc.line(f"  found in origin      {_count(result.found_count, style=style)}")
     doc.line(f"  hydrated             {_count(result.hydrated_count, style=style)}")
     doc.line(f"  already present      {_count(result.reused_count, style=style)}")
@@ -69,7 +69,7 @@ def _append_set(
     verbose: bool,
 ) -> None:
     names: tuple[str, ...] = tuple(
-        item.model_name for item in result.item_results if item.action == action
+        item.artifact_name for item in result.item_results if item.action == action
     )
     if not names:
         return
