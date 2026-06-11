@@ -76,3 +76,19 @@ class PostgresLoadSeedTestCase:
 class PostgresSchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult
+
+
+@dataclass(frozen=True)
+class PostgresIndexSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresLatestReadSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    expected_fragments: tuple[str, ...]

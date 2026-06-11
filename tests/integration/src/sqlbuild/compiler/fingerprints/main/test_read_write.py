@@ -24,6 +24,7 @@ from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types impor
 
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
 RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_framework_type
+RENDER_READ_LATEST_SQL: Callable[..., str] = DuckDbAdapter().render_read_latest_fingerprints_sql
 RELATION_EXISTS: Callable[..., bool] = DuckDbAdapter().relation_exists
 
 WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
@@ -167,6 +168,81 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
     ),
 ]
 
+LATEST_RESOLUTION_TEST_CASES: list[LatestResolutionTestCase] = [
+    LatestResolutionTestCase(
+        description="resolves latest fingerprint when older row is inserted after newer",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                node_type="model",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_002",
+                definition_hash="new_hash",
+                version_hash="new_version",
+                schema_fingerprint="new_schema",
+                definition="SELECT 2",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            Fingerprint(
+                node_type="model",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_001",
+                definition_hash="old_hash",
+                version_hash="old_version",
+                schema_fingerprint="old_schema",
+                definition="SELECT 1",
+                ts=datetime(2026, 1, 15, 10, 0, 0),
+            ),
+        ),
+        expected_latest_run_id="run_002",
+        expected_latest_definition_hash="new_hash",
+        expected_latest_definition="SELECT 2",
+    ),
+    LatestResolutionTestCase(
+        description="resolves latest fingerprint by run id when timestamps tie",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                node_type="model",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_001",
+                definition_hash="low_run_hash",
+                version_hash="low_run_version",
+                schema_fingerprint="low_run_schema",
+                definition="SELECT 1",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            Fingerprint(
+                node_type="model",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_002",
+                definition_hash="high_run_hash",
+                version_hash="high_run_version",
+                schema_fingerprint="high_run_schema",
+                definition="SELECT 2",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+        ),
+        expected_latest_run_id="run_002",
+        expected_latest_definition_hash="high_run_hash",
+        expected_latest_definition="SELECT 2",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -197,6 +273,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_read_latest_sql=RENDER_READ_LATEST_SQL,
     )
 
     assert tuple(sorted(result.fingerprints.keys())) == test_case.expected_node_names
@@ -240,6 +317,7 @@ def test_given_no_table_when_reading_then_returns_empty_set(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_read_latest_sql=RENDER_READ_LATEST_SQL,
     )
 
     assert len(result.fingerprints) == test_case.expected_node_count
@@ -303,6 +381,7 @@ def test_given_old_fingerprint_table_without_version_hash_when_reading_then_rais
             database=None,
             schema=schema,
             render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_read_latest_sql=RENDER_READ_LATEST_SQL,
         )
 
     message: str = str(error_info.value)
@@ -368,45 +447,8 @@ def test_given_no_table_when_writing_then_creates_table(
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        LatestResolutionTestCase(
-            description="resolves latest fingerprint when older row is inserted after newer",
-            database=None,
-            schema="test_schema",
-            fingerprints=(
-                Fingerprint(
-                    node_type="model",
-                    node_name="orders",
-                    target_database=None,
-                    target_schema=None,
-                    target_name="orders",
-                    run_id="run_002",
-                    definition_hash="new_hash",
-                    version_hash="new_version",
-                    schema_fingerprint="new_schema",
-                    definition="SELECT 2",
-                    ts=datetime(2026, 1, 15, 12, 0, 0),
-                ),
-                Fingerprint(
-                    node_type="model",
-                    node_name="orders",
-                    target_database=None,
-                    target_schema=None,
-                    target_name="orders",
-                    run_id="run_001",
-                    definition_hash="old_hash",
-                    version_hash="old_version",
-                    schema_fingerprint="old_schema",
-                    definition="SELECT 1",
-                    ts=datetime(2026, 1, 15, 10, 0, 0),
-                ),
-            ),
-            expected_latest_run_id="run_002",
-            expected_latest_definition_hash="new_hash",
-            expected_latest_definition="SELECT 2",
-        ),
-    ],
-    ids=["resolves latest fingerprint when older row is inserted after newer"],
+    LATEST_RESOLUTION_TEST_CASES,
+    ids=[case.description for case in LATEST_RESOLUTION_TEST_CASES],
 )
 def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
     test_case: LatestResolutionTestCase,
@@ -432,6 +474,7 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_read_latest_sql=RENDER_READ_LATEST_SQL,
     )
     latest: Fingerprint = result.fingerprints["orders"]
 
@@ -505,6 +548,7 @@ def test_given_invalid_definition_storage_when_reading_then_raises_contextual_er
             database=None,
             schema=test_case.schema,
             render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_read_latest_sql=RENDER_READ_LATEST_SQL,
         )
 
     message: str = str(error_info.value)

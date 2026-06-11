@@ -1268,6 +1268,86 @@ class PostgresAdapter(BaseAdapter):
             render_framework_type=self.render_framework_type,
         )
 
+    def render_create_fingerprint_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        index_name: str | None = self.render_qualified_name(
+            database=None,
+            schema=schema,
+            name="_sqlbuild_fingerprints_latest_idx",
+        )
+        if table_name is None or index_name is None:
+            return ()
+        return (
+            "CREATE INDEX IF NOT EXISTS "
+            f"{index_name} ON {table_name} (node_name, ts DESC, run_id DESC)",
+        )
+
+    def render_read_latest_fingerprints_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+
+        return build_read_latest_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        )
+        index_name: str | None = self.render_qualified_name(
+            database=None,
+            schema=schema,
+            name="_sqlbuild_source_freshness_latest_idx",
+        )
+        if table_name is None or index_name is None:
+            return ()
+        return (
+            "CREATE INDEX IF NOT EXISTS "
+            f"{index_name} ON {table_name} ("
+            "source_name, target_database, target_schema, target_name, "
+            "observed_at DESC, run_id DESC)",
+        )
+
+    def render_read_latest_source_freshness_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+
+        return build_read_latest_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
     def sql_analysis_dialect(self) -> str | None:
         """Return the configured SQL analysis dialect name, if any."""
 

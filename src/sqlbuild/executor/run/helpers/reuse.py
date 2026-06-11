@@ -123,6 +123,7 @@ def validate_reuse_origin_fingerprint(
         database=reuse_origin_fingerprint_database,
         schema=reuse_origin_fingerprint_schema,
         render_qualified_name=adapter.render_qualified_name,
+        render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
         require_table=True,
     )
     reuse_origin_fingerprint: Fingerprint | None = fingerprint_set.fingerprints.get(model_name)

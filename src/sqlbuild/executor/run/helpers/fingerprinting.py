@@ -73,6 +73,7 @@ def try_write_fingerprint(
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,
             render_create_table_sql=adapter.render_create_fingerprint_table_sql,
+            render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
         )
     except Exception as exc:
         warnings.append(

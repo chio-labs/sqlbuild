@@ -10,7 +10,6 @@ from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import (
     build_qualified_table_name,
-    build_read_all_sql,
 )
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
@@ -27,8 +26,9 @@ def read_latest_source_freshness(
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
+    render_read_latest_sql: Callable[..., str],
 ) -> SourceFreshnessSet:
-    """Read all source freshness rows and resolve latest per source/target identity.
+    """Read latest source freshness rows from adapter-rendered SQL.
 
     State table existence is checked via adapter metadata (`relation_exists`) rather
     than by swallowing probe-query errors, so operational failures propagate instead
@@ -49,10 +49,9 @@ def read_latest_source_freshness(
     if not table_exists:
         return SourceFreshnessSet(schema=schema, records={})
 
-    read_sql: str = build_read_all_sql(
+    read_sql: str = render_read_latest_sql(
         database=database,
         schema=schema,
-        render_qualified_name=render_qualified_name,
     )
     try:
         result: Any = execute(connection, read_sql)
@@ -63,14 +62,12 @@ def read_latest_source_freshness(
             "source freshness table to regenerate source freshness state."
         ) from error
     rows: list[tuple[Any, ...]] = result.fetchall()
-    latest: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {}
+    records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {}
     row: tuple[Any, ...]
     for row in rows:
         record: SourceFreshnessRecord = _row_to_source_freshness_record(row)
-        identity: SourceFreshnessIdentity = record.identity
-        if identity not in latest or record.observed_at > latest[identity].observed_at:
-            latest[identity] = record
-    return SourceFreshnessSet(schema=schema, records=latest)
+        records[record.identity] = record
+    return SourceFreshnessSet(schema=schema, records=records)
 
 
 def _row_to_source_freshness_record(row: tuple[Any, ...]) -> SourceFreshnessRecord:

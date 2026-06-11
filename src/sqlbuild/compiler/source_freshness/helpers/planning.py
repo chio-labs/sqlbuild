@@ -155,6 +155,7 @@ def _read_previous_records(
             database=state_database,
             schema=state_schema,
             render_qualified_name=render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_source_freshness_sql,
         )
         _merge_latest_previous_records(
             previous_records_by_identity=previous_records_by_identity,

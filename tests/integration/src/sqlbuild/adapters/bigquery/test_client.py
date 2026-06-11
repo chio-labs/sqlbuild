@@ -964,6 +964,7 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
         database=bigquery_project,
         schema=bigquery_dataset,
         render_qualified_name=adapter.render_qualified_name,
+        render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
     )
     fingerprint_table: str = qualified_name(
         project=bigquery_project,

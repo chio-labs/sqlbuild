@@ -12,13 +12,12 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
     build_qualified_table_name,
-    build_read_all_sql,
+    build_read_latest_sql,
 )
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared.helpers._test_types import (
     BuildCreateTableSqlTestCase,
     BuildInsertSqlTestCase,
     BuildQualifiedTableNameTestCase,
-    BuildReadAllSqlTestCase,
 )
 
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
@@ -45,36 +44,6 @@ QUALIFIED_TABLE_NAME_TEST_CASES: list[BuildQualifiedTableNameTestCase] = [
     ),
 ]
 
-
-READ_ALL_SQL_TEST_CASES: list[BuildReadAllSqlTestCase] = [
-    BuildReadAllSqlTestCase(
-        description="selects all fingerprint columns from qualified table",
-        database=None,
-        schema="staging",
-        expected_contains=(
-            "SELECT",
-            "node_type",
-            "node_name",
-            "target_database",
-            "target_schema",
-            "target_name",
-            "run_id",
-            "definition_hash",
-            "version_hash",
-            "schema_fingerprint",
-            "definition_b64",
-            "metadata_json_b64",
-            "ts",
-            f"FROM staging.{FINGERPRINT_TABLE_NAME}",
-        ),
-    ),
-    BuildReadAllSqlTestCase(
-        description="uses fully qualified name when database provided",
-        database="warehouse",
-        schema="staging",
-        expected_contains=(f"FROM warehouse.staging.{FINGERPRINT_TABLE_NAME}",),
-    ),
-]
 
 INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
     BuildInsertSqlTestCase(
@@ -213,13 +182,26 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
 
 @pytest.mark.parametrize(
     "test_case",
-    READ_ALL_SQL_TEST_CASES,
-    ids=[case.description for case in READ_ALL_SQL_TEST_CASES],
+    [
+        BuildCreateTableSqlTestCase(
+            description="selects latest fingerprint rows with window ranking",
+            database=None,
+            schema="staging",
+            expected_contains=(
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                f"FROM staging.{FINGERPRINT_TABLE_NAME}",
+                "WHERE __sqlbuild_latest_rank = 1",
+            ),
+        )
+    ],
+    ids=["selects latest fingerprint rows with window ranking"],
 )
-def test_given_schema_when_building_read_all_sql_then_contains_expected_fragments(
-    test_case: BuildReadAllSqlTestCase,
+def test_given_schema_when_building_read_latest_sql_then_contains_windowed_latest_query(
+    test_case: BuildCreateTableSqlTestCase,
 ) -> None:
-    result: str = build_read_all_sql(
+    result: str = build_read_latest_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
