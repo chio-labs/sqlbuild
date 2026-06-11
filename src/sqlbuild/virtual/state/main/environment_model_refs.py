@@ -7,15 +7,15 @@ from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
-from sqlbuild.virtual.state.models import VirtualEnvironmentRefRecord
+from sqlbuild.virtual.state.models import VirtualEnvironmentModelRefRecord
 
 
-def get_virtual_environment_refs(
+def get_virtual_environment_model_refs(
     *,
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
     virtual_environment_name: str,
-) -> tuple[VirtualEnvironmentRefRecord, ...]:
+) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
     """Get refs for a virtual environment."""
 
     config, backend = build_state_runtime(
@@ -24,7 +24,7 @@ def get_virtual_environment_refs(
     )
     connection: Any = backend.connect(config.connection)
     try:
-        return backend.get_virtual_environment_refs(
+        return backend.get_virtual_environment_model_refs(
             connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,

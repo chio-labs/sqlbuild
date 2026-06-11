@@ -90,6 +90,20 @@ class DuckDbStateBackendSourceFreshnessTestCase:
 
 
 @dataclass(frozen=True)
+class DuckDbStateBackendSeedRefTestCase:
+    description: str
+    schema: str
+    sqlbuild_version: str
+    virtual_environment_name: str
+    seed_name: str
+    version_hash: str
+    identity_metadata_hash: str
+    identity_metadata_json_b64: str
+    replacement_version_hash: str
+    expected_ref_count_after_replace: int
+
+
+@dataclass(frozen=True)
 class DuckDbStateBackendIndexValidationTestCase:
     description: str
     schema: str

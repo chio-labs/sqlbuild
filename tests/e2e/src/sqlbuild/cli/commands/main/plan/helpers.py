@@ -22,8 +22,8 @@ from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     StateBackendConfig,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -358,12 +358,12 @@ def seed_matching_virtual_refs(
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             connection,
             schema=config.schema,
             virtual_environment_name="dev",
             refs=tuple(
-                VirtualEnvironmentRefRecord(
+                VirtualEnvironmentModelRefRecord(
                     virtual_environment_name="dev",
                     model_name=model_name,
                     version_hash=expected_hashes[model_name],

@@ -35,7 +35,7 @@ from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
@@ -1094,7 +1094,7 @@ def test_given_current_vde_versions_and_runtime_stale_model_when_semantics_then_
     semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=graph,
         bound_refs=tuple(
-            VirtualEnvironmentRefRecord(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name="dev",
                 model_name=model_name,
                 version_hash=version_hash,

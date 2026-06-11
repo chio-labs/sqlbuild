@@ -17,8 +17,8 @@ from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model
 from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
@@ -49,7 +49,7 @@ def read_physical_relations_for_refs(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, PhysicalRelationRecord]:
     """Read tracked physical relations for VDE refs."""
 
@@ -69,8 +69,8 @@ def read_physical_relations_for_refs(
 def filter_models_with_changed_virtual_refs(
     *,
     selected_names: tuple[str, ...],
-    from_refs: tuple[VirtualEnvironmentRefRecord, ...],
-    to_refs: tuple[VirtualEnvironmentRefRecord, ...],
+    from_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
+    to_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Split selected models into changed/missing refs and identical refs."""
 

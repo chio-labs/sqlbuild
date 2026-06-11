@@ -36,8 +36,8 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockLease,
     VirtualEnvironmentFunctionRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateOperationStatus,
@@ -129,15 +129,19 @@ def run_virtual_promote(
                 f"virtual environment '{to_virtual_environment_name}' is locked",
                 code="S014",
             )
-        source_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=from_virtual_environment_name,
+        source_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=from_virtual_environment_name,
+            )
         )
-        target_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
+        target_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=to_virtual_environment_name,
+            )
         )
         source_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
@@ -285,15 +289,15 @@ def run_virtual_promote(
                 baseline_virtual_environment_name=from_virtual_environment_name,
             ),
         )
-        refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
-            VirtualEnvironmentRefRecord(
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=to_virtual_environment_name,
                 model_name=model_name,
                 version_hash=version_hash,
             )
             for model_name, version_hash in sorted(final_version_hashes.items())
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=to_virtual_environment_name,
@@ -407,7 +411,7 @@ def _read_model_versions(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(
@@ -425,7 +429,7 @@ def _read_physical_relations(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, PhysicalRelationRecord]:
     relations: dict[str, PhysicalRelationRecord] = {}
     for ref in refs:

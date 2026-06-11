@@ -36,11 +36,11 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockLease,
     VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
     VirtualEnvironmentFunctionRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
@@ -125,8 +125,8 @@ def run_virtual_rollback(
                 f"virtual environment '{virtual_environment_name}' is detached",
                 code="S028",
             )
-        current_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
-            backend.get_virtual_environment_refs(
+        current_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
                 state_connection,
                 schema=config.schema,
                 virtual_environment_name=virtual_environment_name,
@@ -145,7 +145,7 @@ def run_virtual_rollback(
                 virtual_environment_name=virtual_environment_name,
             )
         )
-        target_checkpoint, target_checkpoint_refs = resolve_target_checkpoint(
+        target_checkpoint, target_checkpoint_model_refs = resolve_target_checkpoint(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
@@ -170,19 +170,19 @@ def run_virtual_rollback(
             select=select,
             exclude=exclude,
             all_model_names=tuple(model.name for model in graph.project.models),
-            target_checkpoint_refs=target_checkpoint_refs,
+            target_checkpoint_model_refs=target_checkpoint_model_refs,
         )
         checkpoint_ref_map: dict[str, str] = {
-            ref.model_name: ref.version_hash for ref in target_checkpoint_refs
+            ref.model_name: ref.version_hash for ref in target_checkpoint_model_refs
         }
-        missing_checkpoint_refs: tuple[str, ...] = tuple(
+        missing_checkpoint_model_refs: tuple[str, ...] = tuple(
             model_name
             for model_name in selected_model_names
             if model_name not in checkpoint_ref_map
         )
-        if missing_checkpoint_refs:
+        if missing_checkpoint_model_refs:
             raise PlannerInputError(
-                "checkpoint is missing selected refs: " + ", ".join(missing_checkpoint_refs),
+                "checkpoint is missing selected refs: " + ", ".join(missing_checkpoint_model_refs),
                 code="S025",
             )
         final_version_hashes: dict[str, str] = dict(current_ref_map)
@@ -220,7 +220,7 @@ def run_virtual_rollback(
             state_connection=state_connection,
             schema=config.schema,
             refs=tuple(
-                VirtualEnvironmentCheckpointRefRecord(
+                VirtualEnvironmentCheckpointModelRefRecord(
                     checkpoint_id=target_checkpoint.checkpoint_id,
                     model_name=model_name,
                     version_hash=version_hash,
@@ -234,8 +234,8 @@ def run_virtual_rollback(
             models_by_name=models_by_name,
             physical_relations=physical_relations,
         )
-        target_refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
-            VirtualEnvironmentRefRecord(
+        target_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=virtual_environment_name,
                 model_name=model_name,
                 version_hash=version_hash,
@@ -255,7 +255,7 @@ def run_virtual_rollback(
                 status=status,
             ),
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,

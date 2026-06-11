@@ -117,8 +117,8 @@ from sqlbuild.virtual.state.models import (
     SourceFreshnessRecord,
     StateBackendConfig,
     VirtualEnvironmentFunctionRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
 
@@ -199,7 +199,7 @@ def run_virtual_build(
     )
     state_connection: Any = backend.connect(config.connection)
     try:
-        bound_refs: tuple[VirtualEnvironmentRefRecord, ...] = _read_or_initialize_refs(
+        bound_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = _read_or_initialize_refs(
             backend=backend,
             state_connection=state_connection,
             config=config,
@@ -786,7 +786,7 @@ def _read_or_initialize_refs(
     config: StateBackendConfig,
     target_vde_name: str,
     baseline_vde_name: str | None,
-) -> tuple[VirtualEnvironmentRefRecord, ...]:
+) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
         state_connection,
         schema=config.schema,
@@ -798,20 +798,22 @@ def _read_or_initialize_refs(
             code="S028",
             help="Run state adopt again or choose a non-detached virtual environment.",
         )
-    refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...] = backend.get_virtual_environment_model_refs(
         state_connection,
         schema=config.schema,
         virtual_environment_name=target_vde_name,
     )
     if refs or baseline_vde_name is None or baseline_vde_name == target_vde_name:
         return refs
-    baseline_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-        state_connection,
-        schema=config.schema,
-        virtual_environment_name=baseline_vde_name,
+    baseline_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+        backend.get_virtual_environment_model_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=baseline_vde_name,
+        )
     )
     return tuple(
-        VirtualEnvironmentRefRecord(
+        VirtualEnvironmentModelRefRecord(
             virtual_environment_name=target_vde_name,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -825,7 +827,7 @@ def _read_bound_model_versions(
     backend: Any,
     state_connection: Any,
     config: StateBackendConfig,
-    bound_refs: tuple[VirtualEnvironmentRefRecord, ...],
+    bound_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(
@@ -1016,15 +1018,15 @@ def _persist_successful_virtual_build(
                 ),
             ),
         )
-        refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
-            VirtualEnvironmentRefRecord(
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=target_vde_name,
                 model_name=model_name,
                 version_hash=version_hash,
             )
             for model_name, version_hash in sorted(final_version_hashes.items())
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_vde_name,

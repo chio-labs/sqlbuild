@@ -27,9 +27,9 @@ from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     PhysicalRelationRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 
 
@@ -42,24 +42,25 @@ def resolve_target_checkpoint(
     current_ref_map: dict[str, str],
     checkpoint_id: str | None,
 ) -> tuple[
-    VirtualEnvironmentCheckpointRecord | None, tuple[VirtualEnvironmentCheckpointRefRecord, ...]
+    VirtualEnvironmentCheckpointRecord | None,
+    tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
 ]:
     checkpoint: VirtualEnvironmentCheckpointRecord
     for checkpoint in checkpoints:
         if checkpoint_id is not None and checkpoint.checkpoint_id != checkpoint_id:
             continue
-        checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = (
-            backend.get_virtual_environment_checkpoint_refs(
+        checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+            backend.get_virtual_environment_checkpoint_model_refs(
                 state_connection,
                 schema=schema,
                 checkpoint_id=checkpoint.checkpoint_id,
             )
         )
         checkpoint_ref_map: dict[str, str] = {
-            ref.model_name: ref.version_hash for ref in checkpoint_refs
+            ref.model_name: ref.version_hash for ref in checkpoint_model_refs
         }
         if checkpoint_id is not None or checkpoint_ref_map != current_ref_map:
-            return checkpoint, checkpoint_refs
+            return checkpoint, checkpoint_model_refs
     if checkpoint_id is not None:
         raise PlannerInputError(f"unknown checkpoint '{checkpoint_id}'", code="S026")
     return None, ()
@@ -71,7 +72,7 @@ def resolve_selected_model_names(
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     all_model_names: tuple[str, ...],
-    target_checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    target_checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
 ) -> tuple[str, ...]:
     if select:
         return resolve_virtual_plan_model_selection(
@@ -92,7 +93,9 @@ def resolve_selected_model_names(
         if exclude
         else ()
     )
-    return tuple(ref.model_name for ref in target_checkpoint_refs if ref.model_name not in excluded)
+    return tuple(
+        ref.model_name for ref in target_checkpoint_model_refs if ref.model_name not in excluded
+    )
 
 
 def stale_after_rollback(
@@ -153,7 +156,7 @@ def read_model_versions(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, Any]:
     return {
         ref.model_name: backend.get_model_version(
@@ -171,10 +174,10 @@ def read_physical_relations(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
 ) -> dict[str, PhysicalRelationRecord]:
     relations: dict[str, PhysicalRelationRecord] = {}
-    ref: VirtualEnvironmentCheckpointRefRecord
+    ref: VirtualEnvironmentCheckpointModelRefRecord
     for ref in refs:
         relation: PhysicalRelationRecord | None = backend.get_physical_relation(
             state_connection,

@@ -26,7 +26,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     ReconcileEventRecord,
     StateLockLease,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 from sqlbuild.virtual.state.types import ReconcileAction, StateOperationStatus
 
@@ -75,10 +75,12 @@ def run_virtual_reconcile(
     state_connection: Any = backend.connect(config.connection)
     lease: StateLockLease | None = None
     try:
-        refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=resolved_virtual_environment_name,
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=resolved_virtual_environment_name,
+            )
         )
         ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
         physical_map: dict[str, PhysicalRelationRecord] = {}
@@ -167,7 +169,7 @@ def run_virtual_reconcile(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
                 model_name=model_name,
             )
-            backend.replace_virtual_environment_refs(
+            backend.replace_virtual_environment_model_refs(
                 state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
@@ -370,15 +372,15 @@ def resolve_attach_relation(
 
 def build_attached_refs(
     *,
-    existing_refs: tuple[VirtualEnvironmentRefRecord, ...],
+    existing_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
     virtual_environment_name: str,
     model_name: str,
     version_hash: str,
-) -> tuple[VirtualEnvironmentRefRecord, ...]:
+) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
     ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in existing_refs}
     ref_map[model_name] = version_hash
     return tuple(
-        VirtualEnvironmentRefRecord(
+        VirtualEnvironmentModelRefRecord(
             virtual_environment_name=virtual_environment_name,
             model_name=name,
             version_hash=hash_value,

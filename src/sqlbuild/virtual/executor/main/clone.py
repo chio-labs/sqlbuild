@@ -30,7 +30,7 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     StateLockLease,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 
 
@@ -105,10 +105,12 @@ def run_virtual_clone(
             )
             mode = "workspace fingerprints"
         else:
-            refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-                state_connection,
-                schema=config.schema,
-                virtual_environment_name=virtual_environment_name,
+            refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+                backend.get_virtual_environment_model_refs(
+                    state_connection,
+                    schema=config.schema,
+                    virtual_environment_name=virtual_environment_name,
+                )
             )
             if not refs:
                 raise PlannerInputError(

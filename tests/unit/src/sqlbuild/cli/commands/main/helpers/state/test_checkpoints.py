@@ -11,9 +11,9 @@ from sqlbuild.cli.commands.main.helpers.state.checkpoints import (
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.virtual.state.models import (
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.helpers.state._test_types import (
     CheckpointColorOutputTestCase,
@@ -69,13 +69,13 @@ def test_given_checkpoints_when_formatting_list_without_color_then_preserves_out
     ],
     ids=["preserves no-color checkpoint show output"],
 )
-def test_given_checkpoint_refs_when_formatting_show_without_color_then_preserves_output(
+def test_given_checkpoint_model_refs_when_formatting_show_without_color_then_preserves_output(
     test_case: CheckpointOutputTestCase,
 ) -> None:
     rendered: str = _format_checkpoint_show(
         checkpoint_id="cp_1",
         refs=(
-            VirtualEnvironmentCheckpointRefRecord(
+            VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1", model_name="model_a", version_hash="hash_a"
             ),
         ),
@@ -105,27 +105,27 @@ def test_given_checkpoint_refs_when_formatting_show_without_color_then_preserves
     ],
     ids=["preserves no-color checkpoint diff output"],
 )
-def test_given_checkpoint_refs_when_formatting_diff_without_color_then_preserves_output(
+def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_preserves_output(
     test_case: CheckpointOutputTestCase,
 ) -> None:
     rendered: str = _format_checkpoint_diff(
         virtual_environment_name="dev",
         checkpoint_id="cp_1",
         current_refs=(
-            VirtualEnvironmentRefRecord(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name="dev", model_name="shared", version_hash="current_hash"
             ),
-            VirtualEnvironmentRefRecord(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name="dev",
                 model_name="current_only",
                 version_hash="current_only_hash",
             ),
         ),
-        checkpoint_refs=(
-            VirtualEnvironmentCheckpointRefRecord(
+        checkpoint_model_refs=(
+            VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1", model_name="shared", version_hash="checkpoint_hash"
             ),
-            VirtualEnvironmentCheckpointRefRecord(
+            VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1",
                 model_name="checkpoint_only",
                 version_hash="checkpoint_only_hash",
@@ -153,13 +153,13 @@ def test_given_checkpoint_refs_when_formatting_diff_without_color_then_preserves
     ],
     ids=["uses semantic checkpoint colors"],
 )
-def test_given_checkpoint_refs_when_formatting_with_color_then_uses_semantic_colors(
+def test_given_checkpoint_model_refs_when_formatting_with_color_then_uses_semantic_colors(
     test_case: CheckpointColorOutputTestCase,
 ) -> None:
     rendered: str = _format_checkpoint_show(
         checkpoint_id="cp_1",
         refs=(
-            VirtualEnvironmentCheckpointRefRecord(
+            VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id="cp_1", model_name="model_a", version_hash="hash_a"
             ),
         ),

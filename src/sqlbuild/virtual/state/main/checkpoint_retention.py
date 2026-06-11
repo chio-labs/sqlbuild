@@ -10,8 +10,8 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     PhysicalRelationRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
 )
 
 
@@ -46,14 +46,14 @@ def inspect_checkpoint_retention(
         retained_relations: dict[tuple[str | None, str | None, str], PhysicalRelationRecord] = {}
         checkpoint: VirtualEnvironmentCheckpointRecord
         for checkpoint in retained_checkpoints:
-            refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = (
-                backend.get_virtual_environment_checkpoint_refs(
+            refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+                backend.get_virtual_environment_checkpoint_model_refs(
                     connection,
                     schema=config.schema,
                     checkpoint_id=checkpoint.checkpoint_id,
                 )
             )
-            ref: VirtualEnvironmentCheckpointRefRecord
+            ref: VirtualEnvironmentCheckpointModelRefRecord
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
                     connection,

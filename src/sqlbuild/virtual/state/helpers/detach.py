@@ -20,8 +20,8 @@ from sqlbuild.virtual.state.main.record_operation import record_state_operation
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateBackendConfig,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateOperationStatus,
@@ -74,10 +74,12 @@ def detach_from_virtual_state(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
         )
-        refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=active_target_name,
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=active_target_name,
+            )
         )
         ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
         recorder: StatementRecorder = StatementRecorder()
