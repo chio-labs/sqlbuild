@@ -350,8 +350,10 @@ def _format_seed_assets(
     *, results: tuple[SeedExecutionResult, ...], plan: PlanOutput | None
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
+    reasons: dict[str, str] = {}
     if plan is not None:
         targets = {name: target.qualified_name for name, target in plan.seed_locations.items()}
+        reasons = {entry.name: entry.reason.value for entry in plan.seed_entries}
     return tuple(
         _drop_none(
             {
@@ -360,6 +362,7 @@ def _format_seed_assets(
                 "status": result.status.value,
                 "duration_ms": result.duration_ms,
                 "target": targets.get(result.seed_name),
+                "reason": reasons.get(result.seed_name),
                 "error_code": result.error_code,
                 "error_help": result.error_help,
                 "error_message": result.error_message,

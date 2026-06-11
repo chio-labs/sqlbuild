@@ -71,7 +71,12 @@ from sqlbuild.compiler.source_freshness.models import (
 )
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.schema import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SeedCsvSettings,
+)
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from sqlbuild.spec.models.types import (
     SourceFreshnessStrategy,
@@ -1592,3 +1597,34 @@ def build_scheduling_graph(
         upstream
     )
     return upstream, downstream
+
+
+def build_seed_identity_compiled_seed(
+    file_path: Path,
+    *,
+    csv_settings: SeedCsvSettings | None = None,
+) -> CompiledSeed:
+    resolved_csv_settings: SeedCsvSettings = csv_settings or SeedCsvSettings()
+    schema_entry: SchemaSeedEntry = SchemaSeedEntry(
+        name="orders", csv_settings=resolved_csv_settings
+    )
+    return CompiledSeed(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="orders"),
+        deps=(),
+        name="orders",
+        seed_file=DiscoveredSeedFile(file_path=file_path, relative_path=Path("seeds/orders.csv")),
+        schema_entry=schema_entry,
+        schema_file=DiscoveredSchemaFile(
+            file_path=file_path.parent / "schema.yml",
+            relative_path=Path("seeds/schema.yml"),
+            contents="",
+            model_entries=(),
+            seed_entries=(schema_entry,),
+        ),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name="main.orders",
+        ),
+    )

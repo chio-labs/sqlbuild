@@ -41,6 +41,7 @@ def build_model_version_identity_hash(
         if upstream_key.resource_type not in (
             CompiledResourceType.MODEL,
             CompiledResourceType.FUNCTION,
+            CompiledResourceType.SEED,
         ):
             continue
         upstream_hash: str | None = upstream_version_hashes.get(upstream_key.name)

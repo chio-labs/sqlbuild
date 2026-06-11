@@ -21,7 +21,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
-from sqlbuild.compiler.planner.models import PlannerScope, WarehouseSnapshot
+from sqlbuild.compiler.planner.models import PlannerScope, WarehouseFingerprints, WarehouseSnapshot
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import (
@@ -91,21 +91,23 @@ def build_snapshot_for_metadata_test_case(
             )
         },
         existing_columns={},
-        fingerprints={
-            "orders": Fingerprint(
-                node_type="model",
-                node_name="orders",
-                target_database=None,
-                target_schema=None,
-                target_name="orders",
-                run_id="run_001",
-                definition_hash=compute_query_hash("SELECT 1 AS order_id"),
-                schema_fingerprint="schema_a",
-                definition="SELECT 1 AS order_id",
-                metadata_json=test_case.previous_metadata_json,
-                ts=_STUB_TS,
-            )
-        },
+        fingerprints=WarehouseFingerprints(
+            models={
+                "orders": Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash=compute_query_hash("SELECT 1 AS order_id"),
+                    schema_fingerprint="schema_a",
+                    definition="SELECT 1 AS order_id",
+                    metadata_json=test_case.previous_metadata_json,
+                    ts=_STUB_TS,
+                )
+            }
+        ),
     )
 
 
@@ -195,7 +197,7 @@ def build_snapshot_from_test_case(test_case: DetectModelChangesTestCase) -> Ware
     return WarehouseSnapshot(
         existing_relations=relations,
         existing_columns=columns,
-        fingerprints=fingerprints,
+        fingerprints=WarehouseFingerprints(models=fingerprints),
     )
 
 

@@ -209,7 +209,7 @@ def build_source_load_entry(
     )
 
 
-def build_seed_entry(*, name: str) -> SeedPlanEntry:
+def build_seed_entry(*, name: str, reason: PlanReason = PlanReason.FIRST_RUN) -> SeedPlanEntry:
     """Build a minimal SeedPlanEntry for formatter tests."""
 
     return SeedPlanEntry(
@@ -221,6 +221,7 @@ def build_seed_entry(*, name: str) -> SeedPlanEntry:
         file_path=Path(f"seeds/{name}.csv"),
         columns=(),
         csv_settings=SeedCsvSettings(),
+        reason=reason,
     )
 
 

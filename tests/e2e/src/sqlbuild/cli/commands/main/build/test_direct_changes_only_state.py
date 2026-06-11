@@ -9,8 +9,10 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    DirectChangesOnlySeedBuildE2ETestCase,
     DirectChangesOnlyStateBuildE2ETestCase,
     DirectReuseFromBuildE2ETestCase,
+    DirectSeedChangesOnlyGapE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_direct_changes_only_two_model_project,
@@ -75,6 +77,432 @@ def test_given_upstream_query_change_when_building_changes_only_then_rebuilds_do
         db_path=db_path,
         sql="SELECT amount_cents, amount_dollars FROM fact_orders ORDER BY order_id",
     ) == [(test_case.changed_amount_cents, test_case.expected_changed_amount_dollars)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlySeedBuildE2ETestCase(
+            description="seed change reloads seed and downstream model",
+            project_name="direct_changes_only_seed_identity",
+            initial_seed_contents="order_id,amount_cents\n1,100\n",
+            changed_seed_contents="order_id,amount_cents\n1,125\n",
+            expected_plan_selected_count=2,
+            expected_amount_dollars=1.25,
+        )
+    ],
+    ids=["seed change reloads seed and downstream model"],
+)
+def test_given_seed_change_when_building_changes_only_then_reloads_seed_and_downstream_model(
+    test_case: DirectChangesOnlySeedBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": test_case.initial_seed_contents,
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars "
+                'FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    unchanged_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+    assert unchanged_result.returncode == 0, unchanged_result.stdout + unchanged_result.stderr
+    assert "Plan ready (0 selected)" in unchanged_result.stdout
+    assert "order_amounts" not in unchanged_result.stdout
+    assert "fact_orders" not in unchanged_result.stdout
+
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        test_case.changed_seed_contents, encoding="utf-8"
+    )
+    changed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+
+    assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
+    assert (
+        f"Plan ready ({test_case.expected_plan_selected_count} selected)" in changed_result.stdout
+    )
+    assert "order_amounts  (seed_changed)" in changed_result.stdout
+    assert "seed      order_amounts" in changed_result.stdout
+    assert "fact_orders" in changed_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT amount_dollars FROM fact_orders ORDER BY order_id",
+    ) == [(test_case.expected_amount_dollars,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectSeedChangesOnlyGapE2ETestCase(
+            description="standalone seed writes fingerprint for changes-only build",
+            project_name="direct_standalone_seed_fingerprint",
+            expected_plan_fragment="Plan ready (1 selected)",
+        )
+    ],
+    ids=["standalone seed writes fingerprint for changes-only build"],
+)
+def test_given_standalone_seed_when_building_changes_only_then_seed_is_current(
+    test_case: DirectSeedChangesOnlyGapE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars "
+                'FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+
+    seed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "seed"), project_dir=project_dir
+    )
+    assert seed_result.returncode == 0, seed_result.stdout + seed_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    assert test_case.expected_plan_fragment in build_result.stdout
+    assert "seed      order_amounts" not in build_result.stdout
+    assert "fact_orders" in build_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectSeedChangesOnlyGapE2ETestCase(
+            description="seed change plan json reports changed reason",
+            project_name="direct_seed_plan_json_reason",
+            expected_seed_payload=(
+                {
+                    "name": "order_amounts",
+                    "reason": "config_changed",
+                    "qualified_name": "main.order_amounts",
+                },
+            ),
+        )
+    ],
+    ids=["seed change plan json reports changed reason"],
+)
+def test_given_seed_change_when_planning_json_then_seed_reason_is_reported(
+    test_case: DirectSeedChangesOnlyGapE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,125\n", encoding="utf-8"
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--json"), project_dir=project_dir
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    payload: dict[str, object] = json.loads(plan_result.stdout)
+    seeds: object = payload["seeds"]
+    assert seeds == list(test_case.expected_seed_payload)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectSeedChangesOnlyGapE2ETestCase(
+            description="single changed seed only rebuilds dependent branch",
+            project_name="direct_multi_seed_closure",
+            expected_plan_fragment="Plan ready (2 selected)",
+            expected_fact_order_rows=((125,),),
+            expected_customer_rows=(("Ada",),),
+        )
+    ],
+    ids=["single changed seed only rebuilds dependent branch"],
+)
+def test_given_multiple_seed_branches_when_one_seed_changes_then_only_dependent_branch_runs(
+    test_case: DirectSeedChangesOnlyGapE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+                "  - name: customer_names\n"
+                "    columns:\n"
+                "      - name: customer_id\n"
+                "        type: INTEGER\n"
+                "      - name: customer_name\n"
+                "        type: VARCHAR\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "seeds/customer_names.csv": "customer_id,customer_name\n1,Ada\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+            "models/dim_customers.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT customer_id, customer_name FROM __seed("customer_names")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,125\n", encoding="utf-8"
+    )
+
+    changed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+
+    assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
+    assert test_case.expected_plan_fragment in changed_result.stdout
+    assert "seed      order_amounts" in changed_result.stdout
+    assert "fact_orders" in changed_result.stdout
+    assert "seed      customer_names" not in changed_result.stdout
+    assert "dim_customers" not in changed_result.stdout
+    assert query_duckdb(
+        db_path=db_path, sql="SELECT amount_cents FROM fact_orders ORDER BY order_id"
+    ) == list(test_case.expected_fact_order_rows)
+    assert query_duckdb(
+        db_path=db_path, sql="SELECT customer_name FROM dim_customers ORDER BY customer_id"
+    ) == list(test_case.expected_customer_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectSeedChangesOnlyGapE2ETestCase(
+            description="seed column type change selects seed and downstream model",
+            project_name="direct_seed_schema_identity",
+            expected_plan_fragment="Plan ready (2 selected)",
+        )
+    ],
+    ids=["seed column type change selects seed and downstream model"],
+)
+def test_given_seed_schema_change_when_building_changes_only_then_seed_and_downstream_run(
+    test_case: DirectSeedChangesOnlyGapE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+    (project_dir / "seeds" / "schema.yml").write_text(
+        "seeds:\n"
+        "  - name: order_amounts\n"
+        "    columns:\n"
+        "      - name: order_id\n"
+        "        type: BIGINT\n"
+        "      - name: amount_cents\n"
+        "        type: INTEGER\n",
+        encoding="utf-8",
+    )
+
+    changed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+    )
+
+    assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
+    assert test_case.expected_plan_fragment in changed_result.stdout
+    assert "order_amounts  (seed_changed)" in changed_result.stdout
+    assert "seed      order_amounts" in changed_result.stdout
+    assert "fact_orders" in changed_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectSeedChangesOnlyGapE2ETestCase(
+            description="reuse_from builds active target when seed identity differs",
+            project_name="direct_reuse_from_seed_identity",
+            expected_fact_order_rows=((125,),),
+            expected_customer_rows=((100,),),
+        )
+    ],
+    ids=["reuse_from builds active target when seed identity differs"],
+)
+def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_seed_version(
+    test_case: DirectSeedChangesOnlyGapE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "prod"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[targets.prod]\n"
+                'schema = "prod"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n'
+                'reuse_from = "prod"\n'
+                "reuse_hard_copy = true\n"
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,125\n", encoding="utf-8"
+    )
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+
+    dev_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert dev_result.returncode == 0, dev_result.stdout + dev_result.stderr
+    assert "seed      order_amounts" in dev_result.stdout
+    assert "hard-copy reuse from prod" not in dev_result.stdout
+    assert query_duckdb(
+        db_path=db_path, sql="SELECT amount_cents FROM prod.fact_orders ORDER BY order_id"
+    ) == list(test_case.expected_customer_rows)
+    assert query_duckdb(
+        db_path=db_path, sql="SELECT amount_cents FROM dev.fact_orders ORDER BY order_id"
+    ) == list(test_case.expected_fact_order_rows)
 
 
 @pytest.mark.parametrize(

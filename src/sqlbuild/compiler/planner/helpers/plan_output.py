@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMaterializationFile,
     DiscoveredProviderUsage,
 )
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.loader_dag import upstream_loader_dependency_names
@@ -44,6 +45,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -58,6 +60,8 @@ def build_plan_output(
     changes: PlannerChangeResults,
     model_entry_results: PlannerModelEntryResults,
     reload_sources: bool,
+    seed_version_hashes: dict[str, str] | None = None,
+    seed_metadata_jsons: dict[str, str] | None = None,
 ) -> PlanOutput:
     seed_entries: list[SeedPlanEntry] = [
         SeedPlanEntry(
@@ -67,6 +71,14 @@ def build_plan_output(
             file_path=seed.seed_file.file_path,
             columns=extract_seed_columns(seed),
             csv_settings=seed.schema_entry.csv_settings,
+            fingerprint_definition=(seed_metadata_jsons or {}).get(seed.name, ""),
+            fingerprint_version_hash=(seed_version_hashes or {}).get(seed.name, ""),
+            fingerprint_metadata_json=(seed_metadata_jsons or {}).get(seed.name, "{}"),
+            reason=_resolve_seed_plan_reason(
+                seed_name=seed.name,
+                expected_version_hash=(seed_version_hashes or {}).get(seed.name),
+                snapshot=snapshot,
+            ),
         )
         for seed in project.seeds
         if seed.key in scope.selected_keys
@@ -139,6 +151,20 @@ def build_plan_output(
             source_load_entries=source_load_entries,
         ),
     )
+
+
+def _resolve_seed_plan_reason(
+    *,
+    seed_name: str,
+    expected_version_hash: str | None,
+    snapshot: WarehouseSnapshot,
+) -> PlanReason:
+    fingerprint: Fingerprint | None = snapshot.fingerprints.seeds.get(seed_name)
+    if fingerprint is None:
+        return PlanReason.FIRST_RUN
+    if expected_version_hash is not None and fingerprint.version_hash != expected_version_hash:
+        return PlanReason.CONFIG_CHANGED
+    return PlanReason.NO_CHANGE
 
 
 def _build_provider_usages(
@@ -326,8 +352,8 @@ def _build_function_entries(
                 entry_point=function.entry_point,
                 packages=function.packages,
                 previous_query_sql=(
-                    snapshot.fingerprints[function.name].definition
-                    if function.name in snapshot.fingerprints
+                    snapshot.fingerprints.functions[function.name].definition
+                    if function.name in snapshot.fingerprints.functions
                     else None
                 ),
                 reason=function_change.reason,

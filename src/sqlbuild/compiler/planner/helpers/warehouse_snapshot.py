@@ -21,7 +21,12 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.constants import (
+    FINGERPRINT_TABLE_NAME,
+    NODE_TYPE_FUNCTION,
+    NODE_TYPE_MODEL,
+    NODE_TYPE_SEED,
+)
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
@@ -32,6 +37,7 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ModelCursorSnapshot,
     PlannerScope,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -156,7 +162,7 @@ def gather_warehouse_snapshot(
         schemas=query_schemas,
         names=metadata_names,
     )
-    fingerprints: dict[str, Fingerprint] = _gather_fingerprints(
+    fingerprints: WarehouseFingerprints = _gather_fingerprints(
         adapter=adapter,
         connection=connection,
         execute=execute,
@@ -352,12 +358,14 @@ def _gather_fingerprints(
     execute: Any,
     database: str | None,
     schemas: tuple[str, ...] | None,
-) -> dict[str, Fingerprint]:
-    """Read latest fingerprints across all target schemas."""
+) -> WarehouseFingerprints:
+    """Read latest fingerprints across all target schemas grouped by node type."""
 
     if schemas is None:
-        return {}
-    merged: dict[str, Fingerprint] = {}
+        return WarehouseFingerprints()
+    model_fingerprints: dict[str, Fingerprint] = {}
+    function_fingerprints: dict[str, Fingerprint] = {}
+    seed_fingerprints: dict[str, Fingerprint] = {}
     schema: str
     for schema in schemas:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
@@ -368,8 +376,20 @@ def _gather_fingerprints(
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
         )
-        merged.update(fingerprint_set.fingerprints)
-    return merged
+        node_name: str
+        fingerprint: Fingerprint
+        for node_name, fingerprint in fingerprint_set.fingerprints.items():
+            if fingerprint.node_type == NODE_TYPE_MODEL:
+                model_fingerprints[node_name] = fingerprint
+            elif fingerprint.node_type == NODE_TYPE_FUNCTION:
+                function_fingerprints[node_name] = fingerprint
+            elif fingerprint.node_type == NODE_TYPE_SEED:
+                seed_fingerprints[node_name] = fingerprint
+    return WarehouseFingerprints(
+        models=model_fingerprints,
+        functions=function_fingerprints,
+        seeds=seed_fingerprints,
+    )
 
 
 def _gather_cursor_snapshots(

@@ -901,7 +901,10 @@ def _format_seeds(
     seed_entry: object
     visible: Sequence[object] = visible_entries(plan.seed_entries, options=display_options)
     for seed_entry in visible:
-        lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}")
+        reason: object | None = getattr(seed_entry, "reason", None)
+        reason_label: str = _seed_reason_label(reason)
+        suffix: str = f"  ({reason_label})" if reason_label else ""
+        lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}{suffix}")
     append_overflow_line(
         lines,
         total_count=len(plan.seed_entries),
@@ -909,6 +912,16 @@ def _format_seeds(
         indent="  ",
         options=display_options,
     )
+
+
+def _seed_reason_label(reason: object | None) -> str:
+    if reason == PlanReason.FIRST_RUN:
+        return "first_run"
+    if reason == PlanReason.CONFIG_CHANGED:
+        return "seed_changed"
+    if reason == PlanReason.NO_CHANGE:
+        return "current"
+    return ""
 
 
 def _format_functions(

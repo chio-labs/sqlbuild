@@ -135,7 +135,7 @@ def detect_model_changes(
         )
 
     relation_exists: bool = model_name in snapshot.existing_relations
-    fingerprint: Fingerprint | None = snapshot.fingerprints.get(model_name)
+    fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model_name)
 
     if not relation_exists and fingerprint is None:
         return ChangeDetectionResult(

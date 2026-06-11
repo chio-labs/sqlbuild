@@ -94,6 +94,67 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
         expected_fingerprint_names=frozenset(),
     ),
     GatherWarehouseSnapshotTestCase(
+        description="partitions mixed fingerprint node types into typed maps",
+        setup_sql=(
+            "CREATE TABLE staging.orders (id INTEGER)",
+            "CREATE TABLE staging.country_codes (code VARCHAR)",
+        ),
+        model_locations={"orders": "staging"},
+        seed_locations={"country_codes": "staging"},
+        fingerprints_to_write=(
+            (
+                "staging",
+                Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash="model_definition",
+                    schema_fingerprint="model_schema",
+                    definition="SELECT 1",
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                ),
+            ),
+            (
+                "staging",
+                Fingerprint(
+                    node_type="function",
+                    node_name="is_large_order",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="is_large_order",
+                    run_id="run_001",
+                    definition_hash="function_definition",
+                    schema_fingerprint="",
+                    definition="amount > 100",
+                    ts=datetime(2026, 1, 15, 12, 0, 1),
+                ),
+            ),
+            (
+                "staging",
+                Fingerprint(
+                    node_type="seed",
+                    node_name="country_codes",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="country_codes",
+                    run_id="run_001",
+                    definition_hash="seed_definition",
+                    schema_fingerprint="",
+                    definition='{"columns": []}',
+                    ts=datetime(2026, 1, 15, 12, 0, 2),
+                ),
+            ),
+        ),
+        expected_relation_names=frozenset({"orders", "country_codes"}),
+        expected_column_table_names=frozenset({"orders", "country_codes"}),
+        expected_fingerprint_names=frozenset({"orders"}),
+        expected_function_fingerprint_names=frozenset({"is_large_order"}),
+        expected_seed_fingerprint_names=frozenset({"country_codes"}),
+    ),
+    GatherWarehouseSnapshotTestCase(
         description="filters metadata to selected model and unselected upstream names",
         setup_sql=(
             "CREATE TABLE staging.raw_orders (id INTEGER)",
@@ -175,7 +236,14 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
 
     assert frozenset(snapshot.existing_relations.keys()) == test_case.expected_relation_names
     assert frozenset(snapshot.existing_columns.keys()) == test_case.expected_column_table_names
-    assert frozenset(snapshot.fingerprints.keys()) == test_case.expected_fingerprint_names
+    assert frozenset(snapshot.fingerprints.models.keys()) == test_case.expected_fingerprint_names
+    assert (
+        frozenset(snapshot.fingerprints.functions.keys())
+        == test_case.expected_function_fingerprint_names
+    )
+    assert (
+        frozenset(snapshot.fingerprints.seeds.keys()) == test_case.expected_seed_fingerprint_names
+    )
 
 
 @pytest.mark.parametrize(
@@ -206,7 +274,7 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
 
     assert len(snapshot.existing_relations) == test_case.expected_relation_count
     assert len(snapshot.existing_columns) == test_case.expected_column_count
-    assert len(snapshot.fingerprints) == test_case.expected_fingerprint_count
+    assert len(snapshot.fingerprints.models) == test_case.expected_fingerprint_count
 
 
 @pytest.mark.parametrize(

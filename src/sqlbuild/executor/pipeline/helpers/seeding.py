@@ -20,6 +20,8 @@ def run_seed_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     max_concurrency: int = 1,
+    run_id: str = "",
+    query_change_tracking: bool = False,
     on_seed_complete: Callable[[SeedExecutionResult], None] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
@@ -62,6 +64,8 @@ def run_seed_pipeline(
                     adapter=adapter,
                     connection=connections[worker_index],
                     statement_recorder=StatementRecorder(),
+                    run_id=run_id,
+                    query_change_tracking=query_change_tracking,
                 )
                 results[seed_index] = result
                 if on_seed_complete is not None:

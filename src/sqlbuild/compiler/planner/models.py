@@ -143,12 +143,21 @@ class CursorInputRelation:
 
 
 @dataclass(frozen=True)
+class WarehouseFingerprints:
+    """Latest standard fingerprints grouped by node type."""
+
+    models: dict[str, Fingerprint] = field(default_factory=dict)
+    functions: dict[str, Fingerprint] = field(default_factory=dict)
+    seeds: dict[str, Fingerprint] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
     existing_relations: dict[str, RelationInfo] = field(default_factory=dict)
     existing_columns: dict[str, tuple[ColumnInfo, ...]] = field(default_factory=dict)
-    fingerprints: dict[str, Fingerprint] = field(default_factory=dict)
+    fingerprints: WarehouseFingerprints = field(default_factory=WarehouseFingerprints)
     cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
 
 
@@ -305,6 +314,8 @@ class StandardModelVersionIdentities:
     """Current standard model version identity values by model name."""
 
     function_local_hashes: dict[str, str]
+    seed_version_hashes: dict[str, str]
+    seed_metadata_jsons: dict[str, str]
     model_metadata_jsons: dict[str, str]
     model_local_hashes: dict[str, str]
     model_version_hashes: dict[str, str]
@@ -525,7 +536,11 @@ class SeedPlanEntry:
     file_path: Path
     columns: tuple[ColumnInfo, ...]
     csv_settings: SeedCsvSettings
+    fingerprint_definition: str = ""
+    fingerprint_version_hash: str = ""
+    fingerprint_metadata_json: str = "{}"
     action: PlanAction = PlanAction.LOAD_SEED
+    reason: PlanReason = PlanReason.FIRST_RUN
 
 
 @dataclass(frozen=True)
