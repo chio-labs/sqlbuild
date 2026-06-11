@@ -19,6 +19,19 @@ class ReadLatestSourceFreshnessErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ReadLatestSourceFreshnessRendererTestCase:
+    description: str
+    expected_executed_sql: str
+
+
+@dataclass(frozen=True)
+class WriteSourceFreshnessIndexTestCase:
+    description: str
+    expected_index_sql: str
+    expected_insert_prefix: str
+
+
+@dataclass(frozen=True)
 class SharedSourceFreshnessObservationTestCase:
     description: str
     adapter_observed_at: datetime | None

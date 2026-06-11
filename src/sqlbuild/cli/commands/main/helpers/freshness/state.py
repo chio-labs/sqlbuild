@@ -30,6 +30,7 @@ def read_standard_freshness_state_for_command(
                 database=state_database,
                 schema=state_schema,
                 render_qualified_name=adapter.render_qualified_name,
+                render_read_latest_sql=adapter.render_read_latest_source_freshness_sql,
             ).records
         )
     return records

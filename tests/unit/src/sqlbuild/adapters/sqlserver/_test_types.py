@@ -44,3 +44,19 @@ class SqlServerMoveOrCopyRelationTestCase:
     source: str
     target: str
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlServerIndexSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlServerLatestReadSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    expected_fragments: tuple[str, ...]

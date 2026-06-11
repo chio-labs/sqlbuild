@@ -133,11 +133,36 @@ def test_given_unchanged_project_when_planning_after_build_then_models_are_not_q
     fingerprint_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT node_name, definition_b64 FROM main._sqlbuild_fingerprints ORDER BY node_name"
+            "SELECT node_type, node_name, target_database, target_schema, target_name, run_id, "
+            "definition_hash, version_hash, schema_fingerprint, definition_b64, "
+            "metadata_json_b64, ts FROM main._sqlbuild_fingerprints ORDER BY node_name"
         ),
     )
-    assert tuple(row[0] for row in fingerprint_rows) == test_case.expected_fingerprint_models
-    assert all(isinstance(row[1], str) and row[1] for row in fingerprint_rows)
+    assert tuple(row[1] for row in fingerprint_rows) == test_case.expected_fingerprint_models
+    assert all(isinstance(row[9], str) and row[9] for row in fingerprint_rows)
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    try:
+        stale_row: tuple[object, ...] = tuple(fingerprint_rows[0])
+        connection.execute(
+            "INSERT INTO main._sqlbuild_fingerprints VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                stale_row[0],
+                stale_row[1],
+                stale_row[2],
+                stale_row[3],
+                stale_row[4],
+                "stale_run",
+                "stale_definition_hash",
+                "stale_version_hash",
+                stale_row[8],
+                stale_row[9],
+                stale_row[10],
+                "2000-01-01 00:00:00",
+            ),
+        )
+    finally:
+        connection.close()
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.plan_command,

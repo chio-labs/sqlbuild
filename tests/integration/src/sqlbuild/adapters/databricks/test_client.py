@@ -862,6 +862,7 @@ def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_
         database=databricks_catalog,
         schema=databricks_schema,
         render_qualified_name=adapter.render_qualified_name,
+        render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
     )
 
     actual_query_sql: str = fingerprint_set.fingerprints[test_case.expected_model_name].definition

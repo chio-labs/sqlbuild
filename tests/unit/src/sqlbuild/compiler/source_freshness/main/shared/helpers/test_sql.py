@@ -11,7 +11,7 @@ from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
     build_qualified_table_name,
-    build_read_all_sql,
+    build_read_latest_sql,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.shared.helpers._test_types import (
     BuildSourceFreshnessInsertSqlTestCase,
@@ -92,31 +92,24 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
     "test_case",
     [
         BuildSourceFreshnessSqlTestCase(
-            description="selects all source freshness columns from qualified table",
+            description="selects latest source freshness rows with window ranking",
             database=None,
             schema="analytics",
             expected_contains=(
-                "SELECT",
-                "source_name",
-                "target_database",
-                "target_schema",
-                "target_name",
-                "run_id",
-                "strategy",
-                "value_kind",
-                "data_version",
-                "data_version_hash",
-                "observed_at",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
                 f"FROM analytics.{SOURCE_FRESHNESS_TABLE_NAME}",
+                "WHERE __sqlbuild_latest_rank = 1",
             ),
         )
     ],
-    ids=["selects all source freshness columns from qualified table"],
+    ids=["selects latest source freshness rows with window ranking"],
 )
-def test_given_schema_when_building_read_all_sql_then_contains_expected_fragments(
+def test_given_schema_when_building_read_latest_sql_then_contains_windowed_latest_query(
     test_case: BuildSourceFreshnessSqlTestCase,
 ) -> None:
-    result: str = build_read_all_sql(
+    result: str = build_read_latest_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,

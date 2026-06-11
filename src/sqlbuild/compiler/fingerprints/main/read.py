@@ -12,7 +12,6 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
-    build_read_all_sql,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 
@@ -25,9 +24,10 @@ def read_latest_fingerprints(
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
+    render_read_latest_sql: Callable[..., str],
     require_table: bool = False,
 ) -> FingerprintSet:
-    """Read all fingerprints for a schema and resolve latest per node name in memory.
+    """Read the latest fingerprint per node identity from adapter-rendered SQL.
 
     Fingerprint table existence is checked via adapter metadata (`relation_exists`)
     rather than by swallowing probe-query errors, so operational failures propagate
@@ -50,10 +50,9 @@ def read_latest_fingerprints(
             raise FingerprintInputError(f"Unable to read fingerprints from {qualified_name}")
         return FingerprintSet(schema=schema, fingerprints={})
 
-    read_sql: str = build_read_all_sql(
+    read_sql: str = render_read_latest_sql(
         database=database,
         schema=schema,
-        render_qualified_name=render_qualified_name,
     )
     try:
         result: Any = execute(connection, read_sql)
@@ -64,14 +63,12 @@ def read_latest_fingerprints(
             "fingerprint table to regenerate fingerprints."
         ) from error
     rows: list[tuple[Any, ...]] = result.fetchall()
-    latest: dict[str, Fingerprint] = {}
+    fingerprints: dict[str, Fingerprint] = {}
     row: tuple[Any, ...]
     for row in rows:
         fingerprint: Fingerprint = _row_to_fingerprint(row, qualified_name=qualified_name)
-        node_name: str = fingerprint.node_name
-        if node_name not in latest or fingerprint.ts > latest[node_name].ts:
-            latest[node_name] = fingerprint
-    return FingerprintSet(schema=schema, fingerprints=latest)
+        fingerprints[fingerprint.node_name] = fingerprint
+    return FingerprintSet(schema=schema, fingerprints=fingerprints)
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:

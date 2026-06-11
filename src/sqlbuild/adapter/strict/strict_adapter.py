@@ -683,6 +683,46 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_read_latest_fingerprints_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render SQL that reads latest fingerprint rows per identity."""
+        ...
+
+    @abstractmethod
+    def render_read_latest_source_freshness_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render SQL that reads latest source freshness rows per identity."""
+        ...
+
+    @abstractmethod
+    def render_create_fingerprint_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        """Render optional fingerprint table index DDL statements."""
+        ...
+
+    @abstractmethod
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        """Render optional source freshness table index DDL statements."""
+        ...
+
+    @abstractmethod
     def sql_analysis_dialect(self) -> str | None:
         """Return the SQL analysis dialect name for this adapter, if any."""
         ...

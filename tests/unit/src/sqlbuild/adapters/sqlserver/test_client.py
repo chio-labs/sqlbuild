@@ -7,6 +7,8 @@ from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
 from sqlbuild.compiler.compile.models.core import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,
+    SqlServerIndexSqlTestCase,
+    SqlServerLatestReadSqlTestCase,
     SqlServerMoveOrCopyRelationTestCase,
     SqlServerRenderCreateFunctionTestCase,
     SqlServerRenderCreateSchemaTestCase,
@@ -152,6 +154,134 @@ def test_given_schema_when_rendering_create_then_sqlserver_checks_sys_schemas(
     (statement,) = adapter.render_create_schema(database=None, schema=test_case.schema)
 
     assert statement == test_case.expected_statement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerIndexSqlTestCase(
+            description="renders guarded latest-read index for fingerprint table",
+            database=None,
+            schema="analytics",
+            expected_statements=(
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+                "WHERE name = '_sqlbuild_fingerprints_latest_idx' "
+                "AND object_id = OBJECT_ID(N'analytics._sqlbuild_fingerprints')) "
+                "CREATE INDEX _sqlbuild_fingerprints_latest_idx "
+                "ON analytics._sqlbuild_fingerprints (node_name, ts DESC, run_id DESC)",
+            ),
+        )
+    ],
+    ids=["renders guarded latest-read index for fingerprint table"],
+)
+def test_given_fingerprint_table_when_rendering_indexes_then_sqlserver_uses_latest_read_keys(
+    test_case: SqlServerIndexSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_fingerprint_index_sqls(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerIndexSqlTestCase(
+            description="renders guarded latest-read index for source freshness table",
+            database=None,
+            schema="analytics",
+            expected_statements=(
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+                "WHERE name = '_sqlbuild_source_freshness_latest_idx' "
+                "AND object_id = OBJECT_ID(N'analytics._sqlbuild_source_freshness')) "
+                "CREATE INDEX _sqlbuild_source_freshness_latest_idx "
+                "ON analytics._sqlbuild_source_freshness ("
+                "source_name, target_database, target_schema, target_name, "
+                "observed_at DESC, run_id DESC)",
+            ),
+        )
+    ],
+    ids=["renders guarded latest-read index for source freshness table"],
+)
+def test_given_source_freshness_table_when_rendering_indexes_then_sqlserver_uses_latest_read_keys(
+    test_case: SqlServerIndexSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_source_freshness_index_sqls(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerLatestReadSqlTestCase(
+            description="renders windowed fingerprint latest read",
+            database=None,
+            schema="analytics",
+            expected_fragments=(
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "FROM analytics._sqlbuild_fingerprints",
+            ),
+        )
+    ],
+    ids=["renders windowed fingerprint latest read"],
+)
+def test_given_fingerprint_table_when_rendering_latest_read_then_sqlserver_uses_window_query(
+    test_case: SqlServerLatestReadSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    sql: str = adapter.render_read_latest_fingerprints_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerLatestReadSqlTestCase(
+            description="renders windowed source freshness latest read",
+            database=None,
+            schema="analytics",
+            expected_fragments=(
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "FROM analytics._sqlbuild_source_freshness",
+            ),
+        )
+    ],
+    ids=["renders windowed source freshness latest read"],
+)
+def test_given_source_freshness_when_rendering_latest_read_then_sqlserver_uses_window_query(
+    test_case: SqlServerLatestReadSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    sql: str = adapter.render_read_latest_source_freshness_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
 
 
 @pytest.mark.parametrize(

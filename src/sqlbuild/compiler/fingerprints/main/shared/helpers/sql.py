@@ -76,31 +76,28 @@ def build_create_table_sql(
     )
 
 
-def build_read_all_sql(
+def build_read_latest_sql(
     *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
 ) -> str:
-    """Build a SELECT statement to read all fingerprint rows for a schema."""
+    """Build a windowed SELECT for the latest fingerprint per node name."""
 
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
+    selected_columns: str = _fingerprint_select_columns()
     return (
-        f"SELECT "
-        f"{COLUMN_NODE_TYPE}, "
-        f"{COLUMN_NODE_NAME}, "
-        f"{COLUMN_TARGET_DATABASE}, "
-        f"{COLUMN_TARGET_SCHEMA}, "
-        f"{COLUMN_TARGET_NAME}, "
-        f"{COLUMN_RUN_ID}, "
-        f"{COLUMN_DEFINITION_HASH}, "
-        f"{COLUMN_VERSION_HASH}, "
-        f"{COLUMN_SCHEMA_FINGERPRINT}, "
-        f"{COLUMN_DEFINITION_B64}, "
-        f"{COLUMN_METADATA_JSON_B64}, "
-        f"{COLUMN_TIMESTAMP} "
+        f"SELECT {selected_columns} "
+        f"FROM ("
+        f"SELECT {selected_columns}, "
+        f"ROW_NUMBER() OVER ("
+        f"PARTITION BY {COLUMN_NODE_NAME} "
+        f"ORDER BY {COLUMN_TIMESTAMP} DESC, {COLUMN_RUN_ID} DESC"
+        f") AS __sqlbuild_latest_rank "
         f"FROM {qualified_name}"
+        f") AS __sqlbuild_latest_fingerprints "
+        f"WHERE __sqlbuild_latest_rank = 1"
     )
 
 
@@ -164,6 +161,23 @@ def build_insert_sql(
         f"'{encoded_metadata_json}', "
         f"'{ts}'"
         f")"
+    )
+
+
+def _fingerprint_select_columns() -> str:
+    return (
+        f"{COLUMN_NODE_TYPE}, "
+        f"{COLUMN_NODE_NAME}, "
+        f"{COLUMN_TARGET_DATABASE}, "
+        f"{COLUMN_TARGET_SCHEMA}, "
+        f"{COLUMN_TARGET_NAME}, "
+        f"{COLUMN_RUN_ID}, "
+        f"{COLUMN_DEFINITION_HASH}, "
+        f"{COLUMN_VERSION_HASH}, "
+        f"{COLUMN_SCHEMA_FINGERPRINT}, "
+        f"{COLUMN_DEFINITION_B64}, "
+        f"{COLUMN_METADATA_JSON_B64}, "
+        f"{COLUMN_TIMESTAMP}"
     )
 
 

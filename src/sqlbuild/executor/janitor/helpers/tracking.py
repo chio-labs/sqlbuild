@@ -37,6 +37,7 @@ def collect_tracked_relation_keys(
                 database=database,
                 schema=schema,
                 render_qualified_name=adapter.render_qualified_name,
+                render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
             )
         except Exception as error:
             log_debug_event(

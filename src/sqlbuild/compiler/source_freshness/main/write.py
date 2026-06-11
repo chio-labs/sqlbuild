@@ -23,6 +23,7 @@ def write_source_freshness_record(
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
     render_create_table_sql: Callable[..., str] | None = None,
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
 ) -> None:
     """Append one source freshness row, creating the table if needed."""
 
@@ -37,6 +38,10 @@ def write_source_freshness_record(
         )
     )
     execute(connection, create_sql)
+    if render_create_index_sqls is not None:
+        index_sql: str
+        for index_sql in render_create_index_sqls(database=database, schema=schema):
+            execute(connection, index_sql)
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,

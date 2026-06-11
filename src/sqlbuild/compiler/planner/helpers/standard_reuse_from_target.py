@@ -136,6 +136,7 @@ def _read_reuse_origin_fingerprints(
             database=database,
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
             require_table=True,
         )
     except FingerprintInputError as error:
