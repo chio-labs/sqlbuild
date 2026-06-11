@@ -357,22 +357,22 @@ def test_given_two_virtual_environments_when_seed_differs_then_each_reads_bound_
     "test_case",
     [
         VirtualSeedBuildE2ETestCase(
-            description="second VDE reuses existing physical seed artifact",
+            description="second VDE uses existing physical seed artifact",
             expected_initial_rows=((1, 100),),
             expected_changed_rows=((1, 100),),
             expected_changed_fragments=("order_amounts", "SKIP=1"),
             expected_physical_seed_count=1,
         )
     ],
-    ids=["second VDE reuses existing physical seed artifact"],
+    ids=["second VDE uses existing physical seed artifact"],
 )
-def test_given_second_virtual_environment_when_seed_version_exists_then_it_reuses_physical_seed(
+def test_given_second_vde_when_seed_version_exists_then_uses_existing_physical_seed(
     test_case: VirtualSeedBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="virtual_seed_reuse_existing_artifact",
+        project_name="virtual_seed_existing_artifact",
         repo_files={
             "sqlbuild_project.toml": build_virtual_plan_project_toml(),
             "seeds/schema.yml": (
@@ -417,6 +417,68 @@ def test_given_second_virtual_environment_when_seed_version_exists_then_it_reuse
             "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts'"
         ),
     ) == [(test_case.expected_physical_seed_count,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSeedBuildE2ETestCase(
+            description="explicit model selection updates stale upstream seed artifact",
+            expected_initial_rows=((1, 100),),
+            expected_changed_rows=((1, 200),),
+            expected_changed_fragments=("order_amounts", "fact_orders"),
+        )
+    ],
+    ids=["explicit model selection updates stale upstream seed artifact"],
+)
+def test_given_explicit_model_selection_when_upstream_seed_changed_then_model_reads_new_seed(
+    test_case: VirtualSeedBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_explicit_model_with_changed_seed",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__dev.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_initial_rows)
+
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,200\n",
+        encoding="utf-8",
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "fact_orders"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    for fragment in test_case.expected_changed_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__dev.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_changed_rows)
 
 
 @pytest.mark.parametrize(
