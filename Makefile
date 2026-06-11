@@ -1,3 +1,7 @@
+SHELL := /bin/bash
+
+.PHONY: verify coverage
+
 format:
 	uv run ruff format .
 
@@ -97,13 +101,33 @@ check:
 
 
 verify:
-	uv run ruff format .
-	uv run ruff check --fix .
-	uv run ty check src tests
-	uv run pytest tests -m "not real_warehouse and not dbt" -vv
-	uv run check-test-conventions tests
-	uv run check-structure-conventions src/sqlbuild scripts
-	uv run check-type-annotation-conventions src tests
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/verify-$$(date +%Y%m%d-%H%M%S).log"; \
+	{ \
+		set -e; \
+		uv run ruff format .; \
+		uv run ruff check --fix .; \
+		uv run ty check src tests; \
+		PYTHONUNBUFFERED=1 uv run pytest tests -m "not real_warehouse and not dbt" -vv --color=yes; \
+		uv run check-test-conventions tests; \
+		uv run check-structure-conventions src/sqlbuild scripts; \
+		uv run check-type-annotation-conventions src tests; \
+	} 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "VERIFY_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
+
+
+coverage:
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/coverage-$$(date +%Y%m%d-%H%M%S).log"; \
+	PYTHONUNBUFFERED=1 uv run pytest tests -m "not real_warehouse and not dbt" -vv --color=yes \
+		--cov=src/sqlbuild --cov-branch \
+		--cov-report=term-missing --cov-report=html --cov-report=xml \
+		2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "COVERAGE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 verify-quick:
