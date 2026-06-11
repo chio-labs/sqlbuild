@@ -18,12 +18,6 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
-from sqlbuild.compiler.planner.helpers.changes_only import (
-    build_standard_identity_stale_model_names,
-    mark_run_despite_unchanged_actions,
-    mark_version_identity_stale_actions,
-    prune_unchanged_scope,
-)
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
@@ -43,6 +37,12 @@ from sqlbuild.compiler.planner.helpers.standard_reuse_planning import (
     build_standard_reuse_planning_result,
     serialize_standard_reuse_metadata,
 )
+from sqlbuild.compiler.planner.helpers.standard_scope_pruning import (
+    build_standard_identity_stale_model_names,
+    mark_run_despite_unchanged_actions,
+    mark_version_identity_stale_actions,
+    prune_standard_unchanged_scope,
+)
 from sqlbuild.compiler.planner.helpers.version_identity import (
     StandardModelVersionIdentities,
     build_standard_model_version_identities,
@@ -60,6 +60,7 @@ from sqlbuild.compiler.planner.models import (
     StandardReusePlanningResult,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
@@ -72,7 +73,7 @@ def build_execution_plan(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     full_refresh: bool = False,
-    changes_only: bool = False,
+    standard_scope_pruning: StandardScopePruning = StandardScopePruning.NONE,
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
@@ -173,7 +174,7 @@ def build_execution_plan(
             relations=relations,
         )
     )
-    if changes_only and not full_refresh:
+    if standard_scope_pruning == StandardScopePruning.PRUNE_UNCHANGED and not full_refresh:
         standard_identity_stale_model_names: frozenset[str] = (
             build_standard_identity_stale_model_names(
                 scope=scope,
@@ -203,7 +204,7 @@ def build_execution_plan(
                 ),
             )
         )
-        scope = prune_unchanged_scope(
+        scope = prune_standard_unchanged_scope(
             scope=scope,
             changes=changes,
             resolved_actions=resolved_actions,

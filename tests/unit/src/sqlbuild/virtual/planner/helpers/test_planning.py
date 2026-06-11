@@ -7,7 +7,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 from sqlbuild.shared.models import SqlHookEntry
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
@@ -53,7 +53,7 @@ VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = 
         default_selection=("fact_orders", "stg_orders"),
         stale_model_names=("fact_orders", "stg_orders"),
         include_stale_upstreams=True,
-        changes_only=False,
+        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
         expected_selection=("fact_orders", "stg_orders"),
     ),
     VirtualModelSelectionTestCase(
@@ -62,7 +62,7 @@ VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = 
         default_selection=("fact_orders", "stg_orders"),
         stale_model_names=("fact_orders", "stg_orders"),
         include_stale_upstreams=True,
-        changes_only=True,
+        work_selection_policy=WorkSelectionPolicy.STALE_ONLY,
         expected_selection=("fact_orders", "stg_orders"),
     ),
     VirtualModelSelectionTestCase(
@@ -71,7 +71,7 @@ VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = 
         default_selection=("fact_orders", "stg_orders"),
         stale_model_names=("fact_orders", "stg_orders"),
         include_stale_upstreams=True,
-        changes_only=False,
+        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
         expected_selection=("fact_orders", "stg_orders"),
         downstream_depends_on_dim_customers=True,
     ),
@@ -999,7 +999,7 @@ def test_given_virtual_selectors_when_resolving_selection_then_it_returns_cohere
         default_selection=test_case.default_selection,
         stale_model_names=test_case.stale_model_names,
         include_stale_upstreams=test_case.include_stale_upstreams,
-        changes_only=test_case.changes_only,
+        work_selection_policy=test_case.work_selection_policy,
     )
 
     assert selection == test_case.expected_selection
@@ -1014,7 +1014,7 @@ def test_given_virtual_selectors_when_resolving_selection_then_it_returns_cohere
             default_selection=("fact_orders", "stg_orders"),
             stale_model_names=("fact_orders", "stg_orders"),
             include_stale_upstreams=False,
-            changes_only=False,
+            work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
             expected_selection=("stg_orders",),
         )
     ],
@@ -1036,7 +1036,7 @@ def test_given_virtual_selector_missing_stale_upstream_when_resolving_selection_
             default_selection=test_case.default_selection,
             stale_model_names=test_case.stale_model_names,
             include_stale_upstreams=test_case.include_stale_upstreams,
-            changes_only=test_case.changes_only,
+            work_selection_policy=test_case.work_selection_policy,
         )
 
     assert exc_info.value.code == "S010"

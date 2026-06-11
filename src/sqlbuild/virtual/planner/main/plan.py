@@ -17,7 +17,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGrap
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_name
@@ -180,6 +180,9 @@ def run_virtual_plan_pipeline(
             stale_model_names=stale_model_names,
             graph=graph,
         )
+        work_selection_policy: WorkSelectionPolicy = (
+            WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
+        )
         effective_select: tuple[str, ...] = resolve_virtual_model_selection(
             graph=graph,
             select=select,
@@ -187,7 +190,7 @@ def run_virtual_plan_pipeline(
             default_selection=default_selection,
             stale_model_names=stale_model_names,
             include_stale_upstreams=include_stale_upstreams,
-            changes_only=changes_only,
+            work_selection_policy=work_selection_policy,
         )
 
         if effective_select:

@@ -27,7 +27,7 @@ from sqlbuild.compiler.planner.main.version_identity_stale_model_names import (
 from sqlbuild.compiler.planner.main.version_identity_version_hash import (
     build_model_version_identity_hash,
 )
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
@@ -399,7 +399,7 @@ def resolve_virtual_model_selection(
     default_selection: tuple[str, ...],
     stale_model_names: tuple[str, ...],
     include_stale_upstreams: bool = False,
-    changes_only: bool = False,
+    work_selection_policy: WorkSelectionPolicy = WorkSelectionPolicy.ALL_SELECTED,
 ) -> tuple[str, ...]:
     """Resolve and guard the effective virtual model selection."""
 
@@ -412,7 +412,7 @@ def resolve_virtual_model_selection(
             exclude=exclude,
         )
     )
-    if changes_only:
+    if work_selection_policy == WorkSelectionPolicy.STALE_ONLY:
         default_set: set[str] = set(default_selection)
         selected_model_names = tuple(
             model_name for model_name in selected_model_names if model_name in default_set

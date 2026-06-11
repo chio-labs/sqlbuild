@@ -6,10 +6,10 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.changes_only import (
+from sqlbuild.compiler.planner.helpers.standard_scope_pruning import (
     build_standard_identity_stale_model_names,
     mark_version_identity_stale_actions,
-    prune_unchanged_scope,
+    prune_standard_unchanged_scope,
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -134,7 +134,7 @@ def test_given_identity_hashes_when_collecting_stale_models_then_returns_missing
 def test_given_mixed_change_results_when_pruning_unchanged_scope_then_keeps_only_stale_sql_keys(
     test_case: PruneUnchangedScopeTestCase,
 ) -> None:
-    result: PlannerScope = prune_unchanged_scope(
+    result: PlannerScope = prune_standard_unchanged_scope(
         scope=test_case.scope,
         changes=PlannerChangeResults(
             models={
@@ -212,7 +212,7 @@ def test_given_mixed_change_results_when_pruning_unchanged_scope_then_keeps_only
 def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
     test_case: PruneUnchangedScopeTestCase,
 ) -> None:
-    result: PlannerScope = prune_unchanged_scope(
+    result: PlannerScope = prune_standard_unchanged_scope(
         scope=test_case.scope,
         changes=PlannerChangeResults(
             models={

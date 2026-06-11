@@ -37,7 +37,13 @@ from sqlbuild.compiler.planner.models import (
     PlannerWarehouseSnapshotResult,
     PlanOutput,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    ChangeKind,
+    PlanAction,
+    PlanReason,
+    WorkSelectionPolicy,
+)
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.models import (
@@ -241,6 +247,9 @@ def run_virtual_build(
             bound_model_versions=bound_model_versions,
             source_freshness_records=current_source_freshness_records,
         )
+        work_selection_policy: WorkSelectionPolicy = (
+            WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
+        )
         selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
             graph=graph,
             select=select,
@@ -248,7 +257,7 @@ def run_virtual_build(
             default_selection=semantics.default_selection,
             stale_model_names=semantics.stale_model_names,
             include_stale_upstreams=include_stale_upstreams,
-            changes_only=changes_only,
+            work_selection_policy=work_selection_policy,
         )
         effective_select: tuple[str, ...] = _build_virtual_planner_select(
             graph=graph,
