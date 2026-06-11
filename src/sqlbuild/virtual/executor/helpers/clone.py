@@ -14,10 +14,11 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
 )
 from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -27,7 +28,12 @@ from sqlbuild.virtual.executor.helpers.rewrite import relation_type_for_model
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.main.model_version_lock import acquire_model_version_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
-from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord, StateLockLease
+from sqlbuild.virtual.state.models import (
+    ModelVersionRecord,
+    PhysicalRelationRecord,
+    SeedVersionRecord,
+    StateLockLease,
+)
 from sqlbuild.virtual.state.types import ModelVersionStatus, PhysicalArtifactType
 
 
@@ -62,6 +68,31 @@ def build_workspace_model_versions(
             definition_text_b64=encode_state_text(model.query_sql),
             identity_metadata_json_b64=encode_state_text(metadata_json),
             compiled_sql_b64=encode_state_text(entry.resolved_sql) if entry is not None else None,
+        )
+    return records
+
+
+def build_workspace_seed_versions(
+    *,
+    project: CompiledProject,
+    seed_entries: tuple[SeedPlanEntry, ...],
+    seed_names: tuple[str, ...],
+    version_hashes: dict[str, str],
+    metadata_jsons: dict[str, str],
+) -> dict[str, SeedVersionRecord]:
+    seeds_by_name: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    seed_entries_by_name: dict[str, SeedPlanEntry] = {entry.name: entry for entry in seed_entries}
+    records: dict[str, SeedVersionRecord] = {}
+    for name in seed_names:
+        if name not in seeds_by_name or name not in seed_entries_by_name:
+            continue
+        metadata_json: str = metadata_jsons.get(name, "{}")
+        records[name] = SeedVersionRecord(
+            seed_name=name,
+            version_hash=version_hashes[name],
+            identity_metadata_hash=hashlib.sha256(metadata_json.encode("utf-8")).hexdigest(),
+            identity_metadata_json_b64=encode_state_text(metadata_json),
+            status=ModelVersionStatus.READY,
         )
     return records
 
@@ -185,6 +216,53 @@ def register_hydrated_relation(
                             model.config.values.get("materialized", MaterializationType.TABLE)
                         )
                     ),
+                ),
+            )
+    finally:
+        backend.close(connection)
+
+
+def register_hydrated_seed_relation(
+    *,
+    backend: Any,
+    config_schema: str,
+    config_connection: dict[str, object],
+    seed_version: SeedVersionRecord,
+    destination: CompiledRelationLocation,
+) -> None:
+    connection: Any = backend.connect(config_connection)
+    try:
+        if (
+            backend.get_seed_version(
+                connection,
+                schema=config_schema,
+                seed_name=seed_version.seed_name,
+                version_hash=seed_version.version_hash,
+            )
+            is None
+        ):
+            backend.upsert_seed_version(connection, schema=config_schema, record=seed_version)
+        if (
+            backend.get_physical_relation_for_artifact(
+                connection,
+                schema=config_schema,
+                artifact_type=PhysicalArtifactType.SEED,
+                artifact_name=seed_version.seed_name,
+                version_hash=seed_version.version_hash,
+            )
+            is None
+        ):
+            backend.upsert_physical_relation(
+                connection,
+                schema=config_schema,
+                record=PhysicalRelationRecord(
+                    artifact_type=PhysicalArtifactType.SEED,
+                    artifact_name=seed_version.seed_name,
+                    version_hash=seed_version.version_hash,
+                    database_name=destination.database,
+                    schema_name=destination.schema or "",
+                    relation_name=destination.name,
+                    relation_type="table",
                 ),
             )
     finally:

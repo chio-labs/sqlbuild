@@ -27,8 +27,9 @@ from sqlbuild.virtual.state.models import (
     ReconcileEventRecord,
     StateLockLease,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
-from sqlbuild.virtual.state.types import ReconcileAction, StateOperationStatus
+from sqlbuild.virtual.state.types import PhysicalArtifactType, ReconcileAction, StateOperationStatus
 
 
 def run_virtual_reconcile(
@@ -40,6 +41,7 @@ def run_virtual_reconcile(
     virtual_environment_name: str | None,
     command: str | None,
     model_name: str | None,
+    seed_name: str | None,
     physical_relation_name: str | None,
 ) -> str:
     graph: ProjectGraph = build_project_graph(
@@ -83,6 +85,14 @@ def run_virtual_reconcile(
             )
         )
         ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
+        seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=resolved_virtual_environment_name,
+            )
+        )
+        seed_ref_map: dict[str, str] = {ref.seed_name: ref.version_hash for ref in seed_refs}
         physical_map: dict[str, PhysicalRelationRecord] = {}
         for ref in refs:
             relation: PhysicalRelationRecord | None = backend.get_physical_relation(
@@ -93,10 +103,24 @@ def run_virtual_reconcile(
             )
             if relation is not None:
                 physical_map[ref.model_name] = relation
+        seed_physical_map: dict[str, PhysicalRelationRecord] = {}
+        for ref in seed_refs:
+            relation = backend.get_physical_relation_for_artifact(
+                state_connection,
+                schema=config.schema,
+                artifact_type=PhysicalArtifactType.SEED,
+                artifact_name=ref.seed_name,
+                version_hash=ref.version_hash,
+            )
+            if relation is not None:
+                seed_physical_map[ref.seed_name] = relation
 
         if command == "repair-view":
-            if model_name is None:
-                raise PlannerInputError("reconcile repair-view requires --model", code="C248")
+            if (model_name is None) == (seed_name is None):
+                raise PlannerInputError(
+                    "reconcile repair-view requires exactly one of --model or --seed",
+                    code="C248",
+                )
             lease = acquire_virtual_environment_lease(
                 backend,
                 state_connection,
@@ -110,6 +134,31 @@ def run_virtual_reconcile(
                     f"virtual environment '{resolved_virtual_environment_name}' is locked",
                     code="S014",
                 )
+            if seed_name is not None:
+                repair_seed_view(
+                    graph=graph,
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    virtual_environment_name=resolved_virtual_environment_name,
+                    unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+                    seed_name=seed_name,
+                    seed_physical_map=seed_physical_map,
+                )
+                _record_reconcile_event(
+                    backend=backend,
+                    state_connection=state_connection,
+                    schema=config.schema,
+                    action=ReconcileAction.REPAIR_VIEW,
+                    message=f"repaired seed view for {seed_name}",
+                )
+                return (
+                    "Repair\n"
+                    f"  seed    {seed_name}\n"
+                    f"  VDE     {resolved_virtual_environment_name}\n"
+                    "  action  recreate logical seed view from state\n"
+                    "  result  repaired"
+                )
+            assert model_name is not None
             repair_view(
                 graph=graph,
                 adapter=adapter,
@@ -220,6 +269,8 @@ def run_virtual_reconcile(
             model_name=model_name,
             ref_map=ref_map,
             physical_map=physical_map,
+            seed_ref_map=seed_ref_map,
+            seed_physical_map=seed_physical_map,
         )
     finally:
         if lease is not None:
@@ -242,6 +293,8 @@ def build_reconcile_report(
     model_name: str | None,
     ref_map: dict[str, str],
     physical_map: dict[str, PhysicalRelationRecord],
+    seed_ref_map: dict[str, str],
+    seed_physical_map: dict[str, PhysicalRelationRecord],
 ) -> str:
     target_names: tuple[str, ...] = (
         (model_name,)
@@ -275,6 +328,24 @@ def build_reconcile_report(
             issues.append(f"missing logical target: {model.name}")
         elif normalize_relation_type(relation_type) == RelationType.TABLE:
             issues.append(f"logical target is table: {model.name}")
+    if model_name is None:
+        for seed in graph.project.seeds:
+            if seed.name not in seed_ref_map:
+                issues.append(f"missing seed ref: {seed.name}")
+                continue
+            relation = seed_physical_map.get(seed.name)
+            if relation is None:
+                issues.append(f"missing tracked physical seed relation: {seed.name}")
+                continue
+            if not physical_relation_exists(
+                adapter=adapter, connection_config=connection_config, relation=relation
+            ):
+                issues.append(f"missing physical seed relation: {seed.name}")
+            relation_type = relation_types.get(seed.name)
+            if relation_type is None:
+                issues.append(f"missing logical seed target: {seed.name}")
+            elif normalize_relation_type(relation_type) == RelationType.TABLE:
+                issues.append(f"logical seed target is table: {seed.name}")
     if not issues:
         return f"Reconcile report for {virtual_environment_name}: no issues."
     return "Reconcile report for " + virtual_environment_name + ":\n- " + "\n- ".join(issues)
@@ -317,6 +388,44 @@ def repair_view(
     )
 
 
+def repair_seed_view(
+    *,
+    graph: ProjectGraph,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None,
+    seed_name: str,
+    seed_physical_map: dict[str, PhysicalRelationRecord],
+) -> None:
+    validate_seed_logical_target_repairable(
+        graph=graph,
+        adapter=adapter,
+        connection_config=connection_config,
+        virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        seed_name=seed_name,
+    )
+    relation = seed_physical_map.get(seed_name)
+    if relation is None:
+        raise PlannerInputError(
+            f"missing tracked physical relation for seed '{seed_name}'", code="C251"
+        )
+    if not physical_relation_exists(
+        adapter=adapter, connection_config=connection_config, relation=relation
+    ):
+        raise PlannerInputError(f"missing physical relation for seed '{seed_name}'", code="C252")
+    refresh_logical_vde_views(
+        project=graph.project,
+        adapter=adapter,
+        connection_config=connection_config,
+        virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        physical_relations={},
+        seed_physical_relations={seed_name: relation},
+    )
+
+
 def validate_logical_target_repairable(
     *,
     graph: ProjectGraph,
@@ -337,6 +446,30 @@ def validate_logical_target_repairable(
     if relation_type is not None and normalize_relation_type(relation_type) == RelationType.TABLE:
         raise PlannerInputError(
             f"logical target for '{model_name}' is a table; repair-view will not overwrite it",
+            code="C250",
+        )
+
+
+def validate_seed_logical_target_repairable(
+    *,
+    graph: ProjectGraph,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None,
+    seed_name: str,
+) -> None:
+    relation_types: dict[str, str] = list_virtual_relation_types(
+        graph=graph,
+        adapter=adapter,
+        connection_config=connection_config,
+        virtual_environment_name=virtual_environment_name,
+        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+    )
+    relation_type = relation_types.get(seed_name)
+    if relation_type is not None and normalize_relation_type(relation_type) == RelationType.TABLE:
+        raise PlannerInputError(
+            f"logical seed target for '{seed_name}' is a table; repair-view will not overwrite it",
             code="C250",
         )
 
@@ -416,6 +549,23 @@ def list_virtual_relation_types(
             for relation in relations:
                 if relation.name == model.destination.name:
                     result[model.name] = relation.relation_type
+                    break
+        for seed in graph.project.seeds:
+            virtual_schema = (
+                None
+                if seed.destination.schema is None
+                else seed.destination.schema
+                if unsuffixed_virtual_environment_name == virtual_environment_name
+                else f"{seed.destination.schema}__{virtual_environment_name}"
+            )
+            relations = adapter.list_relations(
+                connection,
+                database=seed.destination.database,
+                schemas=((virtual_schema,) if virtual_schema is not None else None),
+            )
+            for relation in relations:
+                if relation.name == seed.destination.name:
+                    result[seed.name] = relation.relation_type
                     break
         return result
     finally:

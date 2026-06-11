@@ -23,6 +23,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualWaffleShopE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    build_virtual_multi_seed_lifecycle_repo_files,
+    build_virtual_seed_lifecycle_repo_files,
     count_virtual_physical_versions,
     initialize_virtual_seeded_project,
     prepare_virtual_cursor_override_without_snapshot_project,
@@ -3005,6 +3007,162 @@ def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
     "test_case",
     [
         VirtualPromoteE2ETestCase(
+            description="whole VDE promotion carries seed refs and views",
+            promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
+            expected_promote_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.order_amounts ORDER BY id",
+                    ((1, 200),),
+                ),
+                (
+                    "SELECT id, amount_cents FROM dev__dev.stg_orders ORDER BY id",
+                    ((1, 200),),
+                ),
+            ),
+        )
+    ],
+    ids=["whole VDE promotion carries seed refs and views"],
+)
+def test_given_seed_change_when_promoting_then_it_updates_destination_seed_refs_and_views(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_seed_refs",
+        repo_files=build_virtual_seed_lifecycle_repo_files(amount_cents=100),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "id,amount_cents\n1,200\n", encoding="utf-8"
+    )
+    assert (
+        run_sqb(
+            command=("--no-color", "build", "--virtual-env", "pr"), project_dir=project_dir
+        ).returncode
+        == 0
+    )
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert promote_result.returncode == 0, promote_result.stderr
+    query_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT virtual_environment_name, seed_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name IN ('dev', 'pr') ORDER BY virtual_environment_name"
+        ),
+    )
+    assert len(seed_ref_rows) == 2
+    assert seed_ref_rows[0][2] == seed_ref_rows[1][2]
+    checkpoint_seed_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_name FROM sqlbuild_state.virtual_environment_checkpoint_seed_refs "
+            "WHERE seed_name = 'order_amounts'"
+        ),
+    )
+    assert checkpoint_seed_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
+            description="partial promotion carries upstream seed refs and views",
+            promote_command=(
+                "--no-color",
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-promotion",
+            ),
+            expected_promote_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.order_amounts ORDER BY id",
+                    ((1, 200),),
+                ),
+                (
+                    "SELECT id, multiplier FROM dev__dev.amount_multipliers ORDER BY id",
+                    ((1, 2),),
+                ),
+                ("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),
+            ),
+        )
+    ],
+    ids=["partial promotion carries upstream seed refs and views"],
+)
+def test_given_seed_change_when_partially_promoting_then_it_updates_upstream_seed_refs_and_views(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_partial_seed_refs",
+        repo_files=build_virtual_multi_seed_lifecycle_repo_files(amount_cents=100, multiplier=1),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "id,amount_cents\n1,200\n", encoding="utf-8"
+    )
+    (project_dir / "seeds" / "amount_multipliers.csv").write_text(
+        "id,multiplier\n1,2\n", encoding="utf-8"
+    )
+    assert (
+        run_sqb(
+            command=("--no-color", "build", "--virtual-env", "pr"), project_dir=project_dir
+        ).returncode
+        == 0
+    )
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert promote_result.returncode == 0, promote_result.stdout + promote_result.stderr
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT virtual_environment_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name IN ('dev', 'pr') "
+            "AND seed_name IN ('order_amounts', 'amount_multipliers') "
+            "ORDER BY seed_name, virtual_environment_name"
+        ),
+    )
+    assert len(seed_ref_rows) == 4
+    assert seed_ref_rows[0][1] == seed_ref_rows[1][1]
+    assert seed_ref_rows[2][1] == seed_ref_rows[3][1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
             description="whole VDE promotion carries function definitions",
             promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
             expected_promote_fragments=(
@@ -3201,6 +3359,176 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
             db_path=project_dir / "warehouse.duckdb",
             sql=query_sql,
         ) == list(expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="whole rollback restores seed refs and views",
+            rollback_command=("--no-color", "rollback"),
+            expected_rollback_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.order_amounts ORDER BY id",
+                    ((1, 100),),
+                ),
+                (
+                    "SELECT id, multiplier FROM dev__dev.amount_multipliers ORDER BY id",
+                    ((1, 1),),
+                ),
+                (
+                    "SELECT id, amount_cents FROM dev__dev.stg_orders ORDER BY id",
+                    ((1, 100),),
+                ),
+            ),
+            expected_checkpoint_count=0,
+        )
+    ],
+    ids=["whole rollback restores seed refs and views"],
+)
+def test_given_seed_change_when_rolling_back_then_it_restores_checkpointed_seed_refs_and_views(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_seed_refs",
+        repo_files=build_virtual_seed_lifecycle_repo_files(amount_cents=100),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    initial_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+        ),
+    )
+    checkpoint_id: str = str(
+        query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT checkpoint_id FROM sqlbuild_state.virtual_environment_checkpoints "
+                "WHERE virtual_environment_name = 'dev' ORDER BY created_at LIMIT 1"
+            ),
+        )[0][0]
+    )
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "id,amount_cents\n1,200\n", encoding="utf-8"
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id, amount_cents FROM dev__dev.order_amounts ORDER BY id",
+    ) == [(1, 200)]
+    show_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "checkpoints", "show", checkpoint_id),
+        project_dir=project_dir,
+    )
+    assert show_result.returncode == 0, show_result.stderr
+    assert "Seed refs" in show_result.stdout
+    assert "order_amounts" in show_result.stdout
+    diff_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "state", "checkpoints", "diff", checkpoint_id),
+        project_dir=project_dir,
+    )
+    assert diff_result.returncode == 0, diff_result.stderr
+    assert "changed seeds    1" in diff_result.stdout
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == 0, rollback_result.stderr
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    rolled_back_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+        ),
+    )
+    assert rolled_back_seed_ref_rows == initial_seed_ref_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRollbackE2ETestCase(
+            description="partial rollback restores upstream seed refs and views",
+            rollback_command=(
+                "--no-color",
+                "rollback",
+                "--select",
+                "fact_orders",
+                "--include-stale-upstreams",
+                "--allow-partial-rollback",
+            ),
+            expected_rollback_fragments=(),
+            expected_query_results=(
+                (
+                    "SELECT id, amount_cents FROM dev__dev.order_amounts ORDER BY id",
+                    ((1, 100),),
+                ),
+            ),
+            expected_checkpoint_count=0,
+        )
+    ],
+    ids=["partial rollback restores upstream seed refs and views"],
+)
+def test_given_seed_change_when_partial_rollback_then_restores_upstream_seed_refs_and_views(
+    test_case: VirtualRollbackE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_rollback_partial_seed_refs",
+        repo_files=build_virtual_multi_seed_lifecycle_repo_files(amount_cents=100, multiplier=1),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    initial_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+        ),
+    )
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "id,amount_cents\n1,200\n", encoding="utf-8"
+    )
+    (project_dir / "seeds" / "amount_multipliers.csv").write_text(
+        "id,multiplier\n1,2\n", encoding="utf-8"
+    )
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+
+    rollback_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.rollback_command,
+        project_dir=project_dir,
+    )
+
+    assert rollback_result.returncode == 0, rollback_result.stdout + rollback_result.stderr
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+    rolled_back_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+        ),
+    )
+    assert rolled_back_seed_ref_rows == initial_seed_ref_rows
 
 
 @pytest.mark.parametrize(

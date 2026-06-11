@@ -9,8 +9,10 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
+    CompiledObjectKey,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.virtual.executor.helpers.functions import (
@@ -29,8 +31,10 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
 )
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
 def resolve_target_checkpoint(
@@ -192,6 +196,60 @@ def read_physical_relations(
             )
         relations[ref.model_name] = relation
     return relations
+
+
+def read_seed_physical_relations(
+    *,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
+) -> dict[str, PhysicalRelationRecord]:
+    relations: dict[str, PhysicalRelationRecord] = {}
+    ref: VirtualEnvironmentCheckpointSeedRefRecord
+    for ref in refs:
+        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+            state_connection,
+            schema=schema,
+            artifact_type=PhysicalArtifactType.SEED,
+            artifact_name=ref.seed_name,
+            version_hash=ref.version_hash,
+        )
+        if relation is None:
+            raise PlannerInputError(
+                f"checkpoint references missing physical relation for seed '{ref.seed_name}'",
+                code="S022",
+            )
+        relations[ref.seed_name] = relation
+    return relations
+
+
+def selected_upstream_seed_names(
+    *,
+    graph: ProjectGraph,
+    selected_model_names: tuple[str, ...],
+    all_seed_names: tuple[str, ...],
+    include_all: bool,
+) -> tuple[str, ...]:
+    if include_all:
+        return all_seed_names
+    selected: set[str] = set()
+    pending: list[CompiledObjectKey] = [
+        model.key for model in graph.project.models if model.name in selected_model_names
+    ]
+    seen: set[CompiledObjectKey] = set()
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        upstream_key: CompiledObjectKey
+        for upstream_key in graph.upstream_deps.get(key, ()):
+            if upstream_key.resource_type == CompiledResourceType.SEED:
+                selected.add(upstream_key.name)
+                continue
+            pending.append(upstream_key)
+    return tuple(sorted(selected))
 
 
 def validate_physical_relations_exist(

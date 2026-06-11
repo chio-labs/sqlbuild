@@ -6,6 +6,7 @@ from textwrap import dedent
 
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_project_toml,
+    build_virtual_plan_repo_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
@@ -60,6 +61,56 @@ def prepare_virtual_seeded_incremental_project(
         ).strip(),
     )
     return project_dir
+
+
+def build_virtual_seed_lifecycle_repo_files(*, amount_cents: int) -> dict[str, str]:
+    return build_virtual_plan_repo_files(
+        stg_orders_sql='SELECT id, amount_cents FROM __seed("order_amounts")'
+    ) | {
+        "seeds/orders.yml": (
+            "seeds:\n"
+            "  - name: order_amounts\n"
+            "    path: order_amounts.csv\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: integer\n"
+            "      - name: amount_cents\n"
+            "        type: integer\n"
+        ),
+        "seeds/order_amounts.csv": f"id,amount_cents\n1,{amount_cents}\n",
+    }
+
+
+def build_virtual_multi_seed_lifecycle_repo_files(
+    *, amount_cents: int, multiplier: int
+) -> dict[str, str]:
+    return build_virtual_plan_repo_files(
+        stg_orders_sql=(
+            "SELECT a.id, a.amount_cents * m.multiplier AS amount_cents "
+            'FROM __seed("order_amounts") a '
+            'JOIN __seed("amount_multipliers") m USING (id)'
+        )
+    ) | {
+        "seeds/orders.yml": (
+            "seeds:\n"
+            "  - name: order_amounts\n"
+            "    path: order_amounts.csv\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: integer\n"
+            "      - name: amount_cents\n"
+            "        type: integer\n"
+            "  - name: amount_multipliers\n"
+            "    path: amount_multipliers.csv\n"
+            "    columns:\n"
+            "      - name: id\n"
+            "        type: integer\n"
+            "      - name: multiplier\n"
+            "        type: integer\n"
+        ),
+        "seeds/order_amounts.csv": f"id,amount_cents\n1,{amount_cents}\n",
+        "seeds/amount_multipliers.csv": f"id,multiplier\n1,{multiplier}\n",
+    }
 
 
 def prepare_virtual_cursor_override_without_snapshot_project(

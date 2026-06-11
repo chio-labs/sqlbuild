@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,8 @@ class VirtualBuildPipelineResult:
 class VirtualCloneItemResult:
     """One virtual clone hydration result."""
 
-    model_name: str
+    artifact_type: PhysicalArtifactType
+    artifact_name: str
     version_hash: str
     action: str
     message: str | None = None

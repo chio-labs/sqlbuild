@@ -27,7 +27,7 @@ VIRTUAL_CLONE_OUTPUT_TEST_CASES: tuple[RenderVirtualCloneOutputTestCase, ...] = 
         expected_color_fragments=(
             "\033[32m\033[1mVirtual clone\033[0m",
             "\033[34m\033[1mprod\033[0m -> \033[34m\033[1mdev\033[0m",
-            "selected models      \033[34m\033[1m43\033[0m",
+            "selected artifacts   \033[34m\033[1m43\033[0m",
             "missing in origin    \033[33m\033[1m22\033[0m",
             "\033[2mmissing\033[0m: missing_00",
             "\033[2m  ... 2 more; use --verbose to show all\033[0m",

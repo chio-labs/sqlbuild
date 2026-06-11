@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledRelationLocation
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledRelationLocation,
+    CompiledSeed,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
@@ -17,21 +21,29 @@ from sqlbuild.virtual.executor.helpers.clone import (
     attach_origin_database_for_clone,
     build_clone_graph_from_project,
     build_workspace_model_versions,
+    build_workspace_seed_versions,
     hydrate_relation,
     register_hydrated_relation,
+    register_hydrated_seed_relation,
     release_model_lease,
     replace_location_database,
 )
-from sqlbuild.virtual.executor.helpers.rewrite import build_physical_destination
+from sqlbuild.virtual.executor.helpers.rewrite import (
+    build_physical_destination,
+    build_physical_seed_destination,
+)
 from sqlbuild.virtual.executor.models import VirtualCloneItemResult, VirtualCloneResult
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
+    SeedVersionRecord,
     StateLockLease,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
 def run_virtual_clone(
@@ -75,11 +87,20 @@ def run_virtual_clone(
     model_names: tuple[str, ...] = tuple(
         entry.name for entry in clone_pipeline.destination_model_entries
     )
+    seed_names: tuple[str, ...] = tuple(
+        entry.name for entry in clone_pipeline.destination_seed_entries
+    )
     destination_models_by_name: dict[str, CompiledModel] = {
         model.name: model for model in clone_pipeline.destination_project.models
     }
     origin_models_by_name: dict[str, CompiledModel] = {
         model.name: model for model in clone_pipeline.origin_project.models
+    }
+    destination_seeds_by_name: dict[str, CompiledSeed] = {
+        seed.name: seed for seed in clone_pipeline.destination_project.seeds
+    }
+    origin_seeds_by_name: dict[str, CompiledSeed] = {
+        seed.name: seed for seed in clone_pipeline.origin_project.seeds
     }
 
     config, backend = build_state_runtime(
@@ -87,6 +108,7 @@ def run_virtual_clone(
     )
     state_connection: Any = backend.connect(config.connection)
     mode: str
+    seed_versions: dict[str, SeedVersionRecord]
     try:
         if virtual_environment_name is None:
             semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
@@ -102,6 +124,14 @@ def run_virtual_clone(
                 version_hashes=version_hashes,
                 local_hashes=semantics.expected_local_hashes,
                 metadata_jsons=semantics.expected_metadata_jsons,
+            )
+            seed_hashes: dict[str, str] = semantics.expected_seed_version_hashes
+            seed_versions = build_workspace_seed_versions(
+                project=clone_pipeline.destination_project,
+                seed_entries=clone_pipeline.destination_seed_entries,
+                seed_names=seed_names,
+                version_hashes=seed_hashes,
+                metadata_jsons=semantics.seed_identity_metadata_jsons,
             )
             mode = "workspace fingerprints"
         else:
@@ -144,6 +174,39 @@ def run_virtual_clone(
                         code="S021",
                     )
                 model_versions[name] = record
+            seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+                backend.get_virtual_environment_seed_refs(
+                    state_connection,
+                    schema=config.schema,
+                    virtual_environment_name=virtual_environment_name,
+                )
+            )
+            seed_hashes = {ref.seed_name: ref.version_hash for ref in seed_refs}
+            missing_seed_refs: tuple[str, ...] = tuple(
+                name for name in seed_names if name not in seed_hashes
+            )
+            if missing_seed_refs:
+                raise PlannerInputError(
+                    "destination virtual environment is missing selected seed refs: "
+                    + ", ".join(missing_seed_refs),
+                    code="S020",
+                )
+            seed_versions = {}
+            for name in seed_names:
+                seed_version_hash: str = seed_hashes[name]
+                seed_record: SeedVersionRecord | None = backend.get_seed_version(
+                    state_connection,
+                    schema=config.schema,
+                    seed_name=name,
+                    version_hash=seed_version_hash,
+                )
+                if seed_record is None:
+                    raise PlannerInputError(
+                        "destination virtual environment has a ref without seed version state: "
+                        + name,
+                        code="S021",
+                    )
+                seed_versions[name] = seed_record
             mode = "destination VDE refs"
     finally:
         backend.close(state_connection)
@@ -193,7 +256,11 @@ def run_virtual_clone(
                 schema=origin_lookup_location.schema,
                 name=origin_lookup_location.name,
             ):
-                results.append(VirtualCloneItemResult(model_name, version_hash, "missing"))
+                results.append(
+                    VirtualCloneItemResult(
+                        PhysicalArtifactType.MODEL, model_name, version_hash, "missing"
+                    )
+                )
                 continue
             lease: StateLockLease | None = acquire_model_lease(
                 backend=backend,
@@ -205,7 +272,12 @@ def run_virtual_clone(
             if lease is None:
                 if skip_locked:
                     results.append(
-                        VirtualCloneItemResult(model_name, version_hash, "skipped_locked")
+                        VirtualCloneItemResult(
+                            PhysicalArtifactType.MODEL,
+                            model_name,
+                            version_hash,
+                            "skipped_locked",
+                        )
                     )
                     continue
                 raise PlannerInputError(
@@ -229,7 +301,11 @@ def run_virtual_clone(
                     model=destination_model,
                     destination=destination_location,
                 )
-                results.append(VirtualCloneItemResult(model_name, version_hash, action))
+                results.append(
+                    VirtualCloneItemResult(
+                        PhysicalArtifactType.MODEL, model_name, version_hash, action
+                    )
+                )
             finally:
                 release_model_lease(
                     backend=backend,
@@ -237,6 +313,69 @@ def run_virtual_clone(
                     config_connection=config.connection,
                     lease=lease,
                 )
+        for seed_name in seed_names:
+            destination_seed: CompiledSeed = destination_seeds_by_name[seed_name]
+            origin_seed: CompiledSeed = origin_seeds_by_name[seed_name]
+            seed_version: SeedVersionRecord = seed_versions[seed_name]
+            seed_version_hash: str = seed_version.version_hash
+            origin_location = build_physical_seed_destination(
+                adapter=adapter,
+                target=origin_seed.destination,
+                seed_name=seed_name,
+                version_hash=seed_version_hash,
+            )
+            origin_lookup_location = (
+                replace_location_database(
+                    adapter=adapter,
+                    location=origin_location,
+                    database=origin_database_alias,
+                )
+                if origin_database_alias is not None
+                else origin_location
+            )
+            destination_location = build_physical_seed_destination(
+                adapter=adapter,
+                target=destination_seed.destination,
+                seed_name=seed_name,
+                version_hash=seed_version_hash,
+            )
+            if not adapter.relation_exists(
+                origin_connection,
+                database=origin_lookup_location.database,
+                schema=origin_lookup_location.schema,
+                name=origin_lookup_location.name,
+            ):
+                results.append(
+                    VirtualCloneItemResult(
+                        PhysicalArtifactType.SEED,
+                        seed_name,
+                        seed_version_hash,
+                        "missing",
+                    )
+                )
+                continue
+            action = hydrate_relation(
+                adapter=adapter,
+                destination_connection=destination_connection,
+                origin_location=origin_location,
+                destination_location=destination_location,
+                origin_database_alias=origin_database_alias,
+            )
+            register_hydrated_seed_relation(
+                backend=backend,
+                config_schema=config.schema,
+                config_connection=config.connection,
+                seed_version=seed_version,
+                destination=destination_location,
+            )
+            results.append(
+                VirtualCloneItemResult(
+                    PhysicalArtifactType.SEED,
+                    seed_name,
+                    seed_version_hash,
+                    action,
+                )
+            )
     finally:
         if origin_connection is not destination_connection:
             adapter.close(origin_connection)
