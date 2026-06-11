@@ -92,3 +92,12 @@ class PostgresLatestReadSqlTestCase:
     database: str | None
     schema: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresPruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

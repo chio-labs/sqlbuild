@@ -15,12 +15,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorCleanupE2ETestCase,
     JanitorDetachedVirtualEnvironmentE2ETestCase,
     JanitorDetachedVirtualEnvironmentRetentionE2ETestCase,
+    JanitorDirectStatePruningE2ETestCase,
     JanitorDisabledE2ETestCase,
     JanitorExpiredVirtualEnvironmentE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
     JanitorStateCleanupE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
+    create_direct_state_history,
     create_janitor_demo_relations,
     create_janitor_scenario_relations,
     prepare_janitor_project,
@@ -85,7 +87,7 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
                 "main.janitor_untracked_extra  relation is not tracked by SQLBuild",
                 "main.partition_state  relation matches exclude pattern 'partition_*'",
                 "main._sqlbuild_fingerprints  relation matches exclude pattern",
-                "Deleted 1 objects.",
+                "Deleted 1 objects, deleted 0 state items, and pruned 1 direct state tables.",
             ),
             expected_existing_tables=(
                 "orders",
@@ -159,7 +161,7 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
                 "main.__sqb_a13f09c2e7b8__model__daily_revenue",
                 "main.__sqb_a13f09c2e7b8__source__raw_orders",
                 "main.__sqb_a13f09c2e7b__model__daily_revenue  relation is not tracked by SQLBuild",
-                "Deleted 2 objects.",
+                "Deleted 2 objects, deleted 0 state items, and pruned 1 direct state tables.",
             ),
             expected_existing_tables=(
                 "orders",
@@ -214,6 +216,115 @@ def test_given_scenario_artifacts_when_running_tracked_only_janitor_then_it_dele
         assert table_exists(db_path=db_path, table_name=table_name)
     for table_name in test_case.expected_missing_tables:
         assert not table_exists(db_path=db_path, table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorDirectStatePruningE2ETestCase(
+            description="auto-approved janitor prunes direct state history",
+            build_command=("--no-color", "build", "--full-refresh"),
+            janitor_command=(
+                "--no-color",
+                "janitor",
+                "--auto-approve",
+                "--direct-state-history-versions",
+                "2",
+            ),
+            plan_command=("--no-color", "plan"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "direct state pruned    2",
+                "Eligible direct state pruning",
+                "main._sqlbuild_fingerprints  keep latest 2",
+                "main._sqlbuild_source_freshness  keep latest 2",
+                "pruned 2 direct state tables",
+            ),
+            expected_fingerprint_count_before=5,
+            expected_fingerprint_count_after=3,
+            expected_source_freshness_count_before=4,
+            expected_source_freshness_count_after=2,
+            expected_fingerprint_run_ids_after=("run_003", "run_002"),
+            expected_source_freshness_run_ids_after=("run_003", "run_002"),
+        )
+    ],
+    ids=["auto-approved janitor prunes direct state history"],
+)
+def test_given_direct_state_history_when_running_janitor_then_it_prunes_history(
+    test_case: JanitorDirectStatePruningE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_janitor_project(
+        tmp_path=tmp_path,
+        project_name="janitor_direct_state_pruning_project",
+        janitor_config=dedent(
+            """
+              enabled = true
+              retention_days = 0
+            """
+        ),
+    )
+    db_path: Path = project_dir / "janitor.duckdb"
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.build_command,
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    create_direct_state_history(db_path=db_path)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT COUNT(*) FROM main._sqlbuild_fingerprints",
+    ) == [(test_case.expected_fingerprint_count_before,)]
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT COUNT(*) FROM main._sqlbuild_source_freshness",
+    ) == [(test_case.expected_source_freshness_count_before,)]
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT COUNT(*) FROM main._sqlbuild_fingerprints",
+    ) == [(test_case.expected_fingerprint_count_after,)]
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT COUNT(*) FROM main._sqlbuild_source_freshness",
+    ) == [(test_case.expected_source_freshness_count_after,)]
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT run_id FROM main._sqlbuild_fingerprints "
+            "WHERE node_name = 'janitor_state_probe' ORDER BY ts DESC, run_id DESC"
+        ),
+    ) == [(run_id,) for run_id in test_case.expected_fingerprint_run_ids_after]
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT run_id FROM main._sqlbuild_source_freshness "
+            "WHERE source_name = 'raw.janitor_state_probe' "
+            "ORDER BY observed_at DESC, run_id DESC"
+        ),
+    ) == [(run_id,) for run_id in test_case.expected_source_freshness_run_ids_after]
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.plan_command,
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == test_case.expected_exit_code, (
+        plan_result.stdout + plan_result.stderr
+    )
 
 
 @pytest.mark.parametrize(
@@ -298,7 +409,7 @@ def test_given_virtual_checkpoint_refs_when_janitor_then_preserves_physical_vers
                 "expired VDEs pruned",
                 "Eligible expired VDEs",
                 "pr  expired virtual environment",
-                "Deleted 0 objects and 1 state items.",
+                "Deleted 0 objects, deleted 1 state items, and pruned 0 direct state tables.",
             ),
             expected_virtual_environment_names_after=("dev",),
         )
@@ -372,7 +483,7 @@ def test_given_non_active_vde_when_running_janitor_then_it_prunes_expired_enviro
                 "expired locks pruned",
                 "Eligible state backups",
                 "Eligible expired locks",
-                "Deleted 0 objects and 2 state items.",
+                "Deleted 0 objects, deleted 2 state items, and pruned 0 direct state tables.",
             ),
             expected_backup_schema_count_after=1,
             expected_lock_count_after=0,
@@ -674,7 +785,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
                 "detached VDEs pruned",
                 "Eligible detached VDEs",
                 "dev  detached virtual environment",
-                "Deleted 1 objects and 1 state items.",
+                "Deleted 1 objects, deleted 1 state items, and pruned 0 direct state tables.",
             ),
             expected_virtual_environment_count_after=0,
             expected_ref_count_after=0,
@@ -783,7 +894,7 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
                 "detached VDEs pruned",
                 "Eligible detached VDEs",
                 "dev  detached virtual environment",
-                "Deleted 0 objects and 1 state items.",
+                "Deleted 0 objects, deleted 1 state items, and pruned 0 direct state tables.",
             ),
             expected_virtual_environment_count_after=0,
         )

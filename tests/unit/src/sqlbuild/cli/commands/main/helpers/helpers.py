@@ -45,6 +45,15 @@ class RecordingAdapter:
     def render_framework_type(self, framework_type: FrameworkType) -> str:
         return framework_type.value
 
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        del database, schema
+        return ()
+
 
 def model_entry(name: str) -> ModelPlanEntry:
     return ModelPlanEntry(

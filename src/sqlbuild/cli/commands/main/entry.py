@@ -327,6 +327,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
     janitor_parser.add_argument("--retention-days", type=int, default=None)
+    janitor_parser.add_argument("--direct-state-history-versions", type=int, default=None)
     state_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.STATE)
     state_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     state_subparsers = state_parser.add_subparsers(dest="state_command")
@@ -880,6 +881,7 @@ def _main_with_dependencies(
                 args.no_color,
                 args.auto_approve,
                 args.retention_days,
+                args.direct_state_history_versions,
             )
         if args.command == CliCommand.STATE:
             if args.state_command is None:

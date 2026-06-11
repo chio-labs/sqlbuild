@@ -489,6 +489,17 @@ max_checkpoints = 0
         expected_error_fragment="janitor.max_checkpoints must be >= 1",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when janitor direct state history versions is negative",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[janitor]
+direct_state_history_versions = -1
+""".strip(),
+        expected_error_fragment="janitor.direct_state_history_versions must be >= 0",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when project settings contain unknown key",
         project_file_contents="""
 name = "demo"
@@ -696,6 +707,7 @@ retention_days = 14
 max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
+direct_state_history_versions = 5
 
 [snapshots]
 current_state_full_refresh = "require_confirmation"
@@ -761,6 +773,7 @@ target_path = "target/dbt"
         expected_janitor_max_checkpoints=3,
         expected_janitor_delete_tracked_only=False,
         expected_janitor_exclude_patterns=("partition_*",),
+        expected_janitor_direct_state_history_versions=5,
         expected_current_state_full_refresh="require_confirmation",
         expected_historical_full_refresh="allow",
         expected_snapshot_schema_change="deny",
@@ -833,6 +846,10 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
+    assert (
+        config.janitor.direct_state_history_versions
+        == test_case.expected_janitor_direct_state_history_versions
+    )
     assert (
         config.snapshots.current_state_full_refresh == test_case.expected_current_state_full_refresh
     )

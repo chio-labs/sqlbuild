@@ -14,6 +14,7 @@ from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresLatestReadSqlTestCase,
     PostgresLoadSeedTestCase,
     PostgresMoveOrCopyRelationTestCase,
+    PostgresPruneSqlTestCase,
     PostgresRenderCreateFunctionTestCase,
     PostgresRenderCreateTableAsTestCase,
     PostgresRenderIdentifierTestCase,
@@ -215,6 +216,74 @@ def test_given_source_freshness_when_rendering_latest_read_then_postgres_uses_wi
     )
 
     fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresPruneSqlTestCase(
+            description="renders fingerprint pruning with ctid window delete",
+            database=None,
+            schema="analytics",
+            retain_versions=5,
+            expected_fragments=(
+                "DELETE FROM analytics._sqlbuild_fingerprints WHERE ctid IN",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "__sqlbuild_history_rank > 5",
+            ),
+        )
+    ],
+    ids=["renders fingerprint pruning with ctid window delete"],
+)
+def test_given_fingerprint_table_when_rendering_prune_then_postgres_uses_history_rank(
+    test_case: PostgresPruneSqlTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    sql: str = adapter.render_prune_fingerprint_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresPruneSqlTestCase(
+            description="renders source freshness pruning with full identity",
+            database=None,
+            schema="analytics",
+            retain_versions=3,
+            expected_fragments=(
+                "DELETE FROM analytics._sqlbuild_source_freshness WHERE ctid IN",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "__sqlbuild_history_rank > 3",
+            ),
+        )
+    ],
+    ids=["renders source freshness pruning with full identity"],
+)
+def test_given_source_freshness_table_when_rendering_prune_then_postgres_uses_history_rank(
+    test_case: PostgresPruneSqlTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    sql: str = adapter.render_prune_source_freshness_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
     for fragment in test_case.expected_fragments:
         assert fragment in sql
 

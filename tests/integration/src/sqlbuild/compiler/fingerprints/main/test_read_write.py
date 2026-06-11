@@ -17,6 +17,7 @@ from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types impor
     InvalidDefinitionStorageTestCase,
     LatestResolutionTestCase,
     OldFingerprintSchemaTestCase,
+    PruneFingerprintHistoryTestCase,
     ReadNonExistentTableTestCase,
     WriteAndReadTestCase,
     WriteCreatesTableTestCase,
@@ -481,6 +482,151 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
     assert latest.run_id == test_case.expected_latest_run_id
     assert latest.definition_hash == test_case.expected_latest_definition_hash
     assert latest.definition == test_case.expected_latest_definition
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PruneFingerprintHistoryTestCase(
+            description="prunes fingerprint history by node and run id tie breaker",
+            database=None,
+            schema="test_schema",
+            retain_versions=2,
+            fingerprints=(
+                Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_000",
+                    definition_hash="hash_old",
+                    version_hash="version_old",
+                    schema_fingerprint="schema_old",
+                    definition="SELECT 0",
+                    ts=datetime(2026, 1, 15, 10, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash="hash_low_tie",
+                    version_hash="version_low_tie",
+                    schema_fingerprint="schema_low_tie",
+                    definition="SELECT 1",
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_002",
+                    definition_hash="hash_high_tie",
+                    version_hash="version_high_tie",
+                    schema_fingerprint="schema_high_tie",
+                    definition="SELECT 2",
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_003",
+                    definition_hash="hash_latest",
+                    version_hash="version_latest",
+                    schema_fingerprint="schema_latest",
+                    definition="SELECT 3",
+                    ts=datetime(2026, 1, 15, 13, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="model",
+                    node_name="customers",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="customers",
+                    run_id="run_010",
+                    definition_hash="hash_customers_old",
+                    version_hash="version_customers_old",
+                    schema_fingerprint="schema_customers_old",
+                    definition="SELECT 10",
+                    ts=datetime(2026, 1, 15, 10, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="model",
+                    node_name="customers",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="customers",
+                    run_id="run_011",
+                    definition_hash="hash_customers_latest",
+                    version_hash="version_customers_latest",
+                    schema_fingerprint="schema_customers_latest",
+                    definition="SELECT 11",
+                    ts=datetime(2026, 1, 15, 11, 0, 0),
+                ),
+            ),
+            expected_run_ids_by_node={
+                "orders": ("run_003", "run_002"),
+                "customers": ("run_011", "run_010"),
+            },
+            expected_latest_run_id="run_003",
+        )
+    ],
+    ids=["prunes fingerprint history by node and run id tie breaker"],
+)
+def test_given_fingerprint_history_when_pruning_then_keeps_latest_versions_per_node(
+    test_case: PruneFingerprintHistoryTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    fp: Fingerprint
+    for fp in test_case.fingerprints:
+        write_fingerprint(
+            connection=connection,
+            execute=execute,
+            database=test_case.database,
+            schema=test_case.schema,
+            fingerprint=fp,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+        )
+
+    execute(
+        connection,
+        adapter.render_prune_fingerprint_history_sql(
+            database=test_case.database,
+            schema=test_case.schema,
+            retain_versions=test_case.retain_versions,
+        ),
+    )
+
+    node_name: str
+    expected_run_ids: tuple[str, ...]
+    for node_name, expected_run_ids in test_case.expected_run_ids_by_node.items():
+        rows: list[tuple[str]] = connection.execute(
+            f"SELECT run_id FROM {test_case.schema}.{FINGERPRINT_TABLE_NAME} "
+            "WHERE node_name = ? ORDER BY ts DESC, run_id DESC",
+            (node_name,),
+        ).fetchall()
+        assert tuple(row[0] for row in rows) == expected_run_ids
+    latest_result: FingerprintSet = read_latest_fingerprints(
+        connection=connection,
+        execute=execute,
+        relation_exists=RELATION_EXISTS,
+        database=test_case.database,
+        schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_read_latest_sql=RENDER_READ_LATEST_SQL,
+    )
+    assert latest_result.fingerprints["orders"].run_id == test_case.expected_latest_run_id
 
 
 @pytest.mark.parametrize(

@@ -828,6 +828,108 @@ class DuckDbBackedAdapter(BaseAdapter):
             render_framework_type=self.render_framework_type,
         )
 
+    def render_read_latest_fingerprints_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+
+        return build_read_latest_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_create_fingerprint_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        del database, schema
+        return ()
+
+    def render_read_latest_source_freshness_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+
+        return build_read_latest_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        del database, schema
+        return ()
+
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        return (
+            f"DELETE FROM {table_name} WHERE rowid IN ("
+            "SELECT rowid FROM ("
+            "SELECT rowid, ROW_NUMBER() OVER ("
+            "PARTITION BY node_name "
+            "ORDER BY ts DESC, run_id DESC"
+            f") AS __sqlbuild_history_rank FROM {table_name}"
+            ") AS __sqlbuild_ranked "
+            f"WHERE __sqlbuild_history_rank > {retain_versions}"
+            ")"
+        )
+
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        return (
+            f"DELETE FROM {table_name} WHERE rowid IN ("
+            "SELECT rowid FROM ("
+            "SELECT rowid, ROW_NUMBER() OVER ("
+            "PARTITION BY source_name, target_database, target_schema, target_name "
+            "ORDER BY observed_at DESC, run_id DESC"
+            f") AS __sqlbuild_history_rank FROM {table_name}"
+            ") AS __sqlbuild_ranked "
+            f"WHERE __sqlbuild_history_rank > {retain_versions}"
+            ")"
+        )
+
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         return ExpressionInferenceProfile(
             sql_analysis_dialect=self.sql_analysis_dialect(),

@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
@@ -78,6 +80,7 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
         description="fingerprint table is excluded by default",
         relation_infos=(relation_info("_sqlbuild_fingerprints", created_at=OLD_TIME),),
         expected_candidate_names=(),
+        expected_direct_state_table_names=(FINGERPRINT_TABLE_NAME,),
         expected_skipped_relation_reasons=(
             "relation matches exclude pattern '_sqlbuild_fingerprints'",
         ),
@@ -102,6 +105,7 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
         delete_tracked_only=True,
         tracked_relations=((None, "analytics", "old_orders"),),
         expected_candidate_names=("old_orders",),
+        expected_direct_state_table_names=(FINGERPRINT_TABLE_NAME,),
     ),
     JanitorPlanTestCase(
         description="scenario artifact is eligible when tracked-only is enabled",
@@ -147,6 +151,47 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
             "relation is referenced by a retained virtual checkpoint",
         ),
     ),
+    JanitorPlanTestCase(
+        description="existing direct state tables are eligible for history pruning",
+        relation_infos=(
+            relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),
+            relation_info(SOURCE_FRESHNESS_TABLE_NAME, created_at=OLD_TIME),
+        ),
+        direct_state_history_versions=5,
+        expected_candidate_names=(),
+        expected_direct_state_table_names=(
+            FINGERPRINT_TABLE_NAME,
+            SOURCE_FRESHNESS_TABLE_NAME,
+        ),
+        expected_skipped_relation_reasons=(
+            "relation matches exclude pattern '_sqlbuild_fingerprints'",
+            "relation matches exclude pattern '_sqlbuild_source_freshness'",
+        ),
+    ),
+    JanitorPlanTestCase(
+        description="direct state pruning is disabled when history versions is zero",
+        relation_infos=(relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),),
+        direct_state_history_versions=0,
+        expected_candidate_names=(),
+        expected_direct_state_table_names=(),
+        expected_skipped_relation_reasons=(
+            "relation matches exclude pattern '_sqlbuild_fingerprints'",
+        ),
+    ),
+]
+
+EXECUTE_TEST_CASES: list[JanitorExecuteTestCase] = [
+    JanitorExecuteTestCase(
+        description="drops all eligible candidates",
+        relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
+        expected_dropped_targets=("analytics.old_orders",),
+    ),
+    JanitorExecuteTestCase(
+        description="prunes direct state history tables",
+        relation_infos=(relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),),
+        expected_dropped_targets=(),
+        expected_pruned_table_names=(FINGERPRINT_TABLE_NAME,),
+    ),
 ]
 
 
@@ -172,6 +217,7 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         delete_tracked_only=test_case.delete_tracked_only,
         exclude_patterns=test_case.exclude_patterns,
         protected_relation_keys=test_case.protected_relation_keys,
+        direct_state_history_versions=test_case.direct_state_history_versions,
     )
 
     assert tuple(candidate.key.name for candidate in plan.candidates) == (
@@ -179,6 +225,9 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     )
     assert tuple(skipped.reason for skipped in plan.skipped_relations) == (
         test_case.expected_skipped_relation_reasons
+    )
+    assert tuple(candidate.table_name for candidate in plan.direct_state_prune_candidates) == (
+        test_case.expected_direct_state_table_names
     )
     assert (
         tuple(
@@ -192,14 +241,8 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        JanitorExecuteTestCase(
-            description="drops all eligible candidates",
-            relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
-            expected_dropped_targets=("analytics.old_orders",),
-        )
-    ],
-    ids=["drops all eligible candidates"],
+    EXECUTE_TEST_CASES,
+    ids=[case.description for case in EXECUTE_TEST_CASES],
 )
 def test_given_janitor_plan_when_executing_then_drops_expected_relations(
     test_case: JanitorExecuteTestCase,
@@ -220,4 +263,9 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
     )
 
     assert tuple(adapter.dropped_targets) == test_case.expected_dropped_targets
-    assert tuple(candidate.key.name for candidate in result.deleted) == ("old_orders",)
+    assert tuple(candidate.key.name for candidate in result.deleted) == tuple(
+        target.rsplit(".", maxsplit=1)[-1] for target in test_case.expected_dropped_targets
+    )
+    assert tuple(candidate.table_name for candidate in result.pruned_direct_state) == (
+        test_case.expected_pruned_table_names
+    )

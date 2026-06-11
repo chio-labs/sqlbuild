@@ -38,3 +38,12 @@ class DuckDbMetadataSqlTestCase:
     schema: str
     name: str
     expected_sql: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuckDbPruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

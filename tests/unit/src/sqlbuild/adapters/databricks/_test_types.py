@@ -68,3 +68,12 @@ class DatabricksStringTypeCastRenderingTestCase:
     declared_type: str
     expected_loader_fragment: str
     expected_source_cast: str
+
+
+@dataclass(frozen=True)
+class DatabricksPruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

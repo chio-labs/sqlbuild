@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksExpressionInferenceProfileTestCase,
+    DatabricksPruneSqlTestCase,
     DatabricksPythonFunctionSupportTestCase,
     DatabricksRenderCloneTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
@@ -96,6 +97,78 @@ def test_given_databricks_string_declared_type_when_rendering_casts_then_uses_st
     assert test_case.expected_loader_fragment in loader_sql
     assert test_case.declared_type not in loader_sql
     assert source_cast_sql == test_case.expected_source_cast
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksPruneSqlTestCase(
+            description="renders fingerprint pruning with correlated exists",
+            database="workspace",
+            schema="analytics",
+            retain_versions=5,
+            expected_fragments=(
+                "DELETE FROM `workspace`.`analytics`.`_sqlbuild_fingerprints` "
+                "AS target WHERE EXISTS",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "__sqlbuild_history_rank > 5",
+                "target.node_name = stale.node_name",
+            ),
+        )
+    ],
+    ids=["renders fingerprint pruning with correlated exists"],
+)
+def test_given_fingerprint_table_when_rendering_prune_then_databricks_uses_history_rank(
+    test_case: DatabricksPruneSqlTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    sql: str = adapter.render_prune_fingerprint_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksPruneSqlTestCase(
+            description="renders source freshness pruning with null-safe full identity",
+            database="workspace",
+            schema="analytics",
+            retain_versions=3,
+            expected_fragments=(
+                "DELETE FROM `workspace`.`analytics`.`_sqlbuild_source_freshness` "
+                "AS target WHERE EXISTS",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "__sqlbuild_history_rank > 3",
+                "target.target_database IS NOT DISTINCT FROM stale.target_database",
+            ),
+        )
+    ],
+    ids=["renders source freshness pruning with null-safe full identity"],
+)
+def test_given_source_freshness_table_when_rendering_prune_then_databricks_uses_history_rank(
+    test_case: DatabricksPruneSqlTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    sql: str = adapter.render_prune_source_freshness_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
 
 
 TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [

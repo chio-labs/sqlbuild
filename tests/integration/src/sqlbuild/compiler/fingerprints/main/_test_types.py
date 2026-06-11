@@ -57,3 +57,14 @@ class OldFingerprintSchemaTestCase:
     description: str
     schema: str
     expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PruneFingerprintHistoryTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    fingerprints: tuple[Fingerprint, ...]
+    expected_run_ids_by_node: dict[str, tuple[str, ...]]
+    expected_latest_run_id: str

@@ -3394,7 +3394,7 @@ def test_given_seed_change_when_rolling_back_then_it_restores_checkpointed_seed_
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="virtual_rollback_seed_refs",
-        repo_files=build_virtual_seed_lifecycle_repo_files(amount_cents=100),
+        repo_files=build_virtual_multi_seed_lifecycle_repo_files(amount_cents=100, multiplier=1),
     )
     assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
     assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
