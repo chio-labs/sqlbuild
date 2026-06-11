@@ -75,6 +75,7 @@ def run_virtual_build(
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     include_python: bool = True,
+    seed_only: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     fail_fast: bool = False,
@@ -86,6 +87,7 @@ def run_virtual_build(
     cli_vars: dict[str, object] | None = None,
     json_output: bool = False,
     json_output_path: Path | None = None,
+    execution_command: str = "build",
     use_color: bool = False,
     progress_stream: TextIO | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
@@ -144,6 +146,7 @@ def run_virtual_build(
         callbacks_by_ref.append(callbacks)
         _write_execution_header(
             stream=stream,
+            command=execution_command,
             concurrency=concurrency
             if concurrency is not None
             else discovered_inputs.project_config.settings.concurrency,
@@ -170,6 +173,7 @@ def run_virtual_build(
         auto_load_sources=auto_load_sources,
         reload_sources=reload_sources,
         include_python=include_python,
+        seed_only=seed_only,
         select=select,
         exclude=exclude,
         fail_fast=fail_fast,
@@ -275,6 +279,7 @@ def run_virtual_build(
             plan=plan_output,
             python_node_results=result.python_node_results,
             python_check_results=check_results,
+            command=execution_command,
         ),
         json_output=json_output,
         json_output_path=json_output_path,
@@ -287,10 +292,12 @@ def run_virtual_build(
     )
 
 
-def _write_execution_header(*, stream: TextIO, concurrency: int, use_color: bool) -> None:
+def _write_execution_header(
+    *, stream: TextIO, command: str, concurrency: int, use_color: bool
+) -> None:
     write_execution_header(
         stream=stream,
-        command="sqb build",
+        command=f"sqb {command}",
         target=None,
         concurrency=concurrency,
         use_color=use_color,

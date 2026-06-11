@@ -25,6 +25,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -46,6 +47,9 @@ def build_plan_output_from_model_changes_phase(
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
+    seed_version_hashes: dict[str, str] | None = None,
+    seed_metadata_jsons: dict[str, str] | None = None,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanOutput:
     relations: PlannerRelationsContext = build_planner_relations_context(
         project=project,
@@ -90,4 +94,7 @@ def build_plan_output_from_model_changes_phase(
         changes=changes,
         model_entry_results=model_entry_results,
         reload_sources=reload_sources,
+        seed_version_hashes=seed_version_hashes,
+        seed_metadata_jsons=seed_metadata_jsons,
+        seed_plan_reasons=seed_plan_reasons,
     )

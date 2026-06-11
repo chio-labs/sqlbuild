@@ -33,6 +33,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 
 
@@ -181,6 +182,54 @@ def build_bound_version_hashes(
     """Index bound version hashes by model name from VDE refs."""
 
     return {ref.model_name: ref.version_hash for ref in refs}
+
+
+def build_bound_seed_version_hashes(
+    refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
+) -> dict[str, str]:
+    """Index bound version hashes by seed name from VDE seed refs."""
+
+    return {ref.seed_name: ref.version_hash for ref in refs}
+
+
+def build_stale_seed_names(
+    *,
+    seed_names: tuple[str, ...],
+    expected_seed_version_hashes: dict[str, str],
+    bound_seed_version_hashes: dict[str, str],
+) -> tuple[str, ...]:
+    """Return seed names whose bound and expected version hashes differ."""
+
+    return tuple(
+        sorted(
+            seed_name
+            for seed_name in seed_names
+            if bound_seed_version_hashes.get(seed_name)
+            != expected_seed_version_hashes.get(seed_name)
+        )
+    )
+
+
+def build_seed_plan_reasons(
+    *,
+    seed_names: tuple[str, ...],
+    expected_seed_version_hashes: dict[str, str],
+    bound_seed_version_hashes: dict[str, str],
+) -> dict[str, PlanReason]:
+    """Classify VDE seed plan reasons from typed seed refs."""
+
+    reasons: dict[str, PlanReason] = {}
+    seed_name: str
+    for seed_name in seed_names:
+        bound_version_hash: str | None = bound_seed_version_hashes.get(seed_name)
+        expected_version_hash: str | None = expected_seed_version_hashes.get(seed_name)
+        if bound_version_hash is None:
+            reasons[seed_name] = PlanReason.FIRST_RUN
+        elif expected_version_hash is not None and bound_version_hash != expected_version_hash:
+            reasons[seed_name] = PlanReason.CONFIG_CHANGED
+        else:
+            reasons[seed_name] = PlanReason.NO_CHANGE
+    return reasons
 
 
 def build_source_version_hashes(

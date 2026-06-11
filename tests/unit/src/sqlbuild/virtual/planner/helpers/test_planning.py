@@ -22,6 +22,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_seed_version_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_seed_plan_reasons,
     build_source_freshness_incomplete_model_names,
     build_source_version_hashes,
     build_stale_model_names,
@@ -30,6 +31,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_causes,
     build_stale_root_reasons,
     build_stale_root_source_causes,
+    build_stale_seed_names,
     resolve_virtual_model_selection,
 )
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
@@ -43,6 +45,7 @@ from sqlbuild.virtual.state.types import ModelVersionStatus
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     DefaultVirtualSelectionTestCase,
     ExpectedVersionHashesTestCase,
+    SeedRefPlanningTestCase,
     StaleModelNamesTestCase,
     StaleRequiredUpstreamClosureTestCase,
     StaleRootCauseReasonsTestCase,
@@ -56,6 +59,57 @@ from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
 from tests.unit.src.sqlbuild.virtual.planner.helpers.helpers import (
     build_virtual_planner_test_project,
 )
+
+SEED_REF_PLANNING_TEST_CASES: tuple[SeedRefPlanningTestCase, ...] = (
+    SeedRefPlanningTestCase(
+        description="missing bound seed ref is first run",
+        seed_names=("order_amounts",),
+        expected_seed_version_hashes={"order_amounts": "new-seed"},
+        bound_seed_version_hashes={},
+        expected_stale_seed_names=("order_amounts",),
+        expected_seed_plan_reasons={"order_amounts": PlanReason.FIRST_RUN},
+    ),
+    SeedRefPlanningTestCase(
+        description="different bound seed ref is changed",
+        seed_names=("order_amounts",),
+        expected_seed_version_hashes={"order_amounts": "new-seed"},
+        bound_seed_version_hashes={"order_amounts": "old-seed"},
+        expected_stale_seed_names=("order_amounts",),
+        expected_seed_plan_reasons={"order_amounts": PlanReason.CONFIG_CHANGED},
+    ),
+    SeedRefPlanningTestCase(
+        description="matching bound seed ref is current",
+        seed_names=("order_amounts",),
+        expected_seed_version_hashes={"order_amounts": "same-seed"},
+        bound_seed_version_hashes={"order_amounts": "same-seed"},
+        expected_stale_seed_names=(),
+        expected_seed_plan_reasons={"order_amounts": PlanReason.NO_CHANGE},
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SEED_REF_PLANNING_TEST_CASES,
+    ids=[case.description for case in SEED_REF_PLANNING_TEST_CASES],
+)
+def test_given_seed_refs_when_building_virtual_seed_planning_then_returns_stale_names_and_reasons(
+    test_case: SeedRefPlanningTestCase,
+) -> None:
+    stale_seed_names: tuple[str, ...] = build_stale_seed_names(
+        seed_names=test_case.seed_names,
+        expected_seed_version_hashes=test_case.expected_seed_version_hashes,
+        bound_seed_version_hashes=test_case.bound_seed_version_hashes,
+    )
+    seed_plan_reasons: dict[str, PlanReason] = build_seed_plan_reasons(
+        seed_names=test_case.seed_names,
+        expected_seed_version_hashes=test_case.expected_seed_version_hashes,
+        bound_seed_version_hashes=test_case.bound_seed_version_hashes,
+    )
+
+    assert stale_seed_names == test_case.expected_stale_seed_names
+    assert seed_plan_reasons == test_case.expected_seed_plan_reasons
+
 
 VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = (
     VirtualModelSelectionTestCase(

@@ -1322,9 +1322,9 @@ def check_cross_package_internal_imports(
     )
 
     violations: list[Violation] = []
-    _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers", "classes"})
+    _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers"})
     _PUBLIC_MODULES: frozenset[str] = frozenset(
-        {"models", "types", "constants", "exceptions", "__init__", "main"}
+        {"classes", "models", "types", "constants", "exceptions", "__init__", "main"}
     )
 
     for node in ast.walk(module):
@@ -1356,7 +1356,7 @@ def check_cross_package_internal_imports(
                         message=(
                             f"cross-package import reaches into internal structure of "
                             f"'{'.'.join(imported_parts[:3])}'; import from its public "
-                            f"surface (models, types, constants, exceptions, or a thin "
+                            f"surface (classes, models, types, constants, exceptions, or a thin "
                             f"main/ entry module). If the code is helper logic rather than "
                             f"an entrypoint, move it to helpers/ or, if broadly reused "
                             f"across domains, shared/"
@@ -1381,7 +1381,7 @@ def check_cross_package_internal_imports(
                         message=(
                             f"cross-package import reaches into internal structure of "
                             f"'{'.'.join(imported_parts[:2])}'; import from its public "
-                            f"surface (models, types, constants, exceptions, or a thin "
+                            f"surface (classes, models, types, constants, exceptions, or a thin "
                             f"main/ entry module). If the code is helper logic rather than "
                             f"an entrypoint, move it to helpers/ or, if broadly reused "
                             f"across domains, shared/"

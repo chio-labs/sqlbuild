@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     RunDespiteUnchangedDecision,
     RunDespiteUnchangedPlanningResult,
+    SeedPlanEntry,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 
@@ -26,6 +27,7 @@ def rewrite_virtual_plan_entries(
     previous_metadata_jsons: dict[str, str] | None = None,
     previous_function_query_sqls: dict[str, str] | None = None,
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanOutput:
     """Rewrite standard planner entries with virtual-specific reasons and causes."""
 
@@ -92,10 +94,19 @@ def rewrite_virtual_plan_entries(
             )
             continue
         rewritten_function_entries.append(function_entry)
+    rewritten_seed_entries: list[SeedPlanEntry] = []
+    seed_entry: SeedPlanEntry
+    for seed_entry in plan_output.seed_entries:
+        seed_reason: PlanReason | None = (seed_plan_reasons or {}).get(seed_entry.name)
+        if seed_reason is None:
+            rewritten_seed_entries.append(seed_entry)
+            continue
+        rewritten_seed_entries.append(replace(seed_entry, reason=seed_reason))
     return replace(
         plan_output,
         model_entries=tuple(rewritten_entries),
         function_entries=tuple(rewritten_function_entries),
+        seed_entries=tuple(rewritten_seed_entries),
     )
 
 

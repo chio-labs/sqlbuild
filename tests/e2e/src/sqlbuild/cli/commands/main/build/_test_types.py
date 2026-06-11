@@ -149,6 +149,25 @@ class VirtualBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualSeedBuildE2ETestCase:
+    """Test case for virtual seed build state behavior."""
+
+    description: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_changed_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VirtualSeedGapE2ETestCase:
+    """Test case for targeted virtual seed gap coverage."""
+
+    description: str
+    expected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class VirtualCustomMaterializationE2ETestCase:
     """Test case for virtual custom materialization behavior."""
 

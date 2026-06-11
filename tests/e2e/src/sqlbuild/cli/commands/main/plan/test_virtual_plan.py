@@ -113,15 +113,16 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
     "test_case",
     [
         VirtualSourceFreshnessPlanE2ETestCase(
-            description="virtual seed change selects downstream model",
+            description="virtual seed change selects seed and downstream model",
             expected_unchanged_fragments=("Plan ready (0 selected)",),
             expected_fragments=(
-                "Plan ready (1 selected)",
+                "Plan ready (2 selected)",
                 "fact_orders",
+                "order_amounts  (seed_changed)",
             ),
         )
     ],
-    ids=["virtual seed change selects downstream model"],
+    ids=["virtual seed change selects seed and downstream model"],
 )
 def test_given_virtual_seed_change_when_planning_changes_only_then_selects_dependent_model(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -185,7 +186,6 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
     assert changed_plan_result.returncode == 0, changed_plan_result.stderr
     for fragment in test_case.expected_fragments:
         assert fragment in changed_plan_result.stdout, changed_plan_result.stdout
-    assert "order_amounts" not in changed_plan_result.stdout
 
 
 @pytest.mark.parametrize(

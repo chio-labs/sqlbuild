@@ -34,12 +34,14 @@ from sqlbuild.virtual.planner.helpers.output import (
 )
 from sqlbuild.virtual.planner.helpers.planning import (
     build_bound_local_hashes,
+    build_bound_seed_version_hashes,
     build_bound_version_hashes,
     build_default_virtual_selection,
     build_expected_local_hashes,
     build_expected_seed_version_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_seed_plan_reasons,
     build_source_freshness_incomplete_model_names,
     build_source_freshness_unchanged_source_names,
     build_source_version_hashes,
@@ -48,6 +50,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_causes,
     build_stale_root_reasons,
     build_stale_root_source_causes,
+    build_stale_seed_names,
     resolve_virtual_model_selection,
 )
 from sqlbuild.virtual.planner.helpers.run_despite_unchanged import (
@@ -121,6 +124,7 @@ def run_virtual_plan_pipeline(
         (
             bound_version_hashes,
             bound_local_hashes,
+            bound_seed_version_hashes,
             source_version_hashes,
             source_freshness_records,
             source_freshness_unchanged_source_names,
@@ -142,6 +146,16 @@ def run_virtual_plan_pipeline(
         )
         expected_seed_version_hashes: dict[str, str] = build_expected_seed_version_hashes(
             graph=graph,
+        )
+        stale_seed_names: tuple[str, ...] = build_stale_seed_names(
+            seed_names=tuple(seed.name for seed in graph.project.seeds),
+            expected_seed_version_hashes=expected_seed_version_hashes,
+            bound_seed_version_hashes=bound_seed_version_hashes,
+        )
+        seed_plan_reasons: dict[str, PlanReason] = build_seed_plan_reasons(
+            seed_names=tuple(seed.name for seed in graph.project.seeds),
+            expected_seed_version_hashes=expected_seed_version_hashes,
+            bound_seed_version_hashes=bound_seed_version_hashes,
         )
         expected_version_hashes: dict[str, str] = build_expected_version_hashes(
             graph=graph,
@@ -222,13 +236,19 @@ def run_virtual_plan_pipeline(
             include_stale_upstreams=include_stale_upstreams,
             work_selection_policy=work_selection_policy,
         )
+        selected_seed_names: tuple[str, ...] = (
+            stale_seed_names if not select and not exclude else ()
+        )
+        effective_select_with_seeds: tuple[str, ...] = tuple(
+            sorted(set(effective_select) | set(selected_seed_names))
+        )
 
-        if effective_select:
+        if effective_select_with_seeds:
             plan_output: PlanOutput = build_execution_plan(
                 project=graph.project,
                 adapter=adapter,
                 connection=connection,
-                select=effective_select,
+                select=effective_select_with_seeds,
                 exclude=(),
                 cursor_overrides=cursor_overrides,
                 full_refresh=full_refresh,
@@ -264,6 +284,7 @@ def run_virtual_plan_pipeline(
             previous_metadata_jsons=previous_metadata_jsons,
             previous_function_query_sqls=previous_function_query_sqls,
             run_despite_unchanged=run_despite_unchanged,
+            seed_plan_reasons=seed_plan_reasons,
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
@@ -321,6 +342,7 @@ def _read_bound_state(
     dict[str, str],
     dict[str, str],
     dict[str, str],
+    dict[str, str],
     tuple[SourceFreshnessRecord, ...],
     tuple[str, ...],
     dict[str, CompiledRelationLocation],
@@ -345,13 +367,19 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if target_name is None:
-            return {}, {}, {}, (), (), {}, {}, {}, {}, {}
+            return {}, {}, {}, {}, (), (), {}, {}, {}, {}, {}
         refs: tuple[object, ...] = backend.get_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
+        seed_refs: tuple[object, ...] = backend.get_virtual_environment_seed_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=target_name,
+        )
+        bound_seed_version_hashes: dict[str, str] = build_bound_seed_version_hashes(seed_refs)
         previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
             backend.get_virtual_environment_source_freshness(
                 state_connection,
@@ -429,6 +457,7 @@ def _read_bound_state(
         return (
             bound_version_hashes,
             build_bound_local_hashes(model_versions),
+            bound_seed_version_hashes,
             build_source_version_hashes(source_freshness_records),
             source_freshness_records,
             source_freshness_unchanged_source_names,

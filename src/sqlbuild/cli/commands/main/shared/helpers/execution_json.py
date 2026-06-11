@@ -57,6 +57,7 @@ def format_build_execution_json(
     plan: PlanOutput,
     python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
     python_check_results: tuple[PythonCheckExecutionResult, ...] = (),
+    command: str = "build",
 ) -> str:
     """Format build command execution results as JSON."""
 
@@ -78,7 +79,7 @@ def format_build_execution_json(
         else result.status
     )
     return _format_execution_json(
-        command="build",
+        command=command,
         status=status.value,
         assets=(
             *_format_model_assets(results=result.model_results, plan=plan),
