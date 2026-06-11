@@ -18,6 +18,7 @@ from sqlbuild.compiler.source_freshness.models import (
 )
 from tests.integration.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SourceFreshnessLatestResolutionTestCase,
+    SourceFreshnessPruneHistoryTestCase,
     SourceFreshnessReadNonExistentTableTestCase,
     SourceFreshnessRoundTripTestCase,
     SourceFreshnessWriteAndReadTestCase,
@@ -441,10 +442,169 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
     assert latest.run_id == test_case.expected_latest_run_id
     assert latest.data_version_hash == test_case.expected_latest_data_version_hash
     assert latest.data_version == test_case.expected_latest_data_version
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceFreshnessPruneHistoryTestCase(
+            description="prunes source freshness history by full identity and run id tie breaker",
+            database=None,
+            schema="test_schema",
+            retain_versions=2,
+            records=(
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_000",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T10:00:00",
+                    data_version_hash="hash_old",
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                ),
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_001",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T12:00:00",
+                    data_version_hash="hash_low_tie",
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                ),
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_002",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T12:00:00",
+                    data_version_hash="hash_high_tie",
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                ),
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_003",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T13:00:00",
+                    data_version_hash="hash_latest",
+                    observed_at=datetime(2026, 1, 15, 13, 5, 0),
+                ),
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema="raw",
+                    target_name="orders",
+                    run_id="run_010",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T10:00:00",
+                    data_version_hash="hash_physical_old",
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                ),
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema="raw",
+                    target_name="orders",
+                    run_id="run_011",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T11:00:00",
+                    data_version_hash="hash_physical_latest",
+                    observed_at=datetime(2026, 1, 15, 11, 5, 0),
+                ),
+            ),
+            expected_run_ids_by_identity={
+                SourceFreshnessIdentity("raw.orders", None, None, None): (
+                    "run_003",
+                    "run_002",
+                ),
+                SourceFreshnessIdentity("raw.orders", None, "raw", "orders"): (
+                    "run_011",
+                    "run_010",
+                ),
+            },
+            expected_latest_run_id="run_003",
+        )
+    ],
+    ids=["prunes source freshness history by full identity and run id tie breaker"],
+)
+def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_per_identity(
+    test_case: SourceFreshnessPruneHistoryTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    record: SourceFreshnessRecord
+    for record in test_case.records:
+        write_source_freshness_record(
+            connection=connection,
+            execute=execute,
+            database=test_case.database,
+            schema=test_case.schema,
+            record=record,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+        )
+
+    execute(
+        connection,
+        adapter.render_prune_source_freshness_history_sql(
+            database=test_case.database,
+            schema=test_case.schema,
+            retain_versions=test_case.retain_versions,
+        ),
+    )
+
+    identity: SourceFreshnessIdentity
+    expected_run_ids: tuple[str, ...]
+    for identity, expected_run_ids in test_case.expected_run_ids_by_identity.items():
+        rows: list[tuple[str]] = connection.execute(
+            f"SELECT run_id FROM {test_case.schema}.{SOURCE_FRESHNESS_TABLE_NAME} "
+            "WHERE source_name = ? "
+            "AND target_database IS NOT DISTINCT FROM ? "
+            "AND target_schema IS NOT DISTINCT FROM ? "
+            "AND target_name IS NOT DISTINCT FROM ? "
+            "ORDER BY observed_at DESC, run_id DESC",
+            (
+                identity.source_name,
+                identity.target_database,
+                identity.target_schema,
+                identity.target_name,
+            ),
+        ).fetchall()
+        assert tuple(row[0] for row in rows) == expected_run_ids
+    latest_result: SourceFreshnessSet = read_latest_source_freshness(
+        connection=connection,
+        execute=execute,
+        relation_exists=RELATION_EXISTS,
+        database=test_case.database,
+        schema=test_case.schema,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_read_latest_sql=RENDER_READ_LATEST_SQL,
+    )
+    latest_identity: SourceFreshnessIdentity = SourceFreshnessIdentity(
+        "raw.orders", None, None, None
+    )
+    assert latest_result.records[latest_identity].run_id == test_case.expected_latest_run_id
     row_count: int = connection.execute(
         f"SELECT COUNT(*) FROM {test_case.schema}.{SOURCE_FRESHNESS_TABLE_NAME}"
     ).fetchone()[0]
-    assert row_count == len(test_case.records)
+    assert row_count == sum(
+        len(run_ids) for run_ids in test_case.expected_run_ids_by_identity.values()
+    )
 
 
 @pytest.mark.parametrize(

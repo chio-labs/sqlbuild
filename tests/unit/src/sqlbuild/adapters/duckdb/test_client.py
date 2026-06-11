@@ -14,6 +14,7 @@ from tests.unit.src.sqlbuild.adapter.base.helpers import RecordingConnection
 from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbExpressionInferenceProfileTestCase,
     DuckDbMetadataSqlTestCase,
+    DuckDbPruneSqlTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
     DuckDbRenderIdentifierTestCase,
     DuckDbRenderTableFunctionTestCase,
@@ -132,6 +133,74 @@ def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
     )
 
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbPruneSqlTestCase(
+            description="renders fingerprint history pruning with rowid window delete",
+            database=None,
+            schema="analytics",
+            retain_versions=5,
+            expected_fragments=(
+                "DELETE FROM analytics._sqlbuild_fingerprints WHERE rowid IN",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "__sqlbuild_history_rank > 5",
+            ),
+        )
+    ],
+    ids=["renders fingerprint history pruning with rowid window delete"],
+)
+def test_given_fingerprint_table_when_rendering_prune_then_duckdb_uses_history_rank(
+    test_case: DuckDbPruneSqlTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    sql: str = adapter.render_prune_fingerprint_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbPruneSqlTestCase(
+            description="renders source freshness history pruning with full identity",
+            database=None,
+            schema="analytics",
+            retain_versions=3,
+            expected_fragments=(
+                "DELETE FROM analytics._sqlbuild_source_freshness WHERE rowid IN",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "__sqlbuild_history_rank > 3",
+            ),
+        )
+    ],
+    ids=["renders source freshness history pruning with full identity"],
+)
+def test_given_source_freshness_table_when_rendering_prune_then_duckdb_uses_history_rank(
+    test_case: DuckDbPruneSqlTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    sql: str = adapter.render_prune_source_freshness_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
 
 
 @pytest.mark.parametrize(

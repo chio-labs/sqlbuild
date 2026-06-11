@@ -118,6 +118,7 @@ class JanitorConfig:
     enabled: bool = False
     retention_days: int = 30
     max_checkpoints: int = 20
+    direct_state_history_versions: int = 20
     delete_tracked_only: bool = True
     exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
 

@@ -1307,6 +1307,34 @@ class PostgresAdapter(BaseAdapter):
             render_qualified_name=self.render_qualified_name,
         )
 
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        return (
+            f"DELETE FROM {table_name} WHERE ctid IN ("
+            "SELECT ctid FROM ("
+            "SELECT ctid, ROW_NUMBER() OVER ("
+            "PARTITION BY node_name "
+            "ORDER BY ts DESC, run_id DESC"
+            f") AS __sqlbuild_history_rank FROM {table_name}"
+            ") AS __sqlbuild_ranked "
+            f"WHERE __sqlbuild_history_rank > {retain_versions}"
+            ")"
+        )
+
     def render_create_source_freshness_index_sqls(
         self,
         *,
@@ -1346,6 +1374,34 @@ class PostgresAdapter(BaseAdapter):
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        return (
+            f"DELETE FROM {table_name} WHERE ctid IN ("
+            "SELECT ctid FROM ("
+            "SELECT ctid, ROW_NUMBER() OVER ("
+            "PARTITION BY source_name, target_database, target_schema, target_name "
+            "ORDER BY observed_at DESC, run_id DESC"
+            f") AS __sqlbuild_history_rank FROM {table_name}"
+            ") AS __sqlbuild_ranked "
+            f"WHERE __sqlbuild_history_rank > {retain_versions}"
+            ")"
         )
 
     def sql_analysis_dialect(self) -> str | None:

@@ -15,3 +15,12 @@ class MotherDuckAdapterDefaultsTestCase:
     description: str
     expected_default_schema: str
     expected_sql_analysis_dialect: str | None
+
+
+@dataclass(frozen=True)
+class MotherDuckPruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

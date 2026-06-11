@@ -22,6 +22,7 @@ ENV/
 .coverage
 .coverage.*
 htmlcov/
+coverage.xml
 
 # Type checkers and tooling
 .mypy_cache/

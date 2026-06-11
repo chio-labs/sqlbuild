@@ -723,6 +723,28 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        """Render SQL that prunes old fingerprint history rows."""
+        ...
+
+    @abstractmethod
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        """Render SQL that prunes old source freshness history rows."""
+        ...
+
+    @abstractmethod
     def sql_analysis_dialect(self) -> str | None:
         """Return the SQL analysis dialect name for this adapter, if any."""
         ...

@@ -81,6 +81,25 @@ class JanitorExpiredLockCandidate:
 
 
 @dataclass(frozen=True)
+class JanitorDirectStatePruneCandidate:
+    """One direct-mode state table eligible for history pruning."""
+
+    database: str | None
+    schema: str
+    table_name: str
+    retain_versions: int
+    prune_sql: str
+
+    def display_name(self) -> str:
+        parts: list[str] = []
+        if self.database is not None:
+            parts.append(self.database)
+        parts.append(self.schema)
+        parts.append(self.table_name)
+        return ".".join(parts)
+
+
+@dataclass(frozen=True)
 class JanitorSkippedRelation:
     """One stale relation skipped by a safety rule."""
 
@@ -126,6 +145,9 @@ class JanitorPlan:
     ] = field(default_factory=tuple)
     state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
     expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)
+    direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = field(
+        default_factory=tuple
+    )
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
@@ -146,3 +168,4 @@ class JanitorExecutionResult:
     )
     deleted_state_backups: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
     deleted_expired_locks: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)
+    pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)

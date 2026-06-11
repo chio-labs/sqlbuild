@@ -60,3 +60,12 @@ class SqlServerLatestReadSqlTestCase:
     database: str | None
     schema: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlServerPruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

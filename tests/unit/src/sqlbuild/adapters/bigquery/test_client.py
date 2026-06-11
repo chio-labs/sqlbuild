@@ -29,6 +29,7 @@ from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryCountRowsTestCase,
     BigQueryExecutionErrorTestCase,
     BigQueryExpressionInferenceProfileTestCase,
+    BigQueryPruneSqlTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCloneTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
@@ -93,6 +94,78 @@ def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expe
         == test_case.expected_rule_results["IF"]
     )
     assert lower_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["LOWER"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryPruneSqlTestCase(
+            description="renders fingerprint pruning with correlated exists",
+            database="example-project",
+            schema="analytics",
+            retain_versions=5,
+            expected_fragments=(
+                "DELETE FROM `example-project.analytics._sqlbuild_fingerprints` "
+                "AS target WHERE EXISTS",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "__sqlbuild_history_rank > 5",
+                "target.node_name = stale.node_name",
+            ),
+        )
+    ],
+    ids=["renders fingerprint pruning with correlated exists"],
+)
+def test_given_fingerprint_table_when_rendering_prune_then_bigquery_uses_history_rank(
+    test_case: BigQueryPruneSqlTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    sql: str = adapter.render_prune_fingerprint_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryPruneSqlTestCase(
+            description="renders source freshness pruning with null-safe full identity",
+            database="example-project",
+            schema="analytics",
+            retain_versions=3,
+            expected_fragments=(
+                "DELETE FROM `example-project.analytics._sqlbuild_source_freshness` "
+                "AS target WHERE EXISTS",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "__sqlbuild_history_rank > 3",
+                "target.target_database IS NOT DISTINCT FROM stale.target_database",
+            ),
+        )
+    ],
+    ids=["renders source freshness pruning with null-safe full identity"],
+)
+def test_given_source_freshness_table_when_rendering_prune_then_bigquery_uses_history_rank(
+    test_case: BigQueryPruneSqlTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    sql: str = adapter.render_prune_source_freshness_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
 
 
 BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [

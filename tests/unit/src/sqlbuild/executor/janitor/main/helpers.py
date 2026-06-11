@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.spec.models.schema import SchemaSeedEntry, SeedCsvSettings, default_seed_csv_settings
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -43,6 +44,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self.relation_infos: tuple[RelationInfo, ...] = relation_infos
         self.age_metadata_supported: bool = supports_age_metadata
         self.dropped_targets: list[str] = []
+        self.executed_sql: list[str] = []
         self.tracked_relations: tuple[tuple[str | None, str | None, str], ...] = tracked_relations
 
     def supports_relation_age_metadata(self) -> bool:
@@ -68,6 +70,7 @@ class FakeJanitorAdapter(BaseAdapter):
 
     def execute(self, connection: Any, sql: str) -> Any:
         del connection
+        self.executed_sql.append(sql)
         if "LIMIT 0" in sql:
             return _FakeResult(rows=())
         rows: list[tuple[Any, ...]] = []
@@ -135,8 +138,34 @@ class FakeJanitorAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
-        del connection, database, schema
-        return name == FINGERPRINT_TABLE_NAME
+        del connection
+        if name == FINGERPRINT_TABLE_NAME and self.tracked_relations:
+            return True
+        return any(
+            relation.database == database and relation.schema == schema and relation.name == name
+            for relation in self.relation_infos
+            if name in {FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME}
+        )
+
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        del database, schema
+        return f"PRUNE {FINGERPRINT_TABLE_NAME} KEEP {retain_versions}"
+
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        del database, schema
+        return f"PRUNE {SOURCE_FRESHNESS_TABLE_NAME} KEEP {retain_versions}"
 
     def drop(
         self,

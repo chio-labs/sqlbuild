@@ -1751,6 +1751,30 @@ class BaseAdapter(StrictAdapter):
         del database, schema
         return ()
 
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        """Render SQL that prunes old fingerprint history rows."""
+
+        del database, schema, retain_versions
+        raise AdapterUserError("direct-state history pruning is adapter-specific")
+
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        """Render SQL that prunes old source freshness history rows."""
+
+        del database, schema, retain_versions
+        raise AdapterUserError("direct-state history pruning is adapter-specific")
+
     def sql_analysis_dialect(self) -> str | None:
         """Return the configured SQL analysis dialect name, if any."""
 

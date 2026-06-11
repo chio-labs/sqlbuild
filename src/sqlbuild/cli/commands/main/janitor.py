@@ -80,6 +80,7 @@ def run_janitor(
     no_color: bool = False,
     auto_approve: bool = False,
     retention_days: int | None = None,
+    direct_state_history_versions: int | None = None,
 ) -> int:
     """Execute the janitor command."""
 
@@ -102,6 +103,13 @@ def run_janitor(
     )
     if effective_retention_days < 0:
         raise CliUserError("janitor --retention-days must be >= 0", code="C501")
+    effective_direct_state_history_versions: int = (
+        direct_state_history_versions
+        if direct_state_history_versions is not None
+        else discovered_inputs.project_config.janitor.direct_state_history_versions
+    )
+    if effective_direct_state_history_versions < 0:
+        raise CliUserError("janitor --direct-state-history-versions must be >= 0", code="C502")
 
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -212,6 +220,7 @@ def run_janitor(
             ),
             state_backup_candidates=state_backup_candidates(retention=state_retention),
             expired_lock_candidates=expired_lock_candidates(retention=state_retention),
+            direct_state_history_versions=effective_direct_state_history_versions,
         )
         status.complete(
             f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",
@@ -225,6 +234,7 @@ def run_janitor(
             and not plan.expired_virtual_environment_candidates
             and not plan.state_backup_candidates
             and not plan.expired_lock_candidates
+            and not plan.direct_state_prune_candidates
         ):
             return 0
         if not auto_approve and not _confirm(plan=plan):
@@ -273,10 +283,12 @@ def run_janitor(
             + len(result.deleted_state_backups)
             + len(result.deleted_expired_locks)
         )
+        pruned_state_count: int = len(result.pruned_direct_state)
         non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
-        if non_checkpoint_state_count:
+        if non_checkpoint_state_count or pruned_state_count:
             deleted_message: str = (
-                f"Deleted {len(result.deleted)} objects and {deleted_state_count} state items."
+                f"Deleted {len(result.deleted)} objects, deleted {deleted_state_count} "
+                f"state items, and pruned {pruned_state_count} direct state tables."
             )
         elif result.deleted_checkpoints:
             deleted_message = (
@@ -301,8 +313,9 @@ def _confirm(*, plan: JanitorPlan) -> bool:
         + len(plan.state_backup_candidates)
         + len(plan.expired_lock_candidates)
     )
-    if state_candidate_count:
-        deletion_count: int = len(plan.candidates) + state_candidate_count
+    prune_count: int = len(plan.direct_state_prune_candidates)
+    if state_candidate_count or prune_count:
+        deletion_count: int = len(plan.candidates) + state_candidate_count + prune_count
         sys.stdout.write(
             f"Janitor will delete {deletion_count} items from {environment_label(plan)}.\n"
         )

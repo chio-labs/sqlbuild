@@ -63,6 +63,7 @@ class CliNamespace:
     debug: bool = False
     auto_approve: bool = False
     retention_days: int | None = None
+    direct_state_history_versions: int | None = None
     state_command: str | None = None
     state_checkpoint_command: str | None = None
     state_checkpoint_id: str | None = None
@@ -406,7 +407,7 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
-    run_janitor: Callable[[Path | None, bool, bool, int | None], int]
+    run_janitor: Callable[[Path | None, bool, bool, int | None, int | None], int]
     run_state: Callable[
         [Path | None, str, str | None, bool, bool, str | None, str | None, str | None, bool], int
     ]
