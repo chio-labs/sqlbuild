@@ -186,6 +186,9 @@ class PolyglotAnalysisTestCase:
     expected_columns: tuple[InferredColumn, ...] | None
     expected_lineage_columns: tuple[CompiledLineageColumnFact, ...]
     expected_has_star: bool
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
