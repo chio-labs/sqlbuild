@@ -62,6 +62,16 @@ class StaleModelNamesTestCase:
 
 
 @dataclass(frozen=True)
+class SeedRefPlanningTestCase:
+    description: str
+    seed_names: tuple[str, ...]
+    expected_seed_version_hashes: dict[str, str]
+    bound_seed_version_hashes: dict[str, str]
+    expected_stale_seed_names: tuple[str, ...]
+    expected_seed_plan_reasons: dict[str, PlanReason]
+
+
+@dataclass(frozen=True)
 class StaleRootReasonsTestCase:
     description: str
     stale_model_names: tuple[str, ...]

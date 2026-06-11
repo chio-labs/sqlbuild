@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.seed._test_types import SeedE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_project_toml
+from tests.e2e.src.sqlbuild.cli.commands.main.seed._test_types import (
+    SeedE2ETestCase,
+    VirtualSeedE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,
     run_sqb,
@@ -66,3 +72,114 @@ def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expe
     )
     rows: list[tuple[Any, ...]] = query_duckdb(db_path=db_path, sql=seed_sql)
     assert tuple(tuple(r) for r in rows) == test_case.expected_data
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSeedE2ETestCase(
+            description="virtual seed command persists VDE seed state",
+            expected_seed_rows=((1, 100),),
+            expected_seed_fragments=(
+                "Plan ready (1 selected)",
+                "order_amounts",
+                "Execution  sqb seed  (concurrency: 1)",
+                "Completed successfully.",
+            ),
+            expected_current_seed_fragments=(
+                "Plan ready (1 selected)",
+                "order_amounts  (current)",
+            ),
+            expected_build_fragments=("Plan ready (1 selected)", "fact_orders"),
+            unexpected_build_fragments=("order_amounts",),
+        )
+    ],
+    ids=["virtual seed command persists VDE seed state"],
+)
+def test_given_virtual_project_when_running_seed_then_persists_seed_state(
+    test_case: VirtualSeedE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seed_command",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+
+    seed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "seed"),
+        project_dir=project_dir,
+    )
+
+    assert seed_result.returncode == 0, seed_result.stdout + seed_result.stderr
+    fragment: str
+    for fragment in test_case.expected_seed_fragments:
+        assert fragment in seed_result.stdout, seed_result.stdout
+    seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT seed_name FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+        ),
+    )
+    assert seed_ref_rows == [("order_amounts",)]
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev.order_amounts ORDER BY order_id",
+    ) == list(test_case.expected_seed_rows)
+
+    current_seed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "seed", "--select", "order_amounts"),
+        project_dir=project_dir,
+    )
+    assert current_seed_result.returncode == 0, (
+        current_seed_result.stdout + current_seed_result.stderr
+    )
+    for fragment in test_case.expected_current_seed_fragments:
+        assert fragment in current_seed_result.stdout, current_seed_result.stdout
+
+    json_seed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("seed", "--select", "order_amounts", "--json"),
+        project_dir=project_dir,
+    )
+    assert json_seed_result.returncode == 0, json_seed_result.stderr
+    json_payload: dict[str, object] = json.loads(json_seed_result.stdout)
+    assert json_payload["command"] == test_case.expected_json_command
+    seed_assets: list[dict[str, object]] = [
+        dict(asset) for asset in json_payload["assets"] if dict(asset).get("kind") == "seed"
+    ]
+    assert seed_assets[0]["name"] == "order_amounts"
+    assert seed_assets[0]["reason"] == test_case.expected_json_reason
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    for fragment in test_case.expected_build_fragments:
+        assert fragment in build_result.stdout, build_result.stdout
+    for fragment in test_case.unexpected_build_fragments:
+        assert fragment not in build_result.stdout, build_result.stdout

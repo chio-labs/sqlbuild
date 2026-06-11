@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
@@ -27,6 +28,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.build_resources import expand_build_resource_selection
 from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
+from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.warehouse_snapshot import build_warehouse_snapshot_phase
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -53,7 +55,7 @@ from sqlbuild.compiler.python_nodes.models import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
@@ -114,11 +116,13 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackendConfig,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
 
@@ -139,6 +143,7 @@ def run_virtual_build(
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     include_python: bool = True,
+    seed_only: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     fail_fast: bool = False,
@@ -213,6 +218,13 @@ def run_virtual_build(
                 virtual_environment_name=target_vde_name,
             )
         )
+        bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+            )
+        )
         bound_model_versions: dict[str, ModelVersionRecord | None] = _read_bound_model_versions(
             backend=backend,
             state_connection=state_connection,
@@ -245,23 +257,36 @@ def run_virtual_build(
             graph=graph,
             bound_refs=bound_refs,
             bound_model_versions=bound_model_versions,
+            bound_seed_refs=bound_seed_refs,
             source_freshness_records=current_source_freshness_records,
         )
         work_selection_policy: WorkSelectionPolicy = (
             WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
         )
-        selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
-            graph=graph,
-            select=select,
-            exclude=exclude,
-            default_selection=semantics.default_selection,
-            stale_model_names=semantics.stale_model_names,
-            include_stale_upstreams=include_stale_upstreams,
-            work_selection_policy=work_selection_policy,
-        )
+        selected_model_names: tuple[str, ...]
+        selected_seed_names: tuple[str, ...] = ()
+        if seed_only:
+            selected_model_names = ()
+            selected_seed_names = _resolve_virtual_seed_selection(
+                graph=graph,
+                select=select,
+                exclude=exclude,
+            )
+        else:
+            selected_model_names = resolve_virtual_plan_model_selection(
+                graph=graph,
+                select=select,
+                exclude=exclude,
+                default_selection=semantics.default_selection,
+                stale_model_names=semantics.stale_model_names,
+                include_stale_upstreams=include_stale_upstreams,
+                work_selection_policy=work_selection_policy,
+            )
+            selected_seed_names = semantics.stale_seed_names if not select and not exclude else ()
         effective_select: tuple[str, ...] = _build_virtual_planner_select(
             graph=graph,
             selected_model_names=selected_model_names,
+            selected_seed_names=selected_seed_names,
         )
         bound_physical_relations: dict[str, PhysicalRelationRecord] = _read_bound_relations(
             backend=backend,
@@ -346,6 +371,9 @@ def run_virtual_build(
                 project_config=discovered_inputs.project_config,
                 local_config=discovered_inputs.local_config,
                 defer_sources_to=defer_sources_to,
+                seed_version_hashes=semantics.expected_seed_version_hashes,
+                seed_metadata_jsons=semantics.seed_identity_metadata_jsons,
+                seed_plan_reasons=semantics.seed_plan_reasons,
             )
         finally:
             adapter.close(planning_connection)
@@ -512,10 +540,14 @@ def run_virtual_build(
             baseline_vde_name=physical_target_name,
             bound_version_hashes=semantics.bound_version_hashes,
             bound_function_refs=bound_function_refs,
+            bound_seed_refs=bound_seed_refs,
             plan_output=executor_plan_output,
             expected_local_hashes=semantics.expected_local_hashes,
             expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
+            expected_seed_version_hashes=semantics.expected_seed_version_hashes,
+            seed_identity_metadata_jsons=semantics.seed_identity_metadata_jsons,
+            seed_results=result.seed_results,
             load_results=result.load_results,
         )
         read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
@@ -872,32 +904,27 @@ def _persist_successful_virtual_build(
     baseline_vde_name: str | None,
     bound_version_hashes: dict[str, str],
     bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
+    bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
     plan_output: PlanOutput,
     expected_local_hashes: dict[str, str],
     expected_metadata_jsons: dict[str, str],
     expected_version_hashes: dict[str, str],
+    expected_seed_version_hashes: dict[str, str],
+    seed_identity_metadata_jsons: dict[str, str],
+    seed_results: tuple[SeedExecutionResult, ...],
     load_results: tuple[LoadExecutionResult, ...],
 ) -> None:
     final_version_hashes: dict[str, str] = dict(bound_version_hashes)
     final_function_hashes: dict[str, str] = {
         ref.function_name: ref.version_hash for ref in bound_function_refs
     }
+    final_seed_hashes: dict[str, str] = {ref.seed_name: ref.version_hash for ref in bound_seed_refs}
     model_entries_by_name: dict[str, Any] = {
         entry.name: entry for entry in plan_output.model_entries
     }
     for entry in plan_output.model_entries:
         final_version_hashes[entry.name] = expected_version_hashes[entry.name]
 
-    stale_after_build: tuple[str, ...] = tuple(
-        model.name
-        for model in project.models
-        if final_version_hashes.get(model.name) != expected_version_hashes.get(model.name)
-    )
-    status: VirtualEnvironmentStatus = (
-        VirtualEnvironmentStatus.FINALIZED
-        if not stale_after_build
-        else VirtualEnvironmentStatus.ACTIVE
-    )
     state_connection: Any = backend.connect(config.connection)
     try:
         previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
@@ -1007,6 +1034,52 @@ def _persist_successful_virtual_build(
                     schema=config.schema,
                     record=function_version,
                 )
+        successful_seed_names: frozenset[str] = frozenset(
+            seed_result.seed_name
+            for seed_result in seed_results
+            if seed_result.status == ExecutionStatus.SUCCESS
+        )
+        for seed_name in successful_seed_names:
+            version_hash: str | None = expected_seed_version_hashes.get(seed_name)
+            if version_hash is None:
+                continue
+            metadata_json: str = seed_identity_metadata_jsons.get(seed_name, "{}")
+            existing_seed_version: SeedVersionRecord | None = backend.get_seed_version(
+                state_connection,
+                schema=config.schema,
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            if existing_seed_version is None:
+                backend.upsert_seed_version(
+                    state_connection,
+                    schema=config.schema,
+                    record=SeedVersionRecord(
+                        seed_name=seed_name,
+                        version_hash=version_hash,
+                        identity_metadata_hash=hashlib.sha256(
+                            metadata_json.encode("utf-8")
+                        ).hexdigest(),
+                        identity_metadata_json_b64=encode_state_text(metadata_json),
+                        status=ModelVersionStatus.READY,
+                    ),
+                )
+            final_seed_hashes[seed_name] = version_hash
+        stale_model_after_build: tuple[str, ...] = tuple(
+            model.name
+            for model in project.models
+            if final_version_hashes.get(model.name) != expected_version_hashes.get(model.name)
+        )
+        stale_seed_after_build: tuple[str, ...] = tuple(
+            seed.name
+            for seed in project.seeds
+            if final_seed_hashes.get(seed.name) != expected_seed_version_hashes.get(seed.name)
+        )
+        status: VirtualEnvironmentStatus = (
+            VirtualEnvironmentStatus.FINALIZED
+            if not stale_model_after_build and not stale_seed_after_build
+            else VirtualEnvironmentStatus.ACTIVE
+        )
         backend.upsert_virtual_environment(
             state_connection,
             schema=config.schema,
@@ -1046,6 +1119,20 @@ def _persist_successful_virtual_build(
             virtual_environment_name=target_vde_name,
             refs=function_refs,
         )
+        seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=target_vde_name,
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            for seed_name, version_hash in sorted(final_seed_hashes.items())
+        )
+        backend.replace_virtual_environment_seed_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=target_vde_name,
+            refs=seed_refs,
+        )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
                 backend,
@@ -1054,6 +1141,7 @@ def _persist_successful_virtual_build(
                 virtual_environment_name=target_vde_name,
                 refs=refs,
                 function_refs=function_refs,
+                seed_refs=seed_refs,
             )
     finally:
         backend.close(state_connection)
@@ -1095,21 +1183,47 @@ def _build_virtual_planner_select(
     *,
     graph: ProjectGraph,
     selected_model_names: tuple[str, ...],
+    selected_seed_names: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     selected_model_keys: frozenset[CompiledObjectKey] = frozenset(
         key
         for model_name in selected_model_names
         if (key := graph.all_keys.get(model_name)) is not None
     )
+    selected_seed_keys: frozenset[CompiledObjectKey] = frozenset(
+        key
+        for seed_name in selected_seed_names
+        if (key := graph.all_keys.get(seed_name)) is not None
+    )
     expanded_keys: frozenset[CompiledObjectKey] = expand_build_resource_selection(
-        selected_keys=selected_model_keys,
+        selected_keys=selected_model_keys | selected_seed_keys,
         upstream=graph.upstream_deps,
         downstream=graph.downstream_deps,
         include_upstream_functions=True,
-        include_upstream_seeds=True,
+        include_upstream_seeds=False,
         include_downstream_functions=True,
     )
     return tuple(sorted(key.name for key in expanded_keys))
+
+
+def _resolve_virtual_seed_selection(
+    *,
+    graph: ProjectGraph,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> tuple[str, ...]:
+    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=select,
+        exclude=exclude,
+        all_keys=graph.all_keys,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+    )
+    return tuple(
+        sorted(key.name for key in selected_keys if key.resource_type == CompiledResourceType.SEED)
+    )
 
 
 def _build_virtual_model_change(

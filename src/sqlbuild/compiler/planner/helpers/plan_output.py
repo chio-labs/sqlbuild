@@ -62,6 +62,7 @@ def build_plan_output(
     reload_sources: bool,
     seed_version_hashes: dict[str, str] | None = None,
     seed_metadata_jsons: dict[str, str] | None = None,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanOutput:
     seed_entries: list[SeedPlanEntry] = [
         SeedPlanEntry(
@@ -78,6 +79,7 @@ def build_plan_output(
                 seed_name=seed.name,
                 expected_version_hash=(seed_version_hashes or {}).get(seed.name),
                 snapshot=snapshot,
+                seed_plan_reasons=seed_plan_reasons,
             ),
         )
         for seed in project.seeds
@@ -158,7 +160,11 @@ def _resolve_seed_plan_reason(
     seed_name: str,
     expected_version_hash: str | None,
     snapshot: WarehouseSnapshot,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanReason:
+    reason: PlanReason | None = (seed_plan_reasons or {}).get(seed_name)
+    if reason is not None:
+        return reason
     fingerprint: Fingerprint | None = snapshot.fingerprints.seeds.get(seed_name)
     if fingerprint is None:
         return PlanReason.FIRST_RUN
