@@ -524,7 +524,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
         db_path=project_dir / "warehouse.duckdb",
         sql=(
             "SELECT metadata_json_b64 FROM main._sqlbuild_fingerprints "
-            "WHERE model_name = 'fact_orders' ORDER BY ts DESC LIMIT 1"
+            "WHERE node_name = 'fact_orders' ORDER BY ts DESC LIMIT 1"
         ),
     )
     metadata_json: str = base64.b64decode(str(rows[0][0])).decode("utf-8")

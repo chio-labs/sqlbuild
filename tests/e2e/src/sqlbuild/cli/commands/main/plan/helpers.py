@@ -147,7 +147,7 @@ def standard_model_version_hashes(*, db_path: Path, model_name: str) -> list[tup
         db_path=db_path,
         sql=(
             "SELECT version_hash FROM main._sqlbuild_fingerprints "
-            f"WHERE model_name = '{model_name}' ORDER BY ts"
+            f"WHERE node_name = '{model_name}' ORDER BY ts"
         ),
     )
 

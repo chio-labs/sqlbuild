@@ -1442,8 +1442,8 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
             for row in query_duckdb(
                 db_path=db_path,
                 sql=(
-                    "SELECT DISTINCT model_name FROM main._sqlbuild_fingerprints "
-                    "WHERE model_name LIKE 'customer_%snapshot' ORDER BY model_name"
+                    "SELECT DISTINCT node_name FROM main._sqlbuild_fingerprints "
+                    "WHERE node_name LIKE 'customer_%snapshot' ORDER BY node_name"
                 ),
             )
         )
@@ -1918,8 +1918,8 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
             for row in query_duckdb(
                 db_path=db_path,
                 sql=(
-                    "SELECT DISTINCT model_name FROM main._sqlbuild_fingerprints "
-                    "WHERE model_name LIKE 'customer_%snapshot' ORDER BY model_name"
+                    "SELECT DISTINCT node_name FROM main._sqlbuild_fingerprints "
+                    "WHERE node_name LIKE 'customer_%snapshot' ORDER BY node_name"
                 ),
             )
         )

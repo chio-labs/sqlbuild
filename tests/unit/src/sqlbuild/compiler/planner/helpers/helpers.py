@@ -389,12 +389,13 @@ def build_standard_reuse_from_target_fingerprint_row(
     encoded_sql: str = base64.b64encode(b"SELECT 1").decode("ascii")
     encoded_metadata: str = base64.b64encode(b"{}").decode("ascii")
     return (
+        "model",
         model_name,
         None,
         "prod_schema",
         model_name,
         "run_1",
-        f"{model_name}_query_hash",
+        f"{model_name}_definition_hash",
         version_hash,
         f"{model_name}_schema_hash",
         encoded_sql,
@@ -467,15 +468,16 @@ def build_standard_reuse_fingerprint(*, model_name: str, version_hash: str) -> F
     """Build a minimal fingerprint for standard reuse decision tests."""
 
     return Fingerprint(
-        model_name=model_name,
+        node_type="model",
+        node_name=model_name,
         target_database=None,
         target_schema="dev_schema",
         target_name=model_name,
         run_id="run_1",
-        query_hash="query_hash",
+        definition_hash="definition_hash",
         version_hash=version_hash,
         schema_fingerprint="schema_hash",
-        query_sql="SELECT 1",
+        definition="SELECT 1",
         ts=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -1506,14 +1508,15 @@ def build_fingerprint(*, query_sql: str) -> Fingerprint:
     """Build a fingerprint with a hash matching the supplied query SQL."""
 
     return Fingerprint(
-        model_name="is_completed_order",
+        node_type="function",
+        node_name="is_completed_order",
         target_database=None,
         target_schema="main",
         target_name="is_completed_order",
         run_id="run-1",
-        query_hash=compute_query_hash(query_sql),
+        definition_hash=compute_query_hash(query_sql),
         schema_fingerprint="",
-        query_sql=query_sql,
+        definition=query_sql,
         ts=datetime(2026, 1, 1, tzinfo=UTC),
     )
 

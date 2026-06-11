@@ -326,7 +326,7 @@ def _build_function_entries(
                 entry_point=function.entry_point,
                 packages=function.packages,
                 previous_query_sql=(
-                    snapshot.fingerprints[function.name].query_sql
+                    snapshot.fingerprints[function.name].definition
                     if function.name in snapshot.fingerprints
                     else None
                 ),

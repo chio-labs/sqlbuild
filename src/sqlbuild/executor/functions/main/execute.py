@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_FUNCTION
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
@@ -139,15 +140,16 @@ def _try_write_function_fingerprint(
         )
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
-            model_name=entry.name,
+            node_type=NODE_TYPE_FUNCTION,
+            node_name=entry.name,
             target_database=entry.destination.database,
             target_schema=entry.destination.schema,
             target_name=entry.destination.name,
             run_id=run_id,
-            query_hash=compute_query_hash(entry.fingerprint_query_sql),
+            definition_hash=compute_query_hash(entry.fingerprint_query_sql),
             version_hash=compute_query_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
-            query_sql=entry.fingerprint_query_sql,
+            definition=entry.fingerprint_query_sql,
             metadata_json="{}",
             ts=datetime.now(tz=UTC),
         )

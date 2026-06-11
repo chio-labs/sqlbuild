@@ -68,7 +68,7 @@ def detect_function_change(
         )
     if not query_change_tracking:
         return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.FORWARD_ONLY)
-    if compute_query_hash(fingerprint_sql) != fingerprint.query_hash:
+    if compute_query_hash(fingerprint_sql) != fingerprint.definition_hash:
         return PlanReason.QUERY_CHANGED, resolve_replay_on_change(
             replay_on_change=function.replay_on_change
         )

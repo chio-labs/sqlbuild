@@ -802,8 +802,8 @@ def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fai
     for fragment in test_case.expected_error_fragments:
         assert fragment in result.error_message
     fingerprint_rows: list[tuple[object, ...]] = connection.execute(
-        "SELECT model_name, target_name FROM staging._sqlbuild_fingerprints "
-        "WHERE model_name = 'orders' ORDER BY target_name"
+        "SELECT node_name, target_name FROM staging._sqlbuild_fingerprints "
+        "WHERE node_name = 'orders' ORDER BY target_name"
     ).fetchall()
     assert fingerprint_rows == [("orders", "orders_origin")]
     target_exists: bool = connection.execute(
@@ -1006,7 +1006,7 @@ def test_given_complete_reuse_with_origin_audit_proof_when_executing_table_then_
     rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
     destination_metadata_json_b64: str = connection.execute(
         "SELECT metadata_json_b64 FROM staging._sqlbuild_fingerprints "
-        "WHERE model_name = 'orders' AND target_name = 'orders' AND run_id = 'test_run'"
+        "WHERE node_name = 'orders' AND target_name = 'orders' AND run_id = 'test_run'"
     ).fetchone()[0]
     destination_metadata_json: str = base64.b64decode(destination_metadata_json_b64).decode()
     destination_metadata: Any = json.loads(destination_metadata_json)

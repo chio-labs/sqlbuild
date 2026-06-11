@@ -93,14 +93,15 @@ def build_snapshot_for_metadata_test_case(
         existing_columns={},
         fingerprints={
             "orders": Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash=compute_query_hash("SELECT 1 AS order_id"),
+                definition_hash=compute_query_hash("SELECT 1 AS order_id"),
                 schema_fingerprint="schema_a",
-                query_sql="SELECT 1 AS order_id",
+                definition="SELECT 1 AS order_id",
                 metadata_json=test_case.previous_metadata_json,
                 ts=_STUB_TS,
             )
@@ -243,14 +244,15 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
     )
     return {
         test_case.model_name: Fingerprint(
-            model_name=test_case.model_name,
+            node_type="model",
+            node_name=test_case.model_name,
             target_database=None,
             target_schema=None,
             target_name=test_case.model_name,
             run_id="run_001",
-            query_hash=test_case.fingerprint_query_hash,
+            definition_hash=test_case.fingerprint_query_hash,
             schema_fingerprint="schema_a",
-            query_sql="SELECT 1",
+            definition="SELECT 1",
             metadata_json=build_version_identity_metadata_json(
                 model_name=test_case.model_name,
                 config_values=fingerprint_config_values,

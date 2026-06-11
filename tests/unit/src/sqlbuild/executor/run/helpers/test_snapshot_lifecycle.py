@@ -153,7 +153,7 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     fingerprint_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)
         for row in connection.execute(
-            f"SELECT model_name, target_name, run_id FROM main.{FINGERPRINT_TABLE_NAME}"
+            f"SELECT node_name, target_name, run_id FROM main.{FINGERPRINT_TABLE_NAME}"
         ).fetchall()
     )
     lifecycle_sql: tuple[str, ...] = tuple(event.content for event in result.lifecycle_events)

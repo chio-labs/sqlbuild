@@ -75,12 +75,13 @@ class FakeJanitorAdapter(BaseAdapter):
         for tracked_relation in self.tracked_relations:
             rows.append(
                 (
+                    "model",
                     tracked_relation[2],
                     tracked_relation[0],
                     tracked_relation[1],
                     tracked_relation[2],
                     "run_001",
-                    "query_hash",
+                    "definition_hash",
                     "version_hash",
                     "schema_hash",
                     base64.b64encode(b"SELECT 1").decode("ascii"),

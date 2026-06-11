@@ -27,7 +27,7 @@ def read_latest_fingerprints(
     render_qualified_name: Callable[..., str | None],
     require_table: bool = False,
 ) -> FingerprintSet:
-    """Read all fingerprints for a schema and resolve latest per model in memory.
+    """Read all fingerprints for a schema and resolve latest per node name in memory.
 
     Fingerprint table existence is checked via adapter metadata (`relation_exists`)
     rather than by swallowing probe-query errors, so operational failures propagate
@@ -68,44 +68,46 @@ def read_latest_fingerprints(
     row: tuple[Any, ...]
     for row in rows:
         fingerprint: Fingerprint = _row_to_fingerprint(row, qualified_name=qualified_name)
-        model_name: str = fingerprint.model_name
-        if model_name not in latest or fingerprint.ts > latest[model_name].ts:
-            latest[model_name] = fingerprint
+        node_name: str = fingerprint.node_name
+        if node_name not in latest or fingerprint.ts > latest[node_name].ts:
+            latest[node_name] = fingerprint
     return FingerprintSet(schema=schema, fingerprints=latest)
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:
-    raw_ts: Any = row[10]
+    raw_ts: Any = row[11]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
-    raw_target_database: Any = row[1]
-    raw_target_schema: Any = row[2]
-    raw_target_name: Any = row[3]
-    model_name: str = str(row[0])
-    query_sql_storage: str = str(row[8])
-    metadata_json_storage: str = str(row[9])
+    node_type: str = str(row[0])
+    node_name: str = str(row[1])
+    raw_target_database: Any = row[2]
+    raw_target_schema: Any = row[3]
+    raw_target_name: Any = row[4]
+    definition_storage: str = str(row[9])
+    metadata_json_storage: str = str(row[10])
     try:
-        query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
-            "utf-8"
-        )
+        definition: str = base64.b64decode(
+            definition_storage.encode("ascii"), validate=True
+        ).decode("utf-8")
         metadata_json: str = base64.b64decode(
             metadata_json_storage.encode("ascii"), validate=True
         ).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError) as error:
         raise FingerprintInputError(
-            f"Invalid fingerprint query SQL storage for '{model_name}' in {qualified_name}: "
+            f"Invalid fingerprint definition storage for '{node_name}' in {qualified_name}: "
             "expected base64-encoded UTF-8. This can happen after upgrading from an older "
             f"sqlbuild version; delete or rebuild {qualified_name} to regenerate fingerprints."
         ) from error
     return Fingerprint(
-        model_name=model_name,
+        node_type=node_type,
+        node_name=node_name,
         target_database=str(raw_target_database) if raw_target_database is not None else None,
         target_schema=str(raw_target_schema) if raw_target_schema is not None else None,
         target_name=str(raw_target_name) if raw_target_name is not None else None,
-        run_id=str(row[4]),
-        query_hash=str(row[5]),
-        version_hash=str(row[6]),
-        schema_fingerprint=str(row[7]),
-        query_sql=query_sql,
+        run_id=str(row[5]),
+        definition_hash=str(row[6]),
+        version_hash=str(row[7]),
+        schema_fingerprint=str(row[8]),
+        definition=definition,
         metadata_json=metadata_json,
         ts=ts,
     )

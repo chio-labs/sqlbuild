@@ -467,15 +467,15 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
     assert query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT model_name, target_schema, target_name "
-            "FROM prod_staging._sqlbuild_fingerprints WHERE model_name = 'stg_orders'"
+            "SELECT node_name, target_schema, target_name "
+            "FROM prod_staging._sqlbuild_fingerprints WHERE node_name = 'stg_orders'"
         ),
     ) == [("stg_orders", "prod_staging", "stg_orders")]
     assert query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT model_name, target_schema, target_name "
-            "FROM prod_marts._sqlbuild_fingerprints WHERE model_name = 'fact_orders'"
+            "SELECT node_name, target_schema, target_name "
+            "FROM prod_marts._sqlbuild_fingerprints WHERE node_name = 'fact_orders'"
         ),
     ) == [("fact_orders", "prod_marts", "fact_orders")]
     assert query_duckdb(
@@ -533,8 +533,8 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
     assert query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT model_name, target_schema, target_name FROM dev._sqlbuild_fingerprints "
-            "WHERE model_name IN ('stg_orders', 'fact_orders') ORDER BY model_name"
+            "SELECT node_name, target_schema, target_name FROM dev._sqlbuild_fingerprints "
+            "WHERE node_name IN ('stg_orders', 'fact_orders') ORDER BY node_name"
         ),
     ) == [
         ("fact_orders", "dev", "fact_orders"),
@@ -621,8 +621,8 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
     assert query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT model_name, target_schema, target_name FROM dev._sqlbuild_fingerprints "
-            "ORDER BY model_name"
+            "SELECT node_name, target_schema, target_name FROM dev._sqlbuild_fingerprints "
+            "ORDER BY node_name"
         ),
     ) == [("stg_orders", "dev", "stg_orders")]
 
@@ -643,8 +643,8 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
     assert query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT model_name, target_schema, target_name FROM dev._sqlbuild_fingerprints "
-            "ORDER BY model_name"
+            "SELECT node_name, target_schema, target_name FROM dev._sqlbuild_fingerprints "
+            "ORDER BY node_name"
         ),
     ) == [
         ("fact_orders", "dev", "fact_orders"),
