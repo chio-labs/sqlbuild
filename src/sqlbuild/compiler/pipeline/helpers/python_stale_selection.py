@@ -1,4 +1,4 @@
-"""Python-node selection pruning for standard changes-only planning."""
+"""Python-node selection pruning for stale-only planning."""
 
 from __future__ import annotations
 

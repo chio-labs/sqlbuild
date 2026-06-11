@@ -1,4 +1,4 @@
-"""Standard changes-only planner scope pruning helpers."""
+"""Standard planner scope pruning helpers."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReas
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 
 
-def prune_unchanged_scope(
+def prune_standard_unchanged_scope(
     *,
     scope: PlannerScope,
     changes: PlannerChangeResults,
@@ -32,7 +32,7 @@ def prune_unchanged_scope(
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
     expected_version_hashes: dict[str, str] | None = None,
 ) -> PlannerScope:
-    """Remove unchanged selected SQL nodes for standard changes-only planning."""
+    """Remove unchanged selected SQL nodes for standard stale-only planning."""
 
     selected_keys: set[CompiledObjectKey] = set()
     key: CompiledObjectKey

@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 
+from sqlbuild.compiler.planner.types import StandardScopePruning
+
 
 @dataclass(frozen=True)
 class StandardSourceFreshnessPlanOutputTestCase:
     description: str
-    changes_only: bool
+    standard_scope_pruning: StandardScopePruning
     expected_has_source_freshness: bool
 
 

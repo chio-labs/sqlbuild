@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
@@ -205,7 +206,7 @@ def run_virtual_promote(
             default_selection=tuple(model.name for model in graph.project.models),
             stale_model_names=source_semantics.stale_model_names,
             include_stale_upstreams=include_stale_upstreams,
-            changes_only=False,
+            work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
         )
         if not select:
             selected_model_names = tuple(model.name for model in graph.project.models)

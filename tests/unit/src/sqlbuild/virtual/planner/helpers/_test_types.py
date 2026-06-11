@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class VirtualModelSelectionTestCase:
     default_selection: tuple[str, ...]
     stale_model_names: tuple[str, ...]
     include_stale_upstreams: bool
-    changes_only: bool
+    work_selection_policy: WorkSelectionPolicy
     expected_selection: tuple[str, ...]
     downstream_depends_on_dim_customers: bool = False
 

@@ -22,7 +22,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     StandardModelVersionIdentities,
 )
-from sqlbuild.compiler.planner.types import PlanAction, RelationReuseKind
+from sqlbuild.compiler.planner.types import PlanAction, RelationReuseKind, StandardScopePruning
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_project,
@@ -38,13 +38,13 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
 
 PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
     StandardSourceFreshnessPlanOutputTestCase(
-        description="standard changes-only plan output carries source freshness result",
-        changes_only=True,
+        description="standard pruned plan output carries source freshness result",
+        standard_scope_pruning=StandardScopePruning.PRUNE_UNCHANGED,
         expected_has_source_freshness=True,
     ),
     StandardSourceFreshnessPlanOutputTestCase(
         description="normal standard plan output carries source freshness result",
-        changes_only=False,
+        standard_scope_pruning=StandardScopePruning.NONE,
         expected_has_source_freshness=True,
     ),
 ]
@@ -85,7 +85,7 @@ def test_given_direct_plan_when_building_execution_plan_then_source_freshness_is
             ),
             adapter=adapter,
             connection=connection,
-            changes_only=test_case.changes_only,
+            standard_scope_pruning=test_case.standard_scope_pruning,
         )
     finally:
         adapter.close(connection)

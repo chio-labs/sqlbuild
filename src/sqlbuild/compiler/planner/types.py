@@ -17,6 +17,16 @@ class SelectorKind(StrEnum):
     PATH = "path"
 
 
+class WorkSelectionPolicy(StrEnum):
+    ALL_SELECTED = "all_selected"
+    STALE_ONLY = "stale_only"
+
+
+class StandardScopePruning(StrEnum):
+    NONE = "none"
+    PRUNE_UNCHANGED = "prune_unchanged"
+
+
 class ChangeKind(StrEnum):
     FIRST_RUN = "first_run"
     QUERY_CHANGED = "query_changed"
