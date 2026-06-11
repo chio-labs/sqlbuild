@@ -27,6 +27,7 @@ from sqlbuild.virtual.state.models import (
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     query_duckdb,
     run_sqb,
@@ -175,6 +176,62 @@ def build_virtual_plan_repo_files(
         "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
         "models/dim_customers.sql": f"MODEL ();\n\n{dim_customers_sql}\n",
     }
+
+
+def prepare_virtual_run_despite_unchanged_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    run_despite_unchanged: str,
+    data_version_sql: str,
+    include_freshness: bool = True,
+    source_freshness_type: str = "timestamp",
+    warehouse_column_type: str = "TIMESTAMP",
+) -> Path:
+    freshness_fragment: str = (
+        "\n"
+        "    freshness:\n"
+        "      strategy: column\n"
+        "      column: order_ts\n"
+        f"      type: {source_freshness_type}"
+        if include_freshness
+        else ""
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    schema: raw\n"
+                "    table: raw_orders"
+                f"{freshness_fragment}\n"
+            ),
+            "models/rolling_orders.sql": (
+                f"MODEL (materialized table, run_despite_unchanged {run_despite_unchanged});\n\n"
+                'SELECT id, order_ts FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                'MODEL (materialized table);\n\nSELECT id, order_ts FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "CREATE SCHEMA raw;\n"
+            f"CREATE TABLE raw.raw_orders (id INTEGER, order_ts {warehouse_column_type});\n"
+            f"INSERT INTO raw.raw_orders VALUES (7, {data_version_sql});"
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    return project_dir
 
 
 def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:

@@ -38,6 +38,14 @@ class VirtualModelSelectionTestCase:
 
 
 @dataclass(frozen=True)
+class VirtualRunDespiteUnchangedSemanticsTestCase:
+    description: str
+    expected_stale_model_names: tuple[str, ...]
+    expected_default_selection: tuple[str, ...]
+    expected_root_reasons: dict[str, PlanReason]
+
+
+@dataclass(frozen=True)
 class StaleRequiredUpstreamClosureTestCase:
     description: str
     selected_model_names: tuple[str, ...]

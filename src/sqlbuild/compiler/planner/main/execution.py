@@ -23,9 +23,6 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_planner_relations_context,
 )
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
-from sqlbuild.compiler.planner.helpers.run_despite_unchanged import (
-    build_run_despite_unchanged_planning_result,
-)
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.source_freshness import (
     build_planner_source_freshness_result,
@@ -48,6 +45,9 @@ from sqlbuild.compiler.planner.helpers.version_identity import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
+from sqlbuild.compiler.planner.main.run_despite_unchanged import (
+    build_run_despite_unchanged_planning_result,
+)
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
     PlannerChangeResults,

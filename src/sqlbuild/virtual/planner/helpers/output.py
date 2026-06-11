@@ -9,6 +9,8 @@ from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
+    RunDespiteUnchangedDecision,
+    RunDespiteUnchangedPlanningResult,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 
@@ -23,6 +25,7 @@ def rewrite_virtual_plan_entries(
     current_metadata_jsons: dict[str, str] | None = None,
     previous_metadata_jsons: dict[str, str] | None = None,
     previous_function_query_sqls: dict[str, str] | None = None,
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
 ) -> PlanOutput:
     """Rewrite standard planner entries with virtual-specific reasons and causes."""
 
@@ -30,12 +33,18 @@ def rewrite_virtual_plan_entries(
     cause_reasons: dict[str, PlanReason] = stale_root_cause_reasons or stale_root_reasons
     entry: ModelPlanEntry
     for entry in plan_output.model_entries:
+        run_decision: RunDespiteUnchangedDecision | None = (
+            run_despite_unchanged.decisions.get(entry.name)
+            if run_despite_unchanged is not None
+            else None
+        )
         if entry.name in stale_root_reasons:
             rewritten_entries.append(
                 replace(
                     entry,
                     reason=stale_root_reasons[entry.name],
                     cascade=None,
+                    run_despite_unchanged=run_decision,
                     previous_query_sql=(previous_query_sqls or {}).get(
                         entry.name,
                         entry.previous_query_sql,
