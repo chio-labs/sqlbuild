@@ -488,11 +488,11 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
         model_record: ModelVersionRecord = ModelVersionRecord(
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
-            data_hash="data-hash",
-            metadata_hash="metadata-hash",
+            definition_identity_hash="definition-identity-hash",
+            identity_metadata_hash="identity-metadata-hash",
             status=ModelVersionStatus.READY,
-            fingerprint_query_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
-            fingerprint_metadata_json_b64="e30=",
+            definition_text_b64="U0VMRUNUIDEgQVMgaWQ=",
+            identity_metadata_json_b64="e30=",
             compiled_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
         )
         backend.upsert_model_version(connection, schema=test_case.schema, record=model_record)
@@ -872,7 +872,7 @@ def test_given_duckdb_state_backend_when_upserting_function_records_then_round_t
             runtime_version=None,
             entry_point=None,
             body_sql_b64="YW1vdW50ID4gOQ==",
-            fingerprint_query_sql_b64="YW1vdW50ID4gOQ==",
+            definition_text_b64="YW1vdW50ID4gOQ==",
             status=ModelVersionStatus.READY,
         )
         backend.upsert_function_version(
@@ -1180,8 +1180,8 @@ def test_given_duckdb_state_backend_when_upserting_same_identity_then_created_at
         model_record: ModelVersionRecord = ModelVersionRecord(
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
-            data_hash="data-hash",
-            metadata_hash="metadata-hash",
+            definition_identity_hash="definition-identity-hash",
+            identity_metadata_hash="identity-metadata-hash",
             status=ModelVersionStatus.READY,
         )
         backend.upsert_model_version(connection, schema=test_case.schema, record=model_record)

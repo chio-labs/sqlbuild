@@ -30,7 +30,7 @@ def build_function_version_record(function_entry: FunctionPlanEntry) -> Function
         runtime_version=function_entry.runtime_version,
         entry_point=function_entry.entry_point,
         body_sql_b64=encode_state_text(function_entry.body_sql),
-        fingerprint_query_sql_b64=encode_state_text(fingerprint_sql),
+        definition_text_b64=encode_state_text(fingerprint_sql),
         status=ModelVersionStatus.READY,
     )
 

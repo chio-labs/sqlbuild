@@ -1106,8 +1106,8 @@ def test_given_current_vde_versions_and_runtime_stale_model_when_semantics_then_
             model_name: ModelVersionRecord(
                 model_name=model_name,
                 version_hash=expected_version_hashes[model_name],
-                data_hash=local_hash,
-                metadata_hash="metadata-hash",
+                definition_identity_hash=local_hash,
+                identity_metadata_hash="metadata-hash",
                 status=ModelVersionStatus.READY,
             )
             for model_name, local_hash in expected_local_hashes.items()
