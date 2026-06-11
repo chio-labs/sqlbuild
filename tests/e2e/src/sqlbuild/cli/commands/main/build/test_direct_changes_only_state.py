@@ -230,7 +230,7 @@ def test_given_reuse_from_target_with_origin_audit_proof_when_building_dev_then_
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "reused" in dev_result.stdout
+    assert "proof reused" in dev_result.stdout
     assert query_duckdb(db_path=db_path, sql="SELECT id FROM dev.orders") == [(None,)]
     assert checks[0]["kind"] == "audit"
     assert checks[0]["reused"] is True

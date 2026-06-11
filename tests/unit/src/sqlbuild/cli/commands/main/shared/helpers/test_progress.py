@@ -555,7 +555,7 @@ BUILD_PROGRESS_MODEL_OUTPUT_TEST_CASES: list[BuildProgressModelOutputTestCase] =
             ),
         ),
         plan_output=PlanOutput(),
-        expected_fragments=("audit", "orders_id_not_null", "PASS", "reused"),
+        expected_fragments=("audit", "orders_id_not_null", "PASS", "proof reused"),
         unexpected_fragments=("rows",),
     ),
 ]
