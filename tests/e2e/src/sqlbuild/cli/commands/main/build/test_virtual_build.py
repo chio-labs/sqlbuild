@@ -345,6 +345,86 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
     "test_case",
     [
         VirtualSourceFreshnessBuildE2ETestCase(
+            description="virtual changes-only builds runtime stale table and downstream",
+            expected_initial_rows=((7,),),
+            expected_updated_rows=((7,),),
+        )
+    ],
+    ids=["virtual changes-only builds runtime stale table and downstream"],
+)
+def test_given_virtual_run_despite_unchanged_when_building_changes_only_then_builds_downstream(
+    test_case: VirtualSourceFreshnessBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_build_run_despite_unchanged",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: raw
+                    table: raw_orders
+                    freshness:
+                      strategy: column
+                      column: order_ts
+                      type: timestamp
+                """
+            ).strip()
+            + "\n",
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged 30d);\n\n"
+                'SELECT id, order_ts FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=dedent(
+            """
+            CREATE SCHEMA raw;
+            CREATE TABLE raw.raw_orders (id INTEGER, order_ts TIMESTAMP);
+            INSERT INTO raw.raw_orders VALUES (7, TIMESTAMP '2026-06-01 00:00:00');
+            """
+        ).strip(),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    first_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert first_build_result.returncode == 0, first_build_result.stderr
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.orders_mart ORDER BY id",
+    ) == list(test_case.expected_initial_rows)
+
+    changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert changes_only_result.returncode == 0, changes_only_result.stderr
+    assert "rolling_orders" in changes_only_result.stdout
+    assert "orders_mart" in changes_only_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id FROM dev__dev.orders_mart ORDER BY id",
+    ) == list(test_case.expected_updated_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessBuildE2ETestCase(
             description="virtual build respects timestamp source freshness lag tolerance",
             expected_initial_rows=((7,),),
             expected_updated_rows=((9,),),

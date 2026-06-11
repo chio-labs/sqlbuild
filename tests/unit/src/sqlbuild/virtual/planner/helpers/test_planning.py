@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -21,6 +21,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
     build_source_freshness_incomplete_model_names,
+    build_source_version_hashes,
     build_stale_model_names,
     build_stale_required_upstream_closure,
     build_stale_root_cause_reasons,
@@ -29,7 +30,14 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_source_causes,
     resolve_virtual_model_selection,
 )
-from sqlbuild.virtual.state.models import SourceFreshnessRecord
+from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.state.models import (
+    ModelVersionRecord,
+    SourceFreshnessRecord,
+    VirtualEnvironmentRefRecord,
+)
+from sqlbuild.virtual.state.types import ModelVersionStatus
 from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     DefaultVirtualSelectionTestCase,
     ExpectedVersionHashesTestCase,
@@ -40,6 +48,7 @@ from tests.unit.src.sqlbuild.virtual.planner.helpers._test_types import (
     StaleRootReasonsTestCase,
     StaleRootSourceCausesTestCase,
     VirtualModelSelectionTestCase,
+    VirtualRunDespiteUnchangedSemanticsTestCase,
     VirtualSourceFreshnessLagToleranceTestCase,
 )
 from tests.unit.src.sqlbuild.virtual.planner.helpers.helpers import (
@@ -1041,6 +1050,75 @@ def test_given_virtual_selector_missing_stale_upstream_when_resolving_selection_
 
     assert exc_info.value.code == "S010"
     assert test_case.expected_selection[0] in exc_info.value.message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualRunDespiteUnchangedSemanticsTestCase(
+            description="adds run_despite_unchanged root and downstream to stale selection",
+            expected_stale_model_names=("fact_orders", "stg_orders"),
+            expected_default_selection=("fact_orders", "stg_orders"),
+            expected_root_reasons={"stg_orders": PlanReason.RUN_DESPITE_UNCHANGED},
+        )
+    ],
+    ids=["adds run_despite_unchanged root and downstream to stale selection"],
+)
+def test_given_current_vde_versions_and_runtime_stale_model_when_semantics_then_marks_stale(
+    test_case: VirtualRunDespiteUnchangedSemanticsTestCase,
+) -> None:
+    graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql="SELECT 1 AS id",
+        downstream_query_sql="SELECT id FROM stg_orders",
+        upstream_extra_config={"run_despite_unchanged": "30d"},
+    )
+    source_records: tuple[SourceFreshnessRecord, ...] = (
+        SourceFreshnessRecord(
+            virtual_environment_name="dev",
+            source_name="raw.orders",
+            strategy="sql",
+            value_kind="timestamp",
+            data_version="2026-06-01T00:00:00+00:00",
+            data_version_hash="source-hash",
+            observed_at=datetime(2026, 6, 11, tzinfo=UTC),
+        ),
+    )
+    expected_local_hashes: dict[str, str] = build_expected_local_hashes(graph=graph)
+    expected_version_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=graph,
+        expected_local_hashes=expected_local_hashes,
+        source_version_hashes=build_source_version_hashes(source_records),
+    )
+    model_names: tuple[str, ...] = tuple(model.name for model in graph.project.models)
+
+    semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
+        graph=graph,
+        bound_refs=tuple(
+            VirtualEnvironmentRefRecord(
+                virtual_environment_name="dev",
+                model_name=model_name,
+                version_hash=version_hash,
+            )
+            for model_name, version_hash in expected_version_hashes.items()
+            if model_name in model_names
+        ),
+        bound_model_versions={
+            model_name: ModelVersionRecord(
+                model_name=model_name,
+                version_hash=expected_version_hashes[model_name],
+                data_hash=local_hash,
+                metadata_hash="metadata-hash",
+                status=ModelVersionStatus.READY,
+            )
+            for model_name, local_hash in expected_local_hashes.items()
+            if model_name in model_names
+        },
+        source_freshness_records=source_records,
+    )
+
+    assert semantics.stale_model_names == test_case.expected_stale_model_names
+    assert semantics.default_selection == test_case.expected_default_selection
+    assert semantics.stale_root_reasons == test_case.expected_root_reasons
 
 
 @pytest.mark.parametrize(

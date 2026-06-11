@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.planner.models import RunDespiteUnchangedPlanningResult
 from sqlbuild.compiler.planner.types import PlanReason
 
 
@@ -23,6 +24,9 @@ class VirtualPlanSemantics:
     source_freshness_incomplete_model_names: tuple[str, ...] = ()
     stale_model_names: tuple[str, ...] = ()
     default_selection: tuple[str, ...] = ()
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult = field(
+        default_factory=RunDespiteUnchangedPlanningResult
+    )
     stale_root_reasons: dict[str, PlanReason] = field(default_factory=dict)
     stale_root_causes: dict[str, str] = field(default_factory=dict)
     stale_root_cause_reasons: dict[str, PlanReason] = field(default_factory=dict)
