@@ -112,8 +112,8 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 (("abc", False), ("123", True)),
             ),
             (
-                "SELECT model_name FROM main._sqlbuild_fingerprints "
-                "WHERE model_name = 'is_positive_int'",
+                "SELECT node_name FROM main._sqlbuild_fingerprints "
+                "WHERE node_name = 'is_positive_int'",
                 (("is_positive_int",),),
             ),
         ),
@@ -186,8 +186,8 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 (("abc", False), ("123", True)),
             ),
             (
-                "SELECT model_name FROM dev._sqlbuild_fingerprints "
-                "WHERE model_name = 'is_positive_int'",
+                "SELECT node_name FROM dev._sqlbuild_fingerprints "
+                "WHERE node_name = 'is_positive_int'",
                 (("is_positive_int",),),
             ),
         ),
@@ -464,7 +464,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_query_results=(
             ("SELECT id FROM main.orders", ((1,),)),
             (
-                "SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+                "SELECT node_name FROM main._sqlbuild_fingerprints ORDER BY node_name",
                 (("orders",),),
             ),
         ),

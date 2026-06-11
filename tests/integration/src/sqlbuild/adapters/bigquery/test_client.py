@@ -935,14 +935,15 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
     bigquery_dataset: str,
 ) -> None:
     fingerprint: Fingerprint = Fingerprint(
-        model_name=test_case.expected_model_name,
+        node_type="model",
+        node_name=test_case.expected_model_name,
         target_database=bigquery_project,
         target_schema=bigquery_dataset,
         target_name=test_case.expected_target_name,
         run_id="run-1",
-        query_hash="query-hash",
+        definition_hash="definition-hash",
         schema_fingerprint="schema-hash",
-        query_sql=test_case.query_sql,
+        definition=test_case.query_sql,
         ts=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
     )
 
@@ -973,10 +974,10 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
         adapter=adapter,
         connection=connection,
         sql=(
-            f"SELECT query_sql_b64 FROM {fingerprint_table} WHERE model_name = 'fingerprint_model'"
+            f"SELECT definition_b64 FROM {fingerprint_table} WHERE node_name = 'fingerprint_model'"
         ),
     )
 
-    actual_query_sql: str = fingerprint_set.fingerprints[test_case.expected_model_name].query_sql
+    actual_query_sql: str = fingerprint_set.fingerprints[test_case.expected_model_name].definition
     assert actual_query_sql == test_case.query_sql
     assert raw_rows == ((base64.b64encode(test_case.query_sql.encode("utf-8")).decode("ascii"),),)

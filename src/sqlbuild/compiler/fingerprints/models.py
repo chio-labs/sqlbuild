@@ -10,14 +10,15 @@ from datetime import datetime
 class Fingerprint:
     """One applied fingerprint record from a successful materialization."""
 
-    model_name: str
+    node_type: str
+    node_name: str
     target_database: str | None
     target_schema: str | None
     target_name: str | None
     run_id: str
-    query_hash: str
+    definition_hash: str
     schema_fingerprint: str
-    query_sql: str
+    definition: str
     ts: datetime
     metadata_json: str = "{}"
     version_hash: str = ""
@@ -25,7 +26,7 @@ class Fingerprint:
 
 @dataclass(frozen=True)
 class FingerprintSet:
-    """Latest fingerprints per model for one target schema."""
+    """Latest fingerprints per node name for one target schema."""
 
     schema: str
     fingerprints: dict[str, Fingerprint]

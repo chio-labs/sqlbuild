@@ -14,7 +14,7 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
-    InvalidQuerySqlStorageTestCase,
+    InvalidDefinitionStorageTestCase,
     LatestResolutionTestCase,
     OldFingerprintSchemaTestCase,
     ReadNonExistentTableTestCase,
@@ -33,20 +33,21 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         schema="test_schema",
         fingerprints=(
             Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash="hash_a",
+                definition_hash="hash_a",
                 version_hash="version_a",
                 schema_fingerprint="schema_a",
-                query_sql="SELECT id FROM orders",
+                definition="SELECT id FROM orders",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
         ),
-        expected_model_names=("orders",),
-        expected_latest_query_hashes={"orders": "hash_a"},
+        expected_node_names=("orders",),
+        expected_latest_definition_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
     ),
     WriteAndReadTestCase(
@@ -55,32 +56,34 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         schema="test_schema",
         fingerprints=(
             Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash="hash_a",
+                definition_hash="hash_a",
                 version_hash="version_a",
                 schema_fingerprint="schema_a",
-                query_sql="SELECT id FROM orders",
+                definition="SELECT id FROM orders",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
             Fingerprint(
-                model_name="customers",
+                node_type="model",
+                node_name="customers",
                 target_database=None,
                 target_schema=None,
                 target_name="customers",
                 run_id="run_001",
-                query_hash="hash_b",
+                definition_hash="hash_b",
                 version_hash="version_b",
                 schema_fingerprint="schema_b",
-                query_sql="SELECT id FROM customers",
+                definition="SELECT id FROM customers",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
         ),
-        expected_model_names=("customers", "orders"),
-        expected_latest_query_hashes={"orders": "hash_a", "customers": "hash_b"},
+        expected_node_names=("customers", "orders"),
+        expected_latest_definition_hashes={"orders": "hash_a", "customers": "hash_b"},
         expected_latest_target_names={"orders": "orders", "customers": "customers"},
     ),
     WriteAndReadTestCase(
@@ -89,20 +92,21 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         schema="test_schema",
         fingerprints=(
             Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash="hash_a",
+                definition_hash="hash_a",
                 version_hash="version_a",
                 schema_fingerprint="schema_a",
-                query_sql="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
+                definition="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
         ),
-        expected_model_names=("orders",),
-        expected_latest_query_hashes={"orders": "hash_a"},
+        expected_node_names=("orders",),
+        expected_latest_definition_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
     ),
     WriteAndReadTestCase(
@@ -111,15 +115,16 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         schema="test_schema",
         fingerprints=(
             Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash="hash_a",
+                definition_hash="hash_a",
                 version_hash="version_a",
                 schema_fingerprint="schema_a",
-                query_sql="SELECT id FROM orders",
+                definition="SELECT id FROM orders",
                 metadata_json=json.dumps(
                     {
                         "audit_gate": {
@@ -151,8 +156,8 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
         ),
-        expected_model_names=("orders",),
-        expected_latest_query_hashes={"orders": "hash_a"},
+        expected_node_names=("orders",),
+        expected_latest_definition_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
         expected_metadata_fragments=(
             '"audit_gate":{"binding_set_hash":"binding_hash"',
@@ -194,21 +199,21 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
         render_qualified_name=RENDER_QUALIFIED_NAME,
     )
 
-    assert tuple(sorted(result.fingerprints.keys())) == test_case.expected_model_names
-    model_name: str
+    assert tuple(sorted(result.fingerprints.keys())) == test_case.expected_node_names
+    node_name: str
     expected_hash: str
-    for model_name, expected_hash in test_case.expected_latest_query_hashes.items():
-        assert result.fingerprints[model_name].query_hash == expected_hash
+    for node_name, expected_hash in test_case.expected_latest_definition_hashes.items():
+        assert result.fingerprints[node_name].definition_hash == expected_hash
     expected_target_name: str | None
-    for model_name, expected_target_name in test_case.expected_latest_target_names.items():
-        assert result.fingerprints[model_name].target_name == expected_target_name
+    for node_name, expected_target_name in test_case.expected_latest_target_names.items():
+        assert result.fingerprints[node_name].target_name == expected_target_name
     fp: Fingerprint
     for fp in test_case.fingerprints:
-        assert result.fingerprints[fp.model_name].query_sql == fp.query_sql
-        assert result.fingerprints[fp.model_name].version_hash == fp.version_hash
+        assert result.fingerprints[fp.node_name].definition == fp.definition
+        assert result.fingerprints[fp.node_name].version_hash == fp.version_hash
     fragment: str
     for fragment in test_case.expected_metadata_fragments:
-        assert fragment in result.fingerprints[test_case.expected_model_names[0]].metadata_json
+        assert fragment in result.fingerprints[test_case.expected_node_names[0]].metadata_json
 
 
 @pytest.mark.parametrize(
@@ -218,7 +223,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
             description="returns empty set when fingerprint table does not exist",
             database=None,
             schema="test_schema",
-            expected_model_count=0,
+            expected_node_count=0,
         ),
     ],
     ids=["returns empty set when fingerprint table does not exist"],
@@ -237,7 +242,7 @@ def test_given_no_table_when_reading_then_returns_empty_set(
         render_qualified_name=RENDER_QUALIFIED_NAME,
     )
 
-    assert len(result.fingerprints) == test_case.expected_model_count
+    assert len(result.fingerprints) == test_case.expected_node_count
 
 
 @pytest.mark.parametrize(
@@ -314,15 +319,16 @@ def test_given_old_fingerprint_table_without_version_hash_when_reading_then_rais
             database=None,
             schema="test_schema",
             fingerprint=Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash="hash_a",
+                definition_hash="hash_a",
                 version_hash="version_a",
                 schema_fingerprint="schema_a",
-                query_sql="SELECT 1",
+                definition="SELECT 1",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
             expected_table_exists=True,
@@ -355,7 +361,7 @@ def test_given_no_table_when_writing_then_creates_table(
         "SELECT 1 FROM information_schema.columns "
         f"WHERE table_schema = '{test_case.schema}' "
         f"AND table_name = '{FINGERPRINT_TABLE_NAME}' "
-        "AND column_name = 'query_sql_b64'"
+        "AND column_name = 'definition_b64'"
     ).fetchone()
     assert column_row is not None
 
@@ -369,33 +375,35 @@ def test_given_no_table_when_writing_then_creates_table(
             schema="test_schema",
             fingerprints=(
                 Fingerprint(
-                    model_name="orders",
+                    node_type="model",
+                    node_name="orders",
                     target_database=None,
                     target_schema=None,
                     target_name="orders",
                     run_id="run_002",
-                    query_hash="new_hash",
+                    definition_hash="new_hash",
                     version_hash="new_version",
                     schema_fingerprint="new_schema",
-                    query_sql="SELECT 2",
+                    definition="SELECT 2",
                     ts=datetime(2026, 1, 15, 12, 0, 0),
                 ),
                 Fingerprint(
-                    model_name="orders",
+                    node_type="model",
+                    node_name="orders",
                     target_database=None,
                     target_schema=None,
                     target_name="orders",
                     run_id="run_001",
-                    query_hash="old_hash",
+                    definition_hash="old_hash",
                     version_hash="old_version",
                     schema_fingerprint="old_schema",
-                    query_sql="SELECT 1",
+                    definition="SELECT 1",
                     ts=datetime(2026, 1, 15, 10, 0, 0),
                 ),
             ),
             expected_latest_run_id="run_002",
-            expected_latest_query_hash="new_hash",
-            expected_latest_query_sql="SELECT 2",
+            expected_latest_definition_hash="new_hash",
+            expected_latest_definition="SELECT 2",
         ),
     ],
     ids=["resolves latest fingerprint when older row is inserted after newer"],
@@ -428,60 +436,62 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
     latest: Fingerprint = result.fingerprints["orders"]
 
     assert latest.run_id == test_case.expected_latest_run_id
-    assert latest.query_hash == test_case.expected_latest_query_hash
-    assert latest.query_sql == test_case.expected_latest_query_sql
+    assert latest.definition_hash == test_case.expected_latest_definition_hash
+    assert latest.definition == test_case.expected_latest_definition
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        InvalidQuerySqlStorageTestCase(
-            description="invalid query sql b64 storage raises contextual error",
+        InvalidDefinitionStorageTestCase(
+            description="invalid definition b64 storage raises contextual error",
             schema="test_schema",
-            model_name="orders",
-            raw_query_sql_storage="SELECT 1",
+            node_name="orders",
+            raw_definition_storage="SELECT 1",
             expected_error_fragments=(
-                "Invalid fingerprint query SQL storage for 'orders'",
+                "Invalid fingerprint definition storage for 'orders'",
                 "expected base64-encoded UTF-8",
                 "delete or rebuild",
                 "_sqlbuild_fingerprints",
             ),
         )
     ],
-    ids=["invalid query sql b64 storage raises contextual error"],
+    ids=["invalid definition b64 storage raises contextual error"],
 )
-def test_given_invalid_query_sql_storage_when_reading_then_raises_contextual_error(
-    test_case: InvalidQuerySqlStorageTestCase,
+def test_given_invalid_definition_storage_when_reading_then_raises_contextual_error(
+    test_case: InvalidDefinitionStorageTestCase,
     connection: Any,
     execute: Any,
 ) -> None:
     connection.execute(f"CREATE SCHEMA IF NOT EXISTS {test_case.schema}")
     connection.execute(
         f"CREATE TABLE {test_case.schema}.{FINGERPRINT_TABLE_NAME} ("
-        "model_name VARCHAR NOT NULL, "
+        "node_type VARCHAR NOT NULL, "
+        "node_name VARCHAR NOT NULL, "
         "target_database VARCHAR, "
         "target_schema VARCHAR, "
         "target_name VARCHAR, "
         "run_id VARCHAR NOT NULL, "
-        "query_hash VARCHAR NOT NULL, "
+        "definition_hash VARCHAR NOT NULL, "
         "version_hash VARCHAR NOT NULL, "
         "schema_fingerprint VARCHAR NOT NULL, "
-        "query_sql_b64 VARCHAR NOT NULL, "
+        "definition_b64 VARCHAR NOT NULL, "
         "metadata_json_b64 VARCHAR NOT NULL, "
         "ts TIMESTAMP NOT NULL)"
     )
     connection.execute(
         f"INSERT INTO {test_case.schema}.{FINGERPRINT_TABLE_NAME} VALUES "
-        "(?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "(?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            test_case.model_name,
+            "model",
+            test_case.node_name,
             test_case.schema,
-            test_case.model_name,
+            test_case.node_name,
             "run_001",
             "hash_a",
             "version_a",
             "schema_a",
-            test_case.raw_query_sql_storage,
+            test_case.raw_definition_storage,
             "e30=",
             datetime(2026, 1, 15, 12, 0, 0),
         ),

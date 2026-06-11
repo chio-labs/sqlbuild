@@ -64,14 +64,15 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
             (
                 "staging",
                 Fingerprint(
-                    model_name="orders",
+                    node_type="model",
+                    node_name="orders",
                     target_database=None,
                     target_schema=None,
                     target_name="orders",
                     run_id="run_001",
-                    query_hash="hash_a",
+                    definition_hash="definition_a",
                     schema_fingerprint="schema_a",
-                    query_sql="SELECT 1",
+                    definition="SELECT 1",
                     ts=datetime(2026, 1, 15, 12, 0, 0),
                 ),
             ),

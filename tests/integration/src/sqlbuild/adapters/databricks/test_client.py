@@ -833,14 +833,15 @@ def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_
     databricks_schema: str,
 ) -> None:
     fingerprint: Fingerprint = Fingerprint(
-        model_name=test_case.expected_model_name,
+        node_type="model",
+        node_name=test_case.expected_model_name,
         target_database=databricks_catalog,
         target_schema=databricks_schema,
         target_name=test_case.expected_target_name,
         run_id="run-1",
-        query_hash="query-hash",
+        definition_hash="definition-hash",
         schema_fingerprint="schema-hash",
-        query_sql=test_case.query_sql,
+        definition=test_case.query_sql,
         ts=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
     )
 
@@ -863,5 +864,5 @@ def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_
         render_qualified_name=adapter.render_qualified_name,
     )
 
-    actual_query_sql: str = fingerprint_set.fingerprints[test_case.expected_model_name].query_sql
+    actual_query_sql: str = fingerprint_set.fingerprints[test_case.expected_model_name].definition
     assert actual_query_sql == test_case.query_sql

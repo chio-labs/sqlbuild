@@ -315,16 +315,17 @@ def test_given_direct_project_function_hash_change_when_detecting_changes_then_m
         existing_columns={},
         fingerprints={
             "orders": Fingerprint(
-                model_name="orders",
+                node_type="model",
+                node_name="orders",
                 target_database=None,
                 target_schema=None,
                 target_name="orders",
                 run_id="run_001",
-                query_hash=compute_query_hash(
+                definition_hash=compute_query_hash(
                     "SELECT is_large_order(amount) AS large_order FROM orders"
                 ),
                 schema_fingerprint="schema_a",
-                query_sql="SELECT is_large_order(amount) AS large_order FROM orders",
+                definition="SELECT is_large_order(amount) AS large_order FROM orders",
                 metadata_json=build_version_identity_metadata_json(
                     model_name="orders",
                     config_values={},

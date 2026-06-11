@@ -380,7 +380,7 @@ def test_given_changed_upstream_when_planning_then_downstream_reason_matches_pol
 
     fingerprint_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,
-        sql="SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+        sql="SELECT node_name FROM main._sqlbuild_fingerprints ORDER BY node_name",
     )
     assert tuple(row[0] for row in fingerprint_rows) == test_case.expected_fingerprint_models
 

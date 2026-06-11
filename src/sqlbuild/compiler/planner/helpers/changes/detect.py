@@ -166,7 +166,7 @@ def detect_model_changes(
             (
                 "fingerprint comparison"
                 f" compiled_query_hash={compiled_query_hash}"
-                f" fingerprint_query_hash={fingerprint.query_hash}"
+                f" fingerprint_definition_hash={fingerprint.definition_hash}"
                 f" query_changed={query_changed}"
             ),
             sqlbuild_subject="model",
@@ -176,7 +176,7 @@ def detect_model_changes(
             sqlbuild_status="changed" if query_changed else "unchanged",
         )
         log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
-        log_sql(logger=debug_logger, sql=fingerprint.query_sql, action="fingerprint_query")
+        log_sql(logger=debug_logger, sql=fingerprint.definition, action="fingerprint_definition")
         if query_changed:
             raw_policy: str | None = get_config_str(model, "replay_on_change")
             replay_backfill = resolve_replay_on_change(replay_on_change=raw_policy)

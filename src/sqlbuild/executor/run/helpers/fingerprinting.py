@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
@@ -48,16 +49,17 @@ def try_write_fingerprint(
             run_id=run_id,
         )
         fingerprint: Fingerprint = Fingerprint(
-            model_name=entry.name,
+            node_type=NODE_TYPE_MODEL,
+            node_name=entry.name,
             target_database=entry.destination.database,
             target_schema=entry.destination.schema,
             target_name=entry.destination.name,
             run_id=run_id,
-            query_hash=compute_query_hash(entry.fingerprint_query_sql),
+            definition_hash=compute_query_hash(entry.fingerprint_query_sql),
             version_hash=entry.fingerprint_version_hash
             or compute_query_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
-            query_sql=entry.fingerprint_query_sql,
+            definition=entry.fingerprint_query_sql,
             metadata_json=metadata_json,
             ts=datetime.now(tz=UTC),
         )

@@ -133,7 +133,7 @@ def test_given_unchanged_project_when_planning_after_build_then_models_are_not_q
     fingerprint_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,
         sql=(
-            "SELECT model_name, query_sql_b64 FROM main._sqlbuild_fingerprints ORDER BY model_name"
+            "SELECT node_name, definition_b64 FROM main._sqlbuild_fingerprints ORDER BY node_name"
         ),
     )
     assert tuple(row[0] for row in fingerprint_rows) == test_case.expected_fingerprint_models

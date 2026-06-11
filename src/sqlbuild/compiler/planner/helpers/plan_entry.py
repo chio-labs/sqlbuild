@@ -544,7 +544,7 @@ def plan_model_from_change(
     )
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
-    previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
+    previous_query_sql: str | None = fingerprint.definition if fingerprint is not None else None
 
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = {}

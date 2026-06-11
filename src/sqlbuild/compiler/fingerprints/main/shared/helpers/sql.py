@@ -7,10 +7,11 @@ from collections.abc import Callable
 
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.fingerprints.constants import (
+    COLUMN_DEFINITION_B64,
+    COLUMN_DEFINITION_HASH,
     COLUMN_METADATA_JSON_B64,
-    COLUMN_MODEL_NAME,
-    COLUMN_QUERY_HASH,
-    COLUMN_QUERY_SQL_B64,
+    COLUMN_NODE_NAME,
+    COLUMN_NODE_TYPE,
     COLUMN_RUN_ID,
     COLUMN_SCHEMA_FINGERPRINT,
     COLUMN_TARGET_DATABASE,
@@ -59,15 +60,16 @@ def build_create_table_sql(
     timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
     return (
         f"CREATE TABLE IF NOT EXISTS {qualified_name} ("
-        f"{COLUMN_MODEL_NAME} {string_type} NOT NULL, "
+        f"{COLUMN_NODE_TYPE} {string_type} NOT NULL, "
+        f"{COLUMN_NODE_NAME} {string_type} NOT NULL, "
         f"{COLUMN_TARGET_DATABASE} {string_type}, "
         f"{COLUMN_TARGET_SCHEMA} {string_type}, "
         f"{COLUMN_TARGET_NAME} {string_type}, "
         f"{COLUMN_RUN_ID} {string_type} NOT NULL, "
-        f"{COLUMN_QUERY_HASH} {string_type} NOT NULL, "
+        f"{COLUMN_DEFINITION_HASH} {string_type} NOT NULL, "
         f"{COLUMN_VERSION_HASH} {string_type} NOT NULL, "
         f"{COLUMN_SCHEMA_FINGERPRINT} {string_type} NOT NULL, "
-        f"{COLUMN_QUERY_SQL_B64} {string_type} NOT NULL, "
+        f"{COLUMN_DEFINITION_B64} {string_type} NOT NULL, "
         f"{COLUMN_METADATA_JSON_B64} {string_type} NOT NULL, "
         f"{COLUMN_TIMESTAMP} {timestamp_type} NOT NULL"
         f")"
@@ -86,15 +88,16 @@ def build_read_all_sql(
     )
     return (
         f"SELECT "
-        f"{COLUMN_MODEL_NAME}, "
+        f"{COLUMN_NODE_TYPE}, "
+        f"{COLUMN_NODE_NAME}, "
         f"{COLUMN_TARGET_DATABASE}, "
         f"{COLUMN_TARGET_SCHEMA}, "
         f"{COLUMN_TARGET_NAME}, "
         f"{COLUMN_RUN_ID}, "
-        f"{COLUMN_QUERY_HASH}, "
+        f"{COLUMN_DEFINITION_HASH}, "
         f"{COLUMN_VERSION_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
-        f"{COLUMN_QUERY_SQL_B64}, "
+        f"{COLUMN_DEFINITION_B64}, "
         f"{COLUMN_METADATA_JSON_B64}, "
         f"{COLUMN_TIMESTAMP} "
         f"FROM {qualified_name}"
@@ -105,15 +108,16 @@ def build_insert_sql(
     *,
     database: str | None,
     schema: str,
-    model_name: str,
+    node_type: str,
+    node_name: str,
     target_database: str | None,
     target_schema: str | None,
     target_name: str | None,
     run_id: str,
-    query_hash: str,
+    definition_hash: str,
     version_hash: str,
     schema_fingerprint: str,
-    query_sql: str,
+    definition: str,
     metadata_json: str,
     ts: str,
     render_qualified_name: Callable[..., str | None],
@@ -125,34 +129,38 @@ def build_insert_sql(
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
-    encoded_query_sql: str = _encode_query_sql_storage(query_sql).replace("'", "''")
-    encoded_metadata_json: str = _encode_query_sql_storage(metadata_json).replace("'", "''")
+    encoded_definition: str = _encode_definition_storage(definition).replace("'", "''")
+    encoded_metadata_json: str = _encode_definition_storage(metadata_json).replace("'", "''")
+    node_type_literal: str = _required_string_literal(node_type)
+    node_name_literal: str = _required_string_literal(node_name)
     target_database_literal: str = _optional_string_literal(target_database)
     target_schema_literal: str = _optional_string_literal(target_schema)
     target_name_literal: str = _optional_string_literal(target_name)
     return (
         f"INSERT INTO {qualified_name} ("
-        f"{COLUMN_MODEL_NAME}, "
+        f"{COLUMN_NODE_TYPE}, "
+        f"{COLUMN_NODE_NAME}, "
         f"{COLUMN_TARGET_DATABASE}, "
         f"{COLUMN_TARGET_SCHEMA}, "
         f"{COLUMN_TARGET_NAME}, "
         f"{COLUMN_RUN_ID}, "
-        f"{COLUMN_QUERY_HASH}, "
+        f"{COLUMN_DEFINITION_HASH}, "
         f"{COLUMN_VERSION_HASH}, "
         f"{COLUMN_SCHEMA_FINGERPRINT}, "
-        f"{COLUMN_QUERY_SQL_B64}, "
+        f"{COLUMN_DEFINITION_B64}, "
         f"{COLUMN_METADATA_JSON_B64}, "
         f"{COLUMN_TIMESTAMP}"
         f") VALUES ("
-        f"'{model_name}', "
+        f"{node_type_literal}, "
+        f"{node_name_literal}, "
         f"{target_database_literal}, "
         f"{target_schema_literal}, "
         f"{target_name_literal}, "
         f"'{run_id}', "
-        f"'{query_hash}', "
+        f"'{definition_hash}', "
         f"'{version_hash}', "
         f"'{schema_fingerprint}', "
-        f"'{encoded_query_sql}', "
+        f"'{encoded_definition}', "
         f"'{encoded_metadata_json}', "
         f"'{ts}'"
         f")"
@@ -162,9 +170,13 @@ def build_insert_sql(
 def _optional_string_literal(value: str | None) -> str:
     if value is None:
         return "NULL"
+    return _required_string_literal(value)
+
+
+def _required_string_literal(value: str) -> str:
     escaped_value: str = value.replace("'", "''")
     return f"'{escaped_value}'"
 
 
-def _encode_query_sql_storage(value: str) -> str:
+def _encode_definition_storage(value: str) -> str:
     return base64.b64encode(value.encode("utf-8")).decode("ascii")

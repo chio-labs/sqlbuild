@@ -37,14 +37,15 @@ def test_given_hashes_when_detecting_query_change_then_returns_expected(
     test_case: DetectQueryChangeTestCase,
 ) -> None:
     fingerprint: Fingerprint = Fingerprint(
-        model_name="test",
+        node_type="model",
+        node_name="test",
         target_database=None,
         target_schema=None,
         target_name="test",
         run_id="run_001",
-        query_hash=test_case.fingerprint_query_hash,
+        definition_hash=test_case.fingerprint_query_hash,
         schema_fingerprint="schema_a",
-        query_sql="SELECT 1",
+        definition="SELECT 1",
         ts=_STUB_TS,
     )
     result: bool = detect_query_change(
