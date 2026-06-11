@@ -289,25 +289,31 @@ def run_virtual_build(
                 work_selection_policy=work_selection_policy,
             )
             selected_seed_names = semantics.stale_seed_names if not select and not exclude else ()
-        selected_seed_version_hashes: dict[str, str] = {
+        selected_seed_names = _include_stale_upstream_seed_names(
+            graph=graph,
+            selected_model_names=selected_model_names,
+            selected_seed_names=selected_seed_names,
+            stale_seed_names=semantics.stale_seed_names,
+        )
+        desired_seed_version_hashes: dict[str, str] = {
             seed_name: semantics.expected_seed_version_hashes[seed_name]
             for seed_name in selected_seed_names
             if seed_name in semantics.expected_seed_version_hashes
         }
-        reusable_seed_physical_relations: dict[str, PhysicalRelationRecord] = (
-            _read_existing_seed_physical_relations(
+        available_seed_physical_relations: dict[str, PhysicalRelationRecord] = (
+            _read_available_seed_physical_relations(
                 adapter=adapter,
                 connection_config=connection_config,
                 backend=backend,
                 state_connection=state_connection,
                 config=config,
-                selected_seed_version_hashes=selected_seed_version_hashes,
+                desired_seed_version_hashes=desired_seed_version_hashes,
             )
         )
         seed_load_names: tuple[str, ...] = tuple(
             seed_name
             for seed_name in selected_seed_names
-            if seed_name not in reusable_seed_physical_relations
+            if seed_name not in available_seed_physical_relations
         )
         effective_select: tuple[str, ...] = _build_virtual_planner_select(
             graph=graph,
@@ -329,9 +335,9 @@ def run_virtual_build(
         if model_name in semantics.expected_version_hashes
     }
     seed_load_version_hashes: dict[str, str] = {
-        seed_name: selected_seed_version_hashes[seed_name]
+        seed_name: desired_seed_version_hashes[seed_name]
         for seed_name in seed_load_names
-        if seed_name in selected_seed_version_hashes
+        if seed_name in desired_seed_version_hashes
     }
     rewritten_locations: dict[str, CompiledRelationLocation] = build_rewritten_model_locations(
         project=graph.project,
@@ -462,7 +468,7 @@ def run_virtual_build(
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
-    executor_plan_output: PlanOutput = _build_seed_load_plan_output(
+    executor_plan_output: PlanOutput = _build_physical_seed_load_plan_output(
         plan_output=plan_output,
         seed_load_names=seed_load_names,
     )
@@ -586,13 +592,13 @@ def run_virtual_build(
             query_change_tracking=False,
             providers=providers,
         )
-    if result.status == BuildStatus.SUCCESS and reusable_seed_physical_relations:
+    if result.status == BuildStatus.SUCCESS and available_seed_physical_relations:
         result = replace(
             result,
             seed_results=result.seed_results
             + tuple(
                 SeedExecutionResult(seed_name=seed_name, status=ExecutionStatus.SKIPPED)
-                for seed_name in sorted(reusable_seed_physical_relations)
+                for seed_name in sorted(available_seed_physical_relations)
             ),
         )
     if result.status == BuildStatus.SUCCESS:
@@ -614,7 +620,7 @@ def run_virtual_build(
             expected_version_hashes=semantics.expected_version_hashes,
             expected_seed_version_hashes=semantics.expected_seed_version_hashes,
             seed_identity_metadata_jsons=semantics.seed_identity_metadata_jsons,
-            reusable_seed_physical_relations=reusable_seed_physical_relations,
+            available_seed_physical_relations=available_seed_physical_relations,
             seed_results=result.seed_results,
             load_results=result.load_results,
         )
@@ -960,23 +966,51 @@ def _read_bound_relations(
     return relations
 
 
-def _read_existing_seed_physical_relations(
+def _include_stale_upstream_seed_names(
+    *,
+    graph: ProjectGraph,
+    selected_model_names: tuple[str, ...],
+    selected_seed_names: tuple[str, ...],
+    stale_seed_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    selected: set[str] = set(selected_seed_names)
+    stale_seed_name_set: frozenset[str] = frozenset(stale_seed_names)
+    pending: list[CompiledObjectKey] = [
+        model.key for model in graph.project.models if model.name in selected_model_names
+    ]
+    seen: set[CompiledObjectKey] = set()
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        upstream_key: CompiledObjectKey
+        for upstream_key in graph.upstream_deps.get(key, ()):
+            if upstream_key.resource_type == CompiledResourceType.SEED:
+                if upstream_key.name in stale_seed_name_set:
+                    selected.add(upstream_key.name)
+                continue
+            pending.append(upstream_key)
+    return tuple(sorted(selected))
+
+
+def _read_available_seed_physical_relations(
     *,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     backend: Any,
     state_connection: Any,
     config: StateBackendConfig,
-    selected_seed_version_hashes: dict[str, str],
+    desired_seed_version_hashes: dict[str, str],
 ) -> dict[str, PhysicalRelationRecord]:
     relations: dict[str, PhysicalRelationRecord] = {}
-    if not selected_seed_version_hashes:
+    if not desired_seed_version_hashes:
         return relations
     warehouse_connection: Any = adapter.connect(connection_config)
     try:
         seed_name: str
         version_hash: str
-        for seed_name, version_hash in selected_seed_version_hashes.items():
+        for seed_name, version_hash in desired_seed_version_hashes.items():
             relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
                 state_connection,
                 schema=config.schema,
@@ -998,26 +1032,26 @@ def _read_existing_seed_physical_relations(
     return relations
 
 
-def _build_seed_load_plan_output(
+def _build_physical_seed_load_plan_output(
     *, plan_output: PlanOutput, seed_load_names: tuple[str, ...]
 ) -> PlanOutput:
     seed_load_name_set: frozenset[str] = frozenset(seed_load_names)
     selected_load_seed_keys: frozenset[CompiledObjectKey] = frozenset(
         entry.key for entry in plan_output.seed_entries if entry.name in seed_load_name_set
     )
-    selected_reused_seed_keys: frozenset[CompiledObjectKey] = frozenset(
+    selected_existing_seed_keys: frozenset[CompiledObjectKey] = frozenset(
         entry.key for entry in plan_output.seed_entries if entry.name not in seed_load_name_set
     )
     return replace(
         plan_output,
         execution_order=tuple(
-            key for key in plan_output.execution_order if key not in selected_reused_seed_keys
+            key for key in plan_output.execution_order if key not in selected_existing_seed_keys
         ),
         seed_entries=tuple(
             entry for entry in plan_output.seed_entries if entry.key in selected_load_seed_keys
         ),
         selected_keys=frozenset(
-            key for key in plan_output.selected_keys if key not in selected_reused_seed_keys
+            key for key in plan_output.selected_keys if key not in selected_existing_seed_keys
         ),
     )
 
@@ -1041,7 +1075,7 @@ def _persist_successful_virtual_build(
     expected_version_hashes: dict[str, str],
     expected_seed_version_hashes: dict[str, str],
     seed_identity_metadata_jsons: dict[str, str],
-    reusable_seed_physical_relations: dict[str, PhysicalRelationRecord],
+    available_seed_physical_relations: dict[str, PhysicalRelationRecord],
     seed_results: tuple[SeedExecutionResult, ...],
     load_results: tuple[LoadExecutionResult, ...],
 ) -> None:
@@ -1051,9 +1085,9 @@ def _persist_successful_virtual_build(
     }
     final_seed_hashes: dict[str, str] = {ref.seed_name: ref.version_hash for ref in bound_seed_refs}
     final_seed_physical_relations: dict[str, PhysicalRelationRecord] = dict(
-        reusable_seed_physical_relations
+        available_seed_physical_relations
     )
-    for seed_name, relation in reusable_seed_physical_relations.items():
+    for seed_name, relation in available_seed_physical_relations.items():
         final_seed_hashes[seed_name] = relation.version_hash
     model_entries_by_name: dict[str, Any] = {
         entry.name: entry for entry in plan_output.model_entries
