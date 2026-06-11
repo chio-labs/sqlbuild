@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +19,7 @@ from sqlbuild.virtual.freshness.helpers.runtime import (
 from sqlbuild.virtual.planner.helpers.planning import (
     build_default_virtual_selection,
     build_expected_local_hashes,
+    build_expected_seed_version_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
     build_source_freshness_incomplete_model_names,
@@ -315,6 +317,169 @@ def test_given_source_data_version_change_when_building_hashes_then_downstream_h
     ) is test_case.expected_hashes_differ
     assert (
         baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="seed identity change updates dependent expected hash",
+            upstream_query_sql='SELECT order_id FROM __source("raw.orders")',
+            downstream_query_sql="SELECT id FROM stg_orders",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["seed identity change updates dependent expected hash"],
+)
+def test_given_seed_identity_change_when_building_hashes_then_downstream_hash_changes(
+    test_case: ExpectedVersionHashesTestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_seed_file: Path = tmp_path / "baseline_statuses.csv"
+    changed_seed_file: Path = tmp_path / "changed_statuses.csv"
+    baseline_seed_file.write_text("status\nplaced\n", encoding="utf-8")
+    changed_seed_file.write_text("status\nplaced\nshipped\n", encoding="utf-8")
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_seed_file_path=baseline_seed_file,
+    )
+    changed_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_seed_file_path=changed_seed_file,
+    )
+
+    baseline_seed_hashes: dict[str, str] = build_expected_seed_version_hashes(graph=baseline_graph)
+    changed_seed_hashes: dict[str, str] = build_expected_seed_version_hashes(graph=changed_graph)
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+        seed_version_hashes=baseline_seed_hashes,
+    )
+    changed_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=changed_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=changed_graph),
+        seed_version_hashes=changed_seed_hashes,
+    )
+
+    assert baseline_seed_hashes["order_statuses"] != changed_seed_hashes["order_statuses"]
+    assert (
+        baseline_hashes["stg_orders"] != changed_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+    assert (
+        baseline_hashes["fact_orders"] != changed_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+    assert baseline_hashes["dim_customers"] == changed_hashes["dim_customers"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="seed identity change marks dependent closure stale",
+            upstream_query_sql='SELECT order_id FROM __source("raw.orders")',
+            downstream_query_sql="SELECT id FROM stg_orders",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["seed identity change marks dependent closure stale"],
+)
+def test_given_seed_identity_change_when_comparing_bound_hashes_then_dependent_models_are_stale(
+    test_case: ExpectedVersionHashesTestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_seed_file: Path = tmp_path / "baseline_statuses.csv"
+    changed_seed_file: Path = tmp_path / "changed_statuses.csv"
+    baseline_seed_file.write_text("status\nplaced\n", encoding="utf-8")
+    changed_seed_file.write_text("status\nplaced\nshipped\n", encoding="utf-8")
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_seed_file_path=baseline_seed_file,
+    )
+    changed_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_seed_file_path=changed_seed_file,
+    )
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    changed_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=changed_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=changed_graph),
+    )
+
+    stale_model_names: tuple[str, ...] = build_stale_model_names(
+        model_names=tuple(model.name for model in changed_graph.project.models),
+        expected_version_hashes=changed_hashes,
+        bound_version_hashes=baseline_hashes,
+    )
+
+    assert bool(stale_model_names) is test_case.expected_hashes_differ
+    assert stale_model_names == ("stg_orders", "fact_orders")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
+            description="seed and function identities both affect dependent expected hash",
+            upstream_query_sql='SELECT order_id FROM __source("raw.orders")',
+            downstream_query_sql="SELECT normalize_order(id) FROM stg_orders",
+            expected_hashes_differ=True,
+        )
+    ],
+    ids=["seed and function identities both affect dependent expected hash"],
+)
+def test_given_seed_and_function_changes_when_building_hashes_then_downstream_hash_changes(
+    test_case: ExpectedVersionHashesTestCase,
+    tmp_path: Path,
+) -> None:
+    baseline_seed_file: Path = tmp_path / "baseline_statuses.csv"
+    changed_seed_file: Path = tmp_path / "changed_statuses.csv"
+    baseline_seed_file.write_text("status\nplaced\n", encoding="utf-8")
+    changed_seed_file.write_text("status\nplaced\nshipped\n", encoding="utf-8")
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        function_body_sql="value + 1",
+        upstream_seed_file_path=baseline_seed_file,
+    )
+    changed_seed_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        function_body_sql="value + 1",
+        upstream_seed_file_path=changed_seed_file,
+    )
+    changed_function_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        function_body_sql="value + 2",
+        upstream_seed_file_path=baseline_seed_file,
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    changed_seed_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=changed_seed_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=changed_seed_graph),
+    )
+    changed_function_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=changed_function_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=changed_function_graph),
+    )
+
+    assert (
+        baseline_hashes["fact_orders"] != changed_seed_hashes["fact_orders"]
+    ) is test_case.expected_hashes_differ
+    assert (
+        baseline_hashes["fact_orders"] != changed_function_hashes["fact_orders"]
     ) is test_case.expected_hashes_differ
 
 

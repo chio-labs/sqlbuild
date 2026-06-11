@@ -11,6 +11,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
 from sqlbuild.compiler.planner.main.model_upstream_closure import build_upstream_model_names
+from sqlbuild.compiler.planner.main.seed_identity import build_seed_identity
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
     build_function_local_hashes as build_shared_function_local_hashes,
@@ -68,6 +69,26 @@ def build_function_local_hashes(*, graph: ProjectGraph) -> dict[str, str]:
     return build_shared_function_local_hashes(functions=graph.project.functions)
 
 
+def build_expected_seed_version_hashes(*, graph: ProjectGraph) -> dict[str, str]:
+    """Derive expected seed version hashes from current compiled seed identities."""
+
+    return {
+        seed.name: seed_version_hash
+        for seed in graph.project.seeds
+        for seed_version_hash, _metadata_json in (build_seed_identity(seed),)
+    }
+
+
+def build_seed_identity_metadata_jsons(*, graph: ProjectGraph) -> dict[str, str]:
+    """Build deterministic seed identity metadata JSON by seed name."""
+
+    return {
+        seed.name: metadata_json
+        for seed in graph.project.seeds
+        for _seed_version_hash, metadata_json in (build_seed_identity(seed),)
+    }
+
+
 def build_model_fingerprint_metadata_jsons(
     *,
     graph: ProjectGraph,
@@ -99,6 +120,7 @@ def build_expected_version_hashes(
     graph: ProjectGraph,
     expected_local_hashes: dict[str, str],
     source_version_hashes: dict[str, str] | None = None,
+    seed_version_hashes: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Derive expected model version hashes from current code and upstream hashes."""
 
@@ -106,6 +128,7 @@ def build_expected_version_hashes(
     expected_hashes: dict[str, str] = {
         function.name: expected_local_hashes[function.name] for function in graph.project.functions
     }
+    expected_hashes.update(seed_version_hashes or build_expected_seed_version_hashes(graph=graph))
     models_by_name: dict[str, Any] = {model.name: model for model in graph.project.models}
 
     key: Any

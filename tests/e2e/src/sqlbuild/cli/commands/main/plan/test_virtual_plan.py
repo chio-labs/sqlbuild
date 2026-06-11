@@ -113,6 +113,85 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
     "test_case",
     [
         VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual seed change selects downstream model",
+            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "fact_orders",
+            ),
+        )
+    ],
+    ids=["virtual seed change selects downstream model"],
+)
+def test_given_virtual_seed_change_when_planning_changes_only_then_selects_dependent_model(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seed_change_plan",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars "
+                'FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+
+    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
+    assert "order_amounts" not in unchanged_plan_result.stdout
+    assert "fact_orders" not in unchanged_plan_result.stdout
+
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,200\n",
+        encoding="utf-8",
+    )
+    changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert changed_plan_result.returncode == 0, changed_plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in changed_plan_result.stdout, changed_plan_result.stdout
+    assert "order_amounts" not in changed_plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan observes current source freshness before build persistence",
             expected_unchanged_fragments=("Plan ready (0 selected)",),
             expected_fragments=(

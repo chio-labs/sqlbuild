@@ -37,6 +37,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_bound_version_hashes,
     build_default_virtual_selection,
     build_expected_local_hashes,
+    build_expected_seed_version_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
     build_source_freshness_incomplete_model_names,
@@ -139,10 +140,14 @@ def run_virtual_plan_pipeline(
         expected_local_hashes: dict[str, str] = build_expected_local_hashes(
             graph=graph,
         )
+        expected_seed_version_hashes: dict[str, str] = build_expected_seed_version_hashes(
+            graph=graph,
+        )
         expected_version_hashes: dict[str, str] = build_expected_version_hashes(
             graph=graph,
             expected_local_hashes=expected_local_hashes,
             source_version_hashes=source_version_hashes,
+            seed_version_hashes=expected_seed_version_hashes,
         )
         expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
             graph=graph

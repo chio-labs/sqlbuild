@@ -8,19 +8,24 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
     CompiledSource,
     CompileModelConfig,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSourceFile,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
     build_upstream_deps,
 )
 from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
+from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -36,6 +41,8 @@ def build_virtual_planner_test_project(
     upstream_extra_config: dict[str, object] | None = None,
     upstream_source_name: str = "raw.orders",
     upstream_schema_columns: tuple[SchemaColumn, ...] = (),
+    upstream_seed_file_path: Path | None = None,
+    upstream_seed_name: str = "order_statuses",
 ) -> ProjectGraph:
     function: CompiledFunction = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
@@ -78,9 +85,44 @@ def build_virtual_planner_test_project(
             source_entries=(source_entry,),
         ),
     )
+    seed: CompiledSeed | None = None
+    seed_key: CompiledObjectKey | None = None
+    if upstream_seed_file_path is not None:
+        seed_key = CompiledObjectKey(
+            resource_type=CompiledResourceType.SEED,
+            name=upstream_seed_name,
+        )
+        seed_schema_entry: SchemaSeedEntry = SchemaSeedEntry(
+            name=upstream_seed_name,
+            columns=(SchemaColumn(name="status"),),
+        )
+        seed_schema_file: DiscoveredSchemaFile = DiscoveredSchemaFile(
+            file_path=Path("seeds/schema.yml"),
+            relative_path=Path("seeds/schema.yml"),
+            contents="",
+            model_entries=(),
+            seed_entries=(seed_schema_entry,),
+        )
+        seed = CompiledSeed(
+            key=seed_key,
+            deps=(),
+            name=upstream_seed_name,
+            seed_file=DiscoveredSeedFile(
+                file_path=upstream_seed_file_path,
+                relative_path=Path("seeds") / upstream_seed_file_path.name,
+            ),
+            schema_entry=seed_schema_entry,
+            schema_file=seed_schema_file,
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="staging",
+                name=upstream_seed_name,
+                qualified_name=f"staging.{upstream_seed_name}",
+            ),
+        )
     upstream_model: CompiledModel = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=upstream_model_name),
-        deps=(upstream_source.key,),
+        deps=(upstream_source.key, seed_key) if seed_key is not None else (upstream_source.key,),
         name=upstream_model_name,
         relative_path=Path(f"models/{upstream_model_name}.sql"),
         query_sql=upstream_query_sql,
@@ -147,6 +189,7 @@ def build_virtual_planner_test_project(
         settings=SettingsConfig(),
         models=(upstream_model, downstream_model, unrelated_model),
         sources=(upstream_source,),
+        seeds=(seed,) if seed is not None else (),
         functions=(function,),
     )
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
@@ -162,6 +205,8 @@ def build_virtual_planner_test_project(
         unrelated_model.name: unrelated_model.key,
         function.name: function.key,
     }
+    if seed is not None:
+        all_keys[seed.name] = seed.key
     return ProjectGraph(
         project=project,
         upstream_deps=upstream_deps,
