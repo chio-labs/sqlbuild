@@ -32,6 +32,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
     RelationReuseKind,
+    RunDespiteUnchangedMode,
     ScenarioArtifactKind,
     SchemaActionKind,
     SchemaChangeKind,
@@ -168,6 +169,27 @@ class BackfillResult:
 
     action: BackfillAction
     duration: str | None = None
+
+
+@dataclass(frozen=True)
+class RunDespiteUnchangedDecision:
+    """One model-level changes-only override decision."""
+
+    model_name: str
+    mode: RunDespiteUnchangedMode
+    duration: str | None = None
+    newest_source_name: str | None = None
+    newest_source_data_age_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class RunDespiteUnchangedPlanningResult:
+    """Planner-time changes-only override roots and propagated stale models."""
+
+    root_model_names: frozenset[str] = frozenset()
+    stale_model_names: frozenset[str] = frozenset()
+    decisions: dict[str, RunDespiteUnchangedDecision] = field(default_factory=dict)
+    downstream_root_causes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -444,6 +466,7 @@ class ModelPlanEntry:
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
     relation_reuse: RelationReusePlan | None = None
+    run_despite_unchanged: RunDespiteUnchangedDecision | None = None
 
     def __post_init__(self) -> None:
         if self.relation_reuse is None:

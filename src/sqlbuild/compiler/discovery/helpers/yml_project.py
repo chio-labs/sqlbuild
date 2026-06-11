@@ -381,6 +381,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
+        run_despite_unchanged=_optional_str(payload=mapping, key="run_despite_unchanged"),
         row_diff_exclude_columns=row_diff_exclude_columns,
         row_diff_tolerances=row_diff_tolerances,
         tags=tags,

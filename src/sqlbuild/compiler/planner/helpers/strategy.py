@@ -331,6 +331,8 @@ def _table_action(
         return PlanAction.CREATE_TABLE, PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.SCHEMA_CHANGED
+    if change_result.change_kind == ChangeKind.RUN_DESPITE_UNCHANGED:
+        return PlanAction.CREATE_TABLE, PlanReason.RUN_DESPITE_UNCHANGED
     return PlanAction.CREATE_TABLE, PlanReason.NO_CHANGE
 
 

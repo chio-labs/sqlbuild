@@ -666,3 +666,15 @@ class ResolveEffectiveRunScopeTestCase:
     requested_run_scope: AuditRunScope
     attached_model_materialization: str | None
     expected_effective_run_scope: AuditRunScope
+
+
+@dataclass(frozen=True)
+class RunDespiteUnchangedPlanningTestCase:
+    description: str
+    run_despite_unchanged: object
+    materialized: str
+    data_version: str | None
+    value_kind: str
+    expected_root_model_names: frozenset[str]
+    expected_stale_model_names: frozenset[str]
+    expected_error_fragment: str | None = None

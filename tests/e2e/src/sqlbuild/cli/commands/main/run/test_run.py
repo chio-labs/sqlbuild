@@ -225,6 +225,71 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
     "test_case",
     [
         RunE2ETestCase(
+            description="run changes-only executes table configured duration despite unchanged",
+            expected_exit_code=0,
+            expected_table_names=("rolling_orders", "orders_mart"),
+            expected_view_names=(),
+        )
+    ],
+    ids=["run changes-only executes table configured duration despite unchanged"],
+)
+def test_given_run_despite_unchanged_duration_when_running_changes_only_then_executes_downstream(
+    test_case: RunE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_run_run_despite_unchanged_duration",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_run_run_despite_unchanged_duration"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: timestamp\n"
+                "      query: SELECT CURRENT_TIMESTAMP AS data_version\n"
+                "      lag_tolerance: 30d\n"
+            ),
+            "models/rolling_orders.sql": (
+                "MODEL (materialized table, run_despite_unchanged 30d);\n\n"
+                'SELECT order_id, CURRENT_TIMESTAMP AS refreshed_at FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, refreshed_at FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "run", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert run_result.returncode == test_case.expected_exit_code, (
+        run_result.stdout + run_result.stderr
+    )
+    assert "Plan ready (2 selected)" in run_result.stdout
+    assert "table     rolling_orders" in run_result.stdout
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RunE2ETestCase(
             description="run changes-only reads source freshness written by normal run",
             expected_exit_code=0,
             expected_table_names=("orders",),

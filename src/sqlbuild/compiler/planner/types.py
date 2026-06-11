@@ -22,6 +22,7 @@ class ChangeKind(StrEnum):
     QUERY_CHANGED = "query_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
+    RUN_DESPITE_UNCHANGED = "run_despite_unchanged"
     NO_CHANGE = "no_change"
 
 
@@ -78,10 +79,16 @@ class PlanReason(StrEnum):
     FUNCTION_CHANGED = "function_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
+    RUN_DESPITE_UNCHANGED = "run_despite_unchanged"
     UPSTREAM_CHANGED = "upstream_changed"
     NORMAL_INCREMENTAL = "normal_incremental"
     NO_CHANGE = "no_change"
     DISABLED = "disabled"
+
+
+class RunDespiteUnchangedMode(StrEnum):
+    ALWAYS = "always"
+    DURATION = "duration"
 
 
 class StandardReuseDecisionKind(StrEnum):

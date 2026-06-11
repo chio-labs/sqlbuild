@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerResolvedActions,
     PlannerScope,
     ResolvedModelAction,
+    RunDespiteUnchangedPlanningResult,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
@@ -28,6 +29,7 @@ def prune_unchanged_scope(
     changes: PlannerChangeResults,
     resolved_actions: PlannerResolvedActions,
     source_freshness: StandardSourceFreshnessPlanningResult | None = None,
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
     expected_version_hashes: dict[str, str] | None = None,
 ) -> PlannerScope:
     """Remove unchanged selected SQL nodes for standard changes-only planning."""
@@ -48,6 +50,11 @@ def prune_unchanged_scope(
             elif _source_freshness_marks_model_stale(
                 model_name=key.name,
                 source_freshness=source_freshness,
+            ):
+                selected_keys.add(key)
+            elif _run_despite_unchanged_marks_model_stale(
+                model_name=key.name,
+                run_despite_unchanged=run_despite_unchanged,
             ):
                 selected_keys.add(key)
             continue
@@ -112,6 +119,49 @@ def mark_version_identity_stale_actions(
     return PlannerResolvedActions(models=models)
 
 
+def mark_run_despite_unchanged_actions(
+    *,
+    scope: PlannerScope,
+    resolved_actions: PlannerResolvedActions,
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult,
+) -> PlannerResolvedActions:
+    """Mark configured roots and propagated downstreams selected by runtime staleness."""
+
+    if not run_despite_unchanged.stale_model_names:
+        return resolved_actions
+    models: dict[str, ResolvedModelAction] = dict(resolved_actions.models)
+    key: CompiledObjectKey
+    for key in scope.selected_keys:
+        if key.resource_type != CompiledResourceType.MODEL:
+            continue
+        resolved_action: ResolvedModelAction | None = models.get(key.name)
+        if resolved_action is None:
+            continue
+        if key.name in run_despite_unchanged.root_model_names:
+            models[key.name] = replace(
+                resolved_action,
+                change=replace(
+                    resolved_action.change,
+                    change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            )
+            continue
+        root_cause: str | None = run_despite_unchanged.downstream_root_causes.get(key.name)
+        if root_cause is None or resolved_action.cascade is not None:
+            continue
+        models[key.name] = replace(
+            resolved_action,
+            cascade=CascadeResult(
+                effective_action=BackfillAction.FORWARD_ONLY,
+                effective_duration=None,
+                root_cause=root_cause,
+                root_reason=PlanReason.RUN_DESPITE_UNCHANGED,
+            ),
+        )
+    return PlannerResolvedActions(models=models)
+
+
 def _model_action_is_stale(resolved_action: ResolvedModelAction) -> bool:
     change_kind: ChangeKind = resolved_action.change.change_kind
     if change_kind != ChangeKind.NO_CHANGE:
@@ -119,6 +169,16 @@ def _model_action_is_stale(resolved_action: ResolvedModelAction) -> bool:
     if resolved_action.cascade is not None:
         return True
     return _backfill_is_stale(resolved_action.backfill)
+
+
+def _run_despite_unchanged_marks_model_stale(
+    *,
+    model_name: str,
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None,
+) -> bool:
+    if run_despite_unchanged is None:
+        return False
+    return model_name in run_despite_unchanged.stale_model_names
 
 
 def _function_action_is_stale(function_change: FunctionChangeResult) -> bool:

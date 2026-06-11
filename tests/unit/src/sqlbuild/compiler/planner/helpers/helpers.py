@@ -50,6 +50,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
 from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -63,11 +64,19 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+    StandardSourceFreshnessPlanningResult,
+)
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.models.types import (
+    SourceFreshnessStrategy,
+    SourceWriteStrategy,
+)
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
@@ -157,6 +166,111 @@ def model_key(name: str) -> CompiledObjectKey:
     """Build a model object key."""
 
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+
+
+def build_run_despite_unchanged_scope(
+    *, run_despite_unchanged: object, materialized: str
+) -> PlannerScope:
+    """Build a source -> rolling table -> mart planner scope."""
+
+    source_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.SOURCE,
+        name="raw_orders",
+    )
+    rolling_key: CompiledObjectKey = model_key("rolling_orders")
+    mart_key: CompiledObjectKey = model_key("orders_mart")
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        rolling_key: (source_key,),
+        mart_key: (rolling_key,),
+        source_key: (),
+    }
+    return PlannerScope(
+        upstream_deps=upstream_deps,
+        downstream_deps=build_downstream_deps(upstream_deps),
+        all_keys={
+            "raw_orders": source_key,
+            "rolling_orders": rolling_key,
+            "orders_mart": mart_key,
+        },
+        models_by_name={
+            "rolling_orders": build_run_despite_unchanged_model(
+                key=rolling_key,
+                name="rolling_orders",
+                materialized=materialized,
+                run_despite_unchanged=run_despite_unchanged,
+            ),
+            "orders_mart": build_run_despite_unchanged_model(
+                key=mart_key,
+                name="orders_mart",
+                materialized="table",
+                run_despite_unchanged=None,
+            ),
+        },
+        selected_keys=frozenset({rolling_key, mart_key}),
+        execution_order=(source_key, rolling_key, mart_key),
+    )
+
+
+def build_run_despite_unchanged_model(
+    *,
+    key: CompiledObjectKey,
+    name: str,
+    materialized: str,
+    run_despite_unchanged: object | None,
+) -> CompiledModel:
+    """Build a minimal model for run_despite_unchanged helper tests."""
+
+    values: dict[str, object] = {"materialized": materialized}
+    if run_despite_unchanged is not None:
+        values["run_despite_unchanged"] = run_despite_unchanged
+    return CompiledModel(
+        key=key,
+        deps=(),
+        name=name,
+        relative_path=Path(f"models/{name}.sql"),
+        query_sql="SELECT 1",
+        config=CompileModelConfig(values=values),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name=name,
+            qualified_name=f"main.{name}",
+        ),
+    )
+
+
+def build_run_despite_unchanged_source_freshness(
+    *, data_version: str | None, value_kind: str, observed_at: datetime
+) -> StandardSourceFreshnessPlanningResult:
+    """Build source freshness state for run_despite_unchanged helper tests."""
+
+    if data_version is None:
+        return StandardSourceFreshnessPlanningResult()
+    record: SourceFreshnessRecord = SourceFreshnessRecord(
+        source_name="raw_orders",
+        target_database=None,
+        target_schema=None,
+        target_name=None,
+        run_id="run-1",
+        strategy=SourceFreshnessStrategy.SQL.value,
+        value_kind=value_kind,
+        data_version=data_version,
+        data_version_hash="hash",
+        observed_at=observed_at,
+    )
+    return StandardSourceFreshnessPlanningResult(
+        observed_records=(record,),
+        unchanged_identities=frozenset(
+            {
+                SourceFreshnessIdentity(
+                    source_name="raw_orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                )
+            }
+        ),
+    )
 
 
 def build_standard_reuse_from_target_project() -> CompiledProject:

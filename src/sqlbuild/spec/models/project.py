@@ -102,6 +102,7 @@ class DefaultsConfig:
     lookback: str | None = None
     batch_size: str | int | None = None
     replay_on_change: str | None = None
+    run_despite_unchanged: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     tags: tuple[str, ...] = field(default_factory=tuple)
