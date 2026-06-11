@@ -33,6 +33,7 @@ class SeedExecutionResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+    warning_messages: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

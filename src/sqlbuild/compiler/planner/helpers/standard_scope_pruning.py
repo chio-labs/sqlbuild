@@ -6,6 +6,8 @@ from dataclasses import replace
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
@@ -31,6 +33,8 @@ def prune_standard_unchanged_scope(
     source_freshness: StandardSourceFreshnessPlanningResult | None = None,
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
     expected_version_hashes: dict[str, str] | None = None,
+    expected_seed_version_hashes: dict[str, str] | None = None,
+    built_seed_fingerprints: dict[str, Fingerprint] | None = None,
 ) -> PlannerScope:
     """Remove unchanged selected SQL nodes for standard stale-only planning."""
 
@@ -61,6 +65,14 @@ def prune_standard_unchanged_scope(
         if key.resource_type == CompiledResourceType.FUNCTION:
             function_change: FunctionChangeResult | None = changes.functions.get(key.name)
             if function_change is not None and _function_action_is_stale(function_change):
+                selected_keys.add(key)
+            continue
+        if key.resource_type == CompiledResourceType.SEED:
+            if _seed_identity_is_stale(
+                seed_name=key.name,
+                expected_seed_version_hashes=expected_seed_version_hashes,
+                built_seed_fingerprints=built_seed_fingerprints,
+            ):
                 selected_keys.add(key)
             continue
         selected_keys.add(key)
@@ -185,6 +197,21 @@ def _function_action_is_stale(function_change: FunctionChangeResult) -> bool:
     if function_change.reason != PlanReason.NO_CHANGE:
         return True
     return _backfill_is_stale(function_change.backfill)
+
+
+def _seed_identity_is_stale(
+    *,
+    seed_name: str,
+    expected_seed_version_hashes: dict[str, str] | None,
+    built_seed_fingerprints: dict[str, Fingerprint] | None,
+) -> bool:
+    expected_hash: str | None = (expected_seed_version_hashes or {}).get(seed_name)
+    if expected_hash is None:
+        return True
+    fingerprint: Fingerprint | None = (built_seed_fingerprints or {}).get(seed_name)
+    if fingerprint is None or fingerprint.node_type != NODE_TYPE_SEED:
+        return True
+    return fingerprint.version_hash != expected_hash
 
 
 def _model_version_identity_is_stale(

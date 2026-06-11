@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_buil
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -19,9 +19,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
     build_relation_reuse_plan,
+    build_seed_entry,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     ExecutionJsonRelationReuseTestCase,
+    ExecutionJsonSeedReasonTestCase,
     ExecutionJsonTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers.helpers import build_audit_result
@@ -174,3 +176,40 @@ def test_given_reused_audit_when_formatting_build_json_then_includes_reused_mark
 
     assert assets[0]["name"] == test_case.expected_asset_name
     assert checks[0]["reused"] is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionJsonSeedReasonTestCase(
+            description="build json includes seed reason",
+            expected_asset_name="order_amounts",
+            expected_reason="config_changed",
+        )
+    ],
+    ids=["build json includes seed reason"],
+)
+def test_given_seed_result_when_formatting_build_json_then_includes_seed_reason(
+    test_case: ExecutionJsonSeedReasonTestCase,
+) -> None:
+    result: str = format_build_execution_json(
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            seed_results=(
+                SeedExecutionResult(
+                    seed_name="order_amounts",
+                    status=ExecutionStatus.SUCCESS,
+                ),
+            ),
+        ),
+        plan=build_plan_output(
+            seed_entries=(
+                build_seed_entry(name="order_amounts", reason=PlanReason.CONFIG_CHANGED),
+            ),
+        ),
+    )
+    payload: dict[str, object] = json.loads(result)
+    assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
+
+    assert assets[0]["name"] == test_case.expected_asset_name
+    assert assets[0]["reason"] == test_case.expected_reason

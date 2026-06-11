@@ -235,7 +235,7 @@ def _serialize_cascade(cascade: CascadeResult) -> dict[str, object]:
 def _serialize_seed_entry(entry: SeedPlanEntry) -> dict[str, object]:
     """Serialize one SeedPlanEntry."""
 
-    seed: dict[str, object] = {"name": entry.name}
+    seed: dict[str, object] = {"name": entry.name, "reason": entry.reason.value}
     if entry.destination.qualified_name is not None:
         seed["qualified_name"] = entry.destination.qualified_name
     return seed

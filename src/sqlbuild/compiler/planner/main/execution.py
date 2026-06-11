@@ -136,6 +136,7 @@ def build_execution_plan(
     plan_start: float = time.monotonic()
     version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
+        seeds=project.seeds,
         scope=scope,
     )
     standard_reuse: StandardReusePlanningResult | None = build_standard_reuse_planning_result(
@@ -147,7 +148,7 @@ def build_execution_plan(
         project_config=project_config,
         local_config=local_config,
         expected_version_hashes=version_identities.model_version_hashes,
-        built_fingerprints=snapshot.fingerprints,
+        built_fingerprints=snapshot.fingerprints.models,
         cursor_snapshots=snapshot.cursor_snapshots,
         full_refresh=full_refresh,
         custom_prepare_version_materializations=custom_prepare_version_materializations,
@@ -181,7 +182,7 @@ def build_execution_plan(
                 expected_version_hashes=version_identities.model_version_hashes,
                 built_version_hashes={
                     model_name: fingerprint.version_hash
-                    for model_name, fingerprint in snapshot.fingerprints.items()
+                    for model_name, fingerprint in snapshot.fingerprints.models.items()
                 },
             )
         )
@@ -211,6 +212,8 @@ def build_execution_plan(
             source_freshness=source_freshness,
             run_despite_unchanged=run_despite_unchanged,
             expected_version_hashes=version_identities.model_version_hashes,
+            expected_seed_version_hashes=version_identities.seed_version_hashes,
+            built_seed_fingerprints=snapshot.fingerprints.seeds,
         )
         resolved_actions = mark_version_identity_stale_actions(
             scope=scope,
@@ -249,6 +252,8 @@ def build_execution_plan(
         changes=changes,
         model_entry_results=model_entry_results,
         reload_sources=reload_sources,
+        seed_version_hashes=version_identities.seed_version_hashes,
+        seed_metadata_jsons=version_identities.seed_metadata_jsons,
     )
     if source_freshness is not None:
         standard_remaining_stale_model_names: tuple[str, ...] = tuple(

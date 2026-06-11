@@ -187,6 +187,7 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
         expected_keys=("selected_count", "models", "seeds", "warnings"),
         expected_fragments=(
             '"country_codes"',
+            '"reason": "first_run"',
             '"type change detected"',
             '"severity": "warning"',
         ),

@@ -18,6 +18,8 @@ class GatherWarehouseSnapshotTestCase:
     expected_relation_names: frozenset[str] = field(default_factory=frozenset)
     expected_column_table_names: frozenset[str] = field(default_factory=frozenset)
     expected_fingerprint_names: frozenset[str] = field(default_factory=frozenset)
+    expected_function_fingerprint_names: frozenset[str] = field(default_factory=frozenset)
+    expected_seed_fingerprint_names: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)

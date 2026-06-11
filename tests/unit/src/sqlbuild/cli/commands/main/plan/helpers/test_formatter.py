@@ -397,6 +397,20 @@ TEST_CASES: list[FormatPlanTestCase] = [
         expected_fragments=(
             "Seeds (1)",
             "country_codes",
+            "first_run",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="seeds section shows changed seed reason",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            seed_entries=(
+                build_seed_entry(name="country_codes", reason=PlanReason.CONFIG_CHANGED),
+            ),
+        ),
+        expected_fragments=(
+            "Seeds (1)",
+            "country_codes  (seed_changed)",
         ),
     ),
     FormatPlanTestCase(

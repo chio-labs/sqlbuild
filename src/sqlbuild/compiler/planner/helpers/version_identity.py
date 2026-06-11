@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledFunction, CompiledModel
+from sqlbuild.compiler.compile.models.core import CompiledFunction, CompiledModel, CompiledSeed
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.seed_identity import build_seed_identity
 from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
     build_function_local_hashes,
 )
@@ -22,15 +23,25 @@ from sqlbuild.compiler.planner.models import PlannerScope, StandardModelVersionI
 def build_standard_model_version_identities(
     *,
     functions: tuple[CompiledFunction, ...],
+    seeds: tuple[CompiledSeed, ...] = (),
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
 ) -> StandardModelVersionIdentities:
     """Compute current standard model identities from code and upstream identities."""
 
     function_local_hashes: dict[str, str] = build_function_local_hashes(functions=functions)
+    seed_version_hashes: dict[str, str] = {}
+    seed_metadata_jsons: dict[str, str] = {}
+    seed: CompiledSeed
+    for seed in seeds:
+        seed_hash: str
+        seed_metadata_json: str
+        seed_hash, seed_metadata_json = build_seed_identity(seed)
+        seed_version_hashes[seed.name] = seed_hash
+        seed_metadata_jsons[seed.name] = seed_metadata_json
     model_metadata_jsons: dict[str, str] = {}
     model_local_hashes: dict[str, str] = {}
-    model_version_hashes: dict[str, str] = dict(function_local_hashes)
+    model_version_hashes: dict[str, str] = {**function_local_hashes, **seed_version_hashes}
     source_hashes: dict[str, str] = source_version_hashes or {}
 
     key: object
@@ -59,6 +70,8 @@ def build_standard_model_version_identities(
 
     return StandardModelVersionIdentities(
         function_local_hashes=function_local_hashes,
+        seed_version_hashes=seed_version_hashes,
+        seed_metadata_jsons=seed_metadata_jsons,
         model_metadata_jsons=model_metadata_jsons,
         model_local_hashes=model_local_hashes,
         model_version_hashes=model_version_hashes,

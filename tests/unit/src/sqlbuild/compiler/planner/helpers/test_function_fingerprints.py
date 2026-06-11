@@ -9,7 +9,11 @@ from sqlbuild.compiler.planner.helpers.function_fingerprints import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
 )
-from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
+from sqlbuild.compiler.planner.models import (
+    BackfillResult,
+    WarehouseFingerprints,
+    WarehouseSnapshot,
+)
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     DetectFunctionChangeTestCase,
@@ -92,10 +96,12 @@ def test_given_function_fingerprint_when_detecting_change_then_returns_reason_an
         target_schema=test_case.target_schema,
     )
     snapshot: WarehouseSnapshot = WarehouseSnapshot(
-        fingerprints=(
-            {"is_completed_order": build_fingerprint(query_sql=test_case.previous_query_sql)}
-            if test_case.existing_fingerprint
-            else {}
+        fingerprints=WarehouseFingerprints(
+            functions=(
+                {"is_completed_order": build_fingerprint(query_sql=test_case.previous_query_sql)}
+                if test_case.existing_fingerprint
+                else {}
+            )
         )
     )
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.auditing.types import (
@@ -59,6 +60,22 @@ class SourceColumnsTestCase:
     adapter_column_names: tuple[str, ...]
     expected_queried_sql: tuple[str, ...]
     expected_source_column_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SeedIdentityTestCase:
+    description: str
+    seed_contents: str
+    comparison_contents: str
+    expected_same_identity: bool
+    seed_relative_path: Path = Path("seeds/orders.csv")
+
+
+@dataclass(frozen=True)
+class SeedIdentityCsvConfigTestCase:
+    description: str
+    seed_contents: str
+    expected_same_identity: bool
 
 
 @dataclass(frozen=True)

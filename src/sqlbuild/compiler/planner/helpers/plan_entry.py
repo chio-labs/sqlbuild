@@ -543,7 +543,7 @@ def plan_model_from_change(
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
     )
 
-    fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
+    fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
     previous_query_sql: str | None = fingerprint.definition if fingerprint is not None else None
 
     custom_materialization_name: str | None = None

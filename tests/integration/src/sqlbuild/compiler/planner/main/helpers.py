@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import gettempdir
 from typing import Any
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
@@ -85,6 +86,7 @@ def build_project_from_test_case(
     seeds: list[CompiledSeed] = []
     seed_name: str
     for seed_name, target_schema in test_case.seed_locations.items():
+        seed_file_path: Path = _ensure_test_seed_file(seed_name)
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(
@@ -94,7 +96,7 @@ def build_project_from_test_case(
                 deps=(),
                 name=seed_name,
                 seed_file=DiscoveredSeedFile(
-                    file_path=Path(f"seeds/{seed_name}.csv"),
+                    file_path=seed_file_path,
                     relative_path=Path(f"seeds/{seed_name}.csv"),
                 ),
                 schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
@@ -323,6 +325,7 @@ def build_project_from_format_test_case(
     seeds: list[CompiledSeed] = []
     seed_name: str
     for seed_name, target_schema in test_case.seed_locations.items():
+        seed_file_path: Path = _ensure_test_seed_file(seed_name)
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(
@@ -332,7 +335,7 @@ def build_project_from_format_test_case(
                 deps=(),
                 name=seed_name,
                 seed_file=DiscoveredSeedFile(
-                    file_path=Path(f"seeds/{seed_name}.csv"),
+                    file_path=seed_file_path,
                     relative_path=Path(f"seeds/{seed_name}.csv"),
                 ),
                 schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
@@ -360,3 +363,12 @@ def build_project_from_format_test_case(
         models=tuple(models),
         seeds=tuple(seeds),
     )
+
+
+def _ensure_test_seed_file(seed_name: str) -> Path:
+    seed_dir: Path = Path(gettempdir()) / "sqlbuild_planner_seed_fixtures"
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    seed_path: Path = seed_dir / f"{seed_name}.csv"
+    if not seed_path.exists():
+        seed_path.write_text("id,code\n1,US\n", encoding="utf-8")
+    return seed_path

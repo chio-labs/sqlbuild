@@ -61,7 +61,7 @@ def detect_function_change(
 
     if full_refresh:
         return PlanReason.FULL_REFRESH, BackfillResult(action=BackfillAction.FULL)
-    fingerprint: Fingerprint | None = snapshot.fingerprints.get(function.name)
+    fingerprint: Fingerprint | None = snapshot.fingerprints.functions.get(function.name)
     if fingerprint is None:
         return PlanReason.FIRST_RUN, resolve_replay_on_change(
             replay_on_change=function.replay_on_change

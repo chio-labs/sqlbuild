@@ -131,6 +131,8 @@ def run_seed(
         connection_config=connection_config,
         adapter=adapter,
         max_concurrency=effective_concurrency,
+        run_id=pipeline_result.project.run_id,
+        query_change_tracking=pipeline_result.project.settings.query_change_tracking,
         on_seed_complete=on_complete,
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,

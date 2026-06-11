@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,
     PlannerScope,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
@@ -313,27 +314,29 @@ def test_given_direct_project_function_hash_change_when_detecting_changes_then_m
             )
         ).existing_relations,
         existing_columns={},
-        fingerprints={
-            "orders": Fingerprint(
-                node_type="model",
-                node_name="orders",
-                target_database=None,
-                target_schema=None,
-                target_name="orders",
-                run_id="run_001",
-                definition_hash=compute_query_hash(
-                    "SELECT is_large_order(amount) AS large_order FROM orders"
-                ),
-                schema_fingerprint="schema_a",
-                definition="SELECT is_large_order(amount) AS large_order FROM orders",
-                metadata_json=build_version_identity_metadata_json(
-                    model_name="orders",
-                    config_values={},
-                    local_function_hashes=test_case.function_local_hashes,
-                ),
-                ts=datetime(2026, 1, 15, 12, 0, 0),
-            )
-        },
+        fingerprints=WarehouseFingerprints(
+            models={
+                "orders": Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash=compute_query_hash(
+                        "SELECT is_large_order(amount) AS large_order FROM orders"
+                    ),
+                    schema_fingerprint="schema_a",
+                    definition="SELECT is_large_order(amount) AS large_order FROM orders",
+                    metadata_json=build_version_identity_metadata_json(
+                        model_name="orders",
+                        config_values={},
+                        local_function_hashes=test_case.function_local_hashes,
+                    ),
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                )
+            }
+        ),
     )
 
     result: PlannerChangeResults = detect_changes(
