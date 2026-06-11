@@ -341,7 +341,7 @@ def _read_bound_state(
         )
         if target_name is None:
             return {}, {}, {}, (), (), {}, {}, {}, {}, {}
-        refs: tuple[object, ...] = backend.get_virtual_environment_refs(
+        refs: tuple[object, ...] = backend.get_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,

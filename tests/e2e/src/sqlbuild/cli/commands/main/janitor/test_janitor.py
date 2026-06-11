@@ -231,7 +231,7 @@ def test_given_scenario_artifacts_when_running_tracked_only_janitor_then_it_dele
     ],
     ids=["virtual janitor preserves checkpoint referenced physical versions"],
 )
-def test_given_virtual_checkpoint_refs_when_running_janitor_then_it_preserves_physical_versions(
+def test_given_virtual_checkpoint_refs_when_janitor_then_preserves_physical_versions(
     test_case: JanitorCheckpointProtectionE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -593,7 +593,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
         db_path=state_db_path,
         sql=(
             "SELECT physical_relations.relation_name "
-            "FROM sqlbuild_state.virtual_environment_refs AS refs "
+            "FROM sqlbuild_state.virtual_environment_model_refs AS refs "
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
             "ON physical_relations.model_name = refs.model_name "
             "AND physical_relations.version_hash = refs.version_hash "
@@ -617,7 +617,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
         db_path=state_db_path,
         sql=(
             "SELECT physical_relations.relation_name "
-            "FROM sqlbuild_state.virtual_environment_refs AS refs "
+            "FROM sqlbuild_state.virtual_environment_model_refs AS refs "
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
             "ON physical_relations.model_name = refs.model_name "
             "AND physical_relations.version_hash = refs.version_hash "
@@ -757,7 +757,7 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
     ) == [(test_case.expected_virtual_environment_count_after,)]
     assert query_duckdb(
         db_path=state_db_path,
-        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
     ) == [(test_case.expected_ref_count_after,)]
     assert not table_exists(
         db_path=warehouse_db_path,

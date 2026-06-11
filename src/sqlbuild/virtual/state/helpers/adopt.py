@@ -22,8 +22,8 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,
     StateBackendConfig,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
@@ -67,7 +67,7 @@ def adopt_into_virtual_state(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
         )
-        refs: list[VirtualEnvironmentRefRecord] = []
+        refs: list[VirtualEnvironmentModelRefRecord] = []
         recorder: StatementRecorder = StatementRecorder()
         for model in graph.project.models:
             if not adapter.relation_exists(
@@ -156,7 +156,7 @@ def adopt_into_virtual_state(
                 ),
             )
             refs.append(
-                VirtualEnvironmentRefRecord(
+                VirtualEnvironmentModelRefRecord(
                     virtual_environment_name=active_target_name,
                     model_name=model.name,
                     version_hash=version_hash,
@@ -170,7 +170,7 @@ def adopt_into_virtual_state(
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=active_target_name,

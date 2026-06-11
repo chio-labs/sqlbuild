@@ -9,8 +9,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
 )
 
 
@@ -38,14 +38,14 @@ def list_checkpoint_physical_relations(
         relations: dict[tuple[str | None, str | None, str], PhysicalRelationRecord] = {}
         checkpoint: VirtualEnvironmentCheckpointRecord
         for checkpoint in checkpoints:
-            refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = (
-                backend.get_virtual_environment_checkpoint_refs(
+            refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+                backend.get_virtual_environment_checkpoint_model_refs(
                     connection,
                     schema=config.schema,
                     checkpoint_id=checkpoint.checkpoint_id,
                 )
             )
-            ref: VirtualEnvironmentCheckpointRefRecord
+            ref: VirtualEnvironmentCheckpointModelRefRecord
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
                     connection,

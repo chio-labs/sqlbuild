@@ -339,7 +339,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -379,7 +379,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
@@ -414,7 +414,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -449,7 +449,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
@@ -531,7 +531,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -585,7 +585,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
@@ -683,7 +683,7 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -737,7 +737,7 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )

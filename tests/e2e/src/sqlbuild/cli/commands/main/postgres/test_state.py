@@ -890,11 +890,12 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
             ),
             config=postgres_e2e_config,
         ) == ((test_case.expected_virtual_environment_count_after,),)
+        model_ref_table_name: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_model_refs",
+        )
         assert fetch_postgres_rows(
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environment_refs')}"
-            ),
+            sql=(f"SELECT COUNT(*) FROM {model_ref_table_name}"),
             config=postgres_e2e_config,
         ) == ((test_case.expected_ref_count_after,),)
         assert fetch_postgres_rows(
@@ -1093,11 +1094,12 @@ def test_given_postgres_non_active_vde_when_running_janitor_then_it_prunes_expir
             ),
             config=postgres_e2e_config,
         ) == ((test_case.expected_virtual_environment_count_after,),)
+        model_ref_table_name: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_model_refs",
+        )
         assert fetch_postgres_rows(
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environment_refs')}"
-            ),
+            sql=(f"SELECT COUNT(*) FROM {model_ref_table_name}"),
             config=postgres_e2e_config,
         ) == ((test_case.expected_ref_count_after,),)
     finally:
@@ -1395,7 +1397,7 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         physical_relations_relation: str = quoted_relation_name(
             schema_name=state_schema,
@@ -1683,7 +1685,7 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
         )
         refs_table: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         initial_ref_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -1827,9 +1829,9 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
             schema_name=state_schema,
             name="virtual_environment_checkpoints",
         )
-        checkpoint_refs_relation: str = quoted_relation_name(
+        checkpoint_model_refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_checkpoint_refs",
+            name="virtual_environment_checkpoint_model_refs",
         )
         physical_relations_relation: str = quoted_relation_name(
             schema_name=state_schema,
@@ -1843,7 +1845,7 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
         physical_schema_name, physical_relation_name = fetch_postgres_rows(
             sql=(
                 f"SELECT pr.schema_name, pr.relation_name FROM {checkpoints_relation} cp "
-                f"JOIN {checkpoint_refs_relation} cr "
+                f"JOIN {checkpoint_model_refs_relation} cr "
                 "ON cp.checkpoint_id = cr.checkpoint_id JOIN "
                 f"{physical_relations_relation} pr "
                 "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
@@ -3012,7 +3014,7 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
                 f"{
                     quoted_relation_name(
                         schema_name=state_schema,
-                        name='virtual_environment_refs',
+                        name='virtual_environment_model_refs',
                     )
                 } "
                 "AS refs JOIN "
@@ -3401,7 +3403,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                     f"{
                         quoted_relation_name(
                             schema_name=prod_state_schema,
-                            name='virtual_environment_refs',
+                            name='virtual_environment_model_refs',
                         )
                     } "
                     "WHERE virtual_environment_name = 'prod' AND model_name = 'stg_orders'"
@@ -3430,7 +3432,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                 f"{
                     quoted_relation_name(
                         schema_name=dev_state_schema,
-                        name='virtual_environment_refs',
+                        name='virtual_environment_model_refs',
                     )
                 }"
             ),
@@ -3444,7 +3446,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                 f"{
                     quoted_relation_name(
                         schema_name=dev_state_schema,
-                        name='virtual_environment_refs',
+                        name='virtual_environment_model_refs',
                     )
                 } "
                 "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
@@ -3487,7 +3489,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                     f"{
                         quoted_relation_name(
                             schema_name=dev_state_schema,
-                            name='virtual_environment_refs',
+                            name='virtual_environment_model_refs',
                         )
                     } "
                     "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
@@ -4072,7 +4074,7 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4177,7 +4179,7 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4358,7 +4360,7 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4564,7 +4566,7 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4687,7 +4689,7 @@ POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES: tuple[
 ] = (
     PostgresStateSchemaCorruptionE2ETestCase(
         description="postgres migrate blocks cleanly when required state table is missing",
-        mutation_sql_template="DROP TABLE {virtual_environment_refs}",
+        mutation_sql_template="DROP TABLE {virtual_environment_model_refs}",
         expected_exit_code=1,
         expected_error_fragment="Cannot backup invalid state schema",
     ),
@@ -4744,9 +4746,9 @@ def test_given_corrupt_postgres_state_schema_when_migrating_then_cli_blocks_clea
                     schema_name=state_schema,
                     name="state_versions",
                 ),
-                virtual_environment_refs=quoted_relation_name(
+                virtual_environment_model_refs=quoted_relation_name(
                     schema_name=state_schema,
-                    name="virtual_environment_refs",
+                    name="virtual_environment_model_refs",
                 ),
             ),
             config=postgres_e2e_config,

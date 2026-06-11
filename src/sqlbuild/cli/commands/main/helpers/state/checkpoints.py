@@ -11,13 +11,15 @@ from sqlbuild.shared.helpers.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.targets import resolve_target_name
-from sqlbuild.virtual.state.main.checkpoint_refs import get_virtual_environment_checkpoint_refs
-from sqlbuild.virtual.state.main.environment_refs import get_virtual_environment_refs
+from sqlbuild.virtual.state.main.checkpoint_model_refs import (
+    get_virtual_environment_checkpoint_model_refs,
+)
+from sqlbuild.virtual.state.main.environment_model_refs import get_virtual_environment_model_refs
 from sqlbuild.virtual.state.main.list_checkpoints import list_virtual_environment_checkpoints
 from sqlbuild.virtual.state.models import (
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 
 
@@ -67,8 +69,8 @@ def run_state_checkpoints(
     if command == "show":
         if checkpoint_id is None:
             raise CliUserError("state checkpoints show requires checkpoint id", code="C904")
-        refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = (
-            get_virtual_environment_checkpoint_refs(
+        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+            get_virtual_environment_checkpoint_model_refs(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
                 checkpoint_id=checkpoint_id,
@@ -87,26 +89,28 @@ def run_state_checkpoints(
     if command == "diff":
         if checkpoint_id is None:
             raise CliUserError("state checkpoints diff requires checkpoint id", code="C907")
-        checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...] = (
-            get_virtual_environment_checkpoint_refs(
+        checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+            get_virtual_environment_checkpoint_model_refs(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
                 checkpoint_id=checkpoint_id,
             )
         )
-        if not checkpoint_refs:
+        if not checkpoint_model_refs:
             raise CliUserError(f"unknown checkpoint '{checkpoint_id}'", code="C905")
-        current_refs: tuple[VirtualEnvironmentRefRecord, ...] = get_virtual_environment_refs(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
-            virtual_environment_name=resolved_target_name,
+        current_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            get_virtual_environment_model_refs(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+                virtual_environment_name=resolved_target_name,
+            )
         )
         print(
             _format_checkpoint_diff(
                 virtual_environment_name=resolved_target_name,
                 checkpoint_id=checkpoint_id,
                 current_refs=current_refs,
-                checkpoint_refs=checkpoint_refs,
+                checkpoint_model_refs=checkpoint_model_refs,
                 style=style,
             )
         )
@@ -143,7 +147,7 @@ def _format_checkpoint_list(
 def _format_checkpoint_show(
     *,
     checkpoint_id: str,
-    refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
     style: CliStyle,
 ) -> str:
     document: CliDocument = CliDocument(style)
@@ -153,7 +157,7 @@ def _format_checkpoint_show(
     document.line(f"  checkpoint           {style.accent(checkpoint_id)}")
     document.blank()
     document.line(style.success("Refs"))
-    ref: VirtualEnvironmentCheckpointRefRecord
+    ref: VirtualEnvironmentCheckpointModelRefRecord
     for ref in refs:
         document.line(
             f"  {style.object_name(f'{ref.model_name:<24}')} {style.muted(ref.version_hash)}"
@@ -166,13 +170,13 @@ def _format_checkpoint_diff(
     *,
     virtual_environment_name: str,
     checkpoint_id: str,
-    current_refs: tuple[VirtualEnvironmentRefRecord, ...],
-    checkpoint_refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+    current_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
+    checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
     style: CliStyle,
 ) -> str:
     current_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in current_refs}
     checkpoint_ref_map: dict[str, str] = {
-        ref.model_name: ref.version_hash for ref in checkpoint_refs
+        ref.model_name: ref.version_hash for ref in checkpoint_model_refs
     }
     changed: tuple[str, ...] = tuple(
         sorted(

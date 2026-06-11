@@ -31,7 +31,7 @@ from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 
 
@@ -153,7 +153,7 @@ def build_source_freshness_incomplete_model_names(
 
 
 def build_bound_version_hashes(
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, str]:
     """Index bound version hashes by model name from VDE refs."""
 

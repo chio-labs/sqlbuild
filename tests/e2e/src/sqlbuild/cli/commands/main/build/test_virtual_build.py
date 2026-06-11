@@ -116,7 +116,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
     ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT model_name FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
@@ -125,7 +125,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_refs "
+            "FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
@@ -157,7 +157,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_refs "
+            "FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
@@ -1908,8 +1908,8 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT dev.model_name "
-            "FROM sqlbuild_state.virtual_environment_refs dev "
-            "JOIN sqlbuild_state.virtual_environment_refs kevin "
+            "FROM sqlbuild_state.virtual_environment_model_refs dev "
+            "JOIN sqlbuild_state.virtual_environment_model_refs kevin "
             "ON dev.model_name = kevin.model_name "
             "WHERE dev.virtual_environment_name = 'dev' "
             "AND kevin.virtual_environment_name = 'kevin' "
@@ -2069,7 +2069,7 @@ def test_given_checkpoint_physical_relation_missing_when_rolling_back_then_it_bl
         sql=(
             "SELECT pr.schema_name, pr.relation_name "
             "FROM sqlbuild_state.virtual_environment_checkpoints cp "
-            "JOIN sqlbuild_state.virtual_environment_checkpoint_refs cr "
+            "JOIN sqlbuild_state.virtual_environment_checkpoint_model_refs cr "
             "ON cp.checkpoint_id = cr.checkpoint_id "
             "JOIN sqlbuild_state.physical_relations pr "
             "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
@@ -2488,7 +2488,7 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_refs "
+            "FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )
@@ -2545,7 +2545,7 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_refs "
+            "FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
         ),
     )

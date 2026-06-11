@@ -31,14 +31,14 @@ from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
 )
 
 
 def build_virtual_plan_semantics(
     *,
     graph: ProjectGraph,
-    bound_refs: tuple[VirtualEnvironmentRefRecord, ...],
+    bound_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
     bound_model_versions: dict[str, ModelVersionRecord | None],
     source_freshness_records: tuple[SourceFreshnessRecord, ...] = (),
 ) -> VirtualPlanSemantics:

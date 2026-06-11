@@ -392,7 +392,7 @@ database = "state.duckdb"
     assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
     execute_duckdb(
         db_path=state_db_path,
-        sql='DROP TABLE "sqlbuild_state"."virtual_environment_refs"',
+        sql='DROP TABLE "sqlbuild_state"."virtual_environment_model_refs"',
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -704,7 +704,7 @@ def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_n
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT model_name FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev'"
         ),
     ) == [("orders",)]
@@ -1105,7 +1105,7 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
     ) == [(0,)]
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
-        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
     ) == [(0,)]
 
 

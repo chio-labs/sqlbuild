@@ -12,6 +12,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
     StateLockRecord,
@@ -19,12 +20,14 @@ from sqlbuild.virtual.state.models import (
     StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
     VirtualEnvironmentRetentionRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 
 
@@ -95,6 +98,20 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
+    def upsert_seed_version(
+        self, connection: Any, *, schema: str, record: SeedVersionRecord
+    ) -> None:
+        """Insert or replace a seed version row."""
+        ...
+
+    @abstractmethod
+    def get_seed_version(
+        self, connection: Any, *, schema: str, seed_name: str, version_hash: str
+    ) -> SeedVersionRecord | None:
+        """Return a seed version row if it exists."""
+        ...
+
+    @abstractmethod
     def upsert_physical_relation(
         self, connection: Any, *, schema: str, record: PhysicalRelationRecord
     ) -> None:
@@ -158,21 +175,21 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
-    def replace_virtual_environment_refs(
+    def replace_virtual_environment_model_refs(
         self,
         connection: Any,
         *,
         schema: str,
         virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentRefRecord, ...],
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...],
     ) -> None:
         """Replace all refs for a virtual environment."""
         ...
 
     @abstractmethod
-    def get_virtual_environment_refs(
+    def get_virtual_environment_model_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
-    ) -> tuple[VirtualEnvironmentRefRecord, ...]:
+    ) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
         """Return refs for a virtual environment."""
         ...
 
@@ -193,6 +210,25 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         """Return function refs for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def replace_virtual_environment_seed_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
+    ) -> None:
+        """Replace all seed refs for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_seed_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentSeedRefRecord, ...]:
+        """Return seed refs for a virtual environment."""
         ...
 
     @abstractmethod
@@ -221,8 +257,9 @@ class StateBackend(ABC):
         *,
         schema: str,
         checkpoint: VirtualEnvironmentCheckpointRecord,
-        refs: tuple[VirtualEnvironmentCheckpointRefRecord, ...],
+        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
         function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> None:
         """Create a finalized virtual environment checkpoint."""
         ...
@@ -235,9 +272,9 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
-    def get_virtual_environment_checkpoint_refs(
+    def get_virtual_environment_checkpoint_model_refs(
         self, connection: Any, *, schema: str, checkpoint_id: str
-    ) -> tuple[VirtualEnvironmentCheckpointRefRecord, ...]:
+    ) -> tuple[VirtualEnvironmentCheckpointModelRefRecord, ...]:
         """Return refs for a virtual environment checkpoint."""
         ...
 
@@ -246,6 +283,13 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, checkpoint_id: str
     ) -> tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]:
         """Return function refs for a virtual environment checkpoint."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_checkpoint_seed_refs(
+        self, connection: Any, *, schema: str, checkpoint_id: str
+    ) -> tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...]:
+        """Return seed refs for a virtual environment checkpoint."""
         ...
 
     @abstractmethod

@@ -103,6 +103,17 @@ class FunctionVersionRecord:
 
 
 @dataclass(frozen=True)
+class SeedVersionRecord:
+    """Current state row for one seed version."""
+
+    seed_name: str
+    version_hash: str
+    identity_metadata_hash: str
+    identity_metadata_json_b64: str
+    status: ModelVersionStatus
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentRecord:
     """Current state row for one virtual data environment."""
 
@@ -122,7 +133,7 @@ class VirtualEnvironmentRetentionRecord:
 
 
 @dataclass(frozen=True)
-class VirtualEnvironmentRefRecord:
+class VirtualEnvironmentModelRefRecord:
     """Current state row mapping a VDE model ref to a model version."""
 
     virtual_environment_name: str
@@ -136,6 +147,15 @@ class VirtualEnvironmentFunctionRefRecord:
 
     virtual_environment_name: str
     function_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
+class VirtualEnvironmentSeedRefRecord:
+    """Current state row mapping a VDE seed ref to a seed version."""
+
+    virtual_environment_name: str
+    seed_name: str
     version_hash: str
 
 
@@ -162,7 +182,7 @@ class VirtualEnvironmentCheckpointRecord:
 
 
 @dataclass(frozen=True)
-class VirtualEnvironmentCheckpointRefRecord:
+class VirtualEnvironmentCheckpointModelRefRecord:
     """Checkpoint row mapping a model ref to a model version."""
 
     checkpoint_id: str
@@ -176,6 +196,15 @@ class VirtualEnvironmentCheckpointFunctionRefRecord:
 
     checkpoint_id: str
     function_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
+class VirtualEnvironmentCheckpointSeedRefRecord:
+    """Checkpoint row mapping a seed ref to a seed version."""
+
+    checkpoint_id: str
+    seed_name: str
     version_hash: str
 
 
