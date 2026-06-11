@@ -443,11 +443,11 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     model_record: ModelVersionRecord = ModelVersionRecord(
         model_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
-        data_hash="data-hash",
-        metadata_hash="metadata-hash",
+        definition_identity_hash="definition-identity-hash",
+        identity_metadata_hash="identity-metadata-hash",
         status=ModelVersionStatus.READY,
-        fingerprint_query_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
-        fingerprint_metadata_json_b64="e30=",
+        definition_text_b64="U0VMRUNUIDEgQVMgaWQ=",
+        identity_metadata_json_b64="e30=",
         compiled_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
     )
     postgres_state_backend.upsert_model_version(
@@ -976,8 +976,8 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
     model_record: ModelVersionRecord = ModelVersionRecord(
         model_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
-        data_hash="data-hash",
-        metadata_hash="metadata-hash",
+        definition_identity_hash="definition-identity-hash",
+        identity_metadata_hash="identity-metadata-hash",
         status=ModelVersionStatus.READY,
     )
     postgres_state_backend.upsert_model_version(

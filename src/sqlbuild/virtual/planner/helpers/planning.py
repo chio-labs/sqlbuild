@@ -211,7 +211,7 @@ def build_bound_local_hashes(
     """Index bound local semantic hashes by model name from model-version records."""
 
     return {
-        model_name: model_version.data_hash
+        model_name: model_version.definition_identity_hash
         for model_name, model_version in model_versions.items()
         if model_version is not None
     }

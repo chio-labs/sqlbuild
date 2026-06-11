@@ -948,11 +948,15 @@ def _persist_successful_virtual_build(
                     record=ModelVersionRecord(
                         model_name=model.name,
                         version_hash=version_hash,
-                        data_hash=expected_local_hashes.get(model.name, version_hash),
-                        metadata_hash=hashlib.sha256(metadata_json.encode("utf-8")).hexdigest(),
+                        definition_identity_hash=expected_local_hashes.get(
+                            model.name, version_hash
+                        ),
+                        identity_metadata_hash=hashlib.sha256(
+                            metadata_json.encode("utf-8")
+                        ).hexdigest(),
                         status=ModelVersionStatus.READY,
-                        fingerprint_query_sql_b64=encode_state_text(model.query_sql),
-                        fingerprint_metadata_json_b64=encode_state_text(metadata_json),
+                        definition_text_b64=encode_state_text(model.query_sql),
+                        identity_metadata_json_b64=encode_state_text(metadata_json),
                         compiled_sql_b64=(
                             encode_state_text(entry.resolved_sql) if entry is not None else None
                         ),

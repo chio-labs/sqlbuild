@@ -53,11 +53,11 @@ class ModelVersionRecord:
 
     model_name: str
     version_hash: str
-    data_hash: str
-    metadata_hash: str
+    definition_identity_hash: str
+    identity_metadata_hash: str
     status: ModelVersionStatus
-    fingerprint_query_sql_b64: str | None = None
-    fingerprint_metadata_json_b64: str | None = None
+    definition_text_b64: str | None = None
+    identity_metadata_json_b64: str | None = None
     compiled_sql_b64: str | None = None
 
 
@@ -96,7 +96,7 @@ class FunctionVersionRecord:
     return_columns_json_b64: str
     packages_json_b64: str
     body_sql_b64: str
-    fingerprint_query_sql_b64: str
+    definition_text_b64: str
     status: ModelVersionStatus
     runtime_version: str | None = None
     entry_point: str | None = None

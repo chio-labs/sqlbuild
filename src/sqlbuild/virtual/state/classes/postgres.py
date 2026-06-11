@@ -274,8 +274,8 @@ class PostgresStateBackend(StateBackend):
                 )
                 cursor.execute(
                     f"INSERT INTO {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
-                    "(model_name, version_hash, data_hash, metadata_hash, "
-                    "fingerprint_query_sql_b64, fingerprint_metadata_json_b64, "
+                    "(model_name, version_hash, definition_identity_hash, "
+                    "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
                     "compiled_sql_b64, status, "
                     "created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, "
@@ -283,10 +283,10 @@ class PostgresStateBackend(StateBackend):
                     [
                         record.model_name,
                         record.version_hash,
-                        record.data_hash,
-                        record.metadata_hash,
-                        record.fingerprint_query_sql_b64,
-                        record.fingerprint_metadata_json_b64,
+                        record.definition_identity_hash,
+                        record.identity_metadata_hash,
+                        record.definition_text_b64,
+                        record.identity_metadata_json_b64,
                         record.compiled_sql_b64,
                         record.status.value,
                         existing_created_at,
@@ -302,8 +302,8 @@ class PostgresStateBackend(StateBackend):
     ) -> ModelVersionRecord | None:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT model_name, version_hash, data_hash, metadata_hash, "
-                "fingerprint_query_sql_b64, fingerprint_metadata_json_b64, "
+                "SELECT model_name, version_hash, definition_identity_hash, "
+                "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
                 "compiled_sql_b64, status "
                 f"FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
                 "WHERE model_name = %s AND version_hash = %s",
@@ -315,10 +315,10 @@ class PostgresStateBackend(StateBackend):
         return ModelVersionRecord(
             model_name=row[0],
             version_hash=row[1],
-            data_hash=row[2],
-            metadata_hash=row[3],
-            fingerprint_query_sql_b64=row[4],
-            fingerprint_metadata_json_b64=row[5],
+            definition_identity_hash=row[2],
+            identity_metadata_hash=row[3],
+            definition_text_b64=row[4],
+            identity_metadata_json_b64=row[5],
             compiled_sql_b64=row[6],
             status=ModelVersionStatus(row[7]),
         )
@@ -345,7 +345,7 @@ class PostgresStateBackend(StateBackend):
                     f"INSERT INTO {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
                     "(function_name, version_hash, language, returns, arguments_json_b64, "
                     "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
-                    "body_sql_b64, fingerprint_query_sql_b64, status, created_at, updated_at) "
+                    "body_sql_b64, definition_text_b64, status, created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
                     "COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
                     [
@@ -359,7 +359,7 @@ class PostgresStateBackend(StateBackend):
                         record.runtime_version,
                         record.entry_point,
                         record.body_sql_b64,
-                        record.fingerprint_query_sql_b64,
+                        record.definition_text_b64,
                         record.status.value,
                         existing_created_at,
                     ],
@@ -376,7 +376,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT function_name, version_hash, language, returns, arguments_json_b64, "
                 "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
-                "body_sql_b64, fingerprint_query_sql_b64, status "
+                "body_sql_b64, definition_text_b64, status "
                 f"FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
                 "WHERE function_name = %s AND version_hash = %s",
                 [function_name, version_hash],
@@ -395,7 +395,7 @@ class PostgresStateBackend(StateBackend):
             runtime_version=row[7],
             entry_point=row[8],
             body_sql_b64=row[9],
-            fingerprint_query_sql_b64=row[10],
+            definition_text_b64=row[10],
             status=ModelVersionStatus(row[11]),
         )
 

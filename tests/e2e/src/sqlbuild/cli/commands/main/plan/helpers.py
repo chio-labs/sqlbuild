@@ -343,11 +343,11 @@ def seed_matching_virtual_refs(
                 record=ModelVersionRecord(
                     model_name=model_name,
                     version_hash=expected_hashes[model_name],
-                    data_hash=expected_local_hashes[model_name],
-                    metadata_hash=expected_hashes[model_name],
+                    definition_identity_hash=expected_local_hashes[model_name],
+                    identity_metadata_hash=expected_hashes[model_name],
                     status=ModelVersionStatus.READY,
-                    fingerprint_query_sql_b64=encode_state_text(query_sqls[model_name]),
-                    fingerprint_metadata_json_b64=encode_state_text(metadata_jsons[model_name]),
+                    definition_text_b64=encode_state_text(query_sqls[model_name]),
+                    identity_metadata_json_b64=encode_state_text(metadata_jsons[model_name]),
                 ),
             )
         backend.upsert_virtual_environment(

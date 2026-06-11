@@ -138,8 +138,8 @@ def adopt_into_virtual_state(
                 record=ModelVersionRecord(
                     model_name=model.name,
                     version_hash=version_hash,
-                    data_hash=version_hash,
-                    metadata_hash=version_hash,
+                    definition_identity_hash=version_hash,
+                    identity_metadata_hash=version_hash,
                     status=ModelVersionStatus.READY,
                 ),
             )
