@@ -526,7 +526,7 @@ def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_mar
                 sql=(
                     "SELECT relation_name FROM "
                     f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                    "WHERE model_name = 'orders'"
+                    "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -859,7 +859,7 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
                 sql=(
                     "SELECT relation_name FROM "
                     f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                    "WHERE model_name = 'orders'"
+                    "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -1413,7 +1413,8 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
                     "SELECT physical_relations.relation_name FROM "
                     f"{refs_relation} AS refs JOIN "
                     f"{physical_relations_relation} AS physical_relations "
-                    "ON physical_relations.model_name = refs.model_name "
+                    "ON physical_relations.artifact_type = 'model' "
+                    "AND physical_relations.artifact_name = refs.model_name "
                     "AND physical_relations.version_hash = refs.version_hash "
                     "WHERE refs.virtual_environment_name = 'dev' "
                     "AND refs.model_name = 'stg_orders'"
@@ -1431,7 +1432,8 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
                     "SELECT physical_relations.relation_name FROM "
                     f"{refs_relation} AS refs JOIN "
                     f"{physical_relations_relation} AS physical_relations "
-                    "ON physical_relations.model_name = refs.model_name "
+                    "ON physical_relations.artifact_type = 'model' "
+                    "AND physical_relations.artifact_name = refs.model_name "
                     "AND physical_relations.version_hash = refs.version_hash "
                     "WHERE refs.virtual_environment_name = 'dev' "
                     "AND refs.model_name = 'stg_orders'"
@@ -1538,7 +1540,7 @@ def test_given_postgres_active_vde_ref_when_running_janitor_then_it_preserves_ph
                 sql=(
                     "SELECT relation_name FROM "
                     f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                    "WHERE model_name = 'stg_orders'"
+                    "WHERE artifact_type = 'model' AND artifact_name = 'stg_orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -1848,7 +1850,8 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
                 f"JOIN {checkpoint_model_refs_relation} cr "
                 "ON cp.checkpoint_id = cr.checkpoint_id JOIN "
                 f"{physical_relations_relation} pr "
-                "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
+                "ON pr.artifact_type = 'model' AND pr.artifact_name = cr.model_name "
+                "AND pr.version_hash = cr.version_hash "
                 "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'orders' "
                 "ORDER BY cp.created_at ASC LIMIT 1"
             ),
@@ -3019,7 +3022,8 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
                 } "
                 "AS refs JOIN "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "AS physical_relations ON physical_relations.model_name = refs.model_name "
+                "AS physical_relations ON physical_relations.artifact_type = 'model' "
+                "AND physical_relations.artifact_name = refs.model_name "
                 "AND physical_relations.version_hash = refs.version_hash "
                 "WHERE refs.virtual_environment_name = 'pr' AND refs.model_name = 'fact_orders'"
             ),
@@ -3799,7 +3803,8 @@ def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_re
             sql=(
                 "SELECT database_name, schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -3901,7 +3906,8 @@ def test_given_postgres_missing_physical_relation_when_repairing_then_it_blocks(
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4087,7 +4093,8 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'customers' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'customers' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4192,7 +4199,8 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4373,7 +4381,8 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4579,7 +4588,8 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]

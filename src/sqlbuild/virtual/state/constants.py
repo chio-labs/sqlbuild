@@ -113,7 +113,8 @@ SEED_VERSION_COLUMNS: dict[str, StateColumnType] = {
 }
 
 PHYSICAL_RELATION_COLUMNS: dict[str, StateColumnType] = {
-    "model_name": StateColumnType.TEXT,
+    "artifact_type": StateColumnType.TEXT,
+    "artifact_name": StateColumnType.TEXT,
     "version_hash": StateColumnType.TEXT,
     "database_name": StateColumnType.TEXT,
     "schema_name": StateColumnType.TEXT,
@@ -292,7 +293,11 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
         "idx_sqb_seed_versions_identity": ("seed_name", "version_hash"),
     },
     PHYSICAL_RELATION_TABLE: {
-        "idx_sqb_physical_relations_identity": ("model_name", "version_hash"),
+        "idx_sqb_physical_relations_identity": (
+            "artifact_type",
+            "artifact_name",
+            "version_hash",
+        ),
     },
     PHYSICAL_RELATION_ANCESTRY_TABLE: {
         "idx_sqb_physical_relation_ancestry_identity": ("model_name", "version_hash"),

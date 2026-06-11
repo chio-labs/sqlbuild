@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
@@ -29,6 +30,34 @@ def build_physical_destination(
         f"{target.schema}__sqb_physical" if target.schema is not None else None
     )
     physical_name: str = f"{model_name}__v_{version_hash[:8]}"
+    return CompiledRelationLocation(
+        database=target.database,
+        schema=physical_schema,
+        name=physical_name,
+        qualified_name=resolve_qualified_name_parts(
+            adapter=adapter,
+            database=target.database,
+            schema=physical_schema,
+            name=physical_name,
+        ),
+        logical_schema=target.logical_schema,
+        logical_database=target.logical_database,
+    )
+
+
+def build_physical_seed_destination(
+    *,
+    adapter: BaseAdapter,
+    target: CompiledRelationLocation,
+    seed_name: str,
+    version_hash: str,
+) -> CompiledRelationLocation:
+    """Build the physical version target for a virtual-mode seed load."""
+
+    physical_schema: str | None = (
+        f"{target.schema}__sqb_physical" if target.schema is not None else None
+    )
+    physical_name: str = f"{seed_name}__v_{version_hash[:8]}"
     return CompiledRelationLocation(
         database=target.database,
         schema=physical_schema,
@@ -110,6 +139,20 @@ def rewrite_project_model_locations(
         for model in project.models
     )
     return replace(project, models=rewritten_models)
+
+
+def rewrite_project_seed_locations(
+    *,
+    project: CompiledProject,
+    rewritten_locations: dict[str, CompiledRelationLocation],
+) -> CompiledProject:
+    """Return a compiled project with selected seed locations replaced."""
+
+    rewritten_seeds: tuple[CompiledSeed, ...] = tuple(
+        replace(seed, destination=rewritten_locations.get(seed.name, seed.destination))
+        for seed in project.seeds
+    )
+    return replace(project, seeds=rewritten_seeds)
 
 
 def rewrite_project_function_locations(

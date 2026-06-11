@@ -259,7 +259,8 @@ def test_given_virtual_checkpoint_refs_when_janitor_then_preserves_physical_vers
         db_path=state_db_path,
         sql=(
             "SELECT relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'stg_orders' ORDER BY created_at ASC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'stg_orders' "
+            "ORDER BY created_at ASC LIMIT 1"
         ),
     )
     protected_relation_name: str = str(protected_relation_rows[0][0])
@@ -595,7 +596,8 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
             "SELECT physical_relations.relation_name "
             "FROM sqlbuild_state.virtual_environment_model_refs AS refs "
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
-            "ON physical_relations.model_name = refs.model_name "
+            "ON physical_relations.artifact_type = 'model' "
+            "AND physical_relations.artifact_name = refs.model_name "
             "AND physical_relations.version_hash = refs.version_hash "
             "WHERE refs.virtual_environment_name = 'dev' "
             "AND refs.model_name = 'stg_orders'"
@@ -619,7 +621,8 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
             "SELECT physical_relations.relation_name "
             "FROM sqlbuild_state.virtual_environment_model_refs AS refs "
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
-            "ON physical_relations.model_name = refs.model_name "
+            "ON physical_relations.artifact_type = 'model' "
+            "AND physical_relations.artifact_name = refs.model_name "
             "AND physical_relations.version_hash = refs.version_hash "
             "WHERE refs.virtual_environment_name = 'dev' "
             "AND refs.model_name = 'stg_orders'"
@@ -730,7 +733,7 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
             db_path=state_db_path,
             sql=(
                 "SELECT relation_name FROM sqlbuild_state.physical_relations "
-                "WHERE model_name = 'orders'"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
             ),
         )[0][0]
     )
@@ -912,7 +915,7 @@ def test_given_active_vde_ref_when_running_janitor_then_it_preserves_physical_ve
             db_path=state_db_path,
             sql=(
                 "SELECT relation_name FROM sqlbuild_state.physical_relations "
-                "WHERE model_name = 'stg_orders'"
+                "WHERE artifact_type = 'model' AND artifact_name = 'stg_orders'"
             ),
         )[0][0]
     )

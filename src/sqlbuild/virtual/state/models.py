@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    PhysicalArtifactType,
     ReconcileAction,
     StateBackendName,
     StateOperationStatus,
@@ -63,9 +64,10 @@ class ModelVersionRecord:
 
 @dataclass(frozen=True)
 class PhysicalRelationRecord:
-    """Current state row for a physical relation that stores one model version."""
+    """Current state row for a physical relation that stores one artifact version."""
 
-    model_name: str
+    artifact_type: PhysicalArtifactType
+    artifact_name: str
     version_hash: str
     database_name: str | None
     schema_name: str

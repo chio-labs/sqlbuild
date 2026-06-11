@@ -79,7 +79,7 @@ def seed_virtual_physical_version(
         record=PhysicalRelationAncestryRecord(
             model_name=entry.name,
             version_hash=version_hash,
-            parent_model_name=parent_relation.model_name,
+            parent_model_name=parent_relation.artifact_name,
             parent_version_hash=parent_relation.version_hash,
             seed_strategy=seed_strategy,
         ),

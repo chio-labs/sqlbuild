@@ -275,6 +275,153 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
 @pytest.mark.parametrize(
     "test_case",
     [
+        VirtualSeedBuildE2ETestCase(
+            description="two VDEs bind isolated seed physical versions",
+            expected_initial_rows=((1, 100),),
+            expected_changed_rows=((1, 100),),
+            expected_branch_rows=((1, 200),),
+            expected_changed_fragments=(),
+            expected_physical_seed_count=2,
+        )
+    ],
+    ids=["two VDEs bind isolated seed physical versions"],
+)
+def test_given_two_virtual_environments_when_seed_differs_then_each_reads_bound_seed_version(
+    test_case: VirtualSeedBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seed_isolation",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    dev_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert dev_build_result.returncode == 0, dev_build_result.stdout + dev_build_result.stderr
+
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,200\n",
+        encoding="utf-8",
+    )
+    pr_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert pr_build_result.returncode == 0, pr_build_result.stdout + pr_build_result.stderr
+
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__dev.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_changed_rows)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__pr.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_branch_rows)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__dev.order_amounts ORDER BY order_id",
+    ) == list(test_case.expected_changed_rows)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__pr.order_amounts ORDER BY order_id",
+    ) == list(test_case.expected_branch_rows)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts'"
+        ),
+    ) == [(test_case.expected_physical_seed_count,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSeedBuildE2ETestCase(
+            description="second VDE reuses existing physical seed artifact",
+            expected_initial_rows=((1, 100),),
+            expected_changed_rows=((1, 100),),
+            expected_changed_fragments=("order_amounts", "SKIP=1"),
+            expected_physical_seed_count=1,
+        )
+    ],
+    ids=["second VDE reuses existing physical seed artifact"],
+)
+def test_given_second_virtual_environment_when_seed_version_exists_then_it_reuses_physical_seed(
+    test_case: VirtualSeedBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seed_reuse_existing_artifact",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+
+    pr_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+
+    assert pr_build_result.returncode == 0, pr_build_result.stdout + pr_build_result.stderr
+    for fragment in test_case.expected_changed_fragments:
+        assert fragment in pr_build_result.stdout, pr_build_result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__pr.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_changed_rows)
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__pr.order_amounts ORDER BY order_id",
+    ) == list(test_case.expected_initial_rows)
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts'"
+        ),
+    ) == [(test_case.expected_physical_seed_count,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         VirtualSeedGapE2ETestCase(
             description="failed virtual seed reload leaves seed ref unchanged",
             expected_fragments=("order_amounts", "FAIL", "Completed with errors."),
@@ -2506,7 +2653,8 @@ def test_given_checkpoint_physical_relation_missing_when_rolling_back_then_it_bl
             "JOIN sqlbuild_state.virtual_environment_checkpoint_model_refs cr "
             "ON cp.checkpoint_id = cr.checkpoint_id "
             "JOIN sqlbuild_state.physical_relations pr "
-            "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
+            "ON pr.artifact_type = 'model' AND pr.artifact_name = cr.model_name "
+            "AND pr.version_hash = cr.version_hash "
             "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'stg_orders' "
             "ORDER BY cp.created_at ASC LIMIT 1"
         ),
@@ -3589,7 +3737,7 @@ def test_given_promoted_physical_relation_is_missing_when_promoting_then_it_fail
         sql=(
             "SELECT schema_name, relation_name "
             "FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' "
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
             "ORDER BY created_at DESC LIMIT 1"
         ),
     )

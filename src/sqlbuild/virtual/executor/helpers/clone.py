@@ -28,7 +28,7 @@ from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.main.model_version_lock import acquire_model_version_lease
 from sqlbuild.virtual.state.main.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import ModelVersionRecord, PhysicalRelationRecord, StateLockLease
-from sqlbuild.virtual.state.types import ModelVersionStatus
+from sqlbuild.virtual.state.types import ModelVersionStatus, PhysicalArtifactType
 
 
 def build_clone_graph_from_project(project: CompiledProject) -> ProjectGraph:
@@ -174,7 +174,8 @@ def register_hydrated_relation(
                 connection,
                 schema=config_schema,
                 record=PhysicalRelationRecord(
-                    model_name=model.name,
+                    artifact_type=PhysicalArtifactType.MODEL,
+                    artifact_name=model.name,
                     version_hash=model_version.version_hash,
                     database_name=destination.database,
                     schema_name=destination.schema or "",

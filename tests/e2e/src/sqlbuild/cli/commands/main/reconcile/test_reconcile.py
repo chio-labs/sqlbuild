@@ -159,7 +159,8 @@ def test_given_missing_physical_relation_when_reconciling_and_repairing_then_it_
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = physical_rows[0]
@@ -235,7 +236,8 @@ def test_given_tracked_physical_relation_when_attaching_then_logical_ref_is_rebo
         sql=(
             "SELECT schema_name, relation_name, version_hash "
             "FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name, _version_hash = attach_relation_rows[0]
@@ -352,7 +354,8 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'dim_customers' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'dim_customers' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = wrong_model_relation_rows[0]
@@ -422,7 +425,8 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = attach_relation_rows[0]
@@ -550,7 +554,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' "
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
             "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
@@ -701,7 +705,8 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = attach_relation_rows[0]

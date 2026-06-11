@@ -27,7 +27,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
 )
-from sqlbuild.virtual.state.types import StateColumnType
+from sqlbuild.virtual.state.types import PhysicalArtifactType, StateColumnType
 
 
 def state_type_matches_for_test(actual_type: str, expected_type: StateColumnType) -> bool:
@@ -66,7 +66,8 @@ def virtual_environment_ref_for_test(
 
 def physical_relation_for_test(relation_name: str, version_hash: str) -> PhysicalRelationRecord:
     return PhysicalRelationRecord(
-        model_name="orders",
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name="orders",
         version_hash=version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -143,13 +144,24 @@ class FakeStateBackend(StateBackend):
     ) -> None:
         return None
 
-    def get_physical_relation(
-        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    def get_physical_relation_for_artifact(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
+        version_hash: str,
     ) -> PhysicalRelationRecord | None:
         return None
 
-    def list_physical_relations_for_model(
-        self, connection: Any, *, schema: str, model_name: str
+    def list_physical_relations_for_artifact(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
     ) -> tuple[PhysicalRelationRecord, ...]:
         return ()
 

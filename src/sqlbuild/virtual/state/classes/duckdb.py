@@ -64,6 +64,7 @@ from sqlbuild.virtual.state.models import (
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    PhysicalArtifactType,
     StateColumnType,
     StateMigrationAction,
     StateMigrationStatus,
@@ -443,21 +444,22 @@ class DuckDbStateBackend(StateBackend):
                 connection,
                 schema=schema,
                 table_name=PHYSICAL_RELATION_TABLE,
-                where_sql="model_name = ? AND version_hash = ?",
-                params=[record.model_name, record.version_hash],
+                where_sql="artifact_type = ? AND artifact_name = ? AND version_hash = ?",
+                params=[record.artifact_type.value, record.artifact_name, record.version_hash],
             )
             connection.execute(
                 f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
-                "WHERE model_name = ? AND version_hash = ?",
-                [record.model_name, record.version_hash],
+                "WHERE artifact_type = ? AND artifact_name = ? AND version_hash = ?",
+                [record.artifact_type.value, record.artifact_name, record.version_hash],
             )
             connection.execute(
                 f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
-                "(model_name, version_hash, database_name, schema_name, relation_name, "
-                "relation_type, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                "(artifact_type, artifact_name, version_hash, database_name, schema_name, "
+                "relation_name, relation_type, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
                 [
-                    record.model_name,
+                    record.artifact_type.value,
+                    record.artifact_name,
                     record.version_hash,
                     record.database_name,
                     record.schema_name,
@@ -471,45 +473,59 @@ class DuckDbStateBackend(StateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def get_physical_relation(
-        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    def get_physical_relation_for_artifact(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
+        version_hash: str,
     ) -> PhysicalRelationRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
-            "SELECT model_name, version_hash, database_name, schema_name, "
+            "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
             "relation_name, relation_type "
             f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
-            "WHERE model_name = ? AND version_hash = ?",
-            [model_name, version_hash],
+            "WHERE artifact_type = ? AND artifact_name = ? AND version_hash = ?",
+            [artifact_type.value, artifact_name, version_hash],
         ).fetchone()
         if row is None:
             return None
         return PhysicalRelationRecord(
-            model_name=row[0],
-            version_hash=row[1],
-            database_name=row[2],
-            schema_name=row[3],
-            relation_name=row[4],
-            relation_type=row[5],
+            artifact_type=PhysicalArtifactType(row[0]),
+            artifact_name=row[1],
+            version_hash=row[2],
+            database_name=row[3],
+            schema_name=row[4],
+            relation_name=row[5],
+            relation_type=row[6],
         )
 
-    def list_physical_relations_for_model(
-        self, connection: Any, *, schema: str, model_name: str
+    def list_physical_relations_for_artifact(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
     ) -> tuple[PhysicalRelationRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            "SELECT model_name, version_hash, database_name, schema_name, "
+            "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
             "relation_name, relation_type "
             f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
-            "WHERE model_name = ? ORDER BY updated_at DESC, version_hash DESC",
-            [model_name],
+            "WHERE artifact_type = ? AND artifact_name = ? "
+            "ORDER BY updated_at DESC, version_hash DESC",
+            [artifact_type.value, artifact_name],
         ).fetchall()
         return tuple(
             PhysicalRelationRecord(
-                model_name=row[0],
+                artifact_type=PhysicalArtifactType(row[0]),
+                artifact_name=row[1],
                 version_hash=row[2],
-                database_name=row[2],
-                schema_name=row[3],
-                relation_name=row[4],
-                relation_type=row[5],
+                database_name=row[3],
+                schema_name=row[4],
+                relation_name=row[5],
+                relation_type=row[6],
             )
             for row in rows
         )

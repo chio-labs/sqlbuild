@@ -28,6 +28,7 @@ from sqlbuild.virtual.state.models import (
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    PhysicalArtifactType,
     ReconcileAction,
     StateMigrationAction,
     StateOperationStatus,
@@ -461,7 +462,8 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         record=model_record,
     )
     relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name=test_case.expected_model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -474,7 +476,8 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         record=relation_record,
     )
     replaced_relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name=test_case.expected_model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -1216,7 +1219,8 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         sqlbuild_version=test_case.sqlbuild_version,
     )
     relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name=test_case.expected_model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -1232,7 +1236,8 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         postgres_state_connection,
         "SELECT created_at FROM "
         f"{qualified_name(schema=postgres_state_schema, table='physical_relations')} "
-        f"WHERE model_name = '{test_case.expected_model_name}' "
+        "WHERE artifact_type = 'model' "
+        f"AND artifact_name = '{test_case.expected_model_name}' "
         f"AND version_hash = '{test_case.expected_version_hash}'",
     )[0][0]
     postgres_state_backend.upsert_physical_relation(
@@ -1244,7 +1249,8 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         postgres_state_connection,
         "SELECT created_at FROM "
         f"{qualified_name(schema=postgres_state_schema, table='physical_relations')} "
-        f"WHERE model_name = '{test_case.expected_model_name}' "
+        "WHERE artifact_type = 'model' "
+        f"AND artifact_name = '{test_case.expected_model_name}' "
         f"AND version_hash = '{test_case.expected_version_hash}'",
     )[0][0]
 

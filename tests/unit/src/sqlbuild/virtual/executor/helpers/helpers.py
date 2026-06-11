@@ -25,6 +25,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
 def build_virtual_executor_test_project() -> CompiledProject:
@@ -68,7 +69,8 @@ def build_virtual_executor_test_project() -> CompiledProject:
 
 def build_bound_physical_relation(*, model_name: str, version_hash: str) -> PhysicalRelationRecord:
     return PhysicalRelationRecord(
-        model_name=model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=model_name,
         version_hash=version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",

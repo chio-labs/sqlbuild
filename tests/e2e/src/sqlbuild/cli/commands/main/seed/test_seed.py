@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.seed._test_types import (
     VirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,
@@ -145,9 +146,19 @@ def test_given_virtual_project_when_running_seed_then_persists_seed_state(
         ),
     )
     assert seed_ref_rows == [("order_amounts",)]
+    seed_physical_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT artifact_type, artifact_name, schema_name, relation_name "
+            "FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts'"
+        ),
+    )
+    assert len(seed_physical_rows) == 1
+    assert seed_physical_rows[0][0:2] == ("seed", "order_amounts")
     assert query_duckdb(
         db_path=project_dir / "warehouse.duckdb",
-        sql="SELECT order_id, amount_cents FROM dev.order_amounts ORDER BY order_id",
+        sql="SELECT order_id, amount_cents FROM dev__dev.order_amounts ORDER BY order_id",
     ) == list(test_case.expected_seed_rows)
 
     current_seed_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -172,6 +183,21 @@ def test_given_virtual_project_when_running_seed_then_persists_seed_state(
     ]
     assert seed_assets[0]["name"] == "order_amounts"
     assert seed_assets[0]["reason"] == test_case.expected_json_reason
+
+    physical_schema_name, physical_relation_name = seed_physical_rows[0][2:4]
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=f'DROP TABLE "{physical_schema_name}"."{physical_relation_name}"',
+    )
+    reload_seed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "seed", "--select", "order_amounts"),
+        project_dir=project_dir,
+    )
+    assert reload_seed_result.returncode == 0, reload_seed_result.stdout + reload_seed_result.stderr
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id, amount_cents FROM dev__dev.order_amounts ORDER BY order_id",
+    ) == list(test_case.expected_seed_rows)
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--changes-only"),
