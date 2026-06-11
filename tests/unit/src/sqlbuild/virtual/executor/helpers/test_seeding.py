@@ -11,6 +11,7 @@ from sqlbuild.virtual.executor.helpers.seeding import (
     seed_virtual_physical_version,
 )
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 from tests.unit.src.sqlbuild.virtual.executor.helpers._test_types import (
     SeedingIdempotencyTestCase,
     SeedingStrategyTestCase,
@@ -176,7 +177,8 @@ def test_given_incremental_target_when_seeding_then_existing_target_is_dropped_f
         action=PlanAction.INCREMENTAL_DELETE_INSERT,
     ).model_entries[0]
     parent_relation: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name="orders",
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name="orders",
         version_hash="oldhash",
         database_name="",
         schema_name="dev__sqb_physical",

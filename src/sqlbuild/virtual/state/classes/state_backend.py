@@ -29,6 +29,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
 )
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
 class StateBackend(ABC):
@@ -119,18 +120,52 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
-    def get_physical_relation(
-        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    def get_physical_relation_for_artifact(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
+        version_hash: str,
     ) -> PhysicalRelationRecord | None:
-        """Return a physical relation row if it exists."""
+        """Return a physical relation row for an artifact if it exists."""
         ...
 
     @abstractmethod
+    def list_physical_relations_for_artifact(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
+    ) -> tuple[PhysicalRelationRecord, ...]:
+        """Return tracked physical relations for one artifact, newest first when available."""
+        ...
+
+    def get_physical_relation(
+        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+    ) -> PhysicalRelationRecord | None:
+        """Return a physical model relation row if it exists."""
+        return self.get_physical_relation_for_artifact(
+            connection,
+            schema=schema,
+            artifact_type=PhysicalArtifactType.MODEL,
+            artifact_name=model_name,
+            version_hash=version_hash,
+        )
+
     def list_physical_relations_for_model(
         self, connection: Any, *, schema: str, model_name: str
     ) -> tuple[PhysicalRelationRecord, ...]:
         """Return tracked physical relations for one model, newest first when available."""
-        ...
+        return self.list_physical_relations_for_artifact(
+            connection,
+            schema=schema,
+            artifact_type=PhysicalArtifactType.MODEL,
+            artifact_name=model_name,
+        )
 
     @abstractmethod
     def upsert_physical_relation_ancestry(

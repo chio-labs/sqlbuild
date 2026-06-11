@@ -27,6 +27,7 @@ from sqlbuild.virtual.state.models import (
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    PhysicalArtifactType,
     StateOperationStatus,
     StateOperationType,
     VirtualEnvironmentStatus,
@@ -147,7 +148,8 @@ def adopt_into_virtual_state(
                 state_connection,
                 schema=config.schema,
                 record=PhysicalRelationRecord(
-                    model_name=model.name,
+                    artifact_type=PhysicalArtifactType.MODEL,
+                    artifact_name=model.name,
                     version_hash=version_hash,
                     database_name=physical_target.database,
                     schema_name=physical_target.schema or "",

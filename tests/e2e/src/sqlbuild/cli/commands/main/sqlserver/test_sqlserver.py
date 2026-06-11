@@ -421,7 +421,8 @@ def test_given_tracked_physical_relation_when_attaching_on_sqlserver_then_view_i
             sql=(
                 "SELECT database_name, schema_name, relation_name "
                 "FROM sqlbuild_state.physical_relations "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
         )[0]
         physical_relation: str = f'"{physical_schema_name}"."{physical_relation_name}"'

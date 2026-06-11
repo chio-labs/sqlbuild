@@ -156,6 +156,8 @@ class VirtualSeedBuildE2ETestCase:
     expected_initial_rows: tuple[tuple[object, ...], ...]
     expected_changed_rows: tuple[tuple[object, ...], ...]
     expected_changed_fragments: tuple[str, ...]
+    expected_branch_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_physical_seed_count: int = 0
 
 
 @dataclass(frozen=True)
