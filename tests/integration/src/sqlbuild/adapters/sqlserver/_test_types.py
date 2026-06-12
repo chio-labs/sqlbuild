@@ -27,6 +27,13 @@ class SqlServerBuildFlowTestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerRelationReuseCopyTestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
 class SqlServerMergeTestCase:
     description: str
     table_name: str

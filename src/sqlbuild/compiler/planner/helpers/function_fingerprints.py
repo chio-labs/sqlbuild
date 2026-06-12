@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.changes.policy import resolve_query_change_backfill
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
 from sqlbuild.shared.helpers.hashing import compute_query_hash
@@ -61,18 +61,18 @@ def detect_function_change(
 
     if full_refresh:
         return PlanReason.FULL_REFRESH, BackfillResult(action=BackfillAction.FULL)
-    fingerprint: Fingerprint | None = snapshot.fingerprints.get(function.name)
+    fingerprint: Fingerprint | None = snapshot.fingerprints.functions.get(function.name)
     if fingerprint is None:
-        return PlanReason.FIRST_RUN, resolve_query_change_backfill(
-            query_change_backfill=function.query_change_backfill
+        return PlanReason.FIRST_RUN, resolve_replay_on_change(
+            replay_on_change=function.replay_on_change
         )
     if not query_change_tracking:
-        return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.WARN_ONLY)
-    if compute_query_hash(fingerprint_sql) != fingerprint.query_hash:
-        return PlanReason.QUERY_CHANGED, resolve_query_change_backfill(
-            query_change_backfill=function.query_change_backfill
+        return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.FORWARD_ONLY)
+    if compute_query_hash(fingerprint_sql) != fingerprint.definition_hash:
+        return PlanReason.QUERY_CHANGED, resolve_replay_on_change(
+            replay_on_change=function.replay_on_change
         )
-    return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.WARN_ONLY)
+    return PlanReason.NO_CHANGE, BackfillResult(action=BackfillAction.FORWARD_ONLY)
 
 
 def build_function_fingerprint_sql(

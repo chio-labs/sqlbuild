@@ -452,9 +452,9 @@ def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_mar
                 "        self,\n"
                 "        connection: Any,\n"
                 "        *,\n"
-                "        source: str,\n"
-                "        target: str,\n"
-                "        remove_source: bool,\n"
+                "        origin: str,\n"
+                "        destination: str,\n"
+                "        remove_origin: bool,\n"
                 "        allow_copy_fallback: bool,\n"
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"
@@ -526,7 +526,7 @@ def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_mar
                 sql=(
                     "SELECT relation_name FROM "
                     f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                    "WHERE model_name = 'orders'"
+                    "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -859,7 +859,7 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
                 sql=(
                     "SELECT relation_name FROM "
                     f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                    "WHERE model_name = 'orders'"
+                    "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -890,11 +890,12 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
             ),
             config=postgres_e2e_config,
         ) == ((test_case.expected_virtual_environment_count_after,),)
+        model_ref_table_name: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_model_refs",
+        )
         assert fetch_postgres_rows(
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environment_refs')}"
-            ),
+            sql=(f"SELECT COUNT(*) FROM {model_ref_table_name}"),
             config=postgres_e2e_config,
         ) == ((test_case.expected_ref_count_after,),)
         assert fetch_postgres_rows(
@@ -1093,11 +1094,12 @@ def test_given_postgres_non_active_vde_when_running_janitor_then_it_prunes_expir
             ),
             config=postgres_e2e_config,
         ) == ((test_case.expected_virtual_environment_count_after,),)
+        model_ref_table_name: str = quoted_relation_name(
+            schema_name=state_schema,
+            name="virtual_environment_model_refs",
+        )
         assert fetch_postgres_rows(
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{quoted_relation_name(schema_name=state_schema, name='virtual_environment_refs')}"
-            ),
+            sql=(f"SELECT COUNT(*) FROM {model_ref_table_name}"),
             config=postgres_e2e_config,
         ) == ((test_case.expected_ref_count_after,),)
     finally:
@@ -1258,7 +1260,7 @@ def test_given_postgres_warehouse_cleanup_failure_when_janitor_then_state_cleanu
                 "        self,\n"
                 "        connection: Any,\n"
                 "        *,\n"
-                "        target: str,\n"
+                "        destination: str,\n"
                 "        if_exists: bool = True,\n"
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"
@@ -1267,7 +1269,7 @@ def test_given_postgres_warehouse_cleanup_failure_when_janitor_then_state_cleanu
                 "        self,\n"
                 "        connection: Any,\n"
                 "        *,\n"
-                "        target: str,\n"
+                "        destination: str,\n"
                 "        if_exists: bool = True,\n"
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"
@@ -1395,7 +1397,7 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         physical_relations_relation: str = quoted_relation_name(
             schema_name=state_schema,
@@ -1411,7 +1413,8 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
                     "SELECT physical_relations.relation_name FROM "
                     f"{refs_relation} AS refs JOIN "
                     f"{physical_relations_relation} AS physical_relations "
-                    "ON physical_relations.model_name = refs.model_name "
+                    "ON physical_relations.artifact_type = 'model' "
+                    "AND physical_relations.artifact_name = refs.model_name "
                     "AND physical_relations.version_hash = refs.version_hash "
                     "WHERE refs.virtual_environment_name = 'dev' "
                     "AND refs.model_name = 'stg_orders'"
@@ -1429,7 +1432,8 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
                     "SELECT physical_relations.relation_name FROM "
                     f"{refs_relation} AS refs JOIN "
                     f"{physical_relations_relation} AS physical_relations "
-                    "ON physical_relations.model_name = refs.model_name "
+                    "ON physical_relations.artifact_type = 'model' "
+                    "AND physical_relations.artifact_name = refs.model_name "
                     "AND physical_relations.version_hash = refs.version_hash "
                     "WHERE refs.virtual_environment_name = 'dev' "
                     "AND refs.model_name = 'stg_orders'"
@@ -1536,7 +1540,7 @@ def test_given_postgres_active_vde_ref_when_running_janitor_then_it_preserves_ph
                 sql=(
                     "SELECT relation_name FROM "
                     f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                    "WHERE model_name = 'stg_orders'"
+                    "WHERE artifact_type = 'model' AND artifact_name = 'stg_orders'"
                 ),
                 config=postgres_e2e_config,
             )[0][0]
@@ -1683,7 +1687,7 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
         )
         refs_table: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         initial_ref_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -1827,9 +1831,9 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
             schema_name=state_schema,
             name="virtual_environment_checkpoints",
         )
-        checkpoint_refs_relation: str = quoted_relation_name(
+        checkpoint_model_refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_checkpoint_refs",
+            name="virtual_environment_checkpoint_model_refs",
         )
         physical_relations_relation: str = quoted_relation_name(
             schema_name=state_schema,
@@ -1843,10 +1847,11 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
         physical_schema_name, physical_relation_name = fetch_postgres_rows(
             sql=(
                 f"SELECT pr.schema_name, pr.relation_name FROM {checkpoints_relation} cp "
-                f"JOIN {checkpoint_refs_relation} cr "
+                f"JOIN {checkpoint_model_refs_relation} cr "
                 "ON cp.checkpoint_id = cr.checkpoint_id JOIN "
                 f"{physical_relations_relation} pr "
-                "ON pr.model_name = cr.model_name AND pr.version_hash = cr.version_hash "
+                "ON pr.artifact_type = 'model' AND pr.artifact_name = cr.model_name "
+                "AND pr.version_hash = cr.version_hash "
                 "WHERE cp.virtual_environment_name = 'dev' AND cr.model_name = 'orders' "
                 "ORDER BY cp.created_at ASC LIMIT 1"
             ),
@@ -2375,7 +2380,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -2415,7 +2420,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -2739,7 +2744,7 @@ def test_given_postgres_config_and_function_changes_when_planning_then_reasons_m
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "SELECT amount > 9\n"
             ),
         },
@@ -2779,7 +2784,7 @@ def test_given_postgres_config_and_function_changes_when_planning_then_reasons_m
         )
         (function_project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
             "FUNCTION ("
-            "arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full"
+            "arguments (amount INTEGER), returns BOOLEAN, replay_on_change full"
             ");\n\n"
             "SELECT amount > 5\n"
         )
@@ -3012,12 +3017,13 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
                 f"{
                     quoted_relation_name(
                         schema_name=state_schema,
-                        name='virtual_environment_refs',
+                        name='virtual_environment_model_refs',
                     )
                 } "
                 "AS refs JOIN "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "AS physical_relations ON physical_relations.model_name = refs.model_name "
+                "AS physical_relations ON physical_relations.artifact_type = 'model' "
+                "AND physical_relations.artifact_name = refs.model_name "
                 "AND physical_relations.version_hash = refs.version_hash "
                 "WHERE refs.virtual_environment_name = 'pr' AND refs.model_name = 'fact_orders'"
             ),
@@ -3112,7 +3118,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\n"
+                "replay_on_change full);\n\n"
                 "SELECT amount > 9\n"
             ),
         },
@@ -3154,7 +3160,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
 
         (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
             "FUNCTION ("
-            "arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full"
+            "arguments (amount INTEGER), returns BOOLEAN, replay_on_change full"
             ");\n\n"
             "SELECT amount > 5\n",
             encoding="utf-8",
@@ -3269,12 +3275,12 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
     "test_case",
     [
         PostgresVirtualParityE2ETestCase(
-            description="postgres direct mode promotion guard",
+            description="postgres standard mode promotion guard",
             expected_stdout_fragments=("promote requires virtual_environments = true",),
             expected_exit_code=1,
         )
     ],
-    ids=["postgres direct mode promotion guard"],
+    ids=["postgres standard mode promotion guard"],
 )
 def test_given_postgres_direct_mode_project_when_promoting_then_fails_with_mode_error(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -3401,7 +3407,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                     f"{
                         quoted_relation_name(
                             schema_name=prod_state_schema,
-                            name='virtual_environment_refs',
+                            name='virtual_environment_model_refs',
                         )
                     } "
                     "WHERE virtual_environment_name = 'prod' AND model_name = 'stg_orders'"
@@ -3430,7 +3436,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                 f"{
                     quoted_relation_name(
                         schema_name=dev_state_schema,
-                        name='virtual_environment_refs',
+                        name='virtual_environment_model_refs',
                     )
                 }"
             ),
@@ -3444,7 +3450,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                 f"{
                     quoted_relation_name(
                         schema_name=dev_state_schema,
-                        name='virtual_environment_refs',
+                        name='virtual_environment_model_refs',
                     )
                 } "
                 "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
@@ -3487,7 +3493,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
                     f"{
                         quoted_relation_name(
                             schema_name=dev_state_schema,
-                            name='virtual_environment_refs',
+                            name='virtual_environment_model_refs',
                         )
                     } "
                     "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
@@ -3797,7 +3803,8 @@ def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_re
             sql=(
                 "SELECT database_name, schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -3899,7 +3906,8 @@ def test_given_postgres_missing_physical_relation_when_repairing_then_it_blocks(
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4072,7 +4080,7 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4085,7 +4093,8 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'customers' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'customers' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4177,7 +4186,7 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4190,7 +4199,8 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4358,7 +4368,7 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4371,7 +4381,8 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4564,7 +4575,7 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
         assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
         refs_relation: str = quoted_relation_name(
             schema_name=state_schema,
-            name="virtual_environment_refs",
+            name="virtual_environment_model_refs",
         )
         original_refs: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
             sql=(
@@ -4577,7 +4588,8 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
             sql=(
                 "SELECT schema_name, relation_name FROM "
                 f"{quoted_relation_name(schema_name=state_schema, name='physical_relations')} "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
             config=postgres_e2e_config,
         )[0]
@@ -4687,7 +4699,7 @@ POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES: tuple[
 ] = (
     PostgresStateSchemaCorruptionE2ETestCase(
         description="postgres migrate blocks cleanly when required state table is missing",
-        mutation_sql_template="DROP TABLE {virtual_environment_refs}",
+        mutation_sql_template="DROP TABLE {virtual_environment_model_refs}",
         expected_exit_code=1,
         expected_error_fragment="Cannot backup invalid state schema",
     ),
@@ -4744,9 +4756,9 @@ def test_given_corrupt_postgres_state_schema_when_migrating_then_cli_blocks_clea
                     schema_name=state_schema,
                     name="state_versions",
                 ),
-                virtual_environment_refs=quoted_relation_name(
+                virtual_environment_model_refs=quoted_relation_name(
                     schema_name=state_schema,
-                    name="virtual_environment_refs",
+                    name="virtual_environment_model_refs",
                 ),
             ),
             config=postgres_e2e_config,

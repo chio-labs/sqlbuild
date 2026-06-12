@@ -21,12 +21,14 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.spec.models.schema import SchemaSeedEntry, SeedCsvSettings, default_seed_csv_settings
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -42,6 +44,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self.relation_infos: tuple[RelationInfo, ...] = relation_infos
         self.age_metadata_supported: bool = supports_age_metadata
         self.dropped_targets: list[str] = []
+        self.executed_sql: list[str] = []
         self.tracked_relations: tuple[tuple[str | None, str | None, str], ...] = tracked_relations
 
     def supports_relation_age_metadata(self) -> bool:
@@ -67,6 +70,7 @@ class FakeJanitorAdapter(BaseAdapter):
 
     def execute(self, connection: Any, sql: str) -> Any:
         del connection
+        self.executed_sql.append(sql)
         if "LIMIT 0" in sql:
             return _FakeResult(rows=())
         rows: list[tuple[Any, ...]] = []
@@ -74,12 +78,14 @@ class FakeJanitorAdapter(BaseAdapter):
         for tracked_relation in self.tracked_relations:
             rows.append(
                 (
+                    "model",
                     tracked_relation[2],
                     tracked_relation[0],
                     tracked_relation[1],
                     tracked_relation[2],
                     "run_001",
-                    "query_hash",
+                    "definition_hash",
+                    "version_hash",
                     "schema_hash",
                     base64.b64encode(b"SELECT 1").decode("ascii"),
                     base64.b64encode(b"{}").decode("ascii"),
@@ -132,24 +138,51 @@ class FakeJanitorAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
-        return False
+        del connection
+        if name == FINGERPRINT_TABLE_NAME and self.tracked_relations:
+            return True
+        return any(
+            relation.database == database and relation.schema == schema and relation.name == name
+            for relation in self.relation_infos
+            if name in {FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME}
+        )
+
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        del database, schema
+        return f"PRUNE {FINGERPRINT_TABLE_NAME} KEEP {retain_versions}"
+
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        del database, schema
+        return f"PRUNE {SOURCE_FRESHNESS_TABLE_NAME} KEEP {retain_versions}"
 
     def drop(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists, statement_recorder
-        self.dropped_targets.append(target)
+        self.dropped_targets.append(destination)
 
     def create_table_as(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
@@ -160,7 +193,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -170,7 +203,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
@@ -181,7 +214,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -193,7 +226,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -207,7 +240,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -218,7 +251,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -232,7 +265,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -242,7 +275,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -252,7 +285,7 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -262,8 +295,8 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         raise NotImplementedError
@@ -282,8 +315,8 @@ class FakeJanitorAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -341,7 +374,7 @@ class FakeJanitorAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: object,
@@ -358,12 +391,12 @@ class FailingDropAdapter(FakeJanitorAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists, statement_recorder
-        self.dropped_targets.append(target)
+        self.dropped_targets.append(destination)
         raise RuntimeError(self.message)
 
 
@@ -403,7 +436,7 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 relative_path=Path("models/orders.sql"),
                 query_sql="select 1",
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="analytics",
                     name="orders",
@@ -419,7 +452,7 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 seed_file=cast(Any, object()),
                 schema_entry=SchemaSeedEntry(name="countries"),
                 schema_file=cast(Any, object()),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="analytics",
                     name="countries",

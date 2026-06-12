@@ -79,6 +79,15 @@ class DatabricksBuildFlowTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksRelationReuseCopyTestCase:
+    description: str
+    hard_copy: bool
+    destination_name: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
 class DatabricksMergeTestCase:
     description: str
     target_setup_sql: tuple[str, ...]

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.compiler.auditing.main._test_types import (
     ExecuteRenderedAuditTestCase,
@@ -23,7 +23,7 @@ EXECUTE_RENDERED_AUDIT_TEST_CASES: list[ExecuteRenderedAuditTestCase] = [
             "INSERT INTO main.orders__staging VALUES (1, 'alice'), (NULL, 'bob'), (NULL, NULL)",
         ),
         unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        model_targets={"orders": "main.orders"},
+        model_locations={"orders": "main.orders"},
         relation_overrides={"orders": "main.orders__staging"},
         source_map={},
         expected_row_count=2,
@@ -35,7 +35,7 @@ EXECUTE_RENDERED_AUDIT_TEST_CASES: list[ExecuteRenderedAuditTestCase] = [
             "INSERT INTO main.orders VALUES (1, 'alice'), (2, 'bob')",
         ),
         unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        model_targets={"orders": "main.orders"},
+        model_locations={"orders": "main.orders"},
         source_map={},
         expected_row_count=0,
     ),
@@ -46,7 +46,7 @@ EXECUTE_RENDERED_AUDIT_TEST_CASES: list[ExecuteRenderedAuditTestCase] = [
             "INSERT INTO main.raw_orders VALUES (1, 'paid'), (2, NULL), (3, NULL)",
         ),
         unresolved_sql='SELECT id FROM __source("raw_orders") WHERE status IS NULL',
-        model_targets={},
+        model_locations={},
         source_map={
             "raw_orders": SourceEntry(
                 name="raw_orders",
@@ -72,20 +72,20 @@ def test_given_rendered_audit_sql_when_executing_then_returns_expected_rows(
     for sql in test_case.setup_sql:
         connection.execute(sql)
 
-    model_targets: dict[str, CompiledRelationDestination] = {
-        name: CompiledRelationDestination(
+    model_locations: dict[str, CompiledRelationLocation] = {
+        name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=name,
             qualified_name=qualified,
         )
-        for name, qualified in test_case.model_targets.items()
+        for name, qualified in test_case.model_locations.items()
     }
 
     rendered_sql: str = render_audit_sql(
         unresolved_sql=test_case.unresolved_sql,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map=test_case.source_map,
         relation_overrides=test_case.relation_overrides if test_case.relation_overrides else None,
     )

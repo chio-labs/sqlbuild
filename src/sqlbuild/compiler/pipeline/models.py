@@ -12,7 +12,12 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import (
+    PythonIdentityStatus,
+    PythonNodeKind,
+    PythonRunPhase,
+)
+from sqlbuild.executor.custom.models import PrepareVersionContext
 
 
 @dataclass(frozen=True)
@@ -22,6 +27,11 @@ class PythonPlanEntry:
     name: str
     kind: PythonNodeKind
     phase: PythonRunPhase
+    identity_status: PythonIdentityStatus = PythonIdentityStatus.UNKNOWN
+    current_definition_json: str | None = None
+    previous_definition_json: str | None = None
+    current_metadata_json: str | None = None
+    previous_metadata_json: str | None = None
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 
@@ -33,21 +43,24 @@ class CompilePipelineResult:
     plan_output: PlanOutput
     manifest: dict[str, object] = field(default_factory=dict)
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
+    custom_prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = field(
+        default_factory=dict
+    )
     python_node_names: frozenset[str] = field(default_factory=frozenset)
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
 class ClonePipelineResult:
-    """Prepared clone inputs for source and target targets."""
+    """Prepared clone inputs for origin and destination target environments."""
 
-    source_project: CompiledProject
-    target_project: CompiledProject
+    origin_project: CompiledProject
+    destination_project: CompiledProject
     clone_plan: PlanOutput
-    target_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
-    target_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
-    source_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
-    source_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    destination_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    destination_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    origin_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    origin_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

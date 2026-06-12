@@ -1,4 +1,4 @@
-"""Direct source freshness planning observation and comparison helpers."""
+"""Standard source freshness planning observation and comparison helpers."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
@@ -19,17 +20,17 @@ from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
     SourceFreshnessObservation,
     SourceFreshnessRecord,
     SourceFreshnessSet,
+    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy
 
 
-def build_direct_source_freshness_planning_result(
+def build_standard_source_freshness_planning_result(
     *,
     adapter: StrictAdapter,
     connection: Any,
@@ -39,7 +40,7 @@ def build_direct_source_freshness_planning_result(
     observed_at: datetime,
     run_id: str,
     render_qualified_name: Callable[..., str | None],
-) -> DirectSourceFreshnessPlanningResult:
+) -> StandardSourceFreshnessPlanningResult:
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = (
         _read_previous_records(
             adapter=adapter,
@@ -66,12 +67,16 @@ def build_direct_source_freshness_planning_result(
             unknown_source_names.append(source.name)
             continue
 
-        observation: SourceFreshnessObservation = observe_configured_source_freshness(
-            adapter=adapter,
-            connection=connection,
-            source=observation_source,
-            observed_at=observed_at,
-        )
+        try:
+            observation: SourceFreshnessObservation = observe_configured_source_freshness(
+                adapter=adapter,
+                connection=connection,
+                source=observation_source,
+                observed_at=observed_at,
+            )
+        except AdapterUserError:
+            unknown_source_names.append(source.name)
+            continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(
             observation=observation,
             source=observation_source,
@@ -95,7 +100,7 @@ def build_direct_source_freshness_planning_result(
         else:
             changed_identities.add(observed_record.identity)
 
-    return DirectSourceFreshnessPlanningResult(
+    return StandardSourceFreshnessPlanningResult(
         observed_records=tuple(sorted(observed_records, key=lambda record: str(record.identity))),
         previous_records=tuple(
             sorted(previous_records_by_identity.values(), key=lambda record: str(record.identity))
@@ -146,12 +151,30 @@ def _read_previous_records(
         previous_set: SourceFreshnessSet = read_latest_source_freshness(
             connection=connection,
             execute=adapter.execute,
+            relation_exists=adapter.relation_exists,
             database=state_database,
             schema=state_schema,
             render_qualified_name=render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_source_freshness_sql,
         )
-        previous_records_by_identity.update(previous_set.records)
+        _merge_latest_previous_records(
+            previous_records_by_identity=previous_records_by_identity,
+            candidate_records=previous_set.records,
+        )
     return previous_records_by_identity
+
+
+def _merge_latest_previous_records(
+    *,
+    previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
+    candidate_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
+) -> None:
+    identity: SourceFreshnessIdentity
+    candidate_record: SourceFreshnessRecord
+    for identity, candidate_record in candidate_records.items():
+        previous_record: SourceFreshnessRecord | None = previous_records_by_identity.get(identity)
+        if previous_record is None or candidate_record.observed_at > previous_record.observed_at:
+            previous_records_by_identity[identity] = candidate_record
 
 
 def _source_for_observation(*, adapter: StrictAdapter, source: SourceEntry) -> SourceEntry | None:

@@ -9,10 +9,12 @@ from typing import Any
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 
 
@@ -22,8 +24,9 @@ def create_finalized_virtual_environment_checkpoint(
     *,
     schema: str,
     virtual_environment_name: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
     function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (),
+    seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (),
 ) -> str:
     """Persist a finalized VDE checkpoint and return its checkpoint id."""
 
@@ -37,7 +40,7 @@ def create_finalized_virtual_environment_checkpoint(
             virtual_environment_name=virtual_environment_name,
         ),
         refs=tuple(
-            VirtualEnvironmentCheckpointRefRecord(
+            VirtualEnvironmentCheckpointModelRefRecord(
                 checkpoint_id=checkpoint_id,
                 model_name=ref.model_name,
                 version_hash=ref.version_hash,
@@ -51,6 +54,14 @@ def create_finalized_virtual_environment_checkpoint(
                 version_hash=ref.version_hash,
             )
             for ref in function_refs
+        ),
+        seed_refs=tuple(
+            VirtualEnvironmentCheckpointSeedRefRecord(
+                checkpoint_id=checkpoint_id,
+                seed_name=ref.seed_name,
+                version_hash=ref.version_hash,
+            )
+            for ref in seed_refs
         ),
     )
     return checkpoint_id

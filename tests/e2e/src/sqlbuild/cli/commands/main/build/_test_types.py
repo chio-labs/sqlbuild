@@ -42,7 +42,7 @@ class PythonBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DirectPythonBuildHardeningE2ETestCase:
+class StandardPythonBuildHardeningE2ETestCase:
     """Test case for direct build Python lifecycle hardening behavior."""
 
     description: str
@@ -146,6 +146,27 @@ class VirtualBuildE2ETestCase:
     expected_physical_version_count: int | None = None
     expected_default_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_final_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class VirtualSeedBuildE2ETestCase:
+    """Test case for virtual seed build state behavior."""
+
+    description: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_changed_fragments: tuple[str, ...]
+    expected_branch_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_physical_seed_count: int = 0
+
+
+@dataclass(frozen=True)
+class VirtualSeedGapE2ETestCase:
+    """Test case for targeted virtual seed gap coverage."""
+
+    description: str
+    expected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -617,6 +638,46 @@ class SchemaBackfillBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DirectChangesOnlyStateBuildE2ETestCase:
+    """Test case for standard changes-only state/data behavior."""
+
+    description: str
+    project_name: str
+    initial_amount_cents: int
+    changed_amount_cents: int
+    expected_initial_amount_dollars: float
+    expected_changed_amount_dollars: float
+
+
+@dataclass(frozen=True)
+class DirectChangesOnlySeedBuildE2ETestCase:
+    description: str
+    project_name: str
+    initial_seed_contents: str
+    changed_seed_contents: str
+    expected_plan_selected_count: int
+    expected_amount_dollars: float
+
+
+@dataclass(frozen=True)
+class DirectSeedChangesOnlyGapE2ETestCase:
+    description: str
+    project_name: str
+    expected_plan_fragment: str = ""
+    expected_seed_payload: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    expected_fact_order_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_customer_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DirectReuseFromBuildE2ETestCase:
+    description: str
+    project_name: str
+    expected_prod_build_exit_code: int
+    expected_dev_build_exit_code: int
+
+
+@dataclass(frozen=True)
 class MixedTimestampGrainBuildE2ETestCase:
     """Test case for mixed timestamp grain replay behavior."""
 
@@ -701,4 +762,6 @@ class RemoveColumnSemanticsBuildE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_reason: str
-    expected_warning_fragment: str
+    expected_backfill_action: str
+    expected_backfill_duration: str | None
+    expected_warning_count: int

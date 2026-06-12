@@ -67,3 +67,64 @@ class AuditSqlResolutionTestCase:
     attached_target_name: str
     resolved_target_name: str
     expected_resolved_sql: str
+
+
+@dataclass(frozen=True)
+class TableReuseExecutionTestCase:
+    description: str
+    reuse_hard_copy: bool
+    promotion_mode: TablePromotionMode
+    expected_status: str
+    expected_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_error_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_lifecycle_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_target_exists: bool = True
+
+
+@dataclass(frozen=True)
+class TableReuseFailureExecutionTestCase:
+    description: str
+    setup_sql: tuple[str, ...]
+    fingerprint_version_hash: str
+    expected_status: str
+    expected_failed_phase: ExecutionPhase
+    expected_error_fragments: tuple[str, ...]
+    expected_target_exists: bool
+
+
+@dataclass(frozen=True)
+class TableReuseAuditProofExecutionTestCase:
+    description: str
+    expected_status: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_audit_count: int
+    expected_reused_count: int
+    expected_metadata_reused: bool
+
+
+@dataclass(frozen=True)
+class SnapshotReuseExecutionTestCase:
+    description: str
+    expected_status: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_lifecycle_fragments: tuple[str, ...]
+    expected_seed_exists: bool
+
+
+@dataclass(frozen=True)
+class SnapshotReuseFailureExecutionTestCase:
+    description: str
+    fingerprint_version_hash: str
+    expected_status: str
+    expected_error_fragment: str
+    expected_target_exists: bool
+
+
+@dataclass(frozen=True)
+class SnapshotReuseVariantExecutionTestCase:
+    description: str
+    reuse_hard_copy: bool
+    expected_status: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_lifecycle_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_audit_count: int = 0

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
@@ -57,6 +57,7 @@ def format_build_execution_json(
     plan: PlanOutput,
     python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
     python_check_results: tuple[PythonCheckExecutionResult, ...] = (),
+    command: str = "build",
 ) -> str:
     """Format build command execution results as JSON."""
 
@@ -78,7 +79,7 @@ def format_build_execution_json(
         else result.status
     )
     return _format_execution_json(
-        command="build",
+        command=command,
         status=status.value,
         assets=(
             *_format_model_assets(results=result.model_results, plan=plan),
@@ -310,8 +311,10 @@ def _format_model_assets(
     *, results: tuple[ModelExecutionResult, ...], plan: PlanOutput | None
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
+    model_entries: dict[str, ModelPlanEntry] = {}
     if plan is not None:
-        targets = {name: target.qualified_name for name, target in plan.model_targets.items()}
+        targets = {name: target.qualified_name for name, target in plan.model_locations.items()}
+        model_entries = {entry.name: entry for entry in plan.model_entries}
     return tuple(
         _drop_none(
             {
@@ -326,18 +329,32 @@ def _format_model_assets(
                 "error_help": result.error_help,
                 "error_message": result.error_message,
                 "warnings": result.warning_messages,
+                "relation_reuse": _format_relation_reuse(model_entries.get(result.model_name)),
             }
         )
         for result in results
     )
 
 
+def _format_relation_reuse(entry: ModelPlanEntry | None) -> dict[str, object] | None:
+    if entry is None or entry.relation_reuse is None:
+        return None
+    return {
+        "kind": entry.relation_reuse.kind.value,
+        "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
+        "origin_relation": entry.relation_reuse.origin.qualified_name,
+        "hard_copy": entry.relation_reuse.hard_copy,
+    }
+
+
 def _format_seed_assets(
     *, results: tuple[SeedExecutionResult, ...], plan: PlanOutput | None
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
+    reasons: dict[str, str] = {}
     if plan is not None:
-        targets = {name: target.qualified_name for name, target in plan.seed_targets.items()}
+        targets = {name: target.qualified_name for name, target in plan.seed_locations.items()}
+        reasons = {entry.name: entry.reason.value for entry in plan.seed_entries}
     return tuple(
         _drop_none(
             {
@@ -346,6 +363,7 @@ def _format_seed_assets(
                 "status": result.status.value,
                 "duration_ms": result.duration_ms,
                 "target": targets.get(result.seed_name),
+                "reason": reasons.get(result.seed_name),
                 "error_code": result.error_code,
                 "error_help": result.error_help,
                 "error_message": result.error_message,
@@ -403,7 +421,7 @@ def _format_function_assets(
 ) -> tuple[dict[str, object], ...]:
     targets: dict[str, str | None] = {}
     if plan is not None:
-        targets = {name: target.qualified_name for name, target in plan.function_targets.items()}
+        targets = {name: target.qualified_name for name, target in plan.function_locations.items()}
     return tuple(
         _drop_none(
             {
@@ -503,6 +521,7 @@ def _format_audit_checks(
                 "asset_name": result.attached_target_name,
                 "attached_column_name": result.attached_column_name,
                 "run_scope_phase": result.run_scope_phase.value,
+                "reused": result.reused,
             }
         )
         for result in results

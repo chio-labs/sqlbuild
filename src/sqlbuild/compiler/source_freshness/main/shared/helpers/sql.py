@@ -1,4 +1,4 @@
-"""SQL generation helpers for direct source freshness storage."""
+"""SQL generation helpers for standard source freshness storage."""
 
 from __future__ import annotations
 
@@ -71,29 +71,32 @@ def build_create_table_sql(
     )
 
 
-def build_read_all_sql(
+def build_read_latest_sql(
     *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
 ) -> str:
-    """Build a SELECT statement to read all source freshness rows for a schema."""
+    """Build a windowed SELECT for the latest source freshness row per identity."""
 
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
+    selected_columns: str = _source_freshness_select_columns()
     return (
-        f"SELECT "
+        f"SELECT {selected_columns} "
+        f"FROM ("
+        f"SELECT {selected_columns}, "
+        f"ROW_NUMBER() OVER ("
+        f"PARTITION BY "
         f"{COLUMN_SOURCE_NAME}, "
         f"{COLUMN_TARGET_DATABASE}, "
         f"{COLUMN_TARGET_SCHEMA}, "
-        f"{COLUMN_TARGET_NAME}, "
-        f"{COLUMN_RUN_ID}, "
-        f"{COLUMN_STRATEGY}, "
-        f"{COLUMN_VALUE_KIND}, "
-        f"{COLUMN_DATA_VERSION}, "
-        f"{COLUMN_DATA_VERSION_HASH}, "
-        f"{COLUMN_OBSERVED_AT} "
+        f"{COLUMN_TARGET_NAME} "
+        f"ORDER BY {COLUMN_OBSERVED_AT} DESC, {COLUMN_RUN_ID} DESC"
+        f") AS __sqlbuild_latest_rank "
         f"FROM {qualified_name}"
+        f") AS __sqlbuild_latest_source_freshness "
+        f"WHERE __sqlbuild_latest_rank = 1"
     )
 
 
@@ -144,6 +147,21 @@ def build_insert_sql(
         f"{_required_string_literal(data_version_hash)}, "
         f"{_required_string_literal(observed_at)}"
         f")"
+    )
+
+
+def _source_freshness_select_columns() -> str:
+    return (
+        f"{COLUMN_SOURCE_NAME}, "
+        f"{COLUMN_TARGET_DATABASE}, "
+        f"{COLUMN_TARGET_SCHEMA}, "
+        f"{COLUMN_TARGET_NAME}, "
+        f"{COLUMN_RUN_ID}, "
+        f"{COLUMN_STRATEGY}, "
+        f"{COLUMN_VALUE_KIND}, "
+        f"{COLUMN_DATA_VERSION}, "
+        f"{COLUMN_DATA_VERSION_HASH}, "
+        f"{COLUMN_OBSERVED_AT}"
     )
 
 

@@ -16,8 +16,9 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
@@ -27,6 +28,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.build_resources import expand_build_resource_selection
 from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
+from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.warehouse_snapshot import build_warehouse_snapshot_phase
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -37,7 +39,13 @@ from sqlbuild.compiler.planner.models import (
     PlannerWarehouseSnapshotResult,
     PlanOutput,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    ChangeKind,
+    PlanAction,
+    PlanReason,
+    WorkSelectionPolicy,
+)
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.models import (
@@ -47,9 +55,13 @@ from sqlbuild.compiler.python_nodes.models import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
-from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+    PrepareVersionContext,
+)
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
@@ -60,8 +72,8 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.naming import (
-    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
+    resolve_relation_location_qualified_name,
 )
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
@@ -70,18 +82,16 @@ from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_n
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_destination_from_physical_relation,
-    build_rewritten_model_targets,
+    build_physical_seed_destination,
+    build_rewritten_model_locations,
     build_virtual_destination,
     relation_type_for_model,
-    rewrite_project_function_targets,
-    rewrite_project_model_targets,
+    rewrite_project_function_locations,
+    rewrite_project_model_locations,
+    rewrite_project_seed_locations,
 )
 from sqlbuild.virtual.executor.helpers.seeding import seed_virtual_physical_version
-from sqlbuild.virtual.executor.models import (
-    VersionPrepareContext,
-    VirtualBuildExecutionHooks,
-    VirtualBuildPipelineResult,
-)
+from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
 from sqlbuild.virtual.freshness.main.current_records import (
     build_current_virtual_source_freshness_records,
 )
@@ -108,13 +118,19 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackendConfig,
     VirtualEnvironmentFunctionRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
-from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
+from sqlbuild.virtual.state.types import (
+    ModelVersionStatus,
+    PhysicalArtifactType,
+    VirtualEnvironmentStatus,
+)
 
 
 def run_virtual_build(
@@ -133,6 +149,7 @@ def run_virtual_build(
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     include_python: bool = True,
+    seed_only: bool = False,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     fail_fast: bool = False,
@@ -168,7 +185,7 @@ def run_virtual_build(
     custom_materializations: dict[
         str, Callable[[MaterializationContext], MaterializationResult]
     ] = load_custom_materializations(discovered_inputs.materialization_files)
-    prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]] = (
+    prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = (
         load_custom_prepare_version_functions(discovered_inputs.materialization_files)
     )
     physical_target_name: str | None = resolve_target_name(
@@ -193,7 +210,7 @@ def run_virtual_build(
     )
     state_connection: Any = backend.connect(config.connection)
     try:
-        bound_refs: tuple[VirtualEnvironmentRefRecord, ...] = _read_or_initialize_refs(
+        bound_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = _read_or_initialize_refs(
             backend=backend,
             state_connection=state_connection,
             config=config,
@@ -202,6 +219,13 @@ def run_virtual_build(
         )
         bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+            )
+        )
+        bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
                 state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_vde_name,
@@ -239,20 +263,62 @@ def run_virtual_build(
             graph=graph,
             bound_refs=bound_refs,
             bound_model_versions=bound_model_versions,
+            bound_seed_refs=bound_seed_refs,
             source_freshness_records=current_source_freshness_records,
         )
-        selected_model_names: tuple[str, ...] = resolve_virtual_plan_model_selection(
+        work_selection_policy: WorkSelectionPolicy = (
+            WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
+        )
+        selected_model_names: tuple[str, ...]
+        selected_seed_names: tuple[str, ...] = ()
+        if seed_only:
+            selected_model_names = ()
+            selected_seed_names = _resolve_virtual_seed_selection(
+                graph=graph,
+                select=select,
+                exclude=exclude,
+            )
+        else:
+            selected_model_names = resolve_virtual_plan_model_selection(
+                graph=graph,
+                select=select,
+                exclude=exclude,
+                default_selection=semantics.default_selection,
+                stale_model_names=semantics.stale_model_names,
+                include_stale_upstreams=include_stale_upstreams,
+                work_selection_policy=work_selection_policy,
+            )
+            selected_seed_names = semantics.stale_seed_names if not select and not exclude else ()
+        selected_seed_names = _include_stale_upstream_seed_names(
             graph=graph,
-            select=select,
-            exclude=exclude,
-            default_selection=semantics.default_selection,
-            stale_model_names=semantics.stale_model_names,
-            include_stale_upstreams=include_stale_upstreams,
-            changes_only=changes_only,
+            selected_model_names=selected_model_names,
+            selected_seed_names=selected_seed_names,
+            stale_seed_names=semantics.stale_seed_names,
+        )
+        desired_seed_version_hashes: dict[str, str] = {
+            seed_name: semantics.expected_seed_version_hashes[seed_name]
+            for seed_name in selected_seed_names
+            if seed_name in semantics.expected_seed_version_hashes
+        }
+        available_seed_physical_relations: dict[str, PhysicalRelationRecord] = (
+            _read_available_seed_physical_relations(
+                adapter=adapter,
+                connection_config=connection_config,
+                backend=backend,
+                state_connection=state_connection,
+                config=config,
+                desired_seed_version_hashes=desired_seed_version_hashes,
+            )
+        )
+        seed_load_names: tuple[str, ...] = tuple(
+            seed_name
+            for seed_name in selected_seed_names
+            if seed_name not in available_seed_physical_relations
         )
         effective_select: tuple[str, ...] = _build_virtual_planner_select(
             graph=graph,
             selected_model_names=selected_model_names,
+            selected_seed_names=selected_seed_names,
         )
         bound_physical_relations: dict[str, PhysicalRelationRecord] = _read_bound_relations(
             backend=backend,
@@ -268,17 +334,46 @@ def run_virtual_build(
         for model_name in selected_model_names
         if model_name in semantics.expected_version_hashes
     }
-    rewritten_targets: dict[str, CompiledRelationDestination] = build_rewritten_model_targets(
+    seed_load_version_hashes: dict[str, str] = {
+        seed_name: desired_seed_version_hashes[seed_name]
+        for seed_name in seed_load_names
+        if seed_name in desired_seed_version_hashes
+    }
+    rewritten_locations: dict[str, CompiledRelationLocation] = build_rewritten_model_locations(
         project=graph.project,
         adapter=adapter,
         selected_model_version_hashes=selected_model_version_hashes,
         bound_physical_relations=bound_physical_relations,
     )
-    rewritten_project: CompiledProject = rewrite_project_model_targets(
+    rewritten_project: CompiledProject = rewrite_project_model_locations(
         project=graph.project,
-        rewritten_targets=rewritten_targets,
+        rewritten_locations=rewritten_locations,
     )
-    rewritten_project = rewrite_project_function_targets(
+    rewritten_seed_locations: dict[str, CompiledRelationLocation] = {
+        seed.name: build_physical_seed_destination(
+            adapter=adapter,
+            target=seed.destination,
+            seed_name=seed.name,
+            version_hash=seed_load_version_hashes[seed.name],
+        )
+        for seed in graph.project.seeds
+        if seed.name in seed_load_version_hashes
+    }
+    for seed in graph.project.seeds:
+        if seed.name in rewritten_seed_locations:
+            continue
+        if seed.name in semantics.bound_seed_version_hashes:
+            rewritten_seed_locations[seed.name] = build_virtual_destination(
+                adapter=adapter,
+                target=seed.destination,
+                virtual_environment_name=target_vde_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            )
+    rewritten_project = rewrite_project_seed_locations(
+        project=rewritten_project,
+        rewritten_locations=rewritten_seed_locations,
+    )
+    rewritten_project = rewrite_project_function_locations(
         project=rewritten_project,
         adapter=adapter,
         virtual_environment_name=target_vde_name,
@@ -337,6 +432,9 @@ def run_virtual_build(
                 project_config=discovered_inputs.project_config,
                 local_config=discovered_inputs.local_config,
                 defer_sources_to=defer_sources_to,
+                seed_version_hashes=semantics.expected_seed_version_hashes,
+                seed_metadata_jsons=semantics.seed_identity_metadata_jsons,
+                seed_plan_reasons=semantics.seed_plan_reasons,
             )
         finally:
             adapter.close(planning_connection)
@@ -346,7 +444,7 @@ def run_virtual_build(
             upstream_deps=graph.upstream_deps,
             downstream_deps=graph.downstream_deps,
             selected_keys=frozenset(),
-            model_targets={
+            model_locations={
                 model.name: (
                     build_destination_from_physical_relation(
                         adapter=adapter,
@@ -358,10 +456,10 @@ def run_virtual_build(
                 )
                 for model in graph.project.models
             },
-            function_targets={
+            function_locations={
                 function.name: function.destination for function in graph.project.functions
             },
-            seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
+            seed_locations={seed.name: seed.destination for seed in graph.project.seeds},
             source_map={source.name: source.source_entry for source in graph.project.sources},
         )
     plan_output = apply_virtual_plan_output(
@@ -370,7 +468,10 @@ def run_virtual_build(
         semantics=semantics,
         selected_model_names=selected_model_names,
     )
-    executor_plan_output: PlanOutput = plan_output
+    executor_plan_output: PlanOutput = _build_physical_seed_load_plan_output(
+        plan_output=plan_output,
+        seed_load_names=seed_load_names,
+    )
     effective_concurrency: int = (
         concurrency if concurrency is not None else rewritten_project.settings.concurrency
     )
@@ -491,6 +592,15 @@ def run_virtual_build(
             query_change_tracking=False,
             providers=providers,
         )
+    if result.status == BuildStatus.SUCCESS and available_seed_physical_relations:
+        result = replace(
+            result,
+            seed_results=result.seed_results
+            + tuple(
+                SeedExecutionResult(seed_name=seed_name, status=ExecutionStatus.SKIPPED)
+                for seed_name in sorted(available_seed_physical_relations)
+            ),
+        )
     if result.status == BuildStatus.SUCCESS:
         _persist_successful_virtual_build(
             project=graph.project,
@@ -503,10 +613,15 @@ def run_virtual_build(
             baseline_vde_name=physical_target_name,
             bound_version_hashes=semantics.bound_version_hashes,
             bound_function_refs=bound_function_refs,
+            bound_seed_refs=bound_seed_refs,
             plan_output=executor_plan_output,
             expected_local_hashes=semantics.expected_local_hashes,
             expected_metadata_jsons=semantics.expected_metadata_jsons,
             expected_version_hashes=semantics.expected_version_hashes,
+            expected_seed_version_hashes=semantics.expected_seed_version_hashes,
+            seed_identity_metadata_jsons=semantics.seed_identity_metadata_jsons,
+            available_seed_physical_relations=available_seed_physical_relations,
+            seed_results=result.seed_results,
             load_results=result.load_results,
         )
         read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
@@ -557,7 +672,7 @@ def _build_before_model_materialize(
     config: StateBackendConfig,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
     expected_version_hashes: dict[str, str],
-    prepare_version_functions: dict[str, Callable[[VersionPrepareContext], None]],
+    prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]],
     run_id: str,
     environment: str,
     effective_vars: dict[str, object],
@@ -575,7 +690,7 @@ def _build_before_model_materialize(
             return
         state_connection: Any = backend.connect(config.connection)
         try:
-            prepare_version: Callable[[VersionPrepareContext], None] | None = (
+            prepare_version: Callable[[PrepareVersionContext], None] | None = (
                 prepare_version_functions.get(entry.custom_materialization_name or "")
                 if entry.action == PlanAction.CUSTOM
                 else None
@@ -708,7 +823,7 @@ def _prepare_custom_virtual_version(
     entry: ModelPlanEntry,
     parent_relation: PhysicalRelationRecord,
     version_hash: str,
-    prepare_version: Callable[[VersionPrepareContext], None],
+    prepare_version: Callable[[PrepareVersionContext], None],
     run_id: str,
     environment: str,
     effective_vars: dict[str, object],
@@ -720,14 +835,18 @@ def _prepare_custom_virtual_version(
         schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    destination: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
+    destination: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
+    )
     if adapter.relation_exists(
         connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         name=entry.destination.name,
     ):
-        adapter.drop(connection, target=destination, if_exists=True, statement_recorder=recorder)
+        adapter.drop(
+            connection, destination=destination, if_exists=True, statement_recorder=recorder
+        )
     source: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=parent_relation.database_name,
@@ -735,10 +854,10 @@ def _prepare_custom_virtual_version(
         name=parent_relation.relation_name,
     )
     prepare_version(
-        VersionPrepareContext(
+        PrepareVersionContext(
             adapter=adapter,
             connection=connection,
-            prior_relation=source,
+            origin_relation=source,
             destination=destination,
             destination_database=entry.destination.database,
             destination_schema=entry.destination.schema,
@@ -759,7 +878,7 @@ def _prepare_custom_virtual_version(
         record=PhysicalRelationAncestryRecord(
             model_name=entry.name,
             version_hash=version_hash,
-            parent_model_name=parent_relation.model_name,
+            parent_model_name=parent_relation.artifact_name,
             parent_version_hash=parent_relation.version_hash,
             seed_strategy="custom_prepare_version",
         ),
@@ -773,7 +892,7 @@ def _read_or_initialize_refs(
     config: StateBackendConfig,
     target_vde_name: str,
     baseline_vde_name: str | None,
-) -> tuple[VirtualEnvironmentRefRecord, ...]:
+) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
         state_connection,
         schema=config.schema,
@@ -785,20 +904,22 @@ def _read_or_initialize_refs(
             code="S028",
             help="Run state adopt again or choose a non-detached virtual environment.",
         )
-    refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...] = backend.get_virtual_environment_model_refs(
         state_connection,
         schema=config.schema,
         virtual_environment_name=target_vde_name,
     )
     if refs or baseline_vde_name is None or baseline_vde_name == target_vde_name:
         return refs
-    baseline_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-        state_connection,
-        schema=config.schema,
-        virtual_environment_name=baseline_vde_name,
+    baseline_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+        backend.get_virtual_environment_model_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=baseline_vde_name,
+        )
     )
     return tuple(
-        VirtualEnvironmentRefRecord(
+        VirtualEnvironmentModelRefRecord(
             virtual_environment_name=target_vde_name,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -812,7 +933,7 @@ def _read_bound_model_versions(
     backend: Any,
     state_connection: Any,
     config: StateBackendConfig,
-    bound_refs: tuple[VirtualEnvironmentRefRecord, ...],
+    bound_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(
@@ -845,6 +966,96 @@ def _read_bound_relations(
     return relations
 
 
+def _include_stale_upstream_seed_names(
+    *,
+    graph: ProjectGraph,
+    selected_model_names: tuple[str, ...],
+    selected_seed_names: tuple[str, ...],
+    stale_seed_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    selected: set[str] = set(selected_seed_names)
+    stale_seed_name_set: frozenset[str] = frozenset(stale_seed_names)
+    pending: list[CompiledObjectKey] = [
+        model.key for model in graph.project.models if model.name in selected_model_names
+    ]
+    seen: set[CompiledObjectKey] = set()
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        upstream_key: CompiledObjectKey
+        for upstream_key in graph.upstream_deps.get(key, ()):
+            if upstream_key.resource_type == CompiledResourceType.SEED:
+                if upstream_key.name in stale_seed_name_set:
+                    selected.add(upstream_key.name)
+                continue
+            pending.append(upstream_key)
+    return tuple(sorted(selected))
+
+
+def _read_available_seed_physical_relations(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    backend: Any,
+    state_connection: Any,
+    config: StateBackendConfig,
+    desired_seed_version_hashes: dict[str, str],
+) -> dict[str, PhysicalRelationRecord]:
+    relations: dict[str, PhysicalRelationRecord] = {}
+    if not desired_seed_version_hashes:
+        return relations
+    warehouse_connection: Any = adapter.connect(connection_config)
+    try:
+        seed_name: str
+        version_hash: str
+        for seed_name, version_hash in desired_seed_version_hashes.items():
+            relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+                state_connection,
+                schema=config.schema,
+                artifact_type=PhysicalArtifactType.SEED,
+                artifact_name=seed_name,
+                version_hash=version_hash,
+            )
+            if relation is None:
+                continue
+            if adapter.relation_exists(
+                warehouse_connection,
+                database=relation.database_name,
+                schema=relation.schema_name,
+                name=relation.relation_name,
+            ):
+                relations[seed_name] = relation
+    finally:
+        adapter.close(warehouse_connection)
+    return relations
+
+
+def _build_physical_seed_load_plan_output(
+    *, plan_output: PlanOutput, seed_load_names: tuple[str, ...]
+) -> PlanOutput:
+    seed_load_name_set: frozenset[str] = frozenset(seed_load_names)
+    selected_load_seed_keys: frozenset[CompiledObjectKey] = frozenset(
+        entry.key for entry in plan_output.seed_entries if entry.name in seed_load_name_set
+    )
+    selected_existing_seed_keys: frozenset[CompiledObjectKey] = frozenset(
+        entry.key for entry in plan_output.seed_entries if entry.name not in seed_load_name_set
+    )
+    return replace(
+        plan_output,
+        execution_order=tuple(
+            key for key in plan_output.execution_order if key not in selected_existing_seed_keys
+        ),
+        seed_entries=tuple(
+            entry for entry in plan_output.seed_entries if entry.key in selected_load_seed_keys
+        ),
+        selected_keys=frozenset(
+            key for key in plan_output.selected_keys if key not in selected_existing_seed_keys
+        ),
+    )
+
+
 def _persist_successful_virtual_build(
     *,
     project: CompiledProject,
@@ -857,32 +1068,33 @@ def _persist_successful_virtual_build(
     baseline_vde_name: str | None,
     bound_version_hashes: dict[str, str],
     bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
+    bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
     plan_output: PlanOutput,
     expected_local_hashes: dict[str, str],
     expected_metadata_jsons: dict[str, str],
     expected_version_hashes: dict[str, str],
+    expected_seed_version_hashes: dict[str, str],
+    seed_identity_metadata_jsons: dict[str, str],
+    available_seed_physical_relations: dict[str, PhysicalRelationRecord],
+    seed_results: tuple[SeedExecutionResult, ...],
     load_results: tuple[LoadExecutionResult, ...],
 ) -> None:
     final_version_hashes: dict[str, str] = dict(bound_version_hashes)
     final_function_hashes: dict[str, str] = {
         ref.function_name: ref.version_hash for ref in bound_function_refs
     }
+    final_seed_hashes: dict[str, str] = {ref.seed_name: ref.version_hash for ref in bound_seed_refs}
+    final_seed_physical_relations: dict[str, PhysicalRelationRecord] = dict(
+        available_seed_physical_relations
+    )
+    for seed_name, relation in available_seed_physical_relations.items():
+        final_seed_hashes[seed_name] = relation.version_hash
     model_entries_by_name: dict[str, Any] = {
         entry.name: entry for entry in plan_output.model_entries
     }
     for entry in plan_output.model_entries:
         final_version_hashes[entry.name] = expected_version_hashes[entry.name]
 
-    stale_after_build: tuple[str, ...] = tuple(
-        model.name
-        for model in project.models
-        if final_version_hashes.get(model.name) != expected_version_hashes.get(model.name)
-    )
-    status: VirtualEnvironmentStatus = (
-        VirtualEnvironmentStatus.FINALIZED
-        if not stale_after_build
-        else VirtualEnvironmentStatus.ACTIVE
-    )
     state_connection: Any = backend.connect(config.connection)
     try:
         previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
@@ -935,17 +1147,21 @@ def _persist_successful_virtual_build(
                     record=ModelVersionRecord(
                         model_name=model.name,
                         version_hash=version_hash,
-                        data_hash=expected_local_hashes.get(model.name, version_hash),
-                        metadata_hash=hashlib.sha256(metadata_json.encode("utf-8")).hexdigest(),
+                        definition_identity_hash=expected_local_hashes.get(
+                            model.name, version_hash
+                        ),
+                        identity_metadata_hash=hashlib.sha256(
+                            metadata_json.encode("utf-8")
+                        ).hexdigest(),
                         status=ModelVersionStatus.READY,
-                        fingerprint_query_sql_b64=encode_state_text(model.query_sql),
-                        fingerprint_metadata_json_b64=encode_state_text(metadata_json),
+                        definition_text_b64=encode_state_text(model.query_sql),
+                        identity_metadata_json_b64=encode_state_text(metadata_json),
                         compiled_sql_b64=(
                             encode_state_text(entry.resolved_sql) if entry is not None else None
                         ),
                     ),
                 )
-            target: CompiledRelationDestination | None = (
+            target: CompiledRelationLocation | None = (
                 entry.destination if entry is not None else None
             )
             if target is not None:
@@ -962,7 +1178,8 @@ def _persist_successful_virtual_build(
                         state_connection,
                         schema=config.schema,
                         record=PhysicalRelationRecord(
-                            model_name=model.name,
+                            artifact_type=PhysicalArtifactType.MODEL,
+                            artifact_name=model.name,
                             version_hash=version_hash,
                             database_name=target.database,
                             schema_name=target.schema or "",
@@ -988,6 +1205,93 @@ def _persist_successful_virtual_build(
                     schema=config.schema,
                     record=function_version,
                 )
+        successful_seed_names: frozenset[str] = frozenset(
+            seed_result.seed_name
+            for seed_result in seed_results
+            if seed_result.status == ExecutionStatus.SUCCESS
+        )
+        for seed_name in successful_seed_names:
+            version_hash: str | None = expected_seed_version_hashes.get(seed_name)
+            if version_hash is None:
+                continue
+            target: CompiledRelationLocation | None = plan_output.seed_locations.get(seed_name)
+            metadata_json: str = seed_identity_metadata_jsons.get(seed_name, "{}")
+            existing_seed_version: SeedVersionRecord | None = backend.get_seed_version(
+                state_connection,
+                schema=config.schema,
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            if existing_seed_version is None:
+                backend.upsert_seed_version(
+                    state_connection,
+                    schema=config.schema,
+                    record=SeedVersionRecord(
+                        seed_name=seed_name,
+                        version_hash=version_hash,
+                        identity_metadata_hash=hashlib.sha256(
+                            metadata_json.encode("utf-8")
+                        ).hexdigest(),
+                        identity_metadata_json_b64=encode_state_text(metadata_json),
+                        status=ModelVersionStatus.READY,
+                    ),
+                )
+            if target is not None:
+                existing_seed_physical_relation: PhysicalRelationRecord | None = (
+                    backend.get_physical_relation_for_artifact(
+                        state_connection,
+                        schema=config.schema,
+                        artifact_type=PhysicalArtifactType.SEED,
+                        artifact_name=seed_name,
+                        version_hash=version_hash,
+                    )
+                )
+                if existing_seed_physical_relation is None:
+                    seed_physical_relation: PhysicalRelationRecord = PhysicalRelationRecord(
+                        artifact_type=PhysicalArtifactType.SEED,
+                        artifact_name=seed_name,
+                        version_hash=version_hash,
+                        database_name=target.database,
+                        schema_name=target.schema or "",
+                        relation_name=target.name,
+                        relation_type="table",
+                    )
+                    backend.upsert_physical_relation(
+                        state_connection,
+                        schema=config.schema,
+                        record=seed_physical_relation,
+                    )
+                    final_seed_physical_relations[seed_name] = seed_physical_relation
+                else:
+                    final_seed_physical_relations[seed_name] = existing_seed_physical_relation
+            final_seed_hashes[seed_name] = version_hash
+        for seed_name, version_hash in final_seed_hashes.items():
+            if seed_name in final_seed_physical_relations:
+                continue
+            seed_physical_relation = backend.get_physical_relation_for_artifact(
+                state_connection,
+                schema=config.schema,
+                artifact_type=PhysicalArtifactType.SEED,
+                artifact_name=seed_name,
+                version_hash=version_hash,
+            )
+            if seed_physical_relation is not None:
+                final_seed_physical_relations[seed_name] = seed_physical_relation
+        stale_model_after_build: tuple[str, ...] = tuple(
+            model.name
+            for model in project.models
+            if final_version_hashes.get(model.name) != expected_version_hashes.get(model.name)
+        )
+        stale_seed_after_build: tuple[str, ...] = tuple(
+            seed.name
+            for seed in project.seeds
+            if final_seed_hashes.get(seed.name) != expected_seed_version_hashes.get(seed.name)
+        )
+        status: VirtualEnvironmentStatus = (
+            VirtualEnvironmentStatus.FINALIZED
+            if not stale_model_after_build and not stale_seed_after_build
+            else VirtualEnvironmentStatus.ACTIVE
+        )
         backend.upsert_virtual_environment(
             state_connection,
             schema=config.schema,
@@ -999,15 +1303,15 @@ def _persist_successful_virtual_build(
                 ),
             ),
         )
-        refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
-            VirtualEnvironmentRefRecord(
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=target_vde_name,
                 model_name=model_name,
                 version_hash=version_hash,
             )
             for model_name, version_hash in sorted(final_version_hashes.items())
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_vde_name,
@@ -1027,6 +1331,20 @@ def _persist_successful_virtual_build(
             virtual_environment_name=target_vde_name,
             refs=function_refs,
         )
+        seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=target_vde_name,
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            for seed_name, version_hash in sorted(final_seed_hashes.items())
+        )
+        backend.replace_virtual_environment_seed_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=target_vde_name,
+            refs=seed_refs,
+        )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
                 backend,
@@ -1035,6 +1353,7 @@ def _persist_successful_virtual_build(
                 virtual_environment_name=target_vde_name,
                 refs=refs,
                 function_refs=function_refs,
+                seed_refs=seed_refs,
             )
     finally:
         backend.close(state_connection)
@@ -1047,6 +1366,7 @@ def _persist_successful_virtual_build(
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         plan_output=plan_output,
         final_version_hashes=final_version_hashes,
+        final_seed_physical_relations=final_seed_physical_relations,
     )
 
 
@@ -1076,21 +1396,47 @@ def _build_virtual_planner_select(
     *,
     graph: ProjectGraph,
     selected_model_names: tuple[str, ...],
+    selected_seed_names: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     selected_model_keys: frozenset[CompiledObjectKey] = frozenset(
         key
         for model_name in selected_model_names
         if (key := graph.all_keys.get(model_name)) is not None
     )
+    selected_seed_keys: frozenset[CompiledObjectKey] = frozenset(
+        key
+        for seed_name in selected_seed_names
+        if (key := graph.all_keys.get(seed_name)) is not None
+    )
     expanded_keys: frozenset[CompiledObjectKey] = expand_build_resource_selection(
-        selected_keys=selected_model_keys,
+        selected_keys=selected_model_keys | selected_seed_keys,
         upstream=graph.upstream_deps,
         downstream=graph.downstream_deps,
         include_upstream_functions=True,
-        include_upstream_seeds=True,
+        include_upstream_seeds=False,
         include_downstream_functions=True,
     )
     return tuple(sorted(key.name for key in expanded_keys))
+
+
+def _resolve_virtual_seed_selection(
+    *,
+    graph: ProjectGraph,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> tuple[str, ...]:
+    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=select,
+        exclude=exclude,
+        all_keys=graph.all_keys,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+    )
+    return tuple(
+        sorted(key.name for key in selected_keys if key.resource_type == CompiledResourceType.SEED)
+    )
 
 
 def _build_virtual_model_change(
@@ -1145,14 +1491,14 @@ def _build_virtual_model_change(
 
 
 def _virtual_root_backfill(model: CompiledModel) -> BackfillResult:
-    raw_policy: object | None = model.config.values.get("query_change_backfill")
+    raw_policy: object | None = model.config.values.get("replay_on_change")
     if raw_policy == BackfillAction.FULL:
         return BackfillResult(action=BackfillAction.FULL)
     if isinstance(raw_policy, str) and raw_policy.startswith("bounded-"):
         duration: str = raw_policy.removeprefix("bounded-").strip()
         if duration:
             return BackfillResult(action=BackfillAction.BOUNDED, duration=duration)
-    return BackfillResult(action=BackfillAction.WARN_ONLY)
+    return BackfillResult(action=BackfillAction.FORWARD_ONLY)
 
 
 def _create_logical_vde_views(
@@ -1164,9 +1510,10 @@ def _create_logical_vde_views(
     unsuffixed_virtual_environment_name: str | None,
     plan_output: PlanOutput,
     final_version_hashes: dict[str, str],
+    final_seed_physical_relations: dict[str, PhysicalRelationRecord],
 ) -> None:
-    physical_targets: dict[str, CompiledRelationDestination] = {
-        model.name: plan_output.model_targets.get(model.name, model.destination)
+    physical_targets: dict[str, CompiledRelationLocation] = {
+        model.name: plan_output.model_locations.get(model.name, model.destination)
         for model in project.models
     }
     connection: Any = adapter.connect(connection_config)
@@ -1176,10 +1523,10 @@ def _create_logical_vde_views(
         for model in project.models:
             if model.name not in final_version_hashes:
                 continue
-            physical_target: CompiledRelationDestination | None = physical_targets.get(model.name)
+            physical_target: CompiledRelationLocation | None = physical_targets.get(model.name)
             if physical_target is None:
                 continue
-            virtual_target: CompiledRelationDestination = build_virtual_destination(
+            virtual_target: CompiledRelationLocation = build_virtual_destination(
                 adapter=adapter,
                 target=model.destination,
                 virtual_environment_name=target_vde_name,
@@ -1193,10 +1540,48 @@ def _create_logical_vde_views(
             )
             adapter.create_view_as(
                 connection,
-                target=resolve_destination_qualified_name(adapter=adapter, target=virtual_target),
+                destination=resolve_relation_location_qualified_name(
+                    adapter=adapter, location=virtual_target
+                ),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_destination_qualified_name(adapter=adapter, target=physical_target)
+                    + resolve_relation_location_qualified_name(
+                        adapter=adapter, location=physical_target
+                    )
+                ),
+                statement_recorder=recorder,
+            )
+        for seed in project.seeds:
+            relation: PhysicalRelationRecord | None = final_seed_physical_relations.get(seed.name)
+            if relation is None:
+                continue
+            physical_target: CompiledRelationLocation = build_destination_from_physical_relation(
+                adapter=adapter,
+                relation=relation,
+                fallback_target=seed.destination,
+            )
+            virtual_target = build_virtual_destination(
+                adapter=adapter,
+                target=seed.destination,
+                virtual_environment_name=target_vde_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            )
+            adapter.ensure_schema(
+                connection,
+                database=virtual_target.database,
+                schema=virtual_target.schema,
+                statement_recorder=recorder,
+            )
+            adapter.create_view_as(
+                connection,
+                destination=resolve_relation_location_qualified_name(
+                    adapter=adapter, location=virtual_target
+                ),
+                sql=(
+                    "SELECT * FROM "
+                    + resolve_relation_location_qualified_name(
+                        adapter=adapter, location=physical_target
+                    )
                 ),
                 statement_recorder=recorder,
             )

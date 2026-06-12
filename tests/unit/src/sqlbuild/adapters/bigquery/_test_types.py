@@ -138,3 +138,12 @@ class BigQueryCountRowsTestCase:
     description: str
     expected_count: int
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class BigQueryPruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

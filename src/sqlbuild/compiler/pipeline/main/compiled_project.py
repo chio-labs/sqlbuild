@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileProjectInputs,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
@@ -23,6 +24,7 @@ def build_compiled_project(
     selected_target: str | None = None,
     no_sql_validation: bool = False,
     skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> CompiledProject:
@@ -44,6 +46,7 @@ def build_compiled_project(
             compile_inputs,
             inference_profile=adapter.expression_inference_profile(),
             skip_column_inference=skip_column_inference,
+            column_lineage_mode=column_lineage_mode,
         ),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),

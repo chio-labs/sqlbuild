@@ -106,6 +106,24 @@ AUDIT_AGGREGATION_TEST_CASES: list[AuditAggregationTestCase] = [
         expected_outcomes=(AuditOutcome.PASS, AuditOutcome.PASS),
         expected_batch_totals=(1, 1),
         expected_batch_passes=(1, 1),
+        expected_reused=(False, False),
+    ),
+    AuditAggregationTestCase(
+        description="reused final audit records reused display flag",
+        audit_results=(
+            build_audit_result(
+                name="not_null",
+                outcome=AuditOutcome.PASS,
+                column_name="id",
+                reused=True,
+            ),
+        ),
+        expected_entry_count=1,
+        expected_labels=("audit",),
+        expected_outcomes=(AuditOutcome.PASS,),
+        expected_batch_totals=(1,),
+        expected_batch_passes=(1,),
+        expected_reused=(True,),
     ),
     AuditAggregationTestCase(
         description="delta_and_final audits produce separate delta and final entries",
@@ -128,6 +146,7 @@ AUDIT_AGGREGATION_TEST_CASES: list[AuditAggregationTestCase] = [
         expected_outcomes=(AuditOutcome.PASS, AuditOutcome.PASS),
         expected_batch_totals=(1, 1),
         expected_batch_passes=(1, 1),
+        expected_reused=(False, False),
     ),
     AuditAggregationTestCase(
         description="multiple delta batches aggregate into one entry with batch count",
@@ -162,6 +181,7 @@ AUDIT_AGGREGATION_TEST_CASES: list[AuditAggregationTestCase] = [
         expected_outcomes=(AuditOutcome.PASS, AuditOutcome.PASS),
         expected_batch_totals=(3, 1),
         expected_batch_passes=(3, 1),
+        expected_reused=(False, False),
     ),
     AuditAggregationTestCase(
         description="worst outcome across batches is reported when one batch fails",
@@ -197,6 +217,7 @@ AUDIT_AGGREGATION_TEST_CASES: list[AuditAggregationTestCase] = [
         expected_outcomes=(AuditOutcome.ERROR, AuditOutcome.PASS),
         expected_batch_totals=(3, 1),
         expected_batch_passes=(2, 1),
+        expected_reused=(False, False),
     ),
     AuditAggregationTestCase(
         description="warn is worst outcome when no errors present",
@@ -223,6 +244,7 @@ AUDIT_AGGREGATION_TEST_CASES: list[AuditAggregationTestCase] = [
         expected_outcomes=(AuditOutcome.WARN, AuditOutcome.PASS),
         expected_batch_totals=(2, 1),
         expected_batch_passes=(1, 1),
+        expected_reused=(False, False),
     ),
 ]
 
@@ -517,6 +539,25 @@ BUILD_PROGRESS_MODEL_OUTPUT_TEST_CASES: list[BuildProgressModelOutputTestCase] =
         expected_fragments=("\033[32mOK\033[0m", "0.10s"),
         use_color=True,
     ),
+    BuildProgressModelOutputTestCase(
+        description="completed model row renders reused audit detail",
+        node_result=ModelExecutionResult(
+            model_name="fact_orders",
+            status=ExecutionStatus.SUCCESS,
+            duration_ms=100,
+            audit_results=(
+                build_audit_result(
+                    name="orders_id_not_null",
+                    outcome=AuditOutcome.PASS,
+                    target_name="fact_orders",
+                    reused=True,
+                ),
+            ),
+        ),
+        plan_output=PlanOutput(),
+        expected_fragments=("audit", "orders_id_not_null", "PASS", "proof reused"),
+        unexpected_fragments=("rows",),
+    ),
 ]
 
 BUILD_PROGRESS_LOAD_LOG_TEST_CASES: list[BuildProgressLoadLogTestCase] = [
@@ -629,6 +670,10 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
         assert entries[idx].batch_pass == test_case.expected_batch_passes[idx], (
             f"entry {idx}: expected batch_pass {test_case.expected_batch_passes[idx]}, "
             f"got {entries[idx].batch_pass}"
+        )
+        assert entries[idx].reused == test_case.expected_reused[idx], (
+            f"entry {idx}: expected reused {test_case.expected_reused[idx]}, "
+            f"got {entries[idx].reused}"
         )
 
 

@@ -5,7 +5,7 @@ import pytest
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers.target_validation._test_types import (
@@ -19,7 +19,7 @@ REQUIRED_TARGET_NAMESPACE_TEST_CASES: list[ValidateProjectTargetsTestCase] = [
     ValidateProjectTargetsTestCase(
         description="snowflake requires explicit database and schema",
         adapter_name=BuiltinAdapter.SNOWFLAKE,
-        target=CompiledRelationDestination(
+        target=CompiledRelationLocation(
             database=None, schema=None, name="stg_customers", qualified_name=None
         ),
         expected_error_fragment="snowflake execution requires explicit target database, schema",
@@ -27,7 +27,7 @@ REQUIRED_TARGET_NAMESPACE_TEST_CASES: list[ValidateProjectTargetsTestCase] = [
     ValidateProjectTargetsTestCase(
         description="bigquery requires explicit database and schema",
         adapter_name=BuiltinAdapter.BIGQUERY,
-        target=CompiledRelationDestination(
+        target=CompiledRelationLocation(
             database=None, schema=None, name="stg_customers", qualified_name=None
         ),
         expected_error_fragment="bigquery execution requires explicit target database, schema",
@@ -55,7 +55,7 @@ def test_given_adapter_with_missing_target_namespace_when_validating_then_raises
         ValidateProjectTargetsTestCase(
             description="duckdb allows missing database and schema",
             adapter_name=BuiltinAdapter.DUCKDB,
-            target=CompiledRelationDestination(
+            target=CompiledRelationLocation(
                 database=None,
                 schema=None,
                 name="stg_customers",

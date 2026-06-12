@@ -14,13 +14,13 @@ from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
-from sqlbuild.compiler.pipeline.helpers.deferred_targets import (
-    build_deferred_targets,
+from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
+    build_deferred_locations,
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
@@ -32,17 +32,19 @@ from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.helpers.python_changes_only import (
-    filter_python_node_names_for_selected_sql,
-)
 from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
     build_python_plan_entries,
     build_skipped_task_asset_ingress_warnings,
 )
+from sqlbuild.compiler.pipeline.helpers.python_stale_selection import (
+    filter_python_node_names_for_selected_sql,
+)
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.types import StandardScopePruning, WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.main.run_selection import (
@@ -103,6 +105,9 @@ def run_compile_pipeline(
     if on_connection_complete is not None:
         on_connection_complete(1, time.monotonic() - start)
     try:
+        work_selection_policy: WorkSelectionPolicy = (
+            WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
+        )
         return _build_result(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
@@ -115,7 +120,7 @@ def run_compile_pipeline(
             exclude=exclude,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
-            changes_only=changes_only,
+            work_selection_policy=work_selection_policy,
             auto_load_sources=auto_load_sources,
             reload_sources=reload_sources,
             cli_vars=cli_vars,
@@ -140,7 +145,7 @@ def _build_result(
     exclude: tuple[str, ...] = (),
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
-    changes_only: bool = False,
+    work_selection_policy: WorkSelectionPolicy = WorkSelectionPolicy.ALL_SELECTED,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     cli_vars: dict[str, object] | None = None,
@@ -161,7 +166,7 @@ def _build_result(
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
 
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:
         deferred_target_config: TargetConfig = resolve_deferred_target_config(
@@ -169,7 +174,7 @@ def _build_result(
             defer_to=defer_to,
             current_target_name=project.effective_target_name,
         )
-        deferred_targets = build_deferred_targets(
+        deferred_locations = build_deferred_locations(
             project=project,
             deferred_target_config=deferred_target_config,
             effective_vars=project.effective_vars,
@@ -180,7 +185,7 @@ def _build_result(
         deferred_relations = gather_deferred_relations(
             adapter=adapter,
             connection=connection,
-            deferred_targets=deferred_targets,
+            deferred_locations=deferred_locations,
         )
 
     selected_sql_keys: frozenset[CompiledObjectKey] | None = None
@@ -196,6 +201,10 @@ def _build_result(
         selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
 
+    custom_prepare_version_functions: dict[str, Any] = load_custom_prepare_version_functions(
+        discovered_inputs.materialization_files
+    )
+
     plan_output: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
@@ -203,11 +212,15 @@ def _build_result(
         select=select,
         exclude=exclude,
         selected_keys=selected_sql_keys,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         deferred_relations=deferred_relations,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
-        changes_only=changes_only,
+        standard_scope_pruning=(
+            StandardScopePruning.PRUNE_UNCHANGED
+            if work_selection_policy == WorkSelectionPolicy.STALE_ONLY
+            else StandardScopePruning.NONE
+        ),
         auto_load_sources=auto_load_sources,
         reload_sources=reload_sources,
         on_progress=on_progress,
@@ -215,6 +228,7 @@ def _build_result(
         local_config=discovered_inputs.local_config,
         defer_sources_to=defer_sources_to,
         source_deferral_enabled=source_deferral_enabled,
+        custom_prepare_version_materializations=frozenset(custom_prepare_version_functions.keys()),
     )
     loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
     manifest: dict[str, object] = build_manifest(
@@ -238,7 +252,7 @@ def _build_result(
         python_graph: PythonNodeGraph = build_discovered_python_node_graph(
             discovered_inputs=discovered_inputs
         )
-        if changes_only:
+        if work_selection_policy == WorkSelectionPolicy.STALE_ONLY:
             selected_python_node_names = filter_python_node_names_for_selected_sql(
                 python_graph=python_graph,
                 python_node_names=selected_python_node_names,
@@ -265,6 +279,7 @@ def _build_result(
         python_plan_entries = build_python_plan_entries(
             lifecycle_plan=lifecycle_plan,
             python_graph=python_graph,
+            previous_identities=plan_output.python_identity_fingerprints,
         )
 
     return CompilePipelineResult(
@@ -272,6 +287,7 @@ def _build_result(
         plan_output=plan_output,
         manifest=manifest,
         custom_materializations=custom_materializations,
+        custom_prepare_version_functions=custom_prepare_version_functions,
         python_node_names=selected_python_node_names,
         python_plan_entries=python_plan_entries,
     )

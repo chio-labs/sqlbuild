@@ -153,12 +153,12 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         """Render SQL statements that create or replace a table from a query."""
         ...
 
     @abstractmethod
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         """Render SQL statements that create or replace a view from a query."""
         ...
 
@@ -176,7 +176,7 @@ class StrictAdapter(
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -191,16 +191,16 @@ class StrictAdapter(
 
     @abstractmethod
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
-        """Render SQL statements that insert query rows into a target."""
+        """Render SQL statements that insert query rows into a destination."""
         ...
 
     @abstractmethod
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -212,7 +212,7 @@ class StrictAdapter(
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -223,12 +223,12 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         """Render SQL statements that drop a relation."""
         ...
 
     @abstractmethod
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         """Render SQL statements that drop a view relation."""
         ...
 
@@ -237,7 +237,7 @@ class StrictAdapter(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -245,7 +245,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         """Render SQL statements that rename a relation."""
         ...
 
@@ -258,16 +258,16 @@ class StrictAdapter(
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         """Render SQL statements that clone or copy a relation."""
         ...
 
     @abstractmethod
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        """Render SQL statements that clone/copy into a durable independent target."""
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        """Render SQL statements that clone/copy into a durable independent destination."""
         ...
 
     @abstractmethod
@@ -287,7 +287,7 @@ class StrictAdapter(
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: str | None,
@@ -301,8 +301,10 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        """Render SQL statements that replace a target table from a source relation."""
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        """Render SQL statements that replace a destination table from a origin relation."""
         ...
 
     @abstractmethod
@@ -310,11 +312,11 @@ class StrictAdapter(
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Replace a target table from a source relation."""
+        """Replace a destination table from a origin relation."""
         ...
 
     @abstractmethod
@@ -322,30 +324,32 @@ class StrictAdapter(
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Move a relation to a target, or copy it when explicit fallback is allowed."""
+        """Move a relation to a destination, or copy it when explicit fallback is allowed."""
         ...
 
     @abstractmethod
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         """Render SQL statements that add columns to a table."""
         ...
 
     @abstractmethod
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         """Render SQL statements that drop columns from a table."""
         ...
 
     @abstractmethod
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         """Render SQL statements that alter column types on a table."""
         ...
@@ -354,20 +358,20 @@ class StrictAdapter(
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
-        """Render SQL statements that merge query rows into a target."""
+        """Render SQL statements that merge query rows into a destination."""
         ...
 
     @abstractmethod
-    def render_create_initial_snapshot_target(
+    def render_create_initial_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         snapshot_strategy: str | None,
         updated_at_column: str | None,
         observed_at_column: str | None,
@@ -382,8 +386,8 @@ class StrictAdapter(
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -397,11 +401,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_create_initial_historical_timestamp_snapshot_target(
+    def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -414,11 +418,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -432,8 +436,8 @@ class StrictAdapter(
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -449,8 +453,8 @@ class StrictAdapter(
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -464,8 +468,8 @@ class StrictAdapter(
     def render_apply_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
@@ -480,11 +484,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_create_initial_historical_check_snapshot_target(
+    def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -500,8 +504,8 @@ class StrictAdapter(
     def render_apply_historical_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -676,6 +680,68 @@ class StrictAdapter(
         schema: str,
     ) -> str:
         """Render DDL that creates the fingerprint table when missing."""
+        ...
+
+    @abstractmethod
+    def render_read_latest_fingerprints_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render SQL that reads latest fingerprint rows per identity."""
+        ...
+
+    @abstractmethod
+    def render_read_latest_source_freshness_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render SQL that reads latest source freshness rows per identity."""
+        ...
+
+    @abstractmethod
+    def render_create_fingerprint_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        """Render optional fingerprint table index DDL statements."""
+        ...
+
+    @abstractmethod
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        """Render optional source freshness table index DDL statements."""
+        ...
+
+    @abstractmethod
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        """Render SQL that prunes old fingerprint history rows."""
+        ...
+
+    @abstractmethod
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        """Render SQL that prunes old source freshness history rows."""
         ...
 
     @abstractmethod

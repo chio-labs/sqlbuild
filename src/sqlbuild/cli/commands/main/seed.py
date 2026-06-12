@@ -20,6 +20,7 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
+from sqlbuild.cli.commands.main.virtual_build import run_virtual_build
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -27,6 +28,8 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
+from sqlbuild.provider.classes.session import ProviderSession
+from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import supports_color
@@ -63,6 +66,33 @@ def run_seed(
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
+    if discovered_inputs.project_config.settings.virtual_environments:
+        provider_session: ProviderSession = build_provider_session(discovered_inputs.providers)
+        try:
+            return run_virtual_build(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+                adapter=adapter,
+                adapter_name=adapter_name,
+                connection_config=connection_config,
+                include_python=False,
+                seed_only=True,
+                select=select,
+                exclude=exclude,
+                concurrency=concurrency,
+                cli_vars=cli_vars,
+                json_output=json_output,
+                json_output_path=json_output_path,
+                execution_command="seed",
+                use_color=use_color,
+                external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                    project_dir=effective_project_dir,
+                    discovered_inputs=discovered_inputs,
+                ),
+                providers=provider_session.providers,
+            )
+        finally:
+            provider_session.close()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
@@ -131,6 +161,8 @@ def run_seed(
         connection_config=connection_config,
         adapter=adapter,
         max_concurrency=effective_concurrency,
+        run_id=pipeline_result.project.run_id,
+        query_change_tracking=pipeline_result.project.settings.query_change_tracking,
         on_seed_complete=on_complete,
         on_connection_start=execution_connection_progress.on_connection_start,
         on_connection_complete=execution_connection_progress.on_connection_complete,

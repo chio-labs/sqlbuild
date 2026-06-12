@@ -72,6 +72,7 @@ class DiscoveredPythonNode:
     task: DiscoveredPythonTaskMetadata | None = None
     asset: DiscoveredPythonAssetMetadata | None = None
     check: DiscoveredPythonCheckMetadata | None = None
+    identity: PythonNodeIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -152,3 +153,32 @@ class DiscoveredPythonCheckNode:
     """Placeholder for future check-specific discovered node metadata."""
 
     node: DiscoveredPythonNode
+
+
+@dataclass(frozen=True)
+class PythonIdentityDependency:
+    """One first-party Python source object included in a Python node identity."""
+
+    kind: str
+    module: str
+    qualname: str
+    source_path: str
+    source_hash: str
+    source_text: str
+
+
+@dataclass(frozen=True)
+class PythonNodeIdentity:
+    """Read-only identity metadata for a SQLBuild Python node."""
+
+    node_type: str
+    node_name: str
+    object_module: str
+    object_qualname: str
+    source_path: str
+    source_hash: str
+    definition_hash: str
+    version_hash: str
+    dependencies: tuple[PythonIdentityDependency, ...] = field(default_factory=tuple)
+    definition_json: str = "{}"
+    metadata_json: str = "{}"

@@ -196,3 +196,33 @@ def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_c
         assert expected_fragment in comparison_sql
     assert "`workspace`.`test`.`CUSTOMER_ORDERS`" not in comparison_sql
     assert "\n" in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildComparisonSqlTestCase(
+            description="bigquery quoted table function names preserve hyphenated project id",
+            adapter_name="bigquery",
+            expected_fragments=("`project-d5f92072-d107-4987-9ef.test.customer_orders`(1)",),
+        )
+    ],
+    ids=["bigquery quoted table function names preserve hyphenated project id"],
+)
+def test_given_bigquery_table_fn_when_building_comparison_sql_then_preserves_backticks(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+
+    comparison_sql: str = build_sql_test_comparison_sql(
+        build_table_function_test_entry(
+            resolved_sql=("SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)")
+        ),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in comparison_sql
+    assert "project-d5f92072-d107-4987-9ef.test.customer_orders(1)" not in comparison_sql

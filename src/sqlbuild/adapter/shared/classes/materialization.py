@@ -19,7 +19,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
@@ -32,7 +32,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -44,7 +44,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -64,7 +64,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -76,8 +76,8 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         """Rename a relation."""
@@ -100,8 +100,8 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -113,11 +113,11 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Clone/copy a relation into a durable independent target."""
+        """Clone/copy a relation into a durable independent destination."""
         ...
 
     @abstractmethod
@@ -125,7 +125,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -141,7 +141,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
@@ -154,7 +154,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -168,7 +168,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -184,7 +184,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -197,7 +197,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -209,7 +209,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -221,7 +221,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:

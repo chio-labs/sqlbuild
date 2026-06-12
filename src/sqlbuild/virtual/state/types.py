@@ -52,6 +52,11 @@ class ModelVersionStatus(StrEnum):
     FAILED = "failed"
 
 
+class PhysicalArtifactType(StrEnum):
+    MODEL = "model"
+    SEED = "seed"
+
+
 class VirtualEnvironmentStatus(StrEnum):
     ACTIVE = "active"
     FINALIZING = "finalizing"

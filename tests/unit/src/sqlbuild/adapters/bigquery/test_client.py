@@ -29,6 +29,7 @@ from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryCountRowsTestCase,
     BigQueryExecutionErrorTestCase,
     BigQueryExpressionInferenceProfileTestCase,
+    BigQueryPruneSqlTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCloneTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
@@ -93,6 +94,79 @@ def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expe
         == test_case.expected_rule_results["IF"]
     )
     assert lower_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["LOWER"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryPruneSqlTestCase(
+            description="renders fingerprint pruning with correlated exists",
+            database="example-project",
+            schema="analytics",
+            retain_versions=5,
+            expected_fragments=(
+                "DELETE FROM `example-project.analytics._sqlbuild_fingerprints` "
+                "AS target WHERE EXISTS",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_type, node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "__sqlbuild_history_rank > 5",
+                "target.node_type = stale.node_type",
+                "target.node_name = stale.node_name",
+            ),
+        )
+    ],
+    ids=["renders fingerprint pruning with correlated exists"],
+)
+def test_given_fingerprint_table_when_rendering_prune_then_bigquery_uses_history_rank(
+    test_case: BigQueryPruneSqlTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    sql: str = adapter.render_prune_fingerprint_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryPruneSqlTestCase(
+            description="renders source freshness pruning with null-safe full identity",
+            database="example-project",
+            schema="analytics",
+            retain_versions=3,
+            expected_fragments=(
+                "DELETE FROM `example-project.analytics._sqlbuild_source_freshness` "
+                "AS target WHERE EXISTS",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "__sqlbuild_history_rank > 3",
+                "target.target_database IS NOT DISTINCT FROM stale.target_database",
+            ),
+        )
+    ],
+    ids=["renders source freshness pruning with null-safe full identity"],
+)
+def test_given_source_freshness_table_when_rendering_prune_then_bigquery_uses_history_rank(
+    test_case: BigQueryPruneSqlTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    sql: str = adapter.render_prune_source_freshness_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
 
 
 BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [
@@ -338,7 +412,7 @@ def test_given_python_function_when_rendering_then_bigquery_returns_expected_ddl
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="demo.udfs.is_positive_int",
+        destination="demo.udfs.is_positive_int",
         arguments=(FunctionArgument(name="a_string", type="STRING"),),
         returns="INT64",
         body_sql="def main(a_string):\n    return 1 if a_string else 0",
@@ -372,7 +446,7 @@ def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="demo.analytics.customer_orders",
+        destination="demo.analytics.customer_orders",
         arguments=(FunctionArgument(name="p_customer_id", type="INT64"),),
         returns="TABLE",
         body_sql=(
@@ -382,6 +456,40 @@ def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
     )
 
     assert statements == (test_case.expected_sql,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRenderTableFunctionTestCase(
+            description="quotes fully qualified function calls with hyphenated project ids",
+            expected_sql=(
+                "`project-d5f92072.europe_west2.customer_orders`(1)|"
+                "`project-d5f92072.europe_west2.is_completed_order`(status)"
+            ),
+        )
+    ],
+    ids=["quotes fully qualified function calls with hyphenated project ids"],
+)
+def test_given_bigquery_function_call_when_rendering_then_quotes_qualified_target(
+    test_case: BigQueryRenderTableFunctionTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    rendered_call: str = "|".join(
+        (
+            adapter.render_table_function_call(
+                target="project-d5f92072.europe_west2.customer_orders",
+                call_suffix_sql="(1)",
+            ),
+            adapter.render_udf_call(
+                target="project-d5f92072.europe_west2.is_completed_order",
+                call_suffix_sql="(status)",
+            ),
+        )
+    )
+
+    assert rendered_call == test_case.expected_sql
 
 
 @pytest.mark.parametrize(
@@ -479,8 +587,8 @@ def test_given_clone_request_when_rendering_then_bigquery_uses_expected_clone_sq
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
         hard_copy=test_case.hard_copy,
     )
 
@@ -506,7 +614,7 @@ def test_given_bigquery_adapter_when_rendering_drop_view_then_quotes_target(
 ) -> None:
     adapter: BigQueryAdapter = BigQueryAdapter()
 
-    result: tuple[str, ...] = adapter.render_drop_view(target=test_case.target)
+    result: tuple[str, ...] = adapter.render_drop_view(destination=test_case.target)
 
     assert result == test_case.expected_statements
 
@@ -538,7 +646,7 @@ def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     statements: tuple[str, ...] = adapter.render_delete_insert_cursor(
-        target="example-project.dev.events",
+        destination="example-project.dev.events",
         sql="SELECT id, event_time FROM delta_events",
         cursor_column="event_time",
         cursor_start="2026-01-01T00:00:00",

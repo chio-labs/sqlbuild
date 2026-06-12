@@ -13,8 +13,13 @@ from tests.unit.src.sqlbuild.adapter.base._test_types import (
     BaseAdapterDurableCloneTestCase,
     BaseAdapterExpressionInferenceProfileTestCase,
     BaseAdapterIdentifierLimitTestCase,
+    BaseAdapterMetadataSqlTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
     BaseAdapterSqlAnalysisDialectTestCase,
+)
+from tests.unit.src.sqlbuild.adapter.base.helpers import (
+    RecordingBaseAdapter,
+    RecordingConnection,
 )
 
 
@@ -63,7 +68,7 @@ def test_given_python_function_when_rendering_with_base_adapter_then_raises_clea
 
     with pytest.raises(AdapterUserError) as exc_info:
         adapter.render_create_function(
-            target="main.is_positive_int",
+            destination="main.is_positive_int",
             arguments=(FunctionArgument(name="a_string", type="VARCHAR"),),
             returns="BOOLEAN",
             body_sql="def main(a_string): return True",
@@ -156,9 +161,86 @@ def test_given_base_adapter_when_rendering_durable_clone_then_uses_copy_fallback
     adapter: BaseAdapter = ConcreteBaseAdapter()
 
     result: tuple[str, ...] = adapter.render_durable_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
     )
 
     assert adapter.supports_durable_clone() is test_case.expected_supports_durable_clone
     assert result == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BaseAdapterMetadataSqlTestCase(
+            description="escapes single quotes in metadata SQL literals",
+            database="warehouse'prod",
+            schema="sales'ops",
+            name="orders'2026",
+            expected_sql=(
+                "SELECT 1 FROM information_schema.schemata "
+                "WHERE schema_name = 'sales''ops' AND catalog_name = 'warehouse''prod'",
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'orders''2026' "
+                "AND table_schema = 'sales''ops' AND table_catalog = 'warehouse''prod'",
+                "SELECT table_name, table_schema, table_type "
+                "FROM information_schema.tables WHERE 1=1 "
+                "AND table_schema IN ('sales''ops') "
+                "AND table_name IN ('orders''2026') AND table_catalog = 'warehouse''prod'",
+                "SELECT routine_name, routine_schema, routine_type "
+                "FROM information_schema.routines WHERE 1=1 "
+                "AND routine_schema IN ('sales''ops') "
+                "AND routine_name IN ('orders''2026') AND routine_catalog = 'warehouse''prod'",
+                "SELECT column_name, data_type FROM information_schema.columns "
+                "WHERE table_name = 'orders''2026' "
+                "AND table_schema = 'sales''ops' AND table_catalog = 'warehouse''prod' "
+                "ORDER BY ordinal_position",
+                "SELECT table_name, column_name, data_type "
+                "FROM information_schema.columns WHERE 1=1 "
+                "AND table_schema IN ('sales''ops') "
+                "AND table_name IN ('orders''2026') AND table_catalog = 'warehouse''prod' "
+                "ORDER BY table_name, ordinal_position",
+            ),
+        )
+    ],
+    ids=["escapes single quotes in metadata SQL literals"],
+)
+def test_given_metadata_names_with_quotes_when_querying_then_base_adapter_escapes_literals(
+    test_case: BaseAdapterMetadataSqlTestCase,
+) -> None:
+    adapter: RecordingBaseAdapter = RecordingBaseAdapter()
+    connection: RecordingConnection = RecordingConnection()
+
+    adapter.schema_exists(connection, database=test_case.database, schema=test_case.schema)
+    adapter.relation_exists(
+        connection,
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+    )
+    adapter.list_relations(
+        connection,
+        database=test_case.database,
+        schemas=(test_case.schema,),
+        names=(test_case.name,),
+    )
+    adapter.list_functions(
+        connection,
+        database=test_case.database,
+        schemas=(test_case.schema,),
+        names=(test_case.name,),
+    )
+    adapter.get_columns(
+        connection,
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+    )
+    adapter.get_all_columns(
+        connection,
+        database=test_case.database,
+        schemas=(test_case.schema,),
+        names=(test_case.name,),
+    )
+
+    assert tuple(connection.executed_sql) == test_case.expected_sql

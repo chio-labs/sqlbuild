@@ -112,7 +112,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   ),
                   incremental_mode microbatch,
                   batch_size 2d,
-                  query_change_backfill bounded-14d
+                  replay_on_change bounded-14d
                 );
 
                 SELECT
@@ -182,7 +182,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FUNCTION (
                   arguments (amount_cents INTEGER),
                   returns BOOLEAN,
-                  query_change_backfill full,
+                  replay_on_change full,
                 );
 
                 amount_cents > 100
@@ -290,7 +290,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   ),
                   incremental_mode microbatch,
                   batch_size 1d,
-                  query_change_backfill bounded-14d
+                  replay_on_change bounded-14d
                 );
 
                 SELECT
@@ -315,7 +315,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   ),
                   incremental_mode microbatch,
                   batch_size 2d,
-                  query_change_backfill bounded-14d
+                  replay_on_change bounded-14d
                 );
 
                 SELECT
@@ -380,7 +380,7 @@ def test_given_changed_upstream_when_planning_then_downstream_reason_matches_pol
 
     fingerprint_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,
-        sql="SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+        sql="SELECT node_name FROM main._sqlbuild_fingerprints ORDER BY node_name",
     )
     assert tuple(row[0] for row in fingerprint_rows) == test_case.expected_fingerprint_models
 

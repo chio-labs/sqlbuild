@@ -47,7 +47,10 @@ def connection(
     sqlserver_container_config: dict[str, object],
     sqlserver_schema: str,
 ) -> Iterator[Any]:
-    conn: Any = adapter.connect(sqlserver_container_config)
+    try:
+        conn: Any = adapter.connect(sqlserver_container_config)
+    except Exception as exc:
+        pytest.skip(f"SQL Server unavailable for integration tests: {exc}")
     adapter.execute(conn, f"CREATE SCHEMA {adapter.render_identifier(sqlserver_schema)}")
     try:
         yield conn

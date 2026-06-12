@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.compiler.planner.models import (
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     ScenarioExecutionPlan,
     ScenarioRelationMap,
 )
@@ -161,7 +161,7 @@ class ScenarioSnapshotCaptureRelationPlan:
 
     kind: ScenarioArtifactKind
     logical_name: str
-    source_target: CompiledRelationDestination
+    source_target: CompiledRelationLocation
     file_path: Path
     capture_sql: str
 

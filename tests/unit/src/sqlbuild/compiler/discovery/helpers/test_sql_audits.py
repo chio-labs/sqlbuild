@@ -108,11 +108,11 @@ ERROR_TEST_CASES: list[ParseSqlAuditFileErrorTestCase] = [
     ParseSqlAuditFileErrorTestCase(
         description="raises when the audit header includes unsupported keys",
         contents="""
-        AUDIT (name: "negative totals", severity: warning);
+        AUDIT (name: "negative totals", unsupported: true);
 
         SELECT 1
         """,
-        expected_error_fragment="only supports `name` right now; unsupported keys: severity",
+        expected_error_fragment="unsupported keys: unsupported",
     ),
     ParseSqlAuditFileErrorTestCase(
         description="raises when the audit name is blank",

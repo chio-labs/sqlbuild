@@ -9,7 +9,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -44,7 +44,7 @@ EXECUTE_AUDIT_TEST_CASES: list[ExecuteAuditTestCase] = [
             "INSERT INTO main.orders VALUES (1, 'alice'), (2, 'bob')",
         ),
         audit_sql=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
-        model_targets={"orders": "main.orders"},
+        model_locations={"orders": "main.orders"},
         source_map={},
         expected_row_count=0,
     ),
@@ -55,7 +55,7 @@ EXECUTE_AUDIT_TEST_CASES: list[ExecuteAuditTestCase] = [
             "INSERT INTO main.orders VALUES (1, 'alice'), (NULL, 'bob'), (NULL, NULL)",
         ),
         audit_sql=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
-        model_targets={"orders": "main.orders"},
+        model_locations={"orders": "main.orders"},
         source_map={},
         expected_row_count=2,
     ),
@@ -66,7 +66,7 @@ EXECUTE_AUDIT_TEST_CASES: list[ExecuteAuditTestCase] = [
             "INSERT INTO main.raw_payments VALUES (1, 'paid'), (2, NULL)",
         ),
         audit_sql=('SELECT id FROM __source("raw_payments") WHERE status IS NULL'),
-        model_targets={},
+        model_locations={},
         source_map={
             "raw_payments": SourceEntry(
                 name="raw_payments",
@@ -105,20 +105,20 @@ def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
         sql_body=test_case.audit_sql,
     )
 
-    model_targets: dict[str, CompiledRelationDestination] = {
-        name: CompiledRelationDestination(
+    model_locations: dict[str, CompiledRelationLocation] = {
+        name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=name,
             qualified_name=qualified,
         )
-        for name, qualified in test_case.model_targets.items()
+        for name, qualified in test_case.model_locations.items()
     }
 
     result: AuditPlanEntry = plan_audit(
         audit=audit,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map=test_case.source_map,
         adapter=adapter,
         upstream_deps={},

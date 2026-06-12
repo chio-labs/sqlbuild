@@ -42,3 +42,12 @@ class PythonRunPhase(StrEnum):
 
     PRE_SQL_INGRESS = "pre_sql_ingress"
     READ_SIDE = "read_side"
+
+
+class PythonIdentityStatus(StrEnum):
+    """Read-only identity diff status for Python plan display."""
+
+    NEW = "new"
+    CHANGED = "changed"
+    UNCHANGED = "unchanged"
+    UNKNOWN = "unknown"

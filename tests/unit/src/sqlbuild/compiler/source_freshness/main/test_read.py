@@ -4,8 +4,10 @@ from datetime import datetime
 
 import pytest
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -13,11 +15,18 @@ from sqlbuild.compiler.source_freshness.models import (
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     ReadLatestSourceFreshnessErrorTestCase,
+    ReadLatestSourceFreshnessRendererTestCase,
     ReadLatestSourceFreshnessTestCase,
+    WriteSourceFreshnessIndexTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
     FakeSourceFreshnessExecute,
+    FakeSourceFreshnessWriteExecute,
+    freshness_table_relation_exists,
+    render_create_source_freshness_index_sqls,
     render_qualified_name,
+    render_read_latest_sql,
+    render_sentinel_read_latest_sql,
 )
 
 
@@ -52,9 +61,11 @@ def test_given_string_timestamp_row_when_reading_source_freshness_then_parses_ti
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=object(),
         execute=FakeSourceFreshnessExecute(rows=test_case.rows),
+        relation_exists=freshness_table_relation_exists,
         database=None,
         schema="main",
         render_qualified_name=render_qualified_name,
+        render_read_latest_sql=render_read_latest_sql,
     )
 
     identity: SourceFreshnessIdentity = SourceFreshnessIdentity(
@@ -62,6 +73,77 @@ def test_given_string_timestamp_row_when_reading_source_freshness_then_parses_ti
     )
     record: SourceFreshnessRecord = result.records[identity]
     assert record.observed_at == datetime.fromisoformat(test_case.expected_observed_at_iso)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReadLatestSourceFreshnessRendererTestCase(
+            description="uses injected latest-read SQL renderer",
+            expected_executed_sql="SELECT 'sentinel latest source freshness sql'",
+        )
+    ],
+    ids=["uses injected latest-read SQL renderer"],
+)
+def test_given_latest_sql_renderer_when_reading_source_freshness_then_executes_renderer_sql(
+    test_case: ReadLatestSourceFreshnessRendererTestCase,
+) -> None:
+    execute: FakeSourceFreshnessExecute = FakeSourceFreshnessExecute(rows=[])
+
+    read_latest_source_freshness(
+        connection=object(),
+        execute=execute,
+        relation_exists=freshness_table_relation_exists,
+        database=None,
+        schema="main",
+        render_qualified_name=render_qualified_name,
+        render_read_latest_sql=render_sentinel_read_latest_sql,
+    )
+
+    assert execute.executed_sql == [test_case.expected_executed_sql]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WriteSourceFreshnessIndexTestCase(
+            description="creates index before inserting source freshness row",
+            expected_index_sql="CREATE INDEX sentinel_source_freshness_idx",
+            expected_insert_prefix="INSERT INTO main._sqlbuild_source_freshness",
+        )
+    ],
+    ids=["creates index before inserting source freshness row"],
+)
+def test_given_index_renderer_when_writing_source_freshness_then_executes_index_before_insert(
+    test_case: WriteSourceFreshnessIndexTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    execute: FakeSourceFreshnessWriteExecute = FakeSourceFreshnessWriteExecute()
+
+    write_source_freshness_record(
+        connection=object(),
+        execute=execute,
+        database=None,
+        schema="main",
+        record=SourceFreshnessRecord(
+            source_name="raw.orders",
+            target_database=None,
+            target_schema="raw",
+            target_name="orders",
+            run_id="run_001",
+            strategy="adapter_metadata",
+            value_kind="timestamp",
+            data_version="2026-01-15T12:00:00",
+            data_version_hash="hash_orders",
+            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        ),
+        render_qualified_name=render_qualified_name,
+        render_framework_type=adapter.render_framework_type,
+        render_create_index_sqls=render_create_source_freshness_index_sqls,
+    )
+
+    assert execute.executed_sql[1] == test_case.expected_index_sql
+    assert execute.executed_sql[2].startswith(test_case.expected_insert_prefix)
 
 
 @pytest.mark.parametrize(
@@ -82,9 +164,11 @@ def test_given_read_failure_when_reading_source_freshness_then_raises_operator_g
         read_latest_source_freshness(
             connection=object(),
             execute=FakeSourceFreshnessExecute(rows=[], read_error=test_case.read_error),
+            relation_exists=freshness_table_relation_exists,
             database=None,
             schema="main",
             render_qualified_name=render_qualified_name,
+            render_read_latest_sql=render_read_latest_sql,
         )
 
     assert test_case.expected_message_fragment in str(exc_info.value)

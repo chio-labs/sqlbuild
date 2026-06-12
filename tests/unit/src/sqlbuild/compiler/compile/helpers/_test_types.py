@@ -164,6 +164,7 @@ class AssembleCompiledProjectTestCase:
     expected_source_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_source_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
+    expected_audit_always_runs: tuple[bool, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,9 @@ class PolyglotAnalysisTestCase:
     expected_columns: tuple[InferredColumn, ...] | None
     expected_lineage_columns: tuple[CompiledLineageColumnFact, ...]
     expected_has_star: bool
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)

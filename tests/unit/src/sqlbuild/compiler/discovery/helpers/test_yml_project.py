@@ -139,6 +139,8 @@ target = "dev"
 database = "local_db"
 schema = "local_schema"
 defer_sources_to = "prod"
+reuse_from = "prod"
+reuse_hard_copy = true
 
 [targets.dev.connection]
 warehouse = "local_wh"
@@ -147,8 +149,8 @@ warehouse = "local_wh"
 user = "local_user"
 
 [targets.dev.clone]
-allow_as_source = true
-allow_as_target = false
+allow_as_clone_origin = true
+allow_as_clone_destination = false
 """.strip()
         },
         expected_target="dev",
@@ -166,8 +168,10 @@ allow_as_target = false
                 "database": "local_db",
                 "schema": "local_schema",
                 "defer_sources_to": "prod",
-                "allow_as_source": True,
-                "allow_as_target": False,
+                "reuse_from": "prod",
+                "reuse_hard_copy": True,
+                "allow_as_clone_origin": True,
+                "allow_as_clone_destination": False,
             }
         },
     ),
@@ -195,6 +199,28 @@ adapter = "duckdb"
 sql_analysis = 123
 """.strip(),
         expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when target reuse_from is not a string",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+reuse_from = 123
+""".strip(),
+        expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when target reuse_hard_copy is not a boolean",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+reuse_hard_copy = "yes"
+""".strip(),
+        expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings concurrency is not an integer",
@@ -361,15 +387,15 @@ connection = "no"
         expected_error_fragment="Expected 'connection' to be a mapping when provided",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when environment clone allow_as_source is not a boolean",
+        description="raises when environment clone allow_as_clone_origin is not a boolean",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
 [targets.dev.clone]
-allow_as_source = 123
+allow_as_clone_origin = 123
 """.strip(),
-        expected_error_fragment="Expected 'allow_as_source' to be a boolean when provided",
+        expected_error_fragment="Expected 'allow_as_clone_origin' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when defaults tags is a string instead of list",
@@ -463,6 +489,17 @@ max_checkpoints = 0
         expected_error_fragment="janitor.max_checkpoints must be >= 1",
     ),
     LoadProjectConfigErrorTestCase(
+        description="raises when janitor direct state history versions is negative",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[janitor]
+direct_state_history_versions = -1
+""".strip(),
+        expected_error_fragment="janitor.direct_state_history_versions must be >= 0",
+    ),
+    LoadProjectConfigErrorTestCase(
         description="raises when project settings contain unknown key",
         project_file_contents="""
 name = "demo"
@@ -537,6 +574,22 @@ sql_analysis = "no thanks"
         expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
     ),
     LoadLocalConfigErrorTestCase(
+        description="raises when local target reuse_from is not a string",
+        local_file_contents="""
+[targets.dev]
+reuse_from = 123
+""".strip(),
+        expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
+    ),
+    LoadLocalConfigErrorTestCase(
+        description="raises when local target reuse_hard_copy is not a boolean",
+        local_file_contents="""
+[targets.dev]
+reuse_hard_copy = "yes"
+""".strip(),
+        expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
+    ),
+    LoadLocalConfigErrorTestCase(
         description="raises when local settings concurrency is not an integer",
         local_file_contents="""
 [settings]
@@ -562,6 +615,9 @@ PROJECT_CONFIG_TEST_CASES: list[LoadProjectConfigTestCase] = [
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
+
+[targets.dev]
+schema = "dev"
 """.strip(),
         expected_name="demo",
         expected_adapter="duckdb",
@@ -575,7 +631,19 @@ default_target = "dev"
         expected_contract=None,
         expected_path_defaults={},
         expected_vars={},
-        expected_targets={},
+        expected_targets={
+            "dev": {
+                "connection": {},
+                "vars": {},
+                "database": None,
+                "schema": "dev",
+                "defer_sources_to": None,
+                "reuse_from": None,
+                "reuse_hard_copy": False,
+                "allow_as_clone_origin": False,
+                "allow_as_clone_destination": False,
+            }
+        },
         expected_janitor_enabled=False,
         expected_retention_days=30,
         expected_janitor_max_checkpoints=20,
@@ -620,6 +688,8 @@ user = "kevin"
 [targets.dev]
 schema = "dev_${user}"
 defer_sources_to = "prod"
+reuse_from = "prod"
+reuse_hard_copy = true
 
 [targets.dev.connection]
 warehouse = "dev_wh"
@@ -628,8 +698,8 @@ warehouse = "dev_wh"
 schema_prefix = "dev"
 
 [targets.dev.clone]
-allow_as_source = true
-allow_as_target = true
+allow_as_clone_origin = true
+allow_as_clone_destination = true
 
 [janitor]
 enabled = true
@@ -637,6 +707,7 @@ retention_days = 14
 max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
+direct_state_history_versions = 5
 
 [snapshots]
 current_state_full_refresh = "require_confirmation"
@@ -691,8 +762,10 @@ target_path = "target/dbt"
                 "database": None,
                 "schema": "dev_${user}",
                 "defer_sources_to": "prod",
-                "allow_as_source": True,
-                "allow_as_target": True,
+                "reuse_from": "prod",
+                "reuse_hard_copy": True,
+                "allow_as_clone_origin": True,
+                "allow_as_clone_destination": True,
             }
         },
         expected_janitor_enabled=True,
@@ -700,6 +773,7 @@ target_path = "target/dbt"
         expected_janitor_max_checkpoints=3,
         expected_janitor_delete_tracked_only=False,
         expected_janitor_exclude_patterns=("partition_*",),
+        expected_janitor_direct_state_history_versions=5,
         expected_current_state_full_refresh="require_confirmation",
         expected_historical_full_refresh="allow",
         expected_snapshot_schema_change="deny",
@@ -760,8 +834,10 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "database": target_config.database,
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
-            "allow_as_source": target_config.clone.allow_as_source,
-            "allow_as_target": target_config.clone.allow_as_target,
+            "reuse_from": target_config.reuse_from,
+            "reuse_hard_copy": target_config.reuse_hard_copy,
+            "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
+            "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
         for target_name, target_config in config.targets.items()
     } == test_case.expected_targets
@@ -770,6 +846,10 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
+    assert (
+        config.janitor.direct_state_history_versions
+        == test_case.expected_janitor_direct_state_history_versions
+    )
     assert (
         config.snapshots.current_state_full_refresh == test_case.expected_current_state_full_refresh
     )
@@ -833,8 +913,10 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "database": target_config.database,
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
-            "allow_as_source": target_config.clone.allow_as_source,
-            "allow_as_target": target_config.clone.allow_as_target,
+            "reuse_from": target_config.reuse_from,
+            "reuse_hard_copy": target_config.reuse_hard_copy,
+            "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
+            "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
         for target_name, target_config in config.targets.items()
     } == test_case.expected_targets

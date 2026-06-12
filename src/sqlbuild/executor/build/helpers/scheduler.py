@@ -46,7 +46,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
     SourceLoadPlanEntry,
 )
-from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.load.models import LoadExecutionResult
@@ -113,6 +113,8 @@ class BuildScheduler:
         on_progress: Callable[[str], None] | None,
         before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
         custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
+        custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
+        | None = None,
         loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
         loader_is_reload: bool = False,
         start_cursor_ts: datetime | None = None,
@@ -152,6 +154,9 @@ class BuildScheduler:
         self._custom_materializations: Mapping[str, Callable[..., MaterializationResult]] = (
             custom_materializations or {}
         )
+        self._custom_prepare_version_functions: Mapping[
+            str, Callable[[PrepareVersionContext], None]
+        ] = custom_prepare_version_functions or {}
         self._loader_functions_by_name: dict[str, DiscoveredLoaderFunction] = {
             loader.name: loader for loader in loader_functions
         }
@@ -230,8 +235,8 @@ class BuildScheduler:
                 end_audits=self._indexes.end_audits,
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
-                model_targets=self._plan.model_targets,
-                seed_targets=self._plan.seed_targets,
+                model_locations=self._plan.model_locations,
+                seed_locations=self._plan.seed_locations,
                 source_map=self._plan.source_map,
             )
 
@@ -387,8 +392,8 @@ class BuildScheduler:
                 blocked_keys=self._blocked_keys,
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
-                model_targets=self._plan.model_targets,
-                seed_targets=self._plan.seed_targets,
+                model_locations=self._plan.model_locations,
+                seed_locations=self._plan.seed_locations,
                 source_map=self._plan.source_map,
                 all_source_audit_results=self._source_audit_results,
                 fail_fast=self._fail_fast,
@@ -490,6 +495,8 @@ class BuildScheduler:
                 adapter=self._adapter,
                 connection=connection,
                 statement_recorder=StatementRecorder(),
+                run_id=self._run_id,
+                query_change_tracking=self._query_change_tracking,
             )
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: SeedExecutionResult = dataclasses.replace(result, duration_ms=duration)
@@ -622,6 +629,7 @@ class BuildScheduler:
                     snapshots=self._snapshots,
                     allow_snapshot_schema_change=self._allow_snapshot_schema_change,
                     custom_materializations=self._custom_materializations,
+                    custom_prepare_version_functions=self._custom_prepare_version_functions,
                     target=self._target,
                     effective_vars=self._effective_vars,
                     warehouse_relations=self._warehouse_relations,
@@ -806,6 +814,8 @@ def _dispatch_model(
     snapshots: SnapshotsConfig,
     allow_snapshot_schema_change: bool,
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
+    custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
+    | None = None,
     target: str = "",
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
@@ -817,6 +827,9 @@ def _dispatch_model(
     if entry.action == PlanAction.CUSTOM:
         mat_name: str | None = entry.custom_materialization_name
         registry: Mapping[str, Callable[..., MaterializationResult]] = custom_materializations or {}
+        prepare_registry: Mapping[str, Callable[[PrepareVersionContext], None]] = (
+            custom_prepare_version_functions or {}
+        )
         if mat_name is None or mat_name not in registry:
             return ModelExecutionResult(
                 model_name=entry.name,
@@ -829,12 +842,13 @@ def _dispatch_model(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
+            model_locations=plan.model_locations,
+            seed_locations=plan.seed_locations,
             source_map=plan.source_map,
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
             materialize_fn=registry[mat_name],
+            prepare_version_fn=prepare_registry.get(mat_name),
             run_id=run_id,
             query_change_tracking=query_change_tracking,
             target=target,
@@ -858,8 +872,8 @@ def _dispatch_model(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
+            model_locations=plan.model_locations,
+            seed_locations=plan.seed_locations,
             source_map=plan.source_map,
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
@@ -875,8 +889,8 @@ def _dispatch_model(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
+            model_locations=plan.model_locations,
+            seed_locations=plan.seed_locations,
             source_map=plan.source_map,
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
@@ -893,8 +907,8 @@ def _dispatch_model(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
+            model_locations=plan.model_locations,
+            seed_locations=plan.seed_locations,
             source_map=plan.source_map,
             model_audits=model_audits,
             declared_columns=entry.declared_columns,
@@ -910,8 +924,8 @@ def _dispatch_model(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
+            model_locations=plan.model_locations,
+            seed_locations=plan.seed_locations,
             source_map=plan.source_map,
             model_audits=model_audits,
             run_id=run_id,
@@ -926,8 +940,8 @@ def _dispatch_model(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            model_targets=plan.model_targets,
-            seed_targets=plan.seed_targets,
+            model_locations=plan.model_locations,
+            seed_locations=plan.seed_locations,
             source_map=plan.source_map,
             model_audits=model_audits,
             run_id=run_id,
@@ -943,8 +957,8 @@ def _dispatch_model(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=plan.model_targets,
-        seed_targets=plan.seed_targets,
+        model_locations=plan.model_locations,
+        seed_locations=plan.seed_locations,
         source_map=plan.source_map,
         model_audits=model_audits,
         declared_columns=entry.declared_columns,

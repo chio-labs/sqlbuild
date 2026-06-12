@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
 from copy import deepcopy
 from typing import Any
@@ -18,8 +19,11 @@ from sqlbuild.compiler.planner.helpers.scenario_relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
 from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.types import SqlReferenceKind
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
 
 def try_resolve_test_model_sql_with_sql_analysis(
@@ -29,7 +33,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
-    function_targets: dict[str, str],
+    function_locations: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
     reachable_mocks: set[str],
@@ -43,7 +47,12 @@ def try_resolve_test_model_sql_with_sql_analysis(
 
     try:
         parsed: Any = polyglot_module.parse_one(query_sql, dialect="generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "sql test assembly parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
 
     parsed_dict: dict[str, Any] = parsed.to_dict()
@@ -143,7 +152,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
             return None
 
         if function_name == SqlReferenceKind.UDF.function_name:
-            target: str | None = function_targets.get(referenced_name)
+            target: str | None = function_locations.get(referenced_name)
             if target is not None:
                 return target
             return None
@@ -215,7 +224,12 @@ def _cte_name(cte: dict[str, Any]) -> str | None:
 def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
     try:
         generated: list[str] = polyglot_module.generate(expression, dialect="generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "sql test assembly generation failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     if len(generated) != 1:
         return None

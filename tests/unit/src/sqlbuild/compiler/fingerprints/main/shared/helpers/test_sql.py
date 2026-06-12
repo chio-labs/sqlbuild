@@ -12,13 +12,12 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
     build_qualified_table_name,
-    build_read_all_sql,
+    build_read_latest_sql,
 )
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared.helpers._test_types import (
     BuildCreateTableSqlTestCase,
     BuildInsertSqlTestCase,
     BuildQualifiedTableNameTestCase,
-    BuildReadAllSqlTestCase,
 )
 
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
@@ -46,47 +45,21 @@ QUALIFIED_TABLE_NAME_TEST_CASES: list[BuildQualifiedTableNameTestCase] = [
 ]
 
 
-READ_ALL_SQL_TEST_CASES: list[BuildReadAllSqlTestCase] = [
-    BuildReadAllSqlTestCase(
-        description="selects all fingerprint columns from qualified table",
-        database=None,
-        schema="staging",
-        expected_contains=(
-            "SELECT",
-            "model_name",
-            "target_database",
-            "target_schema",
-            "target_name",
-            "run_id",
-            "query_hash",
-            "schema_fingerprint",
-            "query_sql_b64",
-            "metadata_json_b64",
-            "ts",
-            f"FROM staging.{FINGERPRINT_TABLE_NAME}",
-        ),
-    ),
-    BuildReadAllSqlTestCase(
-        description="uses fully qualified name when database provided",
-        database="warehouse",
-        schema="staging",
-        expected_contains=(f"FROM warehouse.staging.{FINGERPRINT_TABLE_NAME}",),
-    ),
-]
-
 INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
     BuildInsertSqlTestCase(
         description="inserts all fingerprint values with inline literals",
         database=None,
         schema="marts",
-        model_name="orders",
+        node_type="model",
+        node_name="orders",
         target_database=None,
         target_schema="marts",
         target_name="orders",
         run_id="run_001",
-        query_hash="abc123",
+        definition_hash="abc123",
+        version_hash="def456",
         schema_fingerprint="ghi789",
-        query_sql="SELECT id FROM orders",
+        definition="SELECT id FROM orders",
         metadata_json='{"config":{"materialized":"table"}}',
         ts="2026-01-15T12:00:00",
         expected_contains=(
@@ -96,6 +69,7 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
             "'marts'",
             "'run_001'",
             "'abc123'",
+            "'def456'",
             "'ghi789'",
             "'U0VMRUNUIGlkIEZST00gb3JkZXJz'",
             "'eyJjb25maWciOnsibWF0ZXJpYWxpemVkIjoidGFibGUifX0='",
@@ -106,14 +80,16 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
         description="escapes single quotes in query sql",
         database=None,
         schema="marts",
-        model_name="orders",
+        node_type="model",
+        node_name="orders",
         target_database=None,
         target_schema="marts",
         target_name="orders",
         run_id="run_001",
-        query_hash="abc123",
+        definition_hash="abc123",
+        version_hash="def456",
         schema_fingerprint="ghi789",
-        query_sql="SELECT * FROM t WHERE name = 'alice'",
+        definition="SELECT * FROM t WHERE name = 'alice'",
         metadata_json="{}",
         ts="2026-01-15T12:00:00",
         expected_contains=("U0VMRUNUICogRlJPTSB0IFdIRVJFIG5hbWUgPSAnYWxpY2Un",),
@@ -122,14 +98,16 @@ INSERT_SQL_TEST_CASES: list[BuildInsertSqlTestCase] = [
         description="stores multiline query sql as base64",
         database=None,
         schema="marts",
-        model_name="orders",
+        node_type="model",
+        node_name="orders",
         target_database=None,
         target_schema="marts",
         target_name="orders",
         run_id="run_001",
-        query_hash="abc123",
+        definition_hash="abc123",
+        version_hash="def456",
         schema_fingerprint="ghi789",
-        query_sql="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
+        definition="SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'",
         metadata_json="{}",
         ts="2026-01-15T12:00:00",
         expected_contains=(
@@ -171,14 +149,15 @@ def test_given_schema_when_building_qualified_name_then_returns_expected(
             expected_contains=(
                 "CREATE TABLE IF NOT EXISTS",
                 f"analytics.{FINGERPRINT_TABLE_NAME}",
-                "model_name VARCHAR NOT NULL",
+                "node_type VARCHAR NOT NULL",
+                "node_name VARCHAR NOT NULL",
                 "target_database VARCHAR,",
                 "target_schema VARCHAR,",
                 "target_name VARCHAR,",
                 "run_id VARCHAR NOT NULL",
-                "query_hash VARCHAR NOT NULL",
+                "definition_hash VARCHAR NOT NULL",
                 "schema_fingerprint VARCHAR NOT NULL",
-                "query_sql_b64 VARCHAR NOT NULL",
+                "definition_b64 VARCHAR NOT NULL",
                 "metadata_json_b64 VARCHAR NOT NULL",
                 "ts TIMESTAMP NOT NULL",
             ),
@@ -203,13 +182,26 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
 
 @pytest.mark.parametrize(
     "test_case",
-    READ_ALL_SQL_TEST_CASES,
-    ids=[case.description for case in READ_ALL_SQL_TEST_CASES],
+    [
+        BuildCreateTableSqlTestCase(
+            description="selects latest fingerprint rows with window ranking",
+            database=None,
+            schema="staging",
+            expected_contains=(
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_type, node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                f"FROM staging.{FINGERPRINT_TABLE_NAME}",
+                "WHERE __sqlbuild_latest_rank = 1",
+            ),
+        )
+    ],
+    ids=["selects latest fingerprint rows with window ranking"],
 )
-def test_given_schema_when_building_read_all_sql_then_contains_expected_fragments(
-    test_case: BuildReadAllSqlTestCase,
+def test_given_schema_when_building_read_latest_sql_then_contains_windowed_latest_query(
+    test_case: BuildCreateTableSqlTestCase,
 ) -> None:
-    result: str = build_read_all_sql(
+    result: str = build_read_latest_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -231,14 +223,16 @@ def test_given_fingerprint_values_when_building_insert_sql_then_contains_expecte
     result: str = build_insert_sql(
         database=test_case.database,
         schema=test_case.schema,
-        model_name=test_case.model_name,
+        node_type=test_case.node_type,
+        node_name=test_case.node_name,
         target_database=test_case.target_database,
         target_schema=test_case.target_schema,
         target_name=test_case.target_name,
         run_id=test_case.run_id,
-        query_hash=test_case.query_hash,
+        definition_hash=test_case.definition_hash,
+        version_hash=test_case.version_hash,
         schema_fingerprint=test_case.schema_fingerprint,
-        query_sql=test_case.query_sql,
+        definition=test_case.definition,
         metadata_json=test_case.metadata_json,
         ts=test_case.ts,
         render_qualified_name=RENDER_QUALIFIED_NAME,

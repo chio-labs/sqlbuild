@@ -25,3 +25,4 @@ class AuditExecutionResult:
     run_scope_phase: AuditRunScope = AuditRunScope.FINAL
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+    reused: bool = False

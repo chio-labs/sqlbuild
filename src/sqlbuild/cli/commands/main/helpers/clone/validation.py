@@ -10,23 +10,23 @@ from sqlbuild.spec.models.project import TargetConfig
 def validate_clone_request(
     *,
     discovered_inputs: DiscoveredProjectInputs,
-    from_target: str,
-    to_target: str,
+    origin_target_name: str,
+    destination_target_name: str,
 ) -> None:
     targets: dict[str, TargetConfig] = discovered_inputs.project_config.targets
-    if from_target == to_target:
+    if origin_target_name == destination_target_name:
         raise CliUserError("clone requires different --from and --to targets", code="C401")
-    if from_target not in targets:
-        raise CliUserError(f"unknown target '{from_target}'", code="C402")
-    if to_target not in targets:
-        raise CliUserError(f"unknown target '{to_target}'", code="C403")
-    if not targets[from_target].clone.allow_as_source:
+    if origin_target_name not in targets:
+        raise CliUserError(f"unknown target '{origin_target_name}'", code="C402")
+    if destination_target_name not in targets:
+        raise CliUserError(f"unknown target '{destination_target_name}'", code="C403")
+    if not targets[origin_target_name].clone.allow_as_clone_origin:
         raise CliUserError(
-            f"target '{from_target}' is not allowed as a clone source target",
+            f"target '{origin_target_name}' is not allowed as a clone origin target",
             code="C404",
         )
-    if not targets[to_target].clone.allow_as_target:
+    if not targets[destination_target_name].clone.allow_as_clone_destination:
         raise CliUserError(
-            f"target '{to_target}' is not allowed as a clone target",
+            f"target '{destination_target_name}' is not allowed as a clone destination target",
             code="C405",
         )

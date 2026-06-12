@@ -97,7 +97,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.shared.helpers.schema_audits import parse_audit_instance
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot
+from sqlbuild.shared.helpers.polyglot import import_polyglot
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
@@ -507,9 +507,9 @@ def build_sql_function_inputs(
                 schema=function_schema,
                 fingerprint_database=function_database,
                 fingerprint_schema=function_schema,
-                query_change_backfill=_parse_optional_function_header(
+                replay_on_change=_parse_optional_function_header(
                     header_values=header_values,
-                    key="query_change_backfill",
+                    key="replay_on_change",
                     effective_vars=effective_vars,
                     relative_path=function_file.relative_path,
                     language="SQL",
@@ -609,9 +609,9 @@ def build_sql_function_inputs(
             runtime_version=runtime_version,
             entry_point=entry_point,
             packages=packages,
-            query_change_backfill=_parse_optional_function_header(
+            replay_on_change=_parse_optional_function_header(
                 header_values=header_values,
-                key="query_change_backfill",
+                key="replay_on_change",
                 effective_vars=effective_vars,
                 relative_path=python_function_file.relative_path,
                 language="Python",
@@ -814,14 +814,11 @@ def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> N
     dialect: str | None = dialect_by_adapter.get(adapter_name)
     if dialect is None:
         return
-    sqlglot_module: Any | None = import_sqlglot()
-    if sqlglot_module is None:
+    polyglot_module: Any | None = import_polyglot()
+    if polyglot_module is None:
         return
     try:
-        sqlglot_module.parse_one(
-            f"CREATE TABLE __sqlbuild_type_check__ (__value__ {type_sql})",
-            read=dialect,
-        )
+        polyglot_module.parse_data_type(type_sql, dialect=dialect)
     except Exception as error:
         raise CompileInputError(
             f"{context} type '{type_sql}' is not valid for adapter '{adapter_name}' "
@@ -1517,6 +1514,7 @@ def build_audit_inputs(
             )
             header_severity: str | None = _str_from_dict(audit_block.header_values, "severity")
             header_run_scope: str | None = _str_from_dict(audit_block.header_values, "run_scope")
+            header_always_run: bool = _bool_from_dict(audit_block.header_values, "always_run")
             resolved_severity: str = resolve_audit_severity(
                 instance_severity=header_severity,
                 default_severity=default_audit_severity,
@@ -1534,6 +1532,7 @@ def build_audit_inputs(
                     references=references,
                     severity=resolved_severity,
                     run_scope=resolved_run_scope,
+                    always_run=header_always_run,
                 )
             )
     model_input: CompileModelInput
@@ -1813,6 +1812,7 @@ def build_attached_audit_input(
         attached_column_name=attached_column_name,
         severity=resolved_severity,
         run_scope=resolved_run_scope,
+        always_run=audit_instance.always_run,
     )
 
 
@@ -3190,7 +3190,7 @@ def resolve_run_id(*, selected_run_id: str | None) -> str:
     if selected_run_id is not None:
         return selected_run_id
     timestamp_prefix: str = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    unique_suffix: str = uuid4().hex[:6]
+    unique_suffix: str = uuid4().hex[:12]
     return f"{timestamp_prefix}_{unique_suffix}"
 
 
@@ -3242,10 +3242,10 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["lookback"] = defaults.lookback
     if defaults.batch_size is not None:
         values["batch_size"] = defaults.batch_size
-    if defaults.query_change_backfill is not None:
-        values["query_change_backfill"] = defaults.query_change_backfill
-    if defaults.schema_change_backfill:
-        values["schema_change_backfill"] = defaults.schema_change_backfill
+    if defaults.replay_on_change is not None:
+        values["replay_on_change"] = defaults.replay_on_change
+    if defaults.run_despite_unchanged is not None:
+        values["run_despite_unchanged"] = defaults.run_despite_unchanged
     if defaults.row_diff_exclude_columns:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
     if defaults.row_diff_tolerances:
@@ -3401,6 +3401,15 @@ def _str_from_dict(values: dict[str, object], key: str) -> str | None:
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, str) else None
+
+
+def _bool_from_dict(values: dict[str, object], key: str) -> bool:
+    raw: object | None = values.get(key)
+    if raw is None:
+        return False
+    if not isinstance(raw, bool):
+        raise CompileInputError(f"AUDIT() '{key}' must be a boolean")
+    return raw
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:

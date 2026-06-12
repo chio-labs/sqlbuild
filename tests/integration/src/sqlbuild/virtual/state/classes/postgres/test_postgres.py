@@ -14,16 +14,21 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     ReconcileEventRecord,
+    SeedVersionRecord,
     SourceFreshnessRecord,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
+    PhysicalArtifactType,
     ReconcileAction,
     StateMigrationAction,
     StateOperationStatus,
@@ -40,6 +45,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendLifecycleTestCase,
     PostgresStateBackendLockTestCase,
     PostgresStateBackendOperationEventTestCase,
+    PostgresStateBackendSeedRefTestCase,
     PostgresStateBackendSourceFreshnessTestCase,
     PostgresStateBackendTableCreationTestCase,
     PostgresStateBackendTransactionRollbackTestCase,
@@ -148,7 +154,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     [
         PostgresStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
-            expected_issue_count=20,
+            expected_issue_count=23,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -443,11 +449,11 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     model_record: ModelVersionRecord = ModelVersionRecord(
         model_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
-        data_hash="data-hash",
-        metadata_hash="metadata-hash",
+        definition_identity_hash="definition-identity-hash",
+        identity_metadata_hash="identity-metadata-hash",
         status=ModelVersionStatus.READY,
-        fingerprint_query_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
-        fingerprint_metadata_json_b64="e30=",
+        definition_text_b64="U0VMRUNUIDEgQVMgaWQ=",
+        identity_metadata_json_b64="e30=",
         compiled_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
     )
     postgres_state_backend.upsert_model_version(
@@ -456,7 +462,8 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         record=model_record,
     )
     relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name=test_case.expected_model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -469,7 +476,8 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         record=relation_record,
     )
     replaced_relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name=test_case.expected_model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -503,12 +511,12 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         schema=postgres_state_schema,
         record=virtual_environment_record,
     )
-    postgres_state_backend.replace_virtual_environment_refs(
+    postgres_state_backend.replace_virtual_environment_model_refs(
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.expected_virtual_environment_name,
         refs=(
-            VirtualEnvironmentRefRecord(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=test_case.expected_virtual_environment_name,
                 model_name=test_case.expected_model_name,
                 version_hash=test_case.expected_version_hash,
@@ -551,8 +559,8 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         )
         == virtual_environment_record
     )
-    refs: tuple[VirtualEnvironmentRefRecord, ...] = (
-        postgres_state_backend.get_virtual_environment_refs(
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_model_refs(
             postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
@@ -561,14 +569,14 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     assert len(refs) == test_case.expected_ref_count
     assert refs[0].model_name == test_case.expected_model_name
     assert refs[0].version_hash == test_case.expected_version_hash
-    postgres_state_backend.replace_virtual_environment_refs(
+    postgres_state_backend.replace_virtual_environment_model_refs(
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.expected_virtual_environment_name,
         refs=(),
     )
-    replaced_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
-        postgres_state_backend.get_virtual_environment_refs(
+    replaced_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_model_refs(
             postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
@@ -687,6 +695,170 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
             postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
+        )
+        == ()
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendSeedRefTestCase(
+            description="persists seed versions and replaces seed refs",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            seed_name="country_codes",
+            version_hash="seed123",
+            identity_metadata_hash="meta123",
+            identity_metadata_json_b64="e30=",
+            expected_ref_count_after_replace=0,
+        )
+    ],
+    ids=["persists seed versions and replaces seed refs"],
+)
+def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_records(
+    test_case: PostgresStateBackendSeedRefTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    seed_version: SeedVersionRecord = SeedVersionRecord(
+        seed_name=test_case.seed_name,
+        version_hash=test_case.version_hash,
+        identity_metadata_hash=test_case.identity_metadata_hash,
+        identity_metadata_json_b64=test_case.identity_metadata_json_b64,
+        status=ModelVersionStatus.READY,
+    )
+    postgres_state_backend.upsert_seed_version(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=seed_version,
+    )
+    postgres_state_backend.replace_virtual_environment_seed_refs(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        refs=(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                seed_name=test_case.seed_name,
+                version_hash=test_case.version_hash,
+            ),
+        ),
+    )
+
+    assert (
+        postgres_state_backend.get_seed_version(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            seed_name=test_case.seed_name,
+            version_hash=test_case.version_hash,
+        )
+        == seed_version
+    )
+    refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_seed_refs(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+    )
+    assert refs == (
+        VirtualEnvironmentSeedRefRecord(
+            virtual_environment_name=test_case.virtual_environment_name,
+            seed_name=test_case.seed_name,
+            version_hash=test_case.version_hash,
+        ),
+    )
+
+    postgres_state_backend.replace_virtual_environment_seed_refs(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        refs=(),
+    )
+    assert (
+        len(
+            postgres_state_backend.get_virtual_environment_seed_refs(
+                postgres_state_connection,
+                schema=postgres_state_schema,
+                virtual_environment_name=test_case.virtual_environment_name,
+            )
+        )
+        == test_case.expected_ref_count_after_replace
+    )
+    postgres_state_backend.replace_virtual_environment_seed_refs(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        refs=(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                seed_name=test_case.seed_name,
+                version_hash=test_case.version_hash,
+            ),
+        ),
+    )
+    postgres_state_backend.delete_virtual_environment(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+    )
+    assert (
+        postgres_state_backend.get_virtual_environment_seed_refs(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        )
+        == ()
+    )
+
+    checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
+        checkpoint_id="chk_seed",
+        virtual_environment_name=test_case.virtual_environment_name,
+    )
+    postgres_state_backend.create_virtual_environment_checkpoint(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        checkpoint=checkpoint,
+        refs=(),
+        seed_refs=(
+            VirtualEnvironmentCheckpointSeedRefRecord(
+                checkpoint_id=checkpoint.checkpoint_id,
+                seed_name=test_case.seed_name,
+                version_hash=test_case.version_hash,
+            ),
+        ),
+    )
+    checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_checkpoint_seed_refs(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            checkpoint_id=checkpoint.checkpoint_id,
+        )
+    )
+    assert checkpoint_seed_refs == (
+        VirtualEnvironmentCheckpointSeedRefRecord(
+            checkpoint_id=checkpoint.checkpoint_id,
+            seed_name=test_case.seed_name,
+            version_hash=test_case.version_hash,
+        ),
+    )
+    postgres_state_backend.delete_virtual_environment_checkpoint(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        checkpoint_id=checkpoint.checkpoint_id,
+    )
+    assert (
+        postgres_state_backend.get_virtual_environment_checkpoint_seed_refs(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            checkpoint_id=checkpoint.checkpoint_id,
         )
         == ()
     )
@@ -902,12 +1074,12 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
-    postgres_state_backend.replace_virtual_environment_refs(
+    postgres_state_backend.replace_virtual_environment_model_refs(
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         refs=(
-            VirtualEnvironmentRefRecord(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=test_case.virtual_environment_name,
                 model_name=test_case.model_name,
                 version_hash=test_case.original_version_hash,
@@ -916,17 +1088,17 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
     )
 
     with pytest.raises(psycopg.errors.UniqueViolation):
-        postgres_state_backend.replace_virtual_environment_refs(
+        postgres_state_backend.replace_virtual_environment_model_refs(
             postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
             refs=(
-                VirtualEnvironmentRefRecord(
+                VirtualEnvironmentModelRefRecord(
                     virtual_environment_name=test_case.virtual_environment_name,
                     model_name=test_case.model_name,
                     version_hash=test_case.original_version_hash,
                 ),
-                VirtualEnvironmentRefRecord(
+                VirtualEnvironmentModelRefRecord(
                     virtual_environment_name=test_case.virtual_environment_name,
                     model_name=test_case.model_name,
                     version_hash=test_case.duplicate_version_hash,
@@ -934,8 +1106,8 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
             ),
         )
 
-    refs: tuple[VirtualEnvironmentRefRecord, ...] = (
-        postgres_state_backend.get_virtual_environment_refs(
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_model_refs(
             postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
@@ -976,8 +1148,8 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
     model_record: ModelVersionRecord = ModelVersionRecord(
         model_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
-        data_hash="data-hash",
-        metadata_hash="metadata-hash",
+        definition_identity_hash="definition-identity-hash",
+        identity_metadata_hash="identity-metadata-hash",
         status=ModelVersionStatus.READY,
     )
     postgres_state_backend.upsert_model_version(
@@ -1047,7 +1219,8 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         sqlbuild_version=test_case.sqlbuild_version,
     )
     relation_record: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name=test_case.expected_model_name,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name=test_case.expected_model_name,
         version_hash=test_case.expected_version_hash,
         database_name=None,
         schema_name="dev__sqb_physical",
@@ -1063,7 +1236,8 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         postgres_state_connection,
         "SELECT created_at FROM "
         f"{qualified_name(schema=postgres_state_schema, table='physical_relations')} "
-        f"WHERE model_name = '{test_case.expected_model_name}' "
+        "WHERE artifact_type = 'model' "
+        f"AND artifact_name = '{test_case.expected_model_name}' "
         f"AND version_hash = '{test_case.expected_version_hash}'",
     )[0][0]
     postgres_state_backend.upsert_physical_relation(
@@ -1075,7 +1249,8 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         postgres_state_connection,
         "SELECT created_at FROM "
         f"{qualified_name(schema=postgres_state_schema, table='physical_relations')} "
-        f"WHERE model_name = '{test_case.expected_model_name}' "
+        "WHERE artifact_type = 'model' "
+        f"AND artifact_name = '{test_case.expected_model_name}' "
         f"AND version_hash = '{test_case.expected_version_hash}'",
     )[0][0]
 

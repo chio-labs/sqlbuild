@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
@@ -19,7 +22,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
@@ -31,7 +34,7 @@ from sqlbuild.compiler.planner.helpers.function_fingerprints import (
 )
 from sqlbuild.compiler.planner.helpers.graph import build_upstream_deps, topologically_order_keys
 from sqlbuild.compiler.planner.helpers.plan_entry import extract_seed_columns, plan_model
-from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_targets
+from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_locations
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
@@ -58,11 +61,13 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
     SCENARIO_PLAN_UNKNOWN_SEED,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _REF_PATTERN: re.Pattern[str] = re.compile(
     rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"
     r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
@@ -87,10 +92,11 @@ def build_scenario_relation_plan(
     project: CompiledProject,
     graph_plan: ScenarioGraphPlan,
     relation_map: ScenarioRelationMap,
+    render_qualified_name: Callable[..., str | None],
     database: str | None = None,
     schema: str | None = None,
 ) -> ScenarioRelationPlan:
-    """Build scenario-scoped relation targets and source entries."""
+    """Build scenario-scoped relation locations and source entries."""
 
     artifacts: dict[ScenarioArtifactIdentity, str] = {
         artifact.identity: artifact.physical_name for artifact in relation_map.artifacts
@@ -99,35 +105,37 @@ def build_scenario_relation_plan(
         source.name: source.source_entry for source in project.sources
     }
 
-    model_targets: dict[str, CompiledRelationDestination] = {}
-    source_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    ref_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    dbt_ref_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    seed_fixture_targets: dict[str, CompiledRelationDestination] = {}
-    seed_targets: dict[str, CompiledRelationDestination] = {}
+    model_locations: dict[str, CompiledRelationLocation] = {}
+    source_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    ref_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    dbt_ref_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    seed_fixture_locations: dict[str, CompiledRelationLocation] = {}
+    seed_locations: dict[str, CompiledRelationLocation] = {}
     source_map: dict[str, SourceEntry] = {}
 
     model_name: str
     for model_name in graph_plan.model_names:
-        model_targets[model_name] = _target_for_artifact(
+        model_locations[model_name] = _target_for_artifact(
             artifacts=artifacts,
             kind=ScenarioArtifactKind.MODEL,
             logical_name=model_name,
             database=database,
             schema=schema,
+            render_qualified_name=render_qualified_name,
         )
 
     ref_name: str
     for ref_name in graph_plan.ref_fixture_names:
-        target: CompiledRelationDestination = _target_for_artifact(
+        target: CompiledRelationLocation = _target_for_artifact(
             artifacts=artifacts,
             kind=ScenarioArtifactKind.REF,
             logical_name=ref_name,
             database=database,
             schema=schema,
+            render_qualified_name=render_qualified_name,
         )
-        ref_fixture_targets[ref_name] = target
-        model_targets[ref_name] = target
+        ref_fixture_locations[ref_name] = target
+        model_locations[ref_name] = target
 
     source_name: str
     for source_name in graph_plan.source_fixture_names:
@@ -137,8 +145,9 @@ def build_scenario_relation_plan(
             logical_name=source_name,
             database=database,
             schema=schema,
+            render_qualified_name=render_qualified_name,
         )
-        source_fixture_targets[source_name] = target
+        source_fixture_locations[source_name] = target
         source_entry: SourceEntry = source_entries[source_name]
         source_map[source_name] = replace(
             source_entry,
@@ -151,12 +160,13 @@ def build_scenario_relation_plan(
 
     dbt_ref_name: str
     for dbt_ref_name in graph_plan.dbt_ref_fixture_names:
-        dbt_ref_fixture_targets[dbt_ref_name] = _target_for_artifact(
+        dbt_ref_fixture_locations[dbt_ref_name] = _target_for_artifact(
             artifacts=artifacts,
             kind=ScenarioArtifactKind.DBT_REF,
             logical_name=dbt_ref_name,
             database=database,
             schema=schema,
+            render_qualified_name=render_qualified_name,
         )
 
     seed_name: str
@@ -167,12 +177,13 @@ def build_scenario_relation_plan(
             logical_name=seed_name,
             database=database,
             schema=schema,
+            render_qualified_name=render_qualified_name,
         )
-        seed_targets[seed_name] = target
+        seed_locations[seed_name] = target
 
     for seed_name in graph_plan.seed_fixture_names:
-        seed_fixture_targets[seed_name] = _required_target(
-            seed_targets,
+        seed_fixture_locations[seed_name] = _required_target(
+            seed_locations,
             seed_name,
             kind=ScenarioArtifactKind.SEED,
         )
@@ -180,14 +191,14 @@ def build_scenario_relation_plan(
     return ScenarioRelationPlan(
         scenario_name=graph_plan.name,
         relation_map=relation_map,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         project_source_map=source_entries,
         source_map=source_map,
-        source_fixture_targets=source_fixture_targets,
-        ref_fixture_targets=ref_fixture_targets,
-        dbt_ref_fixture_targets=dbt_ref_fixture_targets,
-        seed_fixture_targets=seed_fixture_targets,
+        source_fixture_locations=source_fixture_locations,
+        ref_fixture_locations=ref_fixture_locations,
+        dbt_ref_fixture_locations=dbt_ref_fixture_locations,
+        seed_fixture_locations=seed_fixture_locations,
     )
 
 
@@ -195,6 +206,7 @@ def resolve_scenario_check_sql(
     *,
     sql: str,
     relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
     sql_analysis_enabled: bool = True,
     sql_analysis_dialect: str | None = None,
 ) -> str:
@@ -204,11 +216,12 @@ def resolve_scenario_check_sql(
         return _resolve_scenario_check_sql_with_sql_analysis(
             sql=sql,
             relation_plan=relation_plan,
+            adapter=adapter,
             sql_analysis_dialect=sql_analysis_dialect,
         )
 
     def _replace_ref(match: re.Match[str]) -> str:
-        target: CompiledRelationDestination | None = relation_plan.model_targets.get(
+        target: CompiledRelationLocation | None = relation_plan.model_locations.get(
             match.group("name")
         )
         if target is None or target.qualified_name is None:
@@ -216,7 +229,7 @@ def resolve_scenario_check_sql(
         return target.qualified_name
 
     def _replace_seed(match: re.Match[str]) -> str:
-        target: CompiledRelationDestination | None = relation_plan.seed_targets.get(
+        target: CompiledRelationLocation | None = relation_plan.seed_locations.get(
             match.group("name")
         )
         if target is None or target.qualified_name is None:
@@ -227,10 +240,10 @@ def resolve_scenario_check_sql(
         source: SourceEntry | None = relation_plan.source_map.get(match.group("name"))
         if source is None:
             return match.group(0)
-        return render_source_relation(source)
+        return render_source_relation(source, adapter=adapter)
 
     def _replace_dbt_ref(match: re.Match[str]) -> str:
-        target: CompiledRelationDestination | None = relation_plan.dbt_ref_fixture_targets.get(
+        target: CompiledRelationLocation | None = relation_plan.dbt_ref_fixture_locations.get(
             _dbt_ref_fixture_name(match)
         )
         if target is None or target.qualified_name is None:
@@ -265,7 +278,7 @@ def build_scenario_execution_plan(
     functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
         function.key: function for function in project.functions
     }
-    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+    function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
         project.functions
     )
     scenario_model_names: frozenset[str] = frozenset(graph_plan.model_names)
@@ -281,6 +294,7 @@ def build_scenario_execution_plan(
         scenario=scenario,
         graph_plan=graph_plan,
         relation_plan=relation_plan,
+        adapter=adapter,
         sql_analysis_enabled=sql_analysis_enabled,
         sql_analysis_dialect=sql_analysis_dialect,
     )
@@ -294,7 +308,7 @@ def build_scenario_execution_plan(
             function=functions_by_key[key],
             adapter=adapter,
             relation_plan=relation_plan,
-            function_targets=function_targets,
+            function_locations=function_locations,
             source_warehouse_columns=effective_source_warehouse_columns,
         )
         for key in topologically_order_keys(upstream_deps)
@@ -306,8 +320,8 @@ def build_scenario_execution_plan(
     key: CompiledObjectKey
     for key in ordered_model_keys:
         model: CompiledModel = models_by_name[key.name]
-        scenario_target: CompiledRelationDestination = _required_target(
-            relation_plan.model_targets,
+        scenario_target: CompiledRelationLocation = _required_target(
+            relation_plan.model_locations,
             model.name,
             kind=ScenarioArtifactKind.MODEL,
         )
@@ -321,10 +335,10 @@ def build_scenario_execution_plan(
             model=replace(model, destination=scenario_target, query_sql=scenario_query_sql),
             snapshot=effective_snapshot,
             adapter=adapter,
-            model_targets=relation_plan.model_targets,
+            model_locations=relation_plan.model_locations,
             models_by_name=models_by_name,
-            seed_targets=relation_plan.seed_targets,
-            function_targets=function_targets,
+            seed_locations=relation_plan.seed_locations,
+            function_locations=function_locations,
             source_map=relation_plan.source_map,
             source_warehouse_columns=effective_source_warehouse_columns,
             star_exclude_keyword=adapter.star_exclude_keyword(),
@@ -341,6 +355,7 @@ def build_scenario_execution_plan(
         _build_expected_check_plan(
             expected_cte=expected_cte,
             relation_plan=relation_plan,
+            adapter=adapter,
             sql_analysis_enabled=sql_analysis_enabled,
             sql_analysis_dialect=sql_analysis_dialect,
         )
@@ -352,6 +367,7 @@ def build_scenario_execution_plan(
             sql=resolve_scenario_check_sql(
                 sql=assertion_cte.sql_body,
                 relation_plan=relation_plan,
+                adapter=adapter,
                 sql_analysis_enabled=sql_analysis_enabled,
                 sql_analysis_dialect=sql_analysis_dialect,
             ),
@@ -382,7 +398,7 @@ def _build_scenario_function_entry(
     function: CompiledFunction,
     adapter: BaseAdapter,
     relation_plan: ScenarioRelationPlan,
-    function_targets: dict[str, CompiledRelationDestination],
+    function_locations: dict[str, CompiledRelationLocation],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
 ) -> FunctionPlanEntry:
     return FunctionPlanEntry(
@@ -395,9 +411,9 @@ def _build_scenario_function_entry(
         body_sql=resolve_function_sql(
             adapter=adapter,
             function=function,
-            model_targets=relation_plan.model_targets,
-            seed_targets=relation_plan.seed_targets,
-            function_targets=function_targets,
+            model_locations=relation_plan.model_locations,
+            seed_locations=relation_plan.seed_locations,
+            function_locations=function_locations,
             source_map=relation_plan.source_map,
             source_warehouse_columns=source_warehouse_columns,
             star_exclude_keyword=adapter.star_exclude_keyword(),
@@ -418,6 +434,7 @@ def build_scenario_fixture_plans(
     scenario: CompiledSqlScenario,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
     sql_analysis_enabled: bool = True,
     sql_analysis_dialect: str | None = None,
 ) -> tuple[ScenarioFixturePlan, ...]:
@@ -430,6 +447,7 @@ def build_scenario_fixture_plans(
             sql_body=_resolve_project_source_refs(
                 sql=helper_cte.sql_body,
                 source_map=relation_plan.project_source_map,
+                adapter=adapter,
                 sql_analysis_enabled=sql_analysis_enabled,
                 sql_analysis_dialect=sql_analysis_dialect,
             ),
@@ -461,7 +479,7 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.SOURCE,
                 logical_name=source_name,
                 destination=_required_target(
-                    relation_plan.source_fixture_targets,
+                    relation_plan.source_fixture_locations,
                     source_name,
                     kind=ScenarioArtifactKind.SOURCE,
                 ),
@@ -469,6 +487,7 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(source_ctes, source_name, kind="source"),
                         source_map=relation_plan.project_source_map,
+                        adapter=adapter,
                         sql_analysis_enabled=sql_analysis_enabled,
                         sql_analysis_dialect=sql_analysis_dialect,
                     ),
@@ -484,7 +503,7 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.REF,
                 logical_name=ref_name,
                 destination=_required_target(
-                    relation_plan.ref_fixture_targets,
+                    relation_plan.ref_fixture_locations,
                     ref_name,
                     kind=ScenarioArtifactKind.REF,
                 ),
@@ -492,6 +511,7 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(ref_ctes, ref_name, kind="ref"),
                         source_map=relation_plan.project_source_map,
+                        adapter=adapter,
                         sql_analysis_enabled=sql_analysis_enabled,
                         sql_analysis_dialect=sql_analysis_dialect,
                     ),
@@ -507,7 +527,7 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.SEED,
                 logical_name=seed_name,
                 destination=_required_target(
-                    relation_plan.seed_fixture_targets,
+                    relation_plan.seed_fixture_locations,
                     seed_name,
                     kind=ScenarioArtifactKind.SEED,
                 ),
@@ -515,6 +535,7 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(seed_ctes, seed_name, kind="seed"),
                         source_map=relation_plan.project_source_map,
+                        adapter=adapter,
                         sql_analysis_enabled=sql_analysis_enabled,
                         sql_analysis_dialect=sql_analysis_dialect,
                     ),
@@ -530,7 +551,7 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.DBT_REF,
                 logical_name=dbt_ref_name,
                 destination=_required_target(
-                    relation_plan.dbt_ref_fixture_targets,
+                    relation_plan.dbt_ref_fixture_locations,
                     dbt_ref_name,
                     kind=ScenarioArtifactKind.DBT_REF,
                 ),
@@ -538,6 +559,7 @@ def build_scenario_fixture_plans(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(dbt_ref_ctes, dbt_ref_name, kind="dbt_ref"),
                         source_map=relation_plan.project_source_map,
+                        adapter=adapter,
                         sql_analysis_enabled=sql_analysis_enabled,
                         sql_analysis_dialect=sql_analysis_dialect,
                     ),
@@ -575,7 +597,7 @@ def build_scenario_seed_entries(
                 key=seed.key,
                 name=seed.name,
                 destination=_required_target(
-                    relation_plan.seed_targets,
+                    relation_plan.seed_locations,
                     seed_name,
                     kind=ScenarioArtifactKind.SEED,
                 ),
@@ -588,7 +610,11 @@ def build_scenario_seed_entries(
 
 
 def _resolve_scenario_check_sql_with_sql_analysis(
-    *, sql: str, relation_plan: ScenarioRelationPlan, sql_analysis_dialect: str | None
+    *,
+    sql: str,
+    relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
+    sql_analysis_dialect: str | None,
 ) -> str:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -614,6 +640,7 @@ def _resolve_scenario_check_sql_with_sql_analysis(
             function_name=function_name,
             referenced_name=referenced_name,
             relation_plan=relation_plan,
+            adapter=adapter,
         ),
     )
     if not replacement_result:
@@ -631,12 +658,13 @@ def _build_expected_check_plan(
     *,
     expected_cte: CompileSqlScenarioCte,
     relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
     sql_analysis_enabled: bool,
     sql_analysis_dialect: str | None,
 ) -> ScenarioExpectedExpectationPlan:
     model_name: str = expected_cte.name.removeprefix("__expected__")
-    actual_destination: CompiledRelationDestination = _required_target(
-        relation_plan.model_targets,
+    actual_destination: CompiledRelationLocation = _required_target(
+        relation_plan.model_locations,
         model_name,
         kind=ScenarioArtifactKind.MODEL,
     )
@@ -646,6 +674,7 @@ def _build_expected_check_plan(
         expected_sql=resolve_scenario_check_sql(
             sql=expected_cte.sql_body,
             relation_plan=relation_plan,
+            adapter=adapter,
             sql_analysis_enabled=sql_analysis_enabled,
             sql_analysis_dialect=sql_analysis_dialect,
         ),
@@ -691,6 +720,7 @@ def _resolve_project_source_refs(
     *,
     sql: str,
     source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter,
     sql_analysis_enabled: bool,
     sql_analysis_dialect: str | None,
 ) -> str:
@@ -698,6 +728,7 @@ def _resolve_project_source_refs(
         sql_analysis_result: str | None = _try_resolve_project_source_refs_with_sql_analysis(
             sql=sql,
             source_map=source_map,
+            adapter=adapter,
             sql_analysis_dialect=sql_analysis_dialect,
         )
         if sql_analysis_result is not None:
@@ -707,13 +738,17 @@ def _resolve_project_source_refs(
         source: SourceEntry | None = source_map.get(match.group("name"))
         if source is None:
             return match.group(0)
-        return render_source_relation(source)
+        return render_source_relation(source, adapter=adapter)
 
     return _SOURCE_PATTERN.sub(_replace_source, sql)
 
 
 def _try_resolve_project_source_refs_with_sql_analysis(
-    *, sql: str, source_map: dict[str, SourceEntry], sql_analysis_dialect: str | None
+    *,
+    sql: str,
+    source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter,
+    sql_analysis_dialect: str | None,
 ) -> str | None:
     if SqlReferenceKind.SOURCE.function_name not in sql.lower():
         return None
@@ -722,7 +757,12 @@ def _try_resolve_project_source_refs_with_sql_analysis(
         return None
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "scenario source ref resolution parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     parsed_dict: dict[str, Any] = parsed.to_dict()
     expression_source_names: set[str] = set()
@@ -736,7 +776,7 @@ def _try_resolve_project_source_refs_with_sql_analysis(
         if source.expression is not None:
             expression_source_names.add(referenced_name)
             return None
-        return render_source_relation(source)
+        return render_source_relation(source, adapter=adapter)
 
     replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
         parsed_dict,
@@ -761,7 +801,10 @@ def _replace_relation_markers_in_polyglot_dict(
     polyglot_module: Any,
     sql_analysis_dialect: str | None,
     target_for_marker: Any,
+    relation_cache: dict[str, dict[str, Any] | None] | None = None,
 ) -> bool:
+    if relation_cache is None:
+        relation_cache = {}
     changed: bool = False
     if isinstance(node, dict):
         from_clause: Any | None = node.get("from")
@@ -774,6 +817,7 @@ def _replace_relation_markers_in_polyglot_dict(
                         polyglot_module=polyglot_module,
                         sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
+                        relation_cache=relation_cache,
                     )
                     if replacement is not None:
                         expressions[index] = replacement
@@ -789,6 +833,7 @@ def _replace_relation_markers_in_polyglot_dict(
                     polyglot_module=polyglot_module,
                     sql_analysis_dialect=sql_analysis_dialect,
                     target_for_marker=target_for_marker,
+                    relation_cache=relation_cache,
                 )
                 if replacement is not None:
                     join["this"] = replacement
@@ -802,6 +847,7 @@ def _replace_relation_markers_in_polyglot_dict(
                         polyglot_module=polyglot_module,
                         sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
+                        relation_cache=relation_cache,
                     )
                     or changed
                 )
@@ -815,6 +861,7 @@ def _replace_relation_markers_in_polyglot_dict(
                         polyglot_module=polyglot_module,
                         sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
+                        relation_cache=relation_cache,
                     )
                     or changed
                 )
@@ -827,6 +874,7 @@ def _replacement_relation_expression(
     polyglot_module: Any,
     sql_analysis_dialect: str | None,
     target_for_marker: Any,
+    relation_cache: dict[str, dict[str, Any] | None],
 ) -> dict[str, Any] | None:
     if not isinstance(expression, dict):
         return None
@@ -837,6 +885,7 @@ def _replacement_relation_expression(
             polyglot_module=polyglot_module,
             sql_analysis_dialect=sql_analysis_dialect,
             target_for_marker=target_for_marker,
+            relation_cache=relation_cache,
         )
         if inner_replacement is None:
             return None
@@ -856,11 +905,14 @@ def _replacement_relation_expression(
     target_name: str | None = target_for_marker(function_name, referenced_name)
     if target_name is None:
         return None
-    return _polyglot_relation_dict(
-        target_name=target_name,
-        polyglot_module=polyglot_module,
-        sql_analysis_dialect=sql_analysis_dialect,
-    )
+    if target_name not in relation_cache:
+        relation_cache[target_name] = _polyglot_relation_dict(
+            target_name=target_name,
+            polyglot_module=polyglot_module,
+            sql_analysis_dialect=sql_analysis_dialect,
+        )
+    relation: dict[str, Any] | None = relation_cache[target_name]
+    return None if relation is None else deepcopy(relation)
 
 
 def _polyglot_marker_reference_name(
@@ -905,7 +957,12 @@ def _polyglot_relation_dict(
             f"SELECT * FROM {target_name}",
             dialect=sql_analysis_dialect or "generic",
         )
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "scenario relation dict parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return None
     parsed_dict: dict[str, Any] = parsed.to_dict()
     select_payload: Any | None = parsed_dict.get("select")
@@ -932,12 +989,12 @@ def _required_fixture_sql(fixture_sql: dict[str, str], logical_name: str, *, kin
 
 
 def _required_target(
-    targets: dict[str, CompiledRelationDestination],
+    targets: dict[str, CompiledRelationLocation],
     name: str,
     *,
     kind: ScenarioArtifactKind,
-) -> CompiledRelationDestination:
-    target: CompiledRelationDestination | None = targets.get(name)
+) -> CompiledRelationLocation:
+    target: CompiledRelationLocation | None = targets.get(name)
     if target is None:
         raise PlannerInputError(
             f"Scenario relation plan is missing {kind.value} target '{name}'",
@@ -948,28 +1005,30 @@ def _required_target(
 
 
 def _scenario_target_name_for_marker(
-    *, function_name: str, referenced_name: str, relation_plan: ScenarioRelationPlan
+    *,
+    function_name: str,
+    referenced_name: str,
+    relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
 ) -> str | None:
     if function_name == SqlReferenceKind.REF.function_name:
-        target: CompiledRelationDestination | None = relation_plan.model_targets.get(
-            referenced_name
-        )
+        target: CompiledRelationLocation | None = relation_plan.model_locations.get(referenced_name)
         return None if target is None else target.qualified_name
     if function_name == SqlReferenceKind.SEED.function_name:
-        target = relation_plan.seed_targets.get(referenced_name)
+        target = relation_plan.seed_locations.get(referenced_name)
         return None if target is None else target.qualified_name
     if function_name == SqlReferenceKind.SOURCE.function_name:
         source: SourceEntry | None = relation_plan.source_map.get(referenced_name)
-        return None if source is None else render_source_relation(source)
+        return None if source is None else render_source_relation(source, adapter=adapter)
     if function_name == SqlReferenceKind.DBT_REF.function_name:
-        target = relation_plan.dbt_ref_fixture_targets.get(referenced_name)
+        target = relation_plan.dbt_ref_fixture_locations.get(referenced_name)
         return None if target is None else target.qualified_name
     return None
 
 
 def _resolve_model_dbt_ref_fixtures(*, query_sql: str, relation_plan: ScenarioRelationPlan) -> str:
     def _replace_dbt_ref(match: re.Match[str]) -> str:
-        target: CompiledRelationDestination | None = relation_plan.dbt_ref_fixture_targets.get(
+        target: CompiledRelationLocation | None = relation_plan.dbt_ref_fixture_locations.get(
             _dbt_ref_fixture_name(match)
         )
         if target is None or target.qualified_name is None:
@@ -994,7 +1053,8 @@ def _target_for_artifact(
     logical_name: str,
     database: str | None,
     schema: str | None,
-) -> CompiledRelationDestination:
+    render_qualified_name: Callable[..., str | None],
+) -> CompiledRelationLocation:
     identity: ScenarioArtifactIdentity = ScenarioArtifactIdentity(
         kind=kind,
         logical_name=logical_name,
@@ -1006,24 +1066,14 @@ def _target_for_artifact(
             code=SCENARIO_PLAN_INTERNAL,
             help="This is likely a SQLBuild bug. Please file an issue with the scenario name.",
         )
-    qualified_name: str | None = _qualified_name(
+    qualified_name: str | None = render_qualified_name(
         database=database,
         schema=schema,
         name=physical_name,
     )
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=physical_name,
-        qualified_name=qualified_name,
+        qualified_name=qualified_name if qualified_name is not None else physical_name,
     )
-
-
-def _qualified_name(*, database: str | None, schema: str | None, name: str) -> str:
-    parts: list[str] = []
-    if database is not None:
-        parts.append(database)
-    if schema is not None:
-        parts.append(schema)
-    parts.append(name)
-    return ".".join(parts)

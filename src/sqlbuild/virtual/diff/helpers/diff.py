@@ -8,17 +8,17 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
-from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_targets
+from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_locations
 from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
@@ -49,7 +49,7 @@ def read_physical_relations_for_refs(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, PhysicalRelationRecord]:
     """Read tracked physical relations for VDE refs."""
 
@@ -69,8 +69,8 @@ def read_physical_relations_for_refs(
 def filter_models_with_changed_virtual_refs(
     *,
     selected_names: tuple[str, ...],
-    from_refs: tuple[VirtualEnvironmentRefRecord, ...],
-    to_refs: tuple[VirtualEnvironmentRefRecord, ...],
+    from_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
+    to_refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Split selected models into changed/missing refs and identical refs."""
 
@@ -91,9 +91,9 @@ def filter_models_with_changed_virtual_refs(
 def rewrite_project_to_physical_relations(
     *, adapter: BaseAdapter, project: CompiledProject, relations: dict[str, PhysicalRelationRecord]
 ) -> CompiledProject:
-    """Rewrite a project's model targets to tracked physical relations."""
+    """Rewrite a project's model locations to tracked physical relations."""
 
-    targets: dict[str, CompiledRelationDestination] = {
+    targets: dict[str, CompiledRelationLocation] = {
         model.name: build_virtual_destination_from_physical_relation(
             adapter=adapter,
             relation=relations[model.name],
@@ -102,7 +102,7 @@ def rewrite_project_to_physical_relations(
         for model in project.models
         if model.name in relations
     }
-    return rewrite_virtual_project_model_targets(project=project, rewritten_targets=targets)
+    return rewrite_virtual_project_model_locations(project=project, rewritten_locations=targets)
 
 
 def non_finalized_target_names(

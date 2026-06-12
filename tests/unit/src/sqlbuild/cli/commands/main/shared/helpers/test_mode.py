@@ -4,8 +4,8 @@ import pytest
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.mode import (
-    enforce_direct_mode_command_support,
     enforce_no_defer_to_in_virtual_mode,
+    enforce_standard_mode_command_support,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
@@ -16,13 +16,13 @@ from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import
     "test_case",
     [
         ModeGuardTestCase(
-            description="allows run in direct mode",
+            description="allows run in standard mode",
             virtual_environments=False,
             command_name="run",
             expected_error_fragment=None,
         )
     ],
-    ids=["allows run in direct mode"],
+    ids=["allows run in standard mode"],
 )
 def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
     test_case: ModeGuardTestCase,
@@ -36,7 +36,7 @@ def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
         local_config=LocalConfig(),
     )
 
-    enforce_direct_mode_command_support(
+    enforce_standard_mode_command_support(
         discovered_inputs=discovered_inputs,
         command_name=test_case.command_name,
     )
@@ -68,7 +68,7 @@ def test_given_virtual_mode_command_when_enforcing_support_then_raises_cli_user_
     )
 
     with pytest.raises(CliUserError) as exc_info:
-        enforce_direct_mode_command_support(
+        enforce_standard_mode_command_support(
             discovered_inputs=discovered_inputs,
             command_name=test_case.command_name,
         )

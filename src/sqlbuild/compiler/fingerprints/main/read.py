@@ -8,10 +8,10 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
-    build_read_all_sql,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 
@@ -20,24 +20,39 @@ def read_latest_fingerprints(
     *,
     connection: Any,
     execute: Any,
+    relation_exists: Callable[..., bool],
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
+    render_read_latest_sql: Callable[..., str],
+    require_table: bool = False,
 ) -> FingerprintSet:
-    """Read all fingerprints for a schema and resolve latest per model in memory."""
+    """Read the latest fingerprint per node identity from adapter-rendered SQL.
+
+    Fingerprint table existence is checked via adapter metadata (`relation_exists`)
+    rather than by swallowing probe-query errors, so operational failures propagate
+    instead of being misread as "no fingerprint state".
+    """
 
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
-    if not _table_exists(connection=connection, execute=execute, qualified_name=qualified_name):
-        return FingerprintSet(schema=schema, fingerprints={})
-
-    read_sql: str = build_read_all_sql(
+    table_exists: bool = relation_exists(
+        connection,
         database=database,
         schema=schema,
-        render_qualified_name=render_qualified_name,
+        name=FINGERPRINT_TABLE_NAME,
+    )
+    if not table_exists:
+        if require_table:
+            raise FingerprintInputError(f"Unable to read fingerprints from {qualified_name}")
+        return FingerprintSet(schema=schema, fingerprints={})
+
+    read_sql: str = render_read_latest_sql(
+        database=database,
+        schema=schema,
     )
     try:
         result: Any = execute(connection, read_sql)
@@ -48,57 +63,55 @@ def read_latest_fingerprints(
             "fingerprint table to regenerate fingerprints."
         ) from error
     rows: list[tuple[Any, ...]] = result.fetchall()
-    latest: dict[str, Fingerprint] = {}
+    fingerprints: dict[str, Fingerprint] = {}
+    fingerprints_by_identity: dict[tuple[str, str], Fingerprint] = {}
     row: tuple[Any, ...]
     for row in rows:
         fingerprint: Fingerprint = _row_to_fingerprint(row, qualified_name=qualified_name)
-        model_name: str = fingerprint.model_name
-        if model_name not in latest or fingerprint.ts > latest[model_name].ts:
-            latest[model_name] = fingerprint
-    return FingerprintSet(schema=schema, fingerprints=latest)
-
-
-def _table_exists(*, connection: Any, execute: Any, qualified_name: str) -> bool:
-    """Check whether the fingerprint table exists without raising on missing."""
-
-    try:
-        execute(connection, f"SELECT COUNT(*) FROM {qualified_name} WHERE 1 = 0")
-        return True
-    except Exception:
-        return False
+        fingerprints_by_identity[(fingerprint.node_type, fingerprint.node_name)] = fingerprint
+        if fingerprint.node_type == NODE_TYPE_MODEL or fingerprint.node_name not in fingerprints:
+            fingerprints[fingerprint.node_name] = fingerprint
+    return FingerprintSet(
+        schema=schema,
+        fingerprints=fingerprints,
+        fingerprints_by_identity=fingerprints_by_identity,
+    )
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:
-    raw_ts: Any = row[9]
+    raw_ts: Any = row[11]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
-    raw_target_database: Any = row[1]
-    raw_target_schema: Any = row[2]
-    raw_target_name: Any = row[3]
-    model_name: str = str(row[0])
-    query_sql_storage: str = str(row[7])
-    metadata_json_storage: str = str(row[8])
+    node_type: str = str(row[0])
+    node_name: str = str(row[1])
+    raw_target_database: Any = row[2]
+    raw_target_schema: Any = row[3]
+    raw_target_name: Any = row[4]
+    definition_storage: str = str(row[9])
+    metadata_json_storage: str = str(row[10])
     try:
-        query_sql: str = base64.b64decode(query_sql_storage.encode("ascii"), validate=True).decode(
-            "utf-8"
-        )
+        definition: str = base64.b64decode(
+            definition_storage.encode("ascii"), validate=True
+        ).decode("utf-8")
         metadata_json: str = base64.b64decode(
             metadata_json_storage.encode("ascii"), validate=True
         ).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError) as error:
         raise FingerprintInputError(
-            f"Invalid fingerprint query SQL storage for '{model_name}' in {qualified_name}: "
+            f"Invalid fingerprint definition storage for '{node_name}' in {qualified_name}: "
             "expected base64-encoded UTF-8. This can happen after upgrading from an older "
             f"sqlbuild version; delete or rebuild {qualified_name} to regenerate fingerprints."
         ) from error
     return Fingerprint(
-        model_name=model_name,
+        node_type=node_type,
+        node_name=node_name,
         target_database=str(raw_target_database) if raw_target_database is not None else None,
         target_schema=str(raw_target_schema) if raw_target_schema is not None else None,
         target_name=str(raw_target_name) if raw_target_name is not None else None,
-        run_id=str(row[4]),
-        query_hash=str(row[5]),
-        schema_fingerprint=str(row[6]),
-        query_sql=query_sql,
+        run_id=str(row[5]),
+        definition_hash=str(row[6]),
+        version_hash=str(row[7]),
+        schema_fingerprint=str(row[8]),
+        definition=definition,
         metadata_json=metadata_json,
         ts=ts,
     )

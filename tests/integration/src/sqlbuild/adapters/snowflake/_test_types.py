@@ -80,6 +80,15 @@ class SnowflakeBuildFlowTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeRelationReuseCopyTestCase:
+    description: str
+    hard_copy: bool
+    destination_name: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
 class SnowflakeMergeTestCase:
     description: str
     target_setup_sql: tuple[str, ...]

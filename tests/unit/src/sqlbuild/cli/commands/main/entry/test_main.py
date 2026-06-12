@@ -1688,9 +1688,18 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
     [
         MainTestCase(
             description="dispatches janitor command through injected handler",
-            argv=["--no-color", "janitor", "--auto-approve", "--retention-days", "0"],
+            argv=[
+                "--no-color",
+                "janitor",
+                "--auto-approve",
+                "--retention-days",
+                "0",
+                "--direct-state-history-versions",
+                "5",
+            ],
             expected_exit_code=9,
             expected_no_color=True,
+            expected_direct_state_history_versions=5,
         )
     ],
     ids=["dispatches janitor command through injected handler"],
@@ -1698,15 +1707,18 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
 def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, int | None]] = []
+    received_args: list[tuple[Path | None, bool, bool, int | None, int | None]] = []
 
     def run_janitor(
         project_dir: Path | None,
         no_color: bool,
         auto_approve: bool,
         retention_days: int | None,
+        direct_state_history_versions: int | None,
     ) -> int:
-        received_args.append((project_dir, no_color, auto_approve, retention_days))
+        received_args.append(
+            (project_dir, no_color, auto_approve, retention_days, direct_state_history_versions)
+        )
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1715,7 +1727,15 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, test_case.expected_no_color, True, 0)]
+    assert received_args == [
+        (
+            None,
+            test_case.expected_no_color,
+            True,
+            0,
+            test_case.expected_direct_state_history_versions,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

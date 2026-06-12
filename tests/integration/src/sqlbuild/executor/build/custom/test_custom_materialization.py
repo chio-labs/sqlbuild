@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -10,11 +11,15 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import PlanReason
-from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
+from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+    PrepareVersionContext,
+)
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
@@ -40,6 +45,11 @@ from tests.integration.src.sqlbuild.executor.build.custom.helpers import (
     resolve_fn,
     row_count,
     run_custom_entry,
+)
+from tests.integration.src.sqlbuild.executor.run.helpers import (
+    build_test_audit_gate_metadata,
+    build_test_audit_plan_entry,
+    write_matching_reuse_origin_fingerprint,
 )
 
 SUCCESS_TEST_CASES: list[CustomSuccessTestCase] = [
@@ -291,7 +301,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
+    model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
     audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -304,7 +314,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         entry=entry,
         materialize_fn=build_user_audit_fn(expect_pass=test_case.audit_passes),
         model_audits=(audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
     actual_audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
@@ -318,7 +328,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         entry=entry,
         materialize_fn=build_simple_fn(),
         model_audits=(actual_audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
 
     assert result.status == test_case.expected_status
@@ -355,7 +365,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
-    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
+    model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
     actual_audit: AuditPlanEntry = (
         build_passing_audit(name="check_empty", target_name="test_model")
         if test_case.audit_passes
@@ -368,12 +378,93 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
         entry=entry,
         materialize_fn=build_user_audit_fn(expect_pass=test_case.audit_passes),
         model_audits=(actual_audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
 
     assert result.status == test_case.expected_status
     assert len(result.audit_results) == test_case.expected_audit_count
     assert result.audit_results[0].outcome == test_case.expected_audit_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UserAuditTestCase(
+            description="custom baseline reuse executes user audits despite accepted origin proof",
+            audit_passes=False,
+            expected_status=ExecutionStatus.FAILED,
+            expected_audit_count=1,
+            expected_audit_outcome=AuditOutcome.ERROR,
+        )
+    ],
+    ids=["custom baseline reuse executes user audits despite accepted origin proof"],
+)
+def test_given_custom_reuse_with_origin_proof_when_user_runs_audits_then_audit_executes(
+    test_case: UserAuditTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE main.test_model_origin AS SELECT NULL::INTEGER AS id")
+    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
+        name="test_model_id_not_null",
+        unresolved_sql='SELECT id FROM __ref("test_model") WHERE id IS NULL',
+        attached_target_name="test_model",
+        resolved_target_name="main.test_model_origin",
+        severity="error",
+    )
+    write_matching_reuse_origin_fingerprint(
+        adapter=adapter,
+        connection=connection,
+        schema="main",
+        model_name="test_model",
+        target_name="test_model_origin",
+        metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
+    )
+    entry: ModelPlanEntry = dataclasses.replace(
+        build_custom_plan_entry(sql="SELECT NULL::INTEGER AS id"),
+        fingerprint_version_hash="expected_version",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="test_model_origin",
+                qualified_name="main.test_model_origin",
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=True,
+            fingerprint_database=None,
+            fingerprint_schema="main",
+        ),
+    )
+    model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
+    planned_audit: AuditPlanEntry = build_failing_audit(
+        name="test_model_id_not_null",
+        target_name="test_model",
+    )
+
+    def prepare_version(ctx: PrepareVersionContext) -> None:
+        ctx.adapter.create_table_as(
+            ctx.connection,
+            destination=ctx.destination,
+            sql=f"SELECT * FROM {ctx.origin_relation}",
+            statement_recorder=ctx.statement_recorder,
+        )
+
+    result: ModelExecutionResult = run_custom_entry(
+        adapter=adapter,
+        connection=connection,
+        entry=entry,
+        materialize_fn=build_user_audit_fn(expect_pass=test_case.audit_passes),
+        model_audits=(planned_audit,),
+        model_locations=model_locations,
+        prepare_version_fn=prepare_version,
+    )
+
+    assert result.status == test_case.expected_status
+    assert len(result.audit_results) == test_case.expected_audit_count
+    assert result.audit_results[0].outcome == test_case.expected_audit_outcome
+    assert result.audit_results[0].reused is False
 
 
 CLEANUP_TEST_CASES: list[CleanupTestCase] = [
@@ -500,7 +591,7 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         )
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )

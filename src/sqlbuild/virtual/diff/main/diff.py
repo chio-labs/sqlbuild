@@ -30,8 +30,8 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 
 
@@ -107,15 +107,19 @@ def run_virtual_diff(
             schema=config.schema,
             virtual_environment_name=to_virtual_environment_name,
         )
-        from_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=from_virtual_environment_name,
+        from_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=from_virtual_environment_name,
+            )
         )
-        to_refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
+        to_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=to_virtual_environment_name,
+            )
         )
         if not from_refs:
             raise PlannerInputError(
@@ -260,7 +264,7 @@ def _read_model_versions(
     backend: Any,
     state_connection: Any,
     schema: str,
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(

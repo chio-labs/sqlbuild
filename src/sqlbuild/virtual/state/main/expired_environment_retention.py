@@ -11,7 +11,7 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ExpiredVirtualEnvironmentInspection,
     PhysicalRelationRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRetentionRecord,
 )
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
@@ -50,10 +50,12 @@ def inspect_expired_environment_retention(
         for environment in environments:
             if environment.status == VirtualEnvironmentStatus.DETACHED:
                 continue
-            refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-                connection,
-                schema=config.schema,
-                virtual_environment_name=environment.virtual_environment_name,
+            refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+                backend.get_virtual_environment_model_refs(
+                    connection,
+                    schema=config.schema,
+                    virtual_environment_name=environment.virtual_environment_name,
+                )
             )
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(

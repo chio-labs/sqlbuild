@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeLoadSeedTestCase,
     SnowflakeMoveOrCopyRelationTestCase,
+    SnowflakePruneSqlTestCase,
     SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
@@ -82,6 +83,77 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
         == test_case.expected_rule_results["IFF"]
     )
     assert upper_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["UPPER"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakePruneSqlTestCase(
+            description="renders fingerprint pruning with delete using ranked stale rows",
+            database=None,
+            schema="ANALYTICS",
+            retain_versions=5,
+            expected_fragments=(
+                "DELETE FROM ANALYTICS._sqlbuild_fingerprints AS target USING",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY node_type, node_name",
+                "ORDER BY ts DESC, run_id DESC",
+                "__sqlbuild_history_rank > 5",
+                "target.node_type = stale.node_type",
+                "target.node_name = stale.node_name",
+            ),
+        )
+    ],
+    ids=["renders fingerprint pruning with delete using ranked stale rows"],
+)
+def test_given_fingerprint_table_when_rendering_prune_then_snowflake_uses_history_rank(
+    test_case: SnowflakePruneSqlTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    sql: str = adapter.render_prune_fingerprint_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakePruneSqlTestCase(
+            description="renders source freshness pruning with null-safe full identity",
+            database=None,
+            schema="ANALYTICS",
+            retain_versions=3,
+            expected_fragments=(
+                "DELETE FROM ANALYTICS._sqlbuild_source_freshness AS target USING",
+                "ROW_NUMBER() OVER",
+                "PARTITION BY source_name, target_database, target_schema, target_name",
+                "ORDER BY observed_at DESC, run_id DESC",
+                "__sqlbuild_history_rank > 3",
+                "EQUAL_NULL(target.target_database, stale.target_database)",
+            ),
+        )
+    ],
+    ids=["renders source freshness pruning with null-safe full identity"],
+)
+def test_given_source_freshness_table_when_rendering_prune_then_snowflake_uses_history_rank(
+    test_case: SnowflakePruneSqlTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    sql: str = adapter.render_prune_source_freshness_history_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+        retain_versions=test_case.retain_versions,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in sql
 
 
 TEST_CASES: list[SnowflakeRenderCursorBoundLiteralTestCase] = [
@@ -178,8 +250,8 @@ def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_s
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     statements: tuple[str, ...] = adapter.render_clone(
-        source=test_case.source,
-        target=test_case.target,
+        origin=test_case.source,
+        destination=test_case.target,
         hard_copy=test_case.hard_copy,
     )
 
@@ -212,9 +284,9 @@ def test_given_cross_schema_table_move_when_moving_then_snowflake_uses_native_re
 
     adapter.move_or_copy_relation(
         connection,
-        source=test_case.source,
-        target=test_case.target,
-        remove_source=True,
+        origin=test_case.source,
+        destination=test_case.target,
+        remove_origin=True,
         allow_copy_fallback=False,
         statement_recorder=statement_recorder,
     )
@@ -329,7 +401,7 @@ def test_given_python_function_when_rendering_then_snowflake_returns_expected_dd
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="udf_db.udf_schema.is_positive_int",
+        destination="udf_db.udf_schema.is_positive_int",
         arguments=(FunctionArgument(name="a_string", type="STRING"),),
         returns="INTEGER",
         body_sql="def main(a_string):\n    return 1 if a_string else 0",
@@ -363,7 +435,7 @@ def test_given_table_function_when_rendering_then_snowflake_returns_expected_ddl
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     statements: tuple[str, ...] = adapter.render_create_function(
-        target="analytics.customer_orders",
+        destination="analytics.customer_orders",
         arguments=(FunctionArgument(name="p_customer_id", type="INTEGER"),),
         returns="TABLE",
         body_sql=("SELECT order_id FROM analytics.fact_orders\nWHERE customer_id = p_customer_id"),
@@ -459,7 +531,7 @@ def test_given_default_seed_csv_settings_when_loading_seed_then_uses_python_csv_
 
     adapter.load_seed(
         connection,
-        target="dev.waffle_types",
+        destination="dev.waffle_types",
         file_path=seed_file,
         columns=(
             ColumnInfo(name="id", type="INTEGER"),

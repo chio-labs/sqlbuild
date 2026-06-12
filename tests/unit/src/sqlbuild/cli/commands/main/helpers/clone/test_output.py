@@ -35,7 +35,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.helpers.clone._test_types import 
                 )
             ),
             expected_fragments=(
-                "sqb clone  from=prod to=dev",
+                "sqb clone  origin=prod destination=dev",
                 "fact_orders",
                 "OK",
                 "WARN",
@@ -56,16 +56,16 @@ def test_given_clone_result_when_rendering_then_styles_status_rows(
 ) -> None:
     render_clone_output(
         result=test_case.result,
-        from_target="prod",
-        to_target="dev",
+        origin_target_name="prod",
+        destination_target_name="dev",
         use_color=False,
     )
     no_color_output: str = capsys.readouterr().out
 
     render_clone_output(
         result=test_case.result,
-        from_target="prod",
-        to_target="dev",
+        origin_target_name="prod",
+        destination_target_name="dev",
         use_color=True,
     )
     color_output: str = capsys.readouterr().out

@@ -40,8 +40,8 @@ def run_clone(
     project_dir: Path | None,
     no_color: bool,
     no_sql_validation: bool,
-    from_target: str,
-    to_target: str,
+    origin_target_name: str,
+    destination_target_name: str,
     hard_copy: bool,
     virtual_env: str | None = None,
     skip_locked: bool = False,
@@ -56,8 +56,8 @@ def run_clone(
     )
     validate_clone_request(
         discovered_inputs=discovered_inputs,
-        from_target=from_target,
-        to_target=to_target,
+        origin_target_name=origin_target_name,
+        destination_target_name=destination_target_name,
     )
     effective_adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -67,16 +67,16 @@ def run_clone(
         effective_adapter_name, project_dir=effective_project_dir
     )
 
-    source_connection_config: dict[str, object] = resolve_target_connection_config(
+    origin_connection_config: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        target_name=from_target,
+        target_name=origin_target_name,
         cli_vars=cli_vars,
     )
-    target_connection_config: dict[str, object] = resolve_target_connection_config(
+    destination_connection_config: dict[str, object] = resolve_target_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
-        target_name=to_target,
+        target_name=destination_target_name,
         cli_vars=cli_vars,
     )
     if discovered_inputs.project_config.settings.virtual_environments:
@@ -84,10 +84,10 @@ def run_clone(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
             adapter=adapter,
-            from_target=from_target,
-            to_target=to_target,
-            source_connection_config=source_connection_config,
-            target_connection_config=target_connection_config,
+            origin_target_name=origin_target_name,
+            destination_target_name=destination_target_name,
+            origin_connection_config=origin_connection_config,
+            destination_connection_config=destination_connection_config,
             virtual_environment_name=virtual_env,
             skip_locked=skip_locked,
             no_sql_validation=no_sql_validation,
@@ -106,47 +106,51 @@ def run_clone(
         )
         return 0 if is_virtual_clone_success(result) else 1
 
-    source_connection: Any = adapter.connect(source_connection_config)
-    target_connection: Any = adapter.connect(target_connection_config)
+    origin_connection: Any = adapter.connect(origin_connection_config)
+    destination_connection: Any = adapter.connect(destination_connection_config)
     try:
         clone_pipeline: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
-            from_target=from_target,
-            to_target=to_target,
+            origin_target_name=origin_target_name,
+            destination_target_name=destination_target_name,
             no_sql_validation=no_sql_validation,
             select=select,
             exclude=exclude,
             cli_vars=cli_vars,
-            target_connection=target_connection,
+            destination_connection=destination_connection,
             external_sql_reference_resolver=resolve_external_sql_reference_resolver(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
             ),
         )
-        target_model_entries: tuple[ModelPlanEntry, ...] = clone_pipeline.target_model_entries
-        target_seed_entries: tuple[SeedPlanEntry, ...] = clone_pipeline.target_seed_entries
-        if not target_model_entries and not target_seed_entries:
+        destination_model_entries: tuple[ModelPlanEntry, ...] = (
+            clone_pipeline.destination_model_entries
+        )
+        destination_seed_entries: tuple[SeedPlanEntry, ...] = (
+            clone_pipeline.destination_seed_entries
+        )
+        if not destination_model_entries and not destination_seed_entries:
             raise CliUserError("no cloneable resources found in the selected scope", code="C407")
 
         result: CloneExecutionResult = execute_clone(
-            source_model_entries=clone_pipeline.source_model_entries,
-            target_model_entries=target_model_entries,
-            source_seed_entries=clone_pipeline.source_seed_entries,
-            target_seed_entries=target_seed_entries,
+            origin_model_entries=clone_pipeline.origin_model_entries,
+            destination_model_entries=destination_model_entries,
+            origin_seed_entries=clone_pipeline.origin_seed_entries,
+            destination_seed_entries=destination_seed_entries,
             adapter=adapter,
-            source_connection=source_connection,
-            target_connection=target_connection,
+            origin_connection=origin_connection,
+            destination_connection=destination_connection,
             hard_copy=hard_copy,
         )
     finally:
-        adapter.close(source_connection)
-        adapter.close(target_connection)
+        adapter.close(origin_connection)
+        adapter.close(destination_connection)
 
     render_clone_output(
         result=result,
-        from_target=from_target,
-        to_target=to_target,
+        origin_target_name=origin_target_name,
+        destination_target_name=destination_target_name,
         use_color=not no_color and supports_color(),
     )
     return 0 if is_clone_success(result) else 1

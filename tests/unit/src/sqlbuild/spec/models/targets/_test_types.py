@@ -15,3 +15,19 @@ class TargetConfigResolutionTestCase:
     expected_schema: str | None
     expected_connection: dict[str, object]
     expected_allow_reset: bool
+    expected_reuse_from: str | None = None
+    expected_reuse_hard_copy: bool = False
+
+
+@dataclass(frozen=True)
+class TargetConfigReuseErrorTestCase:
+    description: str
+    target_name: str
+    reuse_from: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class TargetConfigReuseLocalSourceTestCase:
+    description: str
+    expected_reuse_from: str

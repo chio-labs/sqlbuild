@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner.helpers.plan_entry import (
@@ -25,6 +25,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -41,18 +42,21 @@ def build_plan_output_from_model_changes_phase(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     reload_sources: bool = False,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
+    seed_version_hashes: dict[str, str] | None = None,
+    seed_metadata_jsons: dict[str, str] | None = None,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanOutput:
     relations: PlannerRelationsContext = build_planner_relations_context(
         project=project,
         adapter=adapter,
         connection=connection,
         scope=scope,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
         project_config=project_config,
         local_config=local_config,
         defer_sources_to=defer_sources_to,
@@ -90,4 +94,7 @@ def build_plan_output_from_model_changes_phase(
         changes=changes,
         model_entry_results=model_entry_results,
         reload_sources=reload_sources,
+        seed_version_hashes=seed_version_hashes,
+        seed_metadata_jsons=seed_metadata_jsons,
+        seed_plan_reasons=seed_plan_reasons,
     )

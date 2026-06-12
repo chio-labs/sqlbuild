@@ -4,22 +4,22 @@ import pytest
 
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.main.propagation import (
-    build_direct_source_freshness_propagation_result,
+    build_standard_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
+    StandardSourceFreshnessPlanningResult,
+    StandardSourceFreshnessPropagationResult,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
-    DirectSourceFreshnessPropagationTestCase,
+    StandardSourceFreshnessPropagationTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
     downstream_deps_from_edges,
     source_freshness_identity,
 )
 
-PROPAGATION_TEST_CASES: list[DirectSourceFreshnessPropagationTestCase] = [
-    DirectSourceFreshnessPropagationTestCase(
+PROPAGATION_TEST_CASES: list[StandardSourceFreshnessPropagationTestCase] = [
+    StandardSourceFreshnessPropagationTestCase(
         description="propagates changed source to direct downstream model",
         changed_source_names=("raw.orders",),
         unknown_source_names=(),
@@ -28,7 +28,7 @@ PROPAGATION_TEST_CASES: list[DirectSourceFreshnessPropagationTestCase] = [
         expected_changed_source_model_names={"raw.orders": frozenset({"orders"})},
         expected_unknown_source_model_names={},
     ),
-    DirectSourceFreshnessPropagationTestCase(
+    StandardSourceFreshnessPropagationTestCase(
         description="propagates changed source through view to downstream table",
         changed_source_names=("raw.orders",),
         unknown_source_names=(),
@@ -42,7 +42,7 @@ PROPAGATION_TEST_CASES: list[DirectSourceFreshnessPropagationTestCase] = [
         },
         expected_unknown_source_model_names={},
     ),
-    DirectSourceFreshnessPropagationTestCase(
+    StandardSourceFreshnessPropagationTestCase(
         description="preserves shared downstream for multiple changed sources",
         changed_source_names=("raw.orders", "raw.payments"),
         unknown_source_names=(),
@@ -57,7 +57,7 @@ PROPAGATION_TEST_CASES: list[DirectSourceFreshnessPropagationTestCase] = [
         },
         expected_unknown_source_model_names={},
     ),
-    DirectSourceFreshnessPropagationTestCase(
+    StandardSourceFreshnessPropagationTestCase(
         description="propagates unknown source conservatively to downstream models",
         changed_source_names=(),
         unknown_source_names=("raw.orders",),
@@ -75,11 +75,11 @@ PROPAGATION_TEST_CASES: list[DirectSourceFreshnessPropagationTestCase] = [
     ids=[case.description for case in PROPAGATION_TEST_CASES],
 )
 def test_given_source_freshness_roots_when_propagating_then_returns_downstream_models(
-    test_case: DirectSourceFreshnessPropagationTestCase,
+    test_case: StandardSourceFreshnessPropagationTestCase,
 ) -> None:
-    propagation: DirectSourceFreshnessPropagationResult = (
-        build_direct_source_freshness_propagation_result(
-            source_freshness=DirectSourceFreshnessPlanningResult(
+    propagation: StandardSourceFreshnessPropagationResult = (
+        build_standard_source_freshness_propagation_result(
+            source_freshness=StandardSourceFreshnessPlanningResult(
                 changed_identities=frozenset(
                     source_freshness_identity(source_name)
                     for source_name in test_case.changed_source_names

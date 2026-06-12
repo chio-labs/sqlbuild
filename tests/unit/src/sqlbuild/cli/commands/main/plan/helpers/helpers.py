@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
+    RelationReusePlan,
     SchemaFinding,
     SeedPlanEntry,
     SourceLoadPlanEntry,
@@ -28,6 +29,7 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
     SchemaChangeKind,
     SchemaColumnSource,
     WarningSeverity,
@@ -47,6 +49,8 @@ def build_model_entry(
     previous_query_sql: str | None = None,
     fingerprint_metadata_json: str | None = None,
     previous_metadata_json: str | None = None,
+    fingerprint_version_hash: str | None = None,
+    previous_version_hash: str | None = None,
     cursor_column: str | None = None,
     cursor_type: str | None = None,
     cursor_bounds: CursorBounds | None = None,
@@ -58,6 +62,7 @@ def build_model_entry(
     schema_findings: tuple[SchemaFinding, ...] = (),
     cascade: CascadeResult | None = None,
     custom_materialization_name: str | None = None,
+    relation_reuse: RelationReusePlan | None = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for formatter tests."""
 
@@ -68,7 +73,7 @@ def build_model_entry(
         materialization_type=materialization_type,
         action=action,
         reason=reason,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql=f"SELECT * FROM {name}",
@@ -85,10 +90,36 @@ def build_model_entry(
         previous_query_sql=previous_query_sql,
         fingerprint_metadata_json=fingerprint_metadata_json,
         previous_metadata_json=previous_metadata_json,
+        fingerprint_version_hash=fingerprint_version_hash,
+        previous_version_hash=previous_version_hash,
         schema_findings=schema_findings,
         backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
         cascade=cascade,
         custom_materialization_name=custom_materialization_name,
+        relation_reuse=relation_reuse,
+    )
+
+
+def build_relation_reuse_plan(
+    *,
+    kind: RelationReuseKind = RelationReuseKind.COMPLETE_RELATION_REUSE,
+    reuse_from_target_name: str = "prod",
+    origin_schema: str = "prod",
+    origin_name: str = "orders",
+    hard_copy: bool = True,
+) -> RelationReusePlan:
+    return RelationReusePlan(
+        kind=kind,
+        origin=CompiledRelationLocation(
+            database=None,
+            schema=origin_schema,
+            name=origin_name,
+            qualified_name=f"{origin_schema}.{origin_name}",
+        ),
+        reuse_from_target_name=reuse_from_target_name,
+        hard_copy=hard_copy,
+        fingerprint_database=None,
+        fingerprint_schema=origin_schema,
     )
 
 
@@ -178,18 +209,19 @@ def build_source_load_entry(
     )
 
 
-def build_seed_entry(*, name: str) -> SeedPlanEntry:
+def build_seed_entry(*, name: str, reason: PlanReason = PlanReason.FIRST_RUN) -> SeedPlanEntry:
     """Build a minimal SeedPlanEntry for formatter tests."""
 
     return SeedPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=name),
         name=name,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         file_path=Path(f"seeds/{name}.csv"),
         columns=(),
         csv_settings=SeedCsvSettings(),
+        reason=reason,
     )
 
 
@@ -198,7 +230,7 @@ def build_function_entry(
     name: str,
     language: FunctionLanguage = FunctionLanguage.SQL,
     reason: PlanReason = PlanReason.NO_CHANGE,
-    backfill_action: BackfillAction = BackfillAction.WARN_ONLY,
+    backfill_action: BackfillAction = BackfillAction.FORWARD_ONLY,
     backfill_duration: str | None = None,
     previous_query_sql: str | None = None,
 ) -> FunctionPlanEntry:
@@ -208,10 +240,10 @@ def build_function_entry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name),
         name=name,
         relative_path=Path(f"functions/{language.value}/{name}.sql"),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
-        fingerprint_destination=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         arguments=(),

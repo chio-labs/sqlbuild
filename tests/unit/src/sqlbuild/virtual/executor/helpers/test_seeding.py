@@ -11,6 +11,7 @@ from sqlbuild.virtual.executor.helpers.seeding import (
     seed_virtual_physical_version,
 )
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 from tests.unit.src.sqlbuild.virtual.executor.helpers._test_types import (
     SeedingIdempotencyTestCase,
     SeedingStrategyTestCase,
@@ -42,8 +43,8 @@ class FakeSeedAdapter(BaseAdapter):
     def supports_durable_clone(self) -> bool:
         return self._supports_durable_clone
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return (f"CREATE TABLE {target} DEEP CLONE {source}",)
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"CREATE TABLE {destination} DEEP CLONE {origin}",)
 
     def relation_exists(
         self,
@@ -70,13 +71,13 @@ class FakeSeedAdapter(BaseAdapter):
         self,
         connection: object,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, if_exists, statement_recorder
         self.drop_count += 1
-        self.executed_sql.append(f"DROP {target}")
+        self.executed_sql.append(f"DROP {destination}")
 
 
 class FakeStateBackend:
@@ -150,8 +151,8 @@ def test_given_incremental_seed_context_when_seeding_then_selects_expected_strat
     strategy: str = _seed_physical_relation(
         adapter=adapter,
         connection=object(),
-        source="source_relation",
-        target="target_relation",
+        origin="source_relation",
+        destination="target_relation",
         entry=entry,
         statement_recorder=StatementRecorder(),
     )
@@ -176,7 +177,8 @@ def test_given_incremental_target_when_seeding_then_existing_target_is_dropped_f
         action=PlanAction.INCREMENTAL_DELETE_INSERT,
     ).model_entries[0]
     parent_relation: PhysicalRelationRecord = PhysicalRelationRecord(
-        model_name="orders",
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name="orders",
         version_hash="oldhash",
         database_name="",
         schema_name="dev__sqb_physical",

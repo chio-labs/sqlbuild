@@ -11,7 +11,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
     CompileSqlReference,
 )
@@ -45,7 +45,7 @@ def build_model(
         relative_path=Path(f"models/{name}.sql"),
         query_sql=query_sql,
         config=CompileModelConfig(values=config),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=schema,
             name=name,
@@ -68,7 +68,7 @@ def resolve_and_execute(
     *,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     connection: Any,
@@ -82,12 +82,12 @@ def resolve_and_execute(
         adapter=DuckDbAdapter(),
         model=model,
         snapshot=snapshot,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword="EXCLUDE",
-        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,

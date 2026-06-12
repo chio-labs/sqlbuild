@@ -1,22 +1,23 @@
-"""Direct source freshness downstream propagation helpers."""
+"""Standard source freshness downstream propagation helpers."""
 
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
     SourceFreshnessIdentity,
+    StandardSourceFreshnessPlanningResult,
+    StandardSourceFreshnessPropagationResult,
 )
 
 
-def build_direct_source_freshness_propagation_result(
+def build_standard_source_freshness_propagation_result(
     *,
-    source_freshness: DirectSourceFreshnessPlanningResult,
+    source_freshness: StandardSourceFreshnessPlanningResult,
     scope: PlannerScope,
-) -> DirectSourceFreshnessPropagationResult:
+) -> StandardSourceFreshnessPropagationResult:
     """Map changed/unknown source freshness roots to downstream model names."""
 
     changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = {}
@@ -38,7 +39,7 @@ def build_direct_source_freshness_propagation_result(
         unknown_source_model_names[source_name] = model_names
         stale_model_names.update(model_names)
 
-    return DirectSourceFreshnessPropagationResult(
+    return StandardSourceFreshnessPropagationResult(
         changed_source_model_names=changed_source_model_names,
         unknown_source_model_names=unknown_source_model_names,
         stale_model_names=frozenset(stale_model_names),
@@ -50,27 +51,7 @@ def _downstream_model_names(*, source_name: str, scope: PlannerScope) -> frozens
         resource_type=CompiledResourceType.SOURCE,
         name=source_name,
     )
-    downstream_keys: frozenset[CompiledObjectKey] = _expand_downstream(
-        source_key,
-        scope.downstream_deps,
+    return build_downstream_model_names(
+        start_keys=(source_key,),
+        downstream_deps=scope.downstream_deps,
     )
-    return frozenset(
-        key.name for key in downstream_keys if key.resource_type == CompiledResourceType.MODEL
-    )
-
-
-def _expand_downstream(
-    key: CompiledObjectKey,
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        neighbor: CompiledObjectKey
-        for neighbor in downstream.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)

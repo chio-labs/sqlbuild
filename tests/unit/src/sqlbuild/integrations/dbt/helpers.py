@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
@@ -121,7 +121,7 @@ def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.NO_CHANGE,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=None,
             name=model_name,
@@ -130,7 +130,7 @@ def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
         fingerprint_query_sql="select 1",
         resolved_sql="select 1",
         logical_ddl="",
-        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
     )
 
 

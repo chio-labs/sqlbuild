@@ -134,7 +134,7 @@ def build_postgres_virtual_clone_project_toml(
         "[targets.prod]\n"
         f'schema = "{prod_warehouse_schema}"\n\n'
         "[targets.prod.clone]\n"
-        "allow_as_source = true\n\n"
+        "allow_as_clone_origin = true\n\n"
         "[targets.prod.state]\n"
         'backend = "postgres"\n'
         f'schema = "{prod_state_schema}"\n\n'
@@ -143,7 +143,7 @@ def build_postgres_virtual_clone_project_toml(
         "[targets.dev]\n"
         f'schema = "{dev_warehouse_schema}"\n\n'
         "[targets.dev.clone]\n"
-        "allow_as_target = true\n\n"
+        "allow_as_clone_destination = true\n\n"
         "[targets.dev.state]\n"
         'backend = "postgres"\n'
         f'schema = "{dev_state_schema}"\n\n'
@@ -275,13 +275,13 @@ def prepare_postgres_diff_project(
         "[targets.dev]\n"
         f'schema = "{dev_schema}"\n\n'
         "[targets.dev.clone]\n"
-        "allow_as_source = true\n"
-        "allow_as_target = true\n\n"
+        "allow_as_clone_origin = true\n"
+        "allow_as_clone_destination = true\n\n"
         "[targets.prod]\n"
         f'schema = "{prod_schema}"\n\n'
         "[targets.prod.clone]\n"
-        "allow_as_source = true\n"
-        "allow_as_target = false\n\n"
+        "allow_as_clone_origin = true\n"
+        "allow_as_clone_destination = false\n\n"
         "[defaults]\n"
         'materialized = "table"\n'
     )

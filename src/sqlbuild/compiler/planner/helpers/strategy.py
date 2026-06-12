@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -127,7 +127,7 @@ def build_logical_ddl(
     *,
     action: PlanAction,
     resolved_sql: str,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
 ) -> str:
@@ -218,16 +218,16 @@ def build_model_warnings(
     if (
         materialization_type == MaterializationType.INCREMENTAL
         and change_result.query_changed
-        and change_result.backfill.action == BackfillAction.WARN_ONLY
+        and change_result.backfill.action == BackfillAction.FORWARD_ONLY
     ):
         warnings.append(
             PlanWarning(
                 model_name=model_name,
                 severity=WarningSeverity.WARNING,
                 message=(
-                    f"query changed for '{model_name}'; incremental history will not be "
-                    "rebuilt unless you set query_change_backfill. Use "
-                    "query_change_backfill full or bounded-<duration> to rebuild history, "
+                    f"query changed for '{model_name}'; incremental history will run "
+                    "forward only unless you set replay_on_change. Use "
+                    "replay_on_change full or bounded-<duration> to replay history, "
                     "or set settings.query_change_tracking = false in sqlbuild_project.toml "
                     "to disable query-change warnings."
                 ),
@@ -331,6 +331,8 @@ def _table_action(
         return PlanAction.CREATE_TABLE, PlanReason.CONFIG_CHANGED
     if change_result.change_kind == ChangeKind.SCHEMA_CHANGED:
         return PlanAction.CREATE_TABLE, PlanReason.SCHEMA_CHANGED
+    if change_result.change_kind == ChangeKind.RUN_DESPITE_UNCHANGED:
+        return PlanAction.CREATE_TABLE, PlanReason.RUN_DESPITE_UNCHANGED
     return PlanAction.CREATE_TABLE, PlanReason.NO_CHANGE
 
 

@@ -39,9 +39,9 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
             cluster_by [event_day],
             transient true,
           ),
-          schema_change_backfill (
-            add_column bounded-30d,
-            type_change full,
+          row_diff_tolerances (
+            revenue bounded-30d,
+            order_count full,
           ),
         );
 
@@ -54,9 +54,9 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
                 "cluster_by": ["event_day"],
                 "transient": True,
             },
-            "schema_change_backfill": {
-                "add_column": "bounded-30d",
-                "type_change": "full",
+            "row_diff_tolerances": {
+                "revenue": "bounded-30d",
+                "order_count": "full",
             },
         },
         expected_query="SELECT order_id, event_day FROM raw_orders",
@@ -88,7 +88,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
           materialized table,
           schema analytics,
           database preserve,
-          query_change_backfill bounded-30d,
+          replay_on_change bounded-30d,
         );
 
         SELECT 1
@@ -97,7 +97,7 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
             "materialized": "table",
             "schema": "analytics",
             "database": "preserve",
-            "query_change_backfill": "bounded-30d",
+            "replay_on_change": "bounded-30d",
         },
         expected_query="SELECT 1",
     ),
@@ -161,9 +161,9 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         description="accepts nested maps with mixed quoted and unquoted strings",
         contents="""
         MODEL (
-          schema_change_backfill (
-            add_column bounded-30d,
-            type_change full,
+          row_diff_tolerances (
+            revenue bounded-30d,
+            order_count full,
           ),
           config (
             cluster_by [event_day, 'region'],
@@ -174,9 +174,9 @@ TEST_CASES: list[ParseModelSqlHeaderTestCase] = [
         SELECT 1
         """,
         expected_header_values={
-            "schema_change_backfill": {
-                "add_column": "bounded-30d",
-                "type_change": "full",
+            "row_diff_tolerances": {
+                "revenue": "bounded-30d",
+                "order_count": "full",
             },
             "config": {
                 "cluster_by": ["event_day", "region"],

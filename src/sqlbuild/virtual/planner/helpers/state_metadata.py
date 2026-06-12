@@ -18,7 +18,7 @@ def decode_model_version_query_sqls(
     for model_name, model_version in model_versions.items():
         if model_version is None:
             continue
-        query_sql: str | None = decode_state_text(model_version.fingerprint_query_sql_b64)
+        query_sql: str | None = decode_state_text(model_version.definition_text_b64)
         if query_sql is None:
             continue
         result[model_name] = query_sql
@@ -34,7 +34,7 @@ def decode_model_version_metadata_jsons(
     for model_name, model_version in model_versions.items():
         if model_version is None:
             continue
-        metadata_json: str | None = decode_state_text(model_version.fingerprint_metadata_json_b64)
+        metadata_json: str | None = decode_state_text(model_version.identity_metadata_json_b64)
         if metadata_json is None:
             continue
         result[model_name] = metadata_json
@@ -73,7 +73,7 @@ def read_previous_function_query_sqls(
     for function_name, function_version in function_versions.items():
         if function_version is None:
             continue
-        query_sql: str | None = decode_state_text(function_version.fingerprint_query_sql_b64)
+        query_sql: str | None = decode_state_text(function_version.definition_text_b64)
         if query_sql is not None:
             result[function_name] = query_sql
     return result

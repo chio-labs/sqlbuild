@@ -14,3 +14,17 @@ class SeedE2ETestCase:
     expected_seed_name: str
     expected_data: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class VirtualSeedE2ETestCase:
+    """Test case for virtual sqb seed e2e verification."""
+
+    description: str
+    expected_seed_rows: tuple[tuple[object, ...], ...]
+    expected_seed_fragments: tuple[str, ...]
+    expected_current_seed_fragments: tuple[str, ...]
+    expected_build_fragments: tuple[str, ...]
+    unexpected_build_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_command: str = "seed"
+    expected_json_reason: str = "no_change"

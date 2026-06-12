@@ -51,3 +51,14 @@ class SourceFreshnessRoundTripTestCase:
     record: SourceFreshnessRecord
     expected_data_version: str | None
     expected_data_version_hash: str
+
+
+@dataclass(frozen=True)
+class SourceFreshnessPruneHistoryTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    records: tuple[SourceFreshnessRecord, ...]
+    expected_run_ids_by_identity: dict[SourceFreshnessIdentity, tuple[str, ...]]
+    expected_latest_run_id: str

@@ -9,6 +9,8 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.helpers.plan import (
     collect_desired_keys,
@@ -25,6 +27,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
+    JanitorDirectStatePruneCandidate,
     JanitorExpiredLockCandidate,
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
@@ -56,6 +59,7 @@ def build_janitor_plan(
     ] = (),
     state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = (),
     expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = (),
+    direct_state_history_versions: int = 20,
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
@@ -71,6 +75,7 @@ def build_janitor_plan(
             expired_virtual_environment_candidates=expired_virtual_environment_candidates,
             state_backup_candidates=state_backup_candidates,
             expired_lock_candidates=expired_lock_candidates,
+            direct_state_prune_candidates=(),
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
@@ -99,6 +104,7 @@ def build_janitor_plan(
 
     skipped_schemas: list[JanitorSkippedSchema] = []
     candidates: list[JanitorDeleteCandidate] = []
+    direct_state_prune_candidates: list[JanitorDirectStatePruneCandidate] = []
     skipped_relations: list[JanitorSkippedRelation] = []
     now: datetime = datetime.now(UTC)
     age_supported: bool = adapter.supports_relation_age_metadata()
@@ -107,6 +113,16 @@ def build_janitor_plan(
 
     schema_key: tuple[str | None, str | None]
     for schema_key in sorted(target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
+        if direct_state_history_versions > 0 and schema_key[1] is not None:
+            direct_state_prune_candidates.extend(
+                _direct_state_prune_candidates(
+                    adapter=adapter,
+                    connection=connection,
+                    database=schema_key[0],
+                    schema=schema_key[1],
+                    retain_versions=direct_state_history_versions,
+                )
+            )
         schema_relations: tuple[RelationInfo, ...] = relations_by_schema.get(schema_key, ())
         source_names: set[str] | None = source_schema_names.get(schema_key)
         if source_names:
@@ -210,6 +226,7 @@ def build_janitor_plan(
         expired_virtual_environment_candidates=expired_virtual_environment_candidates,
         state_backup_candidates=state_backup_candidates,
         expired_lock_candidates=expired_lock_candidates,
+        direct_state_prune_candidates=tuple(direct_state_prune_candidates),
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),
         scanned_schema_count=len(target_schemas),
@@ -228,3 +245,53 @@ def _matching_exclude_pattern(
         if fnmatchcase(key.name, pattern) or fnmatchcase(display_name, pattern):
             return pattern
     return None
+
+
+def _direct_state_prune_candidates(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    database: str | None,
+    schema: str,
+    retain_versions: int,
+) -> tuple[JanitorDirectStatePruneCandidate, ...]:
+    candidates: list[JanitorDirectStatePruneCandidate] = []
+    if adapter.relation_exists(
+        connection,
+        database=database,
+        schema=schema,
+        name=FINGERPRINT_TABLE_NAME,
+    ):
+        candidates.append(
+            JanitorDirectStatePruneCandidate(
+                database=database,
+                schema=schema,
+                table_name=FINGERPRINT_TABLE_NAME,
+                retain_versions=retain_versions,
+                prune_sql=adapter.render_prune_fingerprint_history_sql(
+                    database=database,
+                    schema=schema,
+                    retain_versions=retain_versions,
+                ),
+            )
+        )
+    if adapter.relation_exists(
+        connection,
+        database=database,
+        schema=schema,
+        name=SOURCE_FRESHNESS_TABLE_NAME,
+    ):
+        candidates.append(
+            JanitorDirectStatePruneCandidate(
+                database=database,
+                schema=schema,
+                table_name=SOURCE_FRESHNESS_TABLE_NAME,
+                retain_versions=retain_versions,
+                prune_sql=adapter.render_prune_source_freshness_history_sql(
+                    database=database,
+                    schema=schema,
+                    retain_versions=retain_versions,
+                ),
+            )
+        )
+    return tuple(candidates)

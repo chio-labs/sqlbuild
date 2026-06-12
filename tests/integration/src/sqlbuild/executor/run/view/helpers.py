@@ -14,7 +14,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
@@ -77,7 +77,7 @@ def build_view_plan_entry(
         materialization_type=MaterializationType.VIEW,
         action=PlanAction.CREATE_VIEW,
         reason=PlanReason.FIRST_RUN,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name=target_name,
@@ -214,8 +214,8 @@ def _execute_view_test(
         test_case=test_case,
         resolved_target_name=target_qualified,
     )
-    model_targets: dict[str, CompiledRelationDestination] = {
-        "dim_view": CompiledRelationDestination(
+    model_locations: dict[str, CompiledRelationLocation] = {
+        "dim_view": CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
             name=test_case.target_name,
@@ -227,8 +227,8 @@ def _execute_view_test(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map={},
         model_audits=model_audits,
         run_id="test_run",

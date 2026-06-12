@@ -23,7 +23,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.custom.models import MaterializationResult
+from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -54,6 +54,8 @@ def execute_build_plan(
     on_node_complete: Callable[[object], None] | None = None,
     before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
+    custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
+    | None = None,
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
     loader_is_reload: bool = False,
     start_cursor_ts: datetime | None = None,
@@ -93,6 +95,7 @@ def execute_build_plan(
         on_progress=on_progress,
         before_model_materialize=before_model_materialize,
         custom_materializations=custom_materializations,
+        custom_prepare_version_functions=custom_prepare_version_functions,
         loader_functions=loader_functions,
         loader_is_reload=loader_is_reload,
         start_cursor_ts=start_cursor_ts,

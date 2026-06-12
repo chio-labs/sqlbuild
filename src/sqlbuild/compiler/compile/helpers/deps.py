@@ -78,7 +78,7 @@ def audit_scope_deps(
 
 
 def sql_test_scope_deps(*, expected_model_names: tuple[str, ...]) -> tuple[CompiledObjectKey, ...]:
-    """Return model targets that select a SQL-native unit test."""
+    """Return model names that select a SQL-native unit test."""
 
     if not expected_model_names:
         return ()

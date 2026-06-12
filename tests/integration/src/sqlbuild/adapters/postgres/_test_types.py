@@ -35,6 +35,13 @@ class PostgresBuildFlowTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresRelationReuseCopyTestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_recorded_fragment: str
+
+
+@dataclass(frozen=True)
 class PostgresMergeTestCase:
     description: str
     table_name: str

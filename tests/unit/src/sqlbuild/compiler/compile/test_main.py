@@ -654,12 +654,8 @@ incremental_strategy = "merge"
 incremental_mode = "microbatch"
 lookback = "1d"
 batch_size = "1h"
-query_change_backfill = "bounded-30d"
+replay_on_change = "bounded-30d"
 row_diff_exclude_columns = ["loaded_at", "run_id"]
-
-[defaults.schema_change_backfill]
-add_column = "bounded-7d"
-type_change = "full"
 
 [defaults.row_diff_tolerances]
 
@@ -694,11 +690,7 @@ absolute = 0.01
                 "cursor_grain": "second",
                 "lookback": "1d",
                 "batch_size": "1h",
-                "query_change_backfill": "bounded-30d",
-                "schema_change_backfill": {
-                    "add_column": "bounded-7d",
-                    "type_change": "full",
-                },
+                "replay_on_change": "bounded-30d",
                 "row_diff_exclude_columns": ("loaded_at", "run_id"),
                 "row_diff_tolerances": {
                     "by_column": {"revenue": {"absolute": 0.01}},
@@ -861,7 +853,7 @@ schema_prefix = "analytics_${user}"
 [defaults]
 database = "${schema_prefix}"
 schema = "marts"
-query_change_backfill = "${ENV:BACKFILL_POLICY}"
+replay_on_change = "${ENV:BACKFILL_POLICY}"
 row_diff_exclude_columns = ["${schema_prefix}_loaded_at"]
 
 [targets]
@@ -873,6 +865,8 @@ schema = "dev_${ENV:USER}_${CTX:model.schema}"
             + "\n",
             "models/staging/orders.sql": """
 MODEL (
+  materialized incremental,
+  incremental_strategy append,
   alias '${CTX:model.name}_${CTX:run.target}',
   config (
     cluster_by ['${schema_prefix}_day'],
@@ -897,7 +891,9 @@ select 1
             {
                 "database": "dev_analytics_kevin",
                 "schema": "dev_kevin_marts",
-                "query_change_backfill": "bounded-30d",
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "replay_on_change": "bounded-30d",
                 "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
                 "alias": "orders_dev",
                 "config": {
@@ -1452,7 +1448,7 @@ sources:
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
-        expected_sql_function_query_change_backfills=(None,),
+        expected_sql_function_replay_on_changes=(None,),
         expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={
@@ -1687,7 +1683,7 @@ FUNCTION (
   schema ${udf_schema},
   arguments (order_status ${status_type}),
   returns ${return_type},
-  query_change_backfill bounded-${backfill_days}d
+  replay_on_change bounded-${backfill_days}d
 );
 
 @status_match("order_status", "completed") AND order_status <> @@cancelled_status
@@ -1716,7 +1712,7 @@ FUNCTION (
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
-        expected_sql_function_query_change_backfills=("bounded-30d",),
+        expected_sql_function_replay_on_changes=("bounded-30d",),
         expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -1784,7 +1780,7 @@ WHERE customer_id = p_customer_id
         expected_sql_function_runtime_versions=(None,),
         expected_sql_function_entry_points=(None,),
         expected_sql_function_packages=((),),
-        expected_sql_function_query_change_backfills=(None,),
+        expected_sql_function_replay_on_changes=(None,),
         expected_effective_target_name=None,
         expected_effective_connection={},
         expected_effective_vars={},
@@ -1946,7 +1942,7 @@ def main(order_status):
         expected_sql_function_runtime_versions=("3.11",),
         expected_sql_function_entry_points=("main",),
         expected_sql_function_packages=(("faker",),),
-        expected_sql_function_query_change_backfills=(None,),
+        expected_sql_function_replay_on_changes=(None,),
         expected_effective_target_name="dev",
         expected_effective_connection={},
         expected_effective_vars={
@@ -2540,10 +2536,9 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     )
     assert (
         tuple(
-            function_input.query_change_backfill
-            for function_input in compile_inputs.sql_function_inputs
+            function_input.replay_on_change for function_input in compile_inputs.sql_function_inputs
         )
-        == test_case.expected_sql_function_query_change_backfills
+        == test_case.expected_sql_function_replay_on_changes
     )
     assert (
         tuple(
@@ -2576,7 +2571,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert (
         compile_inputs.run_id == test_case.run_id
         if test_case.run_id is not None
-        else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{6}", compile_inputs.run_id) is not None
+        else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{12}", compile_inputs.run_id) is not None
     )
 
 
@@ -2589,8 +2584,10 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             expected_vars={"shared": "local", "project_only": "present"},
             expected_database="local_db",
             expected_schema="project_schema",
-            expected_allow_as_source=False,
-            expected_allow_as_target=True,
+            expected_reuse_from="prod",
+            expected_reuse_hard_copy=False,
+            expected_allow_as_clone_origin=False,
+            expected_allow_as_clone_destination=True,
         )
     ],
     ids=["merges local target overrides with nullable clone policy"],
@@ -2608,8 +2605,14 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
                     vars={"shared": "project", "project_only": "present"},
                     database="project_db",
                     schema="project_schema",
-                    clone=ClonePolicy(allow_as_source=True, allow_as_target=True),
-                )
+                    reuse_from="staging",
+                    reuse_hard_copy=True,
+                    clone=ClonePolicy(
+                        allow_as_clone_origin=True,
+                        allow_as_clone_destination=True,
+                    ),
+                ),
+                "prod": TargetConfig(),
             },
         ),
         local_config=LocalConfig(
@@ -2618,7 +2621,9 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
                     connection={"warehouse": "local_wh"},
                     vars={"shared": "local"},
                     database="local_db",
-                    clone=LocalClonePolicy(allow_as_source=False),
+                    reuse_from="prod",
+                    reuse_hard_copy=False,
+                    clone=LocalClonePolicy(allow_as_clone_origin=False),
                 )
             }
         ),
@@ -2629,8 +2634,13 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
     assert environment.vars == test_case.expected_vars
     assert environment.database == test_case.expected_database
     assert environment.schema == test_case.expected_schema
-    assert environment.clone.allow_as_source is test_case.expected_allow_as_source
-    assert environment.clone.allow_as_target is test_case.expected_allow_as_target
+    assert environment.reuse_from == test_case.expected_reuse_from
+    assert environment.reuse_hard_copy is test_case.expected_reuse_hard_copy
+    assert environment.clone.allow_as_clone_origin is test_case.expected_allow_as_clone_origin
+    assert (
+        environment.clone.allow_as_clone_destination
+        is test_case.expected_allow_as_clone_destination
+    )
 
 
 COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [

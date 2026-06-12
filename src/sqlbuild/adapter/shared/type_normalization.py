@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -15,18 +16,21 @@ from sqlbuild.adapter.shared.constants import (
 )
 from sqlbuild.adapter.shared.models import NormalizedType
 from sqlbuild.adapter.shared.types import TypeDialect, TypeFamily
-from sqlbuild.shared.helpers.sqlglot import import_sqlglot, import_sqlglot_expressions
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
+from sqlbuild.shared.helpers.polyglot import import_polyglot
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.adapter")
 
 
 def normalize_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
     """Normalize one warehouse type string into a semantic comparison shape."""
 
-    sqlglot_normalized: NormalizedType | None = _normalize_with_sqlglot(
+    polyglot_normalized: NormalizedType | None = _normalize_with_polyglot(
         type_sql=type_sql,
         dialect=dialect,
     )
-    if sqlglot_normalized is not None:
-        return sqlglot_normalized
+    if polyglot_normalized is not None:
+        return polyglot_normalized
     return _normalize_with_fallback(type_sql=type_sql, dialect=dialect)
 
 
@@ -48,20 +52,22 @@ def types_equal(*, left: str, right: str, dialect: TypeDialect | str | None) -> 
     )
 
 
-def _normalize_with_sqlglot(
+def _normalize_with_polyglot(
     *, type_sql: str, dialect: TypeDialect | str | None
 ) -> NormalizedType | None:
-    sqlglot_module: Any | None = import_sqlglot()
-    expressions_module: Any | None = import_sqlglot_expressions()
-    if sqlglot_module is None or expressions_module is None:
+    polyglot_module: Any | None = import_polyglot()
+    if polyglot_module is None:
         return None
     try:
-        parsed: Any = sqlglot_module.parse_one(
-            type_sql,
-            read=dialect,
-            into=expressions_module.DataType,
+        parsed: Any = polyglot_module.parse_data_type(type_sql, dialect=dialect or "generic")
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "type normalization polyglot parse failed; falling back",
+            type_sql=type_sql,
+            dialect=str(dialect),
+            sqlbuild_error=str(error),
         )
-    except Exception:
         return None
     return _normalized_from_parsed_type(parsed=parsed, dialect=dialect)
 
@@ -70,14 +76,32 @@ def _normalized_from_parsed_type(
     *, parsed: Any, dialect: TypeDialect | str | None
 ) -> NormalizedType:
     normalized_dialect: TypeDialect | None = _coerce_type_dialect(dialect)
-    normalized_name: str = parsed.sql(dialect=dialect).upper().replace(" ", "")
-    dtype_name: str = str(parsed.this).upper().removeprefix("DTYPE.")
-    expressions: list[Any] = list(getattr(parsed, "expressions", []) or [])
-    params: list[int] = [_data_type_param_to_int(expression) for expression in expressions]
+    normalized_name: str = parsed.sql(dialect=dialect or "generic").upper().replace(" ", "")
+    args: dict[str, Any] = dict(getattr(parsed, "args", {}) or {})
+    dtype_name: str = _polyglot_type_name(args=args)
+    params: list[int] = _polyglot_type_params(args=args)
 
     if normalized_dialect == TypeDialect.BIGQUERY and dtype_name in {"INT", "BIGINT"}:
         normalized_name = "INT64"
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.INTEGER)
+    if normalized_dialect == TypeDialect.BIGQUERY and dtype_name == "BIGNUMERIC":
+        return NormalizedType(normalized_name="BIGNUMERIC", family=TypeFamily.DECIMAL)
+    if normalized_dialect == TypeDialect.BIGQUERY and dtype_name == "FLOAT64":
+        return NormalizedType(normalized_name="FLOAT64", family=TypeFamily.FLOAT)
+    if dtype_name == "CUSTOM":
+        raw_name: str = str(args.get("name", normalized_name)).upper().replace(" ", "")
+        if normalized_dialect == TypeDialect.SNOWFLAKE and raw_name.startswith("NUMBER"):
+            decimal_name: str = raw_name.replace("NUMBER", "DECIMAL", 1)
+            base_type, params = _split_type_and_params(decimal_name)
+            precision: int | None = params[0] if len(params) >= 1 else None
+            scale: int | None = params[1] if len(params) >= 2 else None
+            return NormalizedType(
+                normalized_name=base_type if not params else decimal_name,
+                family=TypeFamily.DECIMAL,
+                precision=precision,
+                scale=scale,
+            )
+        return _normalize_with_fallback(type_sql=raw_name, dialect=dialect)
     if dtype_name in INTEGER_TYPE_NAMES:
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.INTEGER)
     if dtype_name in DECIMAL_TYPE_NAMES:
@@ -246,9 +270,45 @@ def _timestamp_normalized_name(*, normalized_name: str, dialect: TypeDialect | N
     return normalized_name
 
 
-def _data_type_param_to_int(expression: Any) -> int:
-    literal: Any = getattr(expression, "this", None)
-    return int(str(getattr(literal, "this", literal)))
+def _polyglot_type_name(*, args: dict[str, Any]) -> str:
+    data_type: str = str(args.get("data_type", "")).upper()
+    polyglot_name_map: dict[str, str] = {
+        "BIG_INT": "BIGINT",
+        "SMALL_INT": "SMALLINT",
+        "TINY_INT": "TINYINT",
+        "VAR_CHAR": "VARCHAR",
+        "TEXT": "TEXT",
+        "INT": "INT",
+        "BOOLEAN": "BOOLEAN",
+        "DECIMAL": "DECIMAL",
+        "DOUBLE": "DOUBLE",
+        "FLOAT": "FLOAT",
+        "TIMESTAMP": "TIMESTAMP",
+        "DATE": "DATE",
+        "DATETIME": "DATETIME",
+    }
+    mapped_name: str | None = polyglot_name_map.get(data_type)
+    if mapped_name is not None:
+        return mapped_name
+    if data_type == "CUSTOM":
+        name: str = str(args.get("name", "")).upper().replace(" ", "")
+        if name in {"INT64", "FLOAT64", "BIGNUMERIC"}:
+            return name
+    return data_type
+
+
+def _polyglot_type_params(*, args: dict[str, Any]) -> list[int]:
+    params: list[int] = []
+    key: str
+    for key in ("precision", "scale", "length"):
+        value: Any = args.get(key)
+        if value is None:
+            continue
+        try:
+            params.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return params
 
 
 def _coerce_type_dialect(dialect: TypeDialect | str | None) -> TypeDialect | None:

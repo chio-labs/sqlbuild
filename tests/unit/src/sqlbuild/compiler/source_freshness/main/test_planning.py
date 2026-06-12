@@ -14,23 +14,24 @@ from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
 from sqlbuild.compiler.source_freshness.main.planning import (
-    build_direct_source_freshness_planning_result,
+    build_standard_source_freshness_planning_result,
 )
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
+    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
-    DirectSourceFreshnessAdapterDefaultTestCase,
-    DirectSourceFreshnessLagToleranceTestCase,
-    DirectSourceFreshnessManagedSkipTestCase,
-    DirectSourceFreshnessMultiSchemaTestCase,
-    DirectSourceFreshnessPlanningErrorTestCase,
-    DirectSourceFreshnessPlanningTestCase,
-    DirectSourceFreshnessUnknownTestCase,
+    StandardSourceFreshnessAdapterDefaultTestCase,
+    StandardSourceFreshnessDuplicateSchemaTestCase,
+    StandardSourceFreshnessLagToleranceTestCase,
+    StandardSourceFreshnessManagedSkipTestCase,
+    StandardSourceFreshnessMultiSchemaTestCase,
+    StandardSourceFreshnessPlanningErrorTestCase,
+    StandardSourceFreshnessPlanningTestCase,
+    StandardSourceFreshnessUnknownTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
     write_optional_previous_record,
@@ -60,23 +61,23 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         )
 
 
-PLANNING_COMPARISON_TEST_CASES: list[DirectSourceFreshnessPlanningTestCase] = [
-    DirectSourceFreshnessPlanningTestCase(
-        description="classifies first direct source freshness observation as changed",
+PLANNING_COMPARISON_TEST_CASES: list[StandardSourceFreshnessPlanningTestCase] = [
+    StandardSourceFreshnessPlanningTestCase(
+        description="classifies first standard source freshness observation as changed",
         previous_data_version=None,
         current_query="SELECT 1 AS data_version",
         expected_changed_count=1,
         expected_unchanged_count=0,
     ),
-    DirectSourceFreshnessPlanningTestCase(
-        description="classifies matching previous direct source freshness as unchanged",
+    StandardSourceFreshnessPlanningTestCase(
+        description="classifies matching previous standard source freshness as unchanged",
         previous_data_version="1",
         current_query="SELECT 1 AS data_version",
         expected_changed_count=0,
         expected_unchanged_count=1,
     ),
-    DirectSourceFreshnessPlanningTestCase(
-        description="classifies different previous direct source freshness as changed",
+    StandardSourceFreshnessPlanningTestCase(
+        description="classifies different previous standard source freshness as changed",
         previous_data_version="1",
         current_query="SELECT 2 AS data_version",
         expected_changed_count=1,
@@ -90,8 +91,8 @@ PLANNING_COMPARISON_TEST_CASES: list[DirectSourceFreshnessPlanningTestCase] = [
     PLANNING_COMPARISON_TEST_CASES,
     ids=[case.description for case in PLANNING_COMPARISON_TEST_CASES],
 )
-def test_given_direct_source_freshness_state_when_planning_then_classifies_hash_comparison(
-    test_case: DirectSourceFreshnessPlanningTestCase,
+def test_given_standard_source_freshness_state_when_planning_then_classifies_hash_comparison(
+    test_case: StandardSourceFreshnessPlanningTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
@@ -113,15 +114,17 @@ def test_given_direct_source_freshness_state_when_planning_then_classifies_hash_
             data_version=test_case.previous_data_version,
         )
 
-        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=(source,),
-            state_database=None,
-            state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
-            run_id="planning",
-            render_qualified_name=RENDER_QUALIFIED_NAME,
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(source,),
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
         )
     finally:
         adapter.close(connection)
@@ -131,26 +134,26 @@ def test_given_direct_source_freshness_state_when_planning_then_classifies_hash_
     assert len(result.observed_records) == 1
 
 
-LAG_TOLERANCE_TEST_CASES: tuple[DirectSourceFreshnessLagToleranceTestCase, ...] = (
-    DirectSourceFreshnessLagToleranceTestCase(
+LAG_TOLERANCE_TEST_CASES: tuple[StandardSourceFreshnessLagToleranceTestCase, ...] = (
+    StandardSourceFreshnessLagToleranceTestCase(
         description="within timestamp lag tolerance",
         current_query="SELECT CAST('2026-01-15 12:05:00' AS TIMESTAMP) AS data_version",
         expected_changed_count=0,
         expected_unchanged_count=1,
     ),
-    DirectSourceFreshnessLagToleranceTestCase(
+    StandardSourceFreshnessLagToleranceTestCase(
         description="exactly at timestamp lag tolerance boundary",
         current_query="SELECT CAST('2026-01-15 12:10:00' AS TIMESTAMP) AS data_version",
         expected_changed_count=0,
         expected_unchanged_count=1,
     ),
-    DirectSourceFreshnessLagToleranceTestCase(
+    StandardSourceFreshnessLagToleranceTestCase(
         description="beyond timestamp lag tolerance",
         current_query="SELECT CAST('2026-01-15 12:11:00' AS TIMESTAMP) AS data_version",
         expected_changed_count=1,
         expected_unchanged_count=0,
     ),
-    DirectSourceFreshnessLagToleranceTestCase(
+    StandardSourceFreshnessLagToleranceTestCase(
         description="backwards timestamp movement is conservative",
         current_query="SELECT CAST('2026-01-15 11:59:00' AS TIMESTAMP) AS data_version",
         expected_changed_count=1,
@@ -165,7 +168,7 @@ LAG_TOLERANCE_TEST_CASES: tuple[DirectSourceFreshnessLagToleranceTestCase, ...] 
     ids=[case.description for case in LAG_TOLERANCE_TEST_CASES],
 )
 def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_movement(
-    test_case: DirectSourceFreshnessLagToleranceTestCase,
+    test_case: StandardSourceFreshnessLagToleranceTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
@@ -198,25 +201,27 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
             render_framework_type=RENDER_FRAMEWORK_TYPE,
         )
 
-        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=(
-                SourceEntry(
-                    name="raw.orders",
-                    freshness=SourceFreshnessConfig(
-                        strategy=SourceFreshnessStrategy.SQL,
-                        value_kind=SourceFreshnessValueKind.TIMESTAMP,
-                        query=test_case.current_query,
-                        lag_tolerance="10m",
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(
+                    SourceEntry(
+                        name="raw.orders",
+                        freshness=SourceFreshnessConfig(
+                            strategy=SourceFreshnessStrategy.SQL,
+                            value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                            query=test_case.current_query,
+                            lag_tolerance="10m",
+                        ),
                     ),
                 ),
-            ),
-            state_database=None,
-            state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 30, 0),
-            run_id="planning",
-            render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 30, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
         )
     finally:
         adapter.close(connection)
@@ -228,7 +233,7 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectSourceFreshnessUnknownTestCase(
+        StandardSourceFreshnessUnknownTestCase(
             description="classifies unsupported default source freshness as unknown",
             expected_unknown_source_names=("raw.orders",),
         )
@@ -236,20 +241,22 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
     ids=["classifies unsupported default source freshness as unknown"],
 )
 def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_marks_unknown(
-    test_case: DirectSourceFreshnessUnknownTestCase,
+    test_case: StandardSourceFreshnessUnknownTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=(SourceEntry(name="raw.orders", table="orders"),),
-            state_database=None,
-            state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
-            run_id="planning",
-            render_qualified_name=RENDER_QUALIFIED_NAME,
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(SourceEntry(name="raw.orders", table="orders"),),
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
         )
     finally:
         adapter.close(connection)
@@ -261,7 +268,7 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectSourceFreshnessPlanningErrorTestCase(
+        StandardSourceFreshnessPlanningErrorTestCase(
             description="explicit column freshness error propagates clearly",
             expected_error_fragment="column freshness requires a physical table source",
         )
@@ -269,7 +276,7 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
     ids=["explicit column freshness error propagates clearly"],
 )
 def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear_error(
-    test_case: DirectSourceFreshnessPlanningErrorTestCase,
+    test_case: StandardSourceFreshnessPlanningErrorTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
@@ -277,7 +284,7 @@ def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear
         with pytest.raises(
             SourceFreshnessObservationError, match=test_case.expected_error_fragment
         ):
-            build_direct_source_freshness_planning_result(
+            build_standard_source_freshness_planning_result(
                 adapter=adapter,
                 connection=connection,
                 sources=(
@@ -304,7 +311,7 @@ def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectSourceFreshnessAdapterDefaultTestCase(
+        StandardSourceFreshnessAdapterDefaultTestCase(
             description="adapter default freshness observes unconfigured physical source",
             expected_changed_count=1,
             expected_observed_count=1,
@@ -313,20 +320,22 @@ def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear
     ids=["adapter default freshness observes unconfigured physical source"],
 )
 def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_observes_default(
-    test_case: DirectSourceFreshnessAdapterDefaultTestCase,
+    test_case: StandardSourceFreshnessAdapterDefaultTestCase,
 ) -> None:
     adapter: FreshnessMetadataDuckDbAdapter = FreshnessMetadataDuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=(SourceEntry(name="raw.orders", schema="raw", table="orders"),),
-            state_database=None,
-            state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
-            run_id="planning",
-            render_qualified_name=RENDER_QUALIFIED_NAME,
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(SourceEntry(name="raw.orders", schema="raw", table="orders"),),
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
         )
     finally:
         adapter.close(connection)
@@ -338,29 +347,33 @@ def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_o
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectSourceFreshnessManagedSkipTestCase(
-            description="managed sources are skipped during direct planning observation",
+        StandardSourceFreshnessManagedSkipTestCase(
+            description="managed sources are skipped during standard planning observation",
             expected_observed_count=0,
             expected_unknown_source_names=(),
         )
     ],
-    ids=["managed sources are skipped during direct planning observation"],
+    ids=["managed sources are skipped during standard planning observation"],
 )
 def test_given_managed_source_when_planning_source_freshness_then_skips_observation(
-    test_case: DirectSourceFreshnessManagedSkipTestCase,
+    test_case: StandardSourceFreshnessManagedSkipTestCase,
 ) -> None:
     adapter: FreshnessMetadataDuckDbAdapter = FreshnessMetadataDuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=(SourceEntry(name="raw.orders", schema="raw", table="orders", managed=True),),
-            state_database=None,
-            state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
-            run_id="planning",
-            render_qualified_name=RENDER_QUALIFIED_NAME,
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(
+                    SourceEntry(name="raw.orders", schema="raw", table="orders", managed=True),
+                ),
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
         )
     finally:
         adapter.close(connection)
@@ -372,16 +385,16 @@ def test_given_managed_source_when_planning_source_freshness_then_skips_observat
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectSourceFreshnessMultiSchemaTestCase(
-            description="reads previous direct source freshness across multiple state schemas",
+        StandardSourceFreshnessMultiSchemaTestCase(
+            description="reads previous standard source freshness across multiple state schemas",
             expected_previous_count=2,
             expected_unchanged_count=1,
         )
     ],
-    ids=["reads previous direct source freshness across multiple state schemas"],
+    ids=["reads previous standard source freshness across multiple state schemas"],
 )
 def test_given_multiple_state_schemas_when_planning_then_merges_previous_records(
-    test_case: DirectSourceFreshnessMultiSchemaTestCase,
+    test_case: StandardSourceFreshnessMultiSchemaTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
@@ -406,27 +419,97 @@ def test_given_multiple_state_schemas_when_planning_then_merges_previous_records
             source_name="raw.customers",
             data_version="2",
         )
-        result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=(
-                SourceEntry(
-                    name="raw.orders",
-                    freshness=SourceFreshnessConfig(
-                        strategy=SourceFreshnessStrategy.SQL,
-                        value_kind=SourceFreshnessValueKind.INTEGER,
-                        query="SELECT 1 AS data_version",
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(
+                    SourceEntry(
+                        name="raw.orders",
+                        freshness=SourceFreshnessConfig(
+                            strategy=SourceFreshnessStrategy.SQL,
+                            value_kind=SourceFreshnessValueKind.INTEGER,
+                            query="SELECT 1 AS data_version",
+                        ),
                     ),
                 ),
-            ),
-            state_database=None,
-            state_schemas=("state_a", "state_b"),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
-            run_id="planning",
-            render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_database=None,
+                state_schemas=("state_a", "state_b"),
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
         )
     finally:
         adapter.close(connection)
 
     assert len(result.previous_records) == test_case.expected_previous_count
     assert len(result.unchanged_identities) == test_case.expected_unchanged_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardSourceFreshnessDuplicateSchemaTestCase(
+            description="uses newest duplicate source freshness record across state schemas",
+            expected_previous_data_version="2",
+            expected_changed_count=0,
+        )
+    ],
+    ids=["uses newest duplicate source freshness record across state schemas"],
+)
+def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_observation(
+    test_case: StandardSourceFreshnessDuplicateSchemaTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        connection.execute("CREATE SCHEMA state_a")
+        connection.execute("CREATE SCHEMA state_b")
+        write_previous_record_to_schema(
+            adapter=adapter,
+            connection=connection,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            schema="state_a",
+            source_name="raw.orders",
+            data_version="2",
+            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+        )
+        write_previous_record_to_schema(
+            adapter=adapter,
+            connection=connection,
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            schema="state_b",
+            source_name="raw.orders",
+            data_version="1",
+            observed_at=datetime(2026, 1, 15, 10, 0, 0),
+        )
+
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(
+                    SourceEntry(
+                        name="raw.orders",
+                        freshness=SourceFreshnessConfig(
+                            strategy=SourceFreshnessStrategy.SQL,
+                            value_kind=SourceFreshnessValueKind.INTEGER,
+                            query="SELECT 2 AS data_version",
+                        ),
+                    ),
+                ),
+                state_database=None,
+                state_schemas=("state_a", "state_b"),
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
+        )
+    finally:
+        adapter.close(connection)
+
+    assert result.previous_records[0].data_version == test_case.expected_previous_data_version
+    assert len(result.changed_identities) == test_case.expected_changed_count

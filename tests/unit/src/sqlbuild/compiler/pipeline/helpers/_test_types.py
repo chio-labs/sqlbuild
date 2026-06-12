@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
+
 
 @dataclass(frozen=True)
 class DeferredTargetTestCase:
@@ -19,3 +21,10 @@ class DeferredTargetTestCase:
     expected_schema: str | None
     expected_database: str | None
     expected_qualified_name: str | None
+
+
+@dataclass(frozen=True)
+class PythonPlanIdentityStatusTestCase:
+    description: str
+    previous_version_hash: str | None
+    expected_status: PythonIdentityStatus

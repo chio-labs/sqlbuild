@@ -16,14 +16,18 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+    PrepareVersionContext,
+)
 from sqlbuild.executor.run.helpers.custom import execute_custom_entry
 from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 
@@ -55,7 +59,7 @@ def build_custom_plan_entry(
         materialization_type=MaterializationType.CUSTOM,
         action=PlanAction.CUSTOM,
         reason=reason,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
         fingerprint_query_sql=sql,
@@ -108,11 +112,12 @@ def run_custom_entry(
     entry: ModelPlanEntry,
     materialize_fn: Callable[[MaterializationContext], MaterializationResult],
     model_audits: tuple[AuditPlanEntry, ...] = (),
-    model_targets: dict[str, CompiledRelationDestination] | None = None,
+    model_locations: dict[str, CompiledRelationLocation] | None = None,
     existing_relation: RelationInfo | None = None,
     target: str = "test",
     effective_vars: dict[str, object] | None = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
+    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute a custom materialization lifecycle with full control over parameters."""
 
@@ -120,12 +125,13 @@ def run_custom_entry(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets or {},
-        seed_targets={},
+        model_locations=model_locations or {},
+        seed_locations={},
         source_map={},
         model_audits=model_audits,
         declared_columns=(),
         materialize_fn=materialize_fn,
+        prepare_version_fn=prepare_version_fn,
         run_id="test_run",
         query_change_tracking=True,
         target=target,
@@ -167,7 +173,7 @@ def build_simple_fn() -> Callable[[MaterializationContext], MaterializationResul
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
@@ -196,12 +202,15 @@ def build_staging_fn() -> Callable[[MaterializationContext], MaterializationResu
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
-            ctx.connection, target=staging, sql=ctx.sql, statement_recorder=ctx.statement_recorder
+            ctx.connection,
+            destination=staging,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
         )
         ctx.adapter.rename(
             ctx.connection,
-            source=staging,
-            target=ctx.destination,
+            origin=staging,
+            destination=ctx.destination,
             statement_recorder=ctx.statement_recorder,
         )
         return MaterializationResult(relation=ctx.destination, cleanup_relations=(staging,))
@@ -213,13 +222,16 @@ def build_audit_running_fn() -> Callable[[MaterializationContext], Materializati
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
-            ctx.connection, target=staging, sql=ctx.sql, statement_recorder=ctx.statement_recorder
+            ctx.connection,
+            destination=staging,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
         )
         audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
         ctx.adapter.rename(
             ctx.connection,
-            source=staging,
-            target=ctx.destination,
+            origin=staging,
+            destination=ctx.destination,
             statement_recorder=ctx.statement_recorder,
         )
         return MaterializationResult(
@@ -235,7 +247,10 @@ def build_user_audit_fn(
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
-            ctx.connection, target=staging, sql=ctx.sql, statement_recorder=ctx.statement_recorder
+            ctx.connection,
+            destination=staging,
+            sql=ctx.sql,
+            statement_recorder=ctx.statement_recorder,
         )
         audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
         has_error: bool = any(r.outcome == AuditOutcome.ERROR for r in audit_results)
@@ -249,8 +264,8 @@ def build_user_audit_fn(
             )
         ctx.adapter.rename(
             ctx.connection,
-            source=staging,
-            target=ctx.destination,
+            origin=staging,
+            destination=ctx.destination,
             statement_recorder=ctx.statement_recorder,
         )
         return MaterializationResult(
@@ -265,13 +280,13 @@ def build_cleanup_fn(*, fail: bool) -> Callable[[MaterializationContext], Materi
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=staging,
+            destination=staging,
             sql="SELECT 1 AS cleanup_marker",
             statement_recorder=ctx.statement_recorder,
         )
@@ -307,7 +322,7 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
             ctx.log("building initial partition range")
             ctx.adapter.create_table_as(
                 ctx.connection,
-                target=ctx.destination,
+                destination=ctx.destination,
                 sql=full_sql,
                 statement_recorder=ctx.statement_recorder,
             )
@@ -335,7 +350,7 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
             partition_sql = partition_sql.replace("@@@partition_end", f"'{next_day}'")
             ctx.adapter.append(
                 ctx.connection,
-                target=ctx.destination,
+                destination=ctx.destination,
                 sql=partition_sql,
                 statement_recorder=ctx.statement_recorder,
             )
@@ -356,7 +371,7 @@ def build_existing_relation_capture_fn(
         captured["is_first_run"] = ctx.is_first_run
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
@@ -378,7 +393,7 @@ def build_placeholder_execution_fn(
             sql = sql.replace(f"@@@{placeholder_name}", placeholder_value)
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=sql,
             statement_recorder=ctx.statement_recorder,
         )

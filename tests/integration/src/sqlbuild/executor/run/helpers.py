@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,20 +11,28 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
+    AuditOutcome,
     AuditRunScope,
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+from sqlbuild.compiler.fingerprints.main.write import build_insert_sql
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
+)
+from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+    model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
@@ -60,6 +69,7 @@ def build_table_plan_entry(
     *,
     name: str,
     sql: str,
+    target_database: str | None = None,
     target_schema: str | None,
     target_name: str,
     type_enforcement: bool = False,
@@ -68,7 +78,10 @@ def build_table_plan_entry(
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for table execution tests."""
 
-    qualified: str | None = f"{target_schema}.{target_name}" if target_schema else target_name
+    relation_parts: tuple[str, ...] = tuple(
+        part for part in (target_database, target_schema, target_name) if part is not None
+    )
+    qualified: str = ".".join(relation_parts)
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         name=name,
@@ -76,8 +89,8 @@ def build_table_plan_entry(
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        destination=CompiledRelationDestination(
-            database=None,
+        destination=CompiledRelationLocation(
+            database=target_database,
             schema=target_schema,
             name=target_name,
             qualified_name=qualified,
@@ -88,6 +101,178 @@ def build_table_plan_entry(
         type_enforcement=type_enforcement,
         pre_hooks=pre_hooks,
         post_hooks=post_hooks,
+    )
+
+
+def build_reuse_table_plan_entry(
+    *,
+    name: str,
+    sql: str,
+    target_database: str | None = None,
+    target_schema: str | None,
+    target_name: str,
+    origin_database: str | None = None,
+    origin_schema: str | None,
+    origin_name: str,
+    hard_copy: bool,
+    reuse_origin_fingerprint_database: str | None = None,
+    reuse_origin_fingerprint_schema: str | None = None,
+    unique_key: tuple[str, ...] = ("account_id",),
+    snapshot_strategy: str = "timestamp",
+    updated_at_column: str | None = "updated_at",
+    check_columns: tuple[str, ...] = (),
+    contract_enforced: bool = False,
+    contract_columns: tuple[ColumnInfo, ...] = (),
+    pre_hooks: object = None,
+    post_hooks: object = None,
+) -> ModelPlanEntry:
+    """Build a table plan entry that reuses an origin relation."""
+
+    origin_relation_parts: tuple[str, ...] = tuple(
+        part for part in (origin_database, origin_schema, origin_name) if part is not None
+    )
+    origin_qualified: str = ".".join(origin_relation_parts)
+    return dataclasses.replace(
+        build_table_plan_entry(
+            name=name,
+            sql=sql,
+            target_database=target_database,
+            target_schema=target_schema,
+            target_name=target_name,
+        ),
+        action=PlanAction.CREATE_TABLE,
+        fingerprint_version_hash="expected_version",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=origin_database,
+                schema=origin_schema,
+                name=origin_name,
+                qualified_name=origin_qualified,
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=hard_copy,
+            fingerprint_database=reuse_origin_fingerprint_database,
+            fingerprint_schema=reuse_origin_fingerprint_schema or origin_schema or "",
+        ),
+    )
+
+
+def build_reuse_snapshot_plan_entry(
+    *,
+    name: str,
+    sql: str,
+    target_database: str | None = None,
+    target_schema: str | None,
+    target_name: str,
+    origin_database: str | None = None,
+    origin_schema: str | None,
+    origin_name: str,
+    hard_copy: bool,
+    reuse_origin_fingerprint_database: str | None = None,
+    reuse_origin_fingerprint_schema: str | None = None,
+    unique_key: tuple[str, ...] = ("account_id",),
+    snapshot_strategy: str = "timestamp",
+    updated_at_column: str | None = "updated_at",
+    check_columns: tuple[str, ...] = (),
+    contract_enforced: bool = False,
+    contract_columns: tuple[ColumnInfo, ...] = (),
+    pre_hooks: object = None,
+    post_hooks: object = None,
+) -> ModelPlanEntry:
+    """Build a snapshot plan entry that seeds from an origin relation."""
+
+    destination_relation_parts: tuple[str, ...] = tuple(
+        part for part in (target_database, target_schema, target_name) if part is not None
+    )
+    origin_relation_parts: tuple[str, ...] = tuple(
+        part for part in (origin_database, origin_schema, origin_name) if part is not None
+    )
+    destination_qualified: str = ".".join(destination_relation_parts)
+    origin_qualified: str = ".".join(origin_relation_parts)
+    return ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
+        name=name,
+        relative_path=Path(f"models/{name}.sql"),
+        materialization_type=MaterializationType.SNAPSHOT,
+        action=PlanAction.SNAPSHOT,
+        reason=PlanReason.NO_CHANGE,
+        destination=CompiledRelationLocation(
+            database=target_database,
+            schema=target_schema,
+            name=target_name,
+            qualified_name=destination_qualified,
+        ),
+        fingerprint_query_sql=sql,
+        resolved_sql=sql,
+        logical_ddl="",
+        unique_key=unique_key,
+        snapshot_strategy=snapshot_strategy,
+        updated_at_column=updated_at_column,
+        check_columns=check_columns,
+        contract_enforced=contract_enforced,
+        contract_columns=contract_columns,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
+        fingerprint_version_hash="expected_version",
+        relation_reuse=RelationReusePlan(
+            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            origin=CompiledRelationLocation(
+                database=origin_database,
+                schema=origin_schema,
+                name=origin_name,
+                qualified_name=origin_qualified,
+            ),
+            reuse_from_target_name="prod",
+            hard_copy=hard_copy,
+            fingerprint_database=reuse_origin_fingerprint_database,
+            fingerprint_schema=reuse_origin_fingerprint_schema or origin_schema or "",
+        ),
+    )
+
+
+def write_matching_reuse_origin_fingerprint(
+    *,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    database: str | None = None,
+    schema: str,
+    model_name: str,
+    target_name: str,
+    target_database: str | None = None,
+    version_hash: str = "expected_version",
+    metadata_json: str = "{}",
+) -> None:
+    """Create reuse origin fingerprint state matching a reuse plan entry."""
+
+    adapter.execute(
+        connection,
+        build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=adapter.render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
+        ),
+    )
+    adapter.execute(
+        connection,
+        build_insert_sql(
+            database=database,
+            schema=schema,
+            node_type="model",
+            node_name=model_name,
+            target_database=target_database,
+            target_schema=schema,
+            target_name=target_name,
+            run_id="reuse_from_run",
+            definition_hash="definition_hash",
+            version_hash=version_hash,
+            schema_fingerprint="schema_hash",
+            definition="SELECT 1 AS id",
+            metadata_json=metadata_json,
+            ts="2026-01-01T00:00:00+00:00",
+            render_qualified_name=adapter.render_qualified_name,
+        ),
     )
 
 
@@ -115,6 +300,37 @@ def build_test_audit_plan_entry(
         requested_run_scope=AuditRunScope.FINAL,
         effective_run_scope=AuditRunScope.FINAL,
         attached_target_name=attached_target_name,
+    )
+
+
+def build_test_audit_result(
+    *, audit: AuditPlanEntry, outcome: AuditOutcome = AuditOutcome.PASS
+) -> AuditExecutionResult:
+    """Build a minimal audit execution result for fingerprint metadata tests."""
+
+    return AuditExecutionResult(
+        audit_name=audit.name,
+        attachment_kind=audit.attachment_kind,
+        severity=audit.severity,
+        outcome=outcome,
+        row_count=0 if outcome == AuditOutcome.PASS else 1,
+        executed_sql=audit.resolved_sql,
+        run_scope_phase=AuditRunScope.FINAL,
+        attached_target_name=audit.attached_target_name,
+        attached_column_name=audit.attached_column_name,
+    )
+
+
+def build_test_audit_gate_metadata(
+    *, audit: AuditPlanEntry, outcome: AuditOutcome = AuditOutcome.PASS
+) -> str:
+    """Build metadata JSON containing successful audit gate proof."""
+
+    return model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(audit,),
+        audit_results=(build_test_audit_result(audit=audit, outcome=outcome),),
+        run_id="reuse_from_run",
     )
 
 
@@ -238,8 +454,8 @@ def _execute_test(
         test_case=test_case,
         resolved_target_name=target_qualified,
     )
-    model_targets: dict[str, CompiledRelationDestination] = {
-        "orders": CompiledRelationDestination(
+    model_locations: dict[str, CompiledRelationLocation] = {
+        "orders": CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
             name=test_case.target_name,
@@ -251,8 +467,8 @@ def _execute_test(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map={},
         model_audits=model_audits,
         declared_columns=declared_columns,

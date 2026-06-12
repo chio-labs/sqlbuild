@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
+from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
+from sqlbuild.executor.python_nodes.main.fingerprinting import (
+    try_write_python_node_identity_fingerprint,
+)
 from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookRelation
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -18,7 +23,7 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 
@@ -30,7 +35,7 @@ def execute_hooks(
     phase: HookPhase,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
     model_name: str | None = None,
-    destination: CompiledRelationDestination | None = None,
+    destination: CompiledRelationLocation | None = None,
     run_id: str = "",
     environment: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
@@ -140,7 +145,7 @@ def invoke_python_hook(
     hook_index: int,
     phase: HookPhase,
     model_name: str | None,
-    destination: CompiledRelationDestination | None,
+    destination: CompiledRelationLocation | None,
     run_id: str,
     environment: str | None,
     effective_vars: Mapping[str, object] | None,
@@ -149,7 +154,7 @@ def invoke_python_hook(
     providers: ProviderContainer | None = None,
 ) -> None:
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
-    hook_function: Callable[..., object] | None = _find_hook_function(
+    hook_function: DiscoveredHookFunction | None = _find_hook_function(
         name=hook_entry.name,
         hook_functions=hook_functions,
     )
@@ -194,7 +199,7 @@ def invoke_python_hook(
     )
     try:
         invoke_with_providers(
-            function=hook_function,
+            function=hook_function.function,
             context=context,
             providers=providers,
             supplied_kwargs=dict(hook_entry.kwargs),
@@ -218,6 +223,21 @@ def invoke_python_hook(
         hook_type="python",
         label=hook_entry.name,
         status=ExecutionStatus.SUCCESS,
+    )
+    try_write_python_node_identity_fingerprint(
+        identity=build_python_node_identity(
+            node_type=NODE_TYPE_HOOK,
+            node_name=hook_function.name,
+            function=hook_function.function,
+            project_dir=hook_function.file_path.parent,
+            decorator_config={"description": hook_function.description},
+        ),
+        adapter=adapter,
+        connection=connection,
+        run_id=run_id,
+        database=destination.database,
+        schema=destination.schema,
+        target_name=model_name,
     )
 
 
@@ -292,7 +312,7 @@ def build_hook_context(
     hook_index: int,
     phase: HookPhase,
     model_name: str,
-    destination: CompiledRelationDestination,
+    destination: CompiledRelationLocation,
     run_id: str,
     environment: str | None,
     effective_vars: Mapping[str, object],
@@ -303,7 +323,7 @@ def build_hook_context(
         name=destination.name,
         schema=destination.schema,
         database=destination.database,
-        qualified=resolve_destination_qualified_name(adapter=adapter, target=destination),
+        qualified=resolve_relation_location_qualified_name(adapter=adapter, location=destination),
     )
     return HookContext(
         model_name=model_name,
@@ -325,11 +345,11 @@ def build_hook_context(
 
 def _find_hook_function(
     *, name: str, hook_functions: tuple[DiscoveredHookFunction, ...]
-) -> Callable[..., object] | None:
+) -> DiscoveredHookFunction | None:
     hook_function: DiscoveredHookFunction
     for hook_function in hook_functions:
         if hook_function.name == name:
-            return hook_function.function
+            return hook_function
     return None
 
 

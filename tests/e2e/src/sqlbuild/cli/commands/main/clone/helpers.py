@@ -17,7 +17,16 @@ def prepare_virtual_clone_project(tmp_path: Path) -> Path:
         repo_files={
             "sqlbuild_project.toml": build_virtual_clone_project_toml(),
             "sqlbuild_local.toml": 'target = "dev"\n',
-            "models/stg_orders.sql": "MODEL ();\n\nSELECT 7 AS id\n",
+            "seeds/orders.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    path: order_amounts.csv\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: integer\n"
+            ),
+            "seeds/order_amounts.csv": "id\n7\n",
+            "models/stg_orders.sql": 'MODEL ();\n\nSELECT id FROM __seed("order_amounts")\n',
             "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
             "models/dim_customers.sql": "MODEL ();\n\nSELECT 1 AS customer_id\n",
         },
@@ -38,7 +47,7 @@ def build_virtual_clone_project_toml() -> str:
         "[targets.prod.connection]\n"
         'database = "prod.duckdb"\n\n'
         "[targets.prod.clone]\n"
-        "allow_as_source = true\n\n"
+        "allow_as_clone_origin = true\n\n"
         "[targets.prod.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
@@ -49,7 +58,7 @@ def build_virtual_clone_project_toml() -> str:
         "[targets.dev.connection]\n"
         'database = "dev.duckdb"\n\n'
         "[targets.dev.clone]\n"
-        "allow_as_target = true\n\n"
+        "allow_as_clone_destination = true\n\n"
         "[targets.dev.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
@@ -101,8 +110,20 @@ def prod_version_hash(project_dir: Path, model_name: str) -> str:
         query_duckdb(
             db_path=project_dir / "prod_state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 f"WHERE virtual_environment_name = 'prod' AND model_name = '{model_name}'"
+            ),
+        )[0][0]
+    )
+
+
+def prod_seed_version_hash(project_dir: Path, seed_name: str) -> str:
+    return str(
+        query_duckdb(
+            db_path=project_dir / "prod_state.duckdb",
+            sql=(
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_seed_refs "
+                f"WHERE virtual_environment_name = 'prod' AND seed_name = '{seed_name}'"
             ),
         )[0][0]
     )
@@ -113,7 +134,7 @@ def dev_version_hash(project_dir: Path, model_name: str) -> str:
         query_duckdb(
             db_path=project_dir / "dev_state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 f"WHERE virtual_environment_name = 'dev' AND model_name = '{model_name}'"
             ),
         )[0][0]
@@ -124,8 +145,18 @@ def dev_ref_rows(project_dir: Path) -> list[tuple[object, ...]]:
     return query_duckdb(
         db_path=project_dir / "dev_state.duckdb",
         sql=(
-            "SELECT model_name, version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT model_name, version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+        ),
+    )
+
+
+def dev_seed_ref_rows(project_dir: Path) -> list[tuple[object, ...]]:
+    return query_duckdb(
+        db_path=project_dir / "dev_state.duckdb",
+        sql=(
+            "SELECT seed_name, version_hash FROM sqlbuild_state.virtual_environment_seed_refs "
+            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
         ),
     )
 

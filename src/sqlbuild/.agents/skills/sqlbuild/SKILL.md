@@ -933,22 +933,22 @@ The active target is determined by (in order of precedence):
 
 #### Clone policies
 
-Targets can declare whether they allow cloning to or from:
+Targets can declare whether they allow cloning from an origin or into a destination:
 
 ```toml
 [targets.prod]
 schema = "prod"
 
 [targets.prod.clone]
-allow_as_source = true
-allow_as_target = false
+allow_as_clone_origin = true
+allow_as_clone_destination = false
 
 [targets.dev]
 schema = "dev"
 
 [targets.dev.clone]
-allow_as_source = false
-allow_as_target = true
+allow_as_clone_origin = false
+allow_as_clone_destination = true
 ```
 
 ### Defaults

@@ -209,7 +209,7 @@ def test_given_virtual_incremental_change_when_building_on_sqlserver_then_seeds_
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 0 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -244,7 +244,7 @@ def test_given_virtual_incremental_change_when_building_on_sqlserver_then_seeds_
                 "  cursor ordered_at,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain day,\n"
-                "  query_change_backfill bounded-7d\n"
+                "  replay_on_change bounded-7d\n"
                 ");\n\n"
                 "SELECT id, ordered_at, amount_cents + 1 AS amount_cents\n"
                 'FROM __source("raw_orders")\n'
@@ -421,7 +421,8 @@ def test_given_tracked_physical_relation_when_attaching_on_sqlserver_then_view_i
             sql=(
                 "SELECT database_name, schema_name, relation_name "
                 "FROM sqlbuild_state.physical_relations "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
         )[0]
         physical_relation: str = f'"{physical_schema_name}"."{physical_relation_name}"'
@@ -625,7 +626,7 @@ def test_given_detached_vde_when_running_janitor_on_sqlserver_then_refs_are_prun
         ) == [(test_case.expected_virtual_environment_count_after,)]
         assert query_duckdb(
             db_path=project_dir / "state.duckdb",
-            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
         ) == [(test_case.expected_ref_count_after,)]
     finally:
         cleanup_sqlserver_schema(schema_name=schema_name, config=config)

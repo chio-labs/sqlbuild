@@ -163,7 +163,7 @@ def _format_state_lifecycle_summary(
             label="current state",
             value=(
                 "model_versions, function_versions, physical_relations, "
-                "physical_relation_ancestry, virtual_environments, virtual_environment_refs, "
+                "physical_relation_ancestry, virtual_environments, virtual_environment_model_refs, "
                 "virtual_environment_function_refs, locks"
             ),
             use_color=use_color,
@@ -174,9 +174,9 @@ def _format_state_lifecycle_summary(
         _summary_row(
             label="history",
             value=(
-                "virtual_environment_checkpoints, virtual_environment_checkpoint_refs, "
+                "virtual_environment_checkpoints, virtual_environment_checkpoint_model_refs, "
                 "virtual_environment_checkpoint_function_refs, plan_runs, "
-                "virtual_environment_ref_events, reconcile_events, state_migration_events"
+                "virtual_environment_model_ref_events, reconcile_events, state_migration_events"
             ),
             use_color=use_color,
             emphasize_value=False,

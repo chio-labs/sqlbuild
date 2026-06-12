@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -384,7 +384,7 @@ def _build_python_check(node: DiscoveredPythonNode, *, python_graph: PythonNodeG
     )
 
 
-def _dag_target(target: CompiledRelationDestination) -> DagTarget:
+def _dag_target(target: CompiledRelationLocation) -> DagTarget:
     return DagTarget(
         database=target.database,
         schema=target.schema,
@@ -395,7 +395,7 @@ def _dag_target(target: CompiledRelationDestination) -> DagTarget:
     )
 
 
-def _target_asset_key(target: CompiledRelationDestination) -> tuple[str, ...]:
+def _target_asset_key(target: CompiledRelationLocation) -> tuple[str, ...]:
     return tuple(
         part
         for part in (

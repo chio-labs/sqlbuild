@@ -10,12 +10,13 @@ from sqlbuild.adapter.shared.models import ColumnInfo, NormalizedType, Statement
 from sqlbuild.adapter.shared.type_normalization import normalize_type, types_equal
 from sqlbuild.adapter.shared.types import TypeFamily
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     HistoricalInput,
     PlanReason,
+    RelationReuseKind,
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
@@ -24,7 +25,9 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_plan
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -32,8 +35,8 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
-    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
+    resolve_relation_location_qualified_name,
 )
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.source import SourceEntry
@@ -52,8 +55,8 @@ def execute_snapshot_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     run_id: str,
@@ -70,8 +73,8 @@ def execute_snapshot_entry(
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
-    target_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=entry.destination
+    target_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
     )
     delta_table: str = f"{target_table}__snapshot_delta"
     delta_qualified: str = resolve_qualified_name_parts(
@@ -79,6 +82,13 @@ def execute_snapshot_entry(
         database=target_database,
         schema=target_schema,
         name=delta_table,
+    )
+    seed_table: str = f"{target_table}__reuse_seed"
+    seed_qualified: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=target_database,
+        schema=target_schema,
+        name=seed_table,
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
@@ -125,15 +135,44 @@ def execute_snapshot_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
+            if (
+                entry.relation_reuse is not None
+                and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+            ):
+                adapter.drop(
+                    connection,
+                    destination=seed_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
+                create_relation_from_reuse_plan(
+                    adapter=adapter,
+                    connection=connection,
+                    model_name=entry.name,
+                    expected_version_hash=entry.fingerprint_version_hash,
+                    relation_reuse=entry.relation_reuse,
+                    destination_relation=seed_qualified,
+                    statement_recorder=statement_recorder,
+                )
+                promote_relation_to_destination(
+                    adapter=adapter,
+                    connection=connection,
+                    origin_relation=seed_qualified,
+                    destination_relation=target_qualified,
+                    destination_database=target_database,
+                    destination_schema=target_schema,
+                    destination_name=target_table,
+                    statement_recorder=statement_recorder,
+                )
             adapter.drop(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
             adapter.create_table_as(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 sql=entry.resolved_sql,
                 statement_recorder=statement_recorder,
             )
@@ -188,8 +227,8 @@ def execute_snapshot_entry(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         source_map=source_map,
         model_audits=model_audits,
         delta_qualified=delta_qualified,
@@ -215,7 +254,7 @@ def execute_snapshot_entry(
             if entry.reason == PlanReason.FULL_REFRESH:
                 adapter.drop(
                     connection,
-                    target=target_qualified,
+                    destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -282,8 +321,8 @@ def execute_snapshot_entry(
             audit=audit,
             adapter=adapter,
             connection=connection,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,
@@ -347,12 +386,14 @@ def execute_snapshot_entry(
         run_id=run_id,
         query_change_tracking=query_change_tracking,
         warnings=warnings,
+        model_audits=model_audits,
+        audit_results=tuple(audit_results),
     )
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
         adapter.drop(
             connection,
-            target=delta_qualified,
+            destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
         )
@@ -373,8 +414,8 @@ def _execute_snapshot_delta_audits(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     delta_qualified: str,
@@ -391,8 +432,8 @@ def _execute_snapshot_delta_audits(
             audit=audit,
             adapter=adapter,
             connection=connection,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
             relation_overrides=delta_overrides,
             run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
@@ -516,9 +557,9 @@ def _create_initial_snapshot_target(
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
         if entry.historical_input == HistoricalInput.CHANGES:
             statements: tuple[str, ...] = (
-                adapter.render_create_initial_historical_timestamp_changes_target(
-                    target=target_qualified,
-                    source=delta_qualified,
+                adapter.render_create_initial_historical_timestamp_changes_destination(
+                    destination=target_qualified,
+                    origin=delta_qualified,
                     unique_key=entry.unique_key,
                     updated_at_column=updated_at_column,
                     valid_from_column=valid_from_column,
@@ -527,9 +568,9 @@ def _create_initial_snapshot_target(
                 )
             )
         else:
-            statements = adapter.render_create_initial_historical_timestamp_snapshot_target(
-                target=target_qualified,
-                source=delta_qualified,
+            statements = adapter.render_create_initial_historical_timestamp_snapshot_destination(
+                destination=target_qualified,
+                origin=delta_qualified,
                 unique_key=entry.unique_key,
                 updated_at_column=updated_at_column,
                 observed_at_column=entry.observed_at_column,
@@ -540,9 +581,9 @@ def _create_initial_snapshot_target(
             )
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.observed_at_column is not None:
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
-        statements = adapter.render_create_initial_historical_check_snapshot_target(
-            target=target_qualified,
-            source=delta_qualified,
+        statements = adapter.render_create_initial_historical_check_snapshot_destination(
+            destination=target_qualified,
+            origin=delta_qualified,
             unique_key=entry.unique_key,
             check_columns=check_columns,
             observed_at_column=entry.observed_at_column,
@@ -552,9 +593,9 @@ def _create_initial_snapshot_target(
             invalidate_hard_deletes=entry.invalidate_hard_deletes,
         )
     else:
-        statements = adapter.render_create_initial_snapshot_target(
-            target=target_qualified,
-            source=delta_qualified,
+        statements = adapter.render_create_initial_snapshot_destination(
+            destination=target_qualified,
+            origin=delta_qualified,
             snapshot_strategy=entry.snapshot_strategy,
             updated_at_column=entry.updated_at_column,
             observed_at_column=entry.observed_at_column,
@@ -623,8 +664,8 @@ def _apply_timestamp_snapshot_changes(
         statements: tuple[str, ...]
         if entry.historical_input == HistoricalInput.CHANGES:
             statements = adapter.render_apply_historical_timestamp_changes(
-                target=target_qualified,
-                source=delta_qualified,
+                destination=target_qualified,
+                origin=delta_qualified,
                 unique_key=entry.unique_key,
                 updated_at_column=updated_at_column,
                 valid_from_column=valid_from_column,
@@ -633,8 +674,8 @@ def _apply_timestamp_snapshot_changes(
             )
         else:
             statements = adapter.render_apply_historical_timestamp_snapshot_changes(
-                target=target_qualified,
-                source=delta_qualified,
+                destination=target_qualified,
+                origin=delta_qualified,
                 unique_key=entry.unique_key,
                 updated_at_column=updated_at_column,
                 observed_at_column=entry.observed_at_column,
@@ -650,8 +691,8 @@ def _apply_timestamp_snapshot_changes(
                 adapter.execute(connection, statement)
         return
     statements: tuple[str, ...] = adapter.render_apply_timestamp_snapshot_changes(
-        target=target_qualified,
-        source=delta_qualified,
+        destination=target_qualified,
+        origin=delta_qualified,
         unique_key=entry.unique_key,
         updated_at_column=updated_at_column,
         observed_at_column=entry.observed_at_column,
@@ -684,8 +725,8 @@ def _apply_check_snapshot_changes(
     output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
     if entry.observed_at_column is not None:
         statements: tuple[str, ...] = adapter.render_apply_historical_check_snapshot_changes(
-            target=target_qualified,
-            source=delta_qualified,
+            destination=target_qualified,
+            origin=delta_qualified,
             unique_key=entry.unique_key,
             check_columns=check_columns,
             observed_at_column=entry.observed_at_column,
@@ -696,8 +737,8 @@ def _apply_check_snapshot_changes(
         )
     else:
         statements = adapter.render_apply_check_snapshot_changes(
-            target=target_qualified,
-            source=delta_qualified,
+            destination=target_qualified,
+            origin=delta_qualified,
             unique_key=entry.unique_key,
             check_columns=check_columns,
             updated_at_column=entry.updated_at_column,
@@ -801,7 +842,7 @@ def _apply_snapshot_schema_change(
 
     adapter.add_columns(
         connection,
-        target=target_qualified,
+        destination=target_qualified,
         columns=added,
         statement_recorder=statement_recorder,
     )
