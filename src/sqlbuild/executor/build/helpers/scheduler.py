@@ -50,6 +50,7 @@ from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersio
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.main.execute import (
     execute_custom_entry,
     execute_incremental_entry,
@@ -130,6 +131,7 @@ class BuildScheduler:
         initial_load_results: tuple[LoadExecutionResult, ...] = (),
         initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
         providers: ProviderContainer | None = None,
+        python_identity_recorder: PythonIdentityRecorder | None = None,
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
@@ -177,6 +179,7 @@ class BuildScheduler:
         self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
         self._use_color: bool = use_color
         self._providers: ProviderContainer | None = providers
+        self._python_identity_recorder: PythonIdentityRecorder | None = python_identity_recorder
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
@@ -635,6 +638,7 @@ class BuildScheduler:
                     warehouse_relations=self._warehouse_relations,
                     on_progress=self._on_sub_progress,
                     providers=self._providers,
+                    python_identity_recorder=self._python_identity_recorder,
                 )
             except Exception as error:
                 result = ModelExecutionResult(
@@ -821,6 +825,7 @@ def _dispatch_model(
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_progress: Callable[[str], None] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Route a model to the correct executor based on action and mode."""
 
@@ -858,6 +863,7 @@ def _dispatch_model(
             hook_functions=plan.hook_functions,
             effective_target_name=target,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH
@@ -883,6 +889,7 @@ def _dispatch_model(
             effective_target_name=target,
             effective_vars=effective_vars,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
     if is_full_refresh_microbatch:
         return execute_microbatch_entry(
@@ -901,6 +908,7 @@ def _dispatch_model(
             effective_target_name=target,
             effective_vars=effective_vars,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
     if entry.action in INCREMENTAL_ACTIONS:
         return execute_incremental_entry(
@@ -918,6 +926,7 @@ def _dispatch_model(
             effective_target_name=target,
             effective_vars=effective_vars,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
     if entry.action == PlanAction.CREATE_VIEW:
         return execute_view_entry(
@@ -934,6 +943,7 @@ def _dispatch_model(
             effective_target_name=target,
             effective_vars=effective_vars,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
     if entry.action == PlanAction.SNAPSHOT:
         return execute_snapshot_entry(
@@ -952,6 +962,7 @@ def _dispatch_model(
             effective_target_name=target,
             effective_vars=effective_vars,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
     return execute_table_entry(
         entry=entry,
@@ -969,6 +980,7 @@ def _dispatch_model(
         effective_target_name=target,
         effective_vars=effective_vars,
         providers=providers,
+        python_identity_recorder=python_identity_recorder,
     )
 
 

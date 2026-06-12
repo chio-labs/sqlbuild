@@ -100,6 +100,18 @@ class JanitorDirectStatePruneCandidate:
 
 
 @dataclass(frozen=True)
+class JanitorVirtualStatePruneCandidate:
+    """One virtual-mode state table eligible for orphaned state pruning."""
+
+    schema: str
+    table_name: str
+    reason: str
+
+    def display_name(self) -> str:
+        return f"{self.schema}.{self.table_name}"
+
+
+@dataclass(frozen=True)
 class JanitorSkippedRelation:
     """One stale relation skipped by a safety rule."""
 
@@ -148,6 +160,9 @@ class JanitorPlan:
     direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = field(
         default_factory=tuple
     )
+    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
+        default_factory=tuple
+    )
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
@@ -169,3 +184,6 @@ class JanitorExecutionResult:
     deleted_state_backups: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
     deleted_expired_locks: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)
+    pruned_virtual_state: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
+        default_factory=tuple
+    )

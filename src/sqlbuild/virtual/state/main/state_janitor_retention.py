@@ -31,6 +31,7 @@ def inspect_state_janitor_retention(
         )
         latest_backup_id: str | None = backups[0].backup_id if backups else None
         return StateJanitorInspection(
+            schema=config.schema,
             state_backups=tuple(
                 backup
                 for backup in backups
@@ -42,6 +43,9 @@ def inspect_state_janitor_retention(
                 )
             ),
             expired_locks=backend.list_expired_locks(connection, schema=config.schema),
+            unreferenced_python_node_versions=backend.count_unreferenced_python_node_versions(
+                connection, schema=config.schema
+            ),
         )
     finally:
         backend.close(connection)

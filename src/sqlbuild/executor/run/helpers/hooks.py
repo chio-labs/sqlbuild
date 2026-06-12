@@ -14,6 +14,7 @@ from sqlbuild.compiler.python_nodes.main.identity import build_python_node_ident
 from sqlbuild.executor.python_nodes.main.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookRelation
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -42,6 +43,7 @@ def execute_hooks(
     statement_recorder: StatementRecorder | None = None,
     hook_results: list[HookExecutionResult] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> None:
     """Execute pre/post lifecycle hook entries."""
 
@@ -83,6 +85,7 @@ def execute_hooks(
             statement_recorder=statement_recorder,
             hook_results=hook_results,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
         return
     if isinstance(hooks, list | tuple):
@@ -123,6 +126,7 @@ def execute_hooks(
                     statement_recorder=statement_recorder,
                     hook_results=hook_results,
                     providers=providers,
+                    python_identity_recorder=python_identity_recorder,
                 )
             else:
                 raise ExecutorInputError(
@@ -152,6 +156,7 @@ def invoke_python_hook(
     statement_recorder: StatementRecorder | None,
     hook_results: list[HookExecutionResult] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> None:
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
     hook_function: DiscoveredHookFunction | None = _find_hook_function(
@@ -224,21 +229,25 @@ def invoke_python_hook(
         label=hook_entry.name,
         status=ExecutionStatus.SUCCESS,
     )
-    try_write_python_node_identity_fingerprint(
-        identity=build_python_node_identity(
-            node_type=NODE_TYPE_HOOK,
-            node_name=hook_function.name,
-            function=hook_function.function,
-            project_dir=hook_function.file_path.parent,
-            decorator_config={"description": hook_function.description},
-        ),
-        adapter=adapter,
-        connection=connection,
-        run_id=run_id,
-        database=destination.database,
-        schema=destination.schema,
-        target_name=model_name,
+    identity = build_python_node_identity(
+        node_type=NODE_TYPE_HOOK,
+        node_name=hook_function.name,
+        function=hook_function.function,
+        project_dir=hook_function.file_path.parent,
+        decorator_config={"description": hook_function.description},
     )
+    if python_identity_recorder is not None:
+        python_identity_recorder(identity, model_name)
+    else:
+        try_write_python_node_identity_fingerprint(
+            identity=identity,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            database=destination.database,
+            schema=destination.schema,
+            target_name=model_name,
+        )
 
 
 def _execute_sql_hook(

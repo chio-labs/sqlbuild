@@ -13,6 +13,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    PythonNodeVersionRecord,
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
@@ -23,6 +24,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
@@ -45,6 +47,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendLifecycleTestCase,
     PostgresStateBackendLockTestCase,
     PostgresStateBackendOperationEventTestCase,
+    PostgresStateBackendPythonNodeIdentityTestCase,
     PostgresStateBackendSeedRefTestCase,
     PostgresStateBackendSourceFreshnessTestCase,
     PostgresStateBackendTableCreationTestCase,
@@ -861,6 +864,165 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
             checkpoint_id=checkpoint.checkpoint_id,
         )
         == ()
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendPythonNodeIdentityTestCase(
+            description="persists python node versions and separate VDE refs",
+            sqlbuild_version="0.0.test",
+            first_virtual_environment_name="dev_alice",
+            second_virtual_environment_name="dev_bob",
+            node_type="task",
+            node_name="prepare_orders",
+            first_version_hash="version-one",
+            second_version_hash="version-two",
+            expected_ref_versions=("version-one", "version-two"),
+            orphan_version_hash="version-orphan",
+            expected_pruned_count=1,
+        )
+    ],
+    ids=["persists python node versions and separate VDE refs"],
+)
+def test_given_postgres_state_backend_when_upserting_python_node_identity_then_round_trips_refs(
+    test_case: PostgresStateBackendPythonNodeIdentityTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    first_record: PythonNodeVersionRecord = PythonNodeVersionRecord(
+        node_type=test_case.node_type,
+        node_name=test_case.node_name,
+        version_hash=test_case.first_version_hash,
+        definition_hash="definition-one",
+        identity_metadata_hash="metadata-one",
+        definition_json_b64="e30=",
+        identity_metadata_json_b64="e30=",
+        status=ModelVersionStatus.READY,
+    )
+    second_record: PythonNodeVersionRecord = PythonNodeVersionRecord(
+        node_type=test_case.node_type,
+        node_name=test_case.node_name,
+        version_hash=test_case.second_version_hash,
+        definition_hash="definition-two",
+        identity_metadata_hash="metadata-two",
+        definition_json_b64="e30=",
+        identity_metadata_json_b64="e30=",
+        status=ModelVersionStatus.READY,
+    )
+    orphan_record: PythonNodeVersionRecord = PythonNodeVersionRecord(
+        node_type=test_case.node_type,
+        node_name=test_case.node_name,
+        version_hash=test_case.orphan_version_hash,
+        definition_hash="definition-orphan",
+        identity_metadata_hash="metadata-orphan",
+        definition_json_b64="e30=",
+        identity_metadata_json_b64="e30=",
+        status=ModelVersionStatus.READY,
+    )
+
+    postgres_state_backend.upsert_python_node_version(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=first_record,
+    )
+    postgres_state_backend.upsert_python_node_version(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=second_record,
+    )
+    postgres_state_backend.upsert_python_node_version(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        record=orphan_record,
+    )
+    postgres_state_backend.upsert_virtual_environment_python_node_ref(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        ref=VirtualEnvironmentPythonNodeRefRecord(
+            virtual_environment_name=test_case.first_virtual_environment_name,
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.first_version_hash,
+        ),
+    )
+    postgres_state_backend.upsert_virtual_environment_python_node_ref(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        ref=VirtualEnvironmentPythonNodeRefRecord(
+            virtual_environment_name=test_case.second_virtual_environment_name,
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.second_version_hash,
+        ),
+    )
+
+    first_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_python_node_refs(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.first_virtual_environment_name,
+        )
+    )
+    second_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
+        postgres_state_backend.get_virtual_environment_python_node_refs(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.second_virtual_environment_name,
+        )
+    )
+
+    assert (
+        postgres_state_backend.get_python_node_version(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.first_version_hash,
+        )
+        == first_record
+    )
+    assert tuple(ref.version_hash for ref in (*first_refs, *second_refs)) == (
+        test_case.expected_ref_versions
+    )
+    assert (
+        postgres_state_backend.count_unreferenced_python_node_versions(
+            postgres_state_connection, schema=postgres_state_schema
+        )
+        == test_case.expected_pruned_count
+    )
+    assert (
+        postgres_state_backend.prune_unreferenced_python_node_versions(
+            postgres_state_connection, schema=postgres_state_schema
+        )
+        == test_case.expected_pruned_count
+    )
+    assert (
+        postgres_state_backend.get_python_node_version(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.orphan_version_hash,
+        )
+        is None
+    )
+    assert (
+        postgres_state_backend.get_python_node_version(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.second_version_hash,
+        )
+        == second_record
     )
 
 

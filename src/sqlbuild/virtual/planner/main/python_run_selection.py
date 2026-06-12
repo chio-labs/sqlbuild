@@ -40,6 +40,7 @@ def build_virtual_python_run_selection(
     selected_python_names: frozenset[str] = planned_source_loader_python_names(
         plan_output=plan_output, python_graph=python_graph
     )
+    validation_sql_keys = frozenset(plan_output.selected_keys)
     if include_python:
         raw_select: tuple[str, ...] = select or selected_model_names
         if raw_select:
@@ -50,6 +51,7 @@ def build_virtual_python_run_selection(
                 python_graph=python_graph,
             )
             selected_python_names = selected_python_names | run_selection.python_node_names
+            validation_sql_keys = validation_sql_keys | run_selection.sql_keys
         selected_python_names = selected_python_names | sql_attached_python_names(
             selected_sql_names=frozenset(key.name for key in plan_output.selected_keys),
             python_graph=python_graph,
@@ -60,7 +62,7 @@ def build_virtual_python_run_selection(
     )
     validate_python_sql_selection(
         selection=PythonSqlSelection(
-            sql_keys=frozenset(plan_output.selected_keys),
+            sql_keys=validation_sql_keys,
             python_node_names=selected_python_names,
         ),
         project_graph=graph,

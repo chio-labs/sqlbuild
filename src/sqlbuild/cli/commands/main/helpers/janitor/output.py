@@ -98,6 +98,13 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
         else style.accent(direct_state_count)
     )
     stream.write(f"  {'direct state pruned':<22} {rendered_direct_state}\n")
+    virtual_state_count: str = str(len(plan.virtual_state_prune_candidates))
+    rendered_virtual_state: str = (
+        style.warning(virtual_state_count)
+        if plan.virtual_state_prune_candidates
+        else style.accent(virtual_state_count)
+    )
+    stream.write(f"  {'virtual state pruned':<22} {rendered_virtual_state}\n")
     skipped_count: str = style.accent(str(len(plan.skipped_relations)))
     stream.write(f"  {'objects skipped':<22} {skipped_count}\n")
 
@@ -171,6 +178,14 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
                 f"{style.muted(f'keep latest {direct_state_candidate.retain_versions}')}\n"
             )
 
+    if plan.virtual_state_prune_candidates:
+        stream.write(f"\n{style.success('Eligible virtual state pruning')}\n")
+        for virtual_state_candidate in plan.virtual_state_prune_candidates:
+            stream.write(
+                f"  {style.object_name(virtual_state_candidate.display_name())}  "
+                f"{style.muted(virtual_state_candidate.reason)}\n"
+            )
+
     if plan.skipped_relations:
         stream.write(f"\n{style.success('Skipped objects')}\n")
         skipped: JanitorSkippedRelation
@@ -192,6 +207,7 @@ def confirmation_text(plan: JanitorPlan) -> str:
         + len(plan.state_backup_candidates)
         + len(plan.expired_lock_candidates)
         + len(plan.direct_state_prune_candidates)
+        + len(plan.virtual_state_prune_candidates)
     )
     if state_candidate_count == 0:
         return f"delete {len(plan.candidates)} objects from {environment_label(plan)}"

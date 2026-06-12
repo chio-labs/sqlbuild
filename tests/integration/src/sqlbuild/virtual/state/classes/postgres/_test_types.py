@@ -77,6 +77,21 @@ class PostgresStateBackendSeedRefTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresStateBackendPythonNodeIdentityTestCase:
+    description: str
+    sqlbuild_version: str
+    first_virtual_environment_name: str
+    second_virtual_environment_name: str
+    node_type: str
+    node_name: str
+    first_version_hash: str
+    second_version_hash: str
+    expected_ref_versions: tuple[str, str]
+    orphan_version_hash: str
+    expected_pruned_count: int
+
+
+@dataclass(frozen=True)
 class PostgresStateBackendIndexValidationTestCase:
     description: str
     sqlbuild_version: str

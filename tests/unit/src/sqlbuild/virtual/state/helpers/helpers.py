@@ -9,6 +9,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    PythonNodeVersionRecord,
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
@@ -23,6 +24,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
@@ -137,6 +139,22 @@ class FakeStateBackend(StateBackend):
     def get_seed_version(
         self, connection: Any, *, schema: str, seed_name: str, version_hash: str
     ) -> SeedVersionRecord | None:
+        return None
+
+    def upsert_python_node_version(
+        self, connection: Any, *, schema: str, record: PythonNodeVersionRecord
+    ) -> None:
+        return None
+
+    def get_python_node_version(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        node_type: str,
+        node_name: str,
+        version_hash: str,
+    ) -> PythonNodeVersionRecord | None:
         return None
 
     def upsert_physical_relation(
@@ -254,6 +272,26 @@ class FakeStateBackend(StateBackend):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentSeedRefRecord, ...]:
         return ()
+
+    def upsert_virtual_environment_python_node_ref(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        ref: VirtualEnvironmentPythonNodeRefRecord,
+    ) -> None:
+        return None
+
+    def get_virtual_environment_python_node_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentPythonNodeRefRecord, ...]:
+        return ()
+
+    def count_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+        return 0
+
+    def prune_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+        return 0
 
     def create_virtual_environment_checkpoint(
         self,

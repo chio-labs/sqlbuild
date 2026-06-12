@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
     build_python_plan_entries as _build_python_plan_entries,
 )
@@ -10,8 +11,15 @@ from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunL
 
 
 def build_python_plan_entries(
-    *, lifecycle_plan: PythonSqlRunLifecyclePlan, python_graph: PythonNodeGraph
+    *,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    python_graph: PythonNodeGraph,
+    previous_identities: dict[tuple[str, str], Fingerprint] | None = None,
 ) -> tuple[PythonPlanEntry, ...]:
     """Return display entries for a lifecycle-aware Python-node plan."""
 
-    return _build_python_plan_entries(lifecycle_plan=lifecycle_plan, python_graph=python_graph)
+    return _build_python_plan_entries(
+        lifecycle_plan=lifecycle_plan,
+        python_graph=python_graph,
+        previous_identities=previous_identities,
+    )

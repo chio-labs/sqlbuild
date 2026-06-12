@@ -24,6 +24,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeRunState,
 )
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import (
@@ -59,6 +60,7 @@ def execute_python_check_nodes(
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     providers: ProviderContainer | None = None,
+    identity_recorder: PythonIdentityRecorder | None = None,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -147,14 +149,18 @@ def execute_python_check_nodes(
         )
         results.append(result)
         if not result.failed:
-            try_write_python_node_identity_fingerprint(
-                identity=python_graph.nodes_by_name[check_function.name].identity,
-                adapter=adapter,
-                connection=connection,
-                run_id=run_id,
-                database=default_database,
-                schema=default_schema,
-            )
+            identity = python_graph.nodes_by_name[check_function.name].identity
+            if identity_recorder is not None:
+                identity_recorder(identity, None)
+            else:
+                try_write_python_node_identity_fingerprint(
+                    identity=identity,
+                    adapter=adapter,
+                    connection=connection,
+                    run_id=run_id,
+                    database=default_database,
+                    schema=default_schema,
+                )
     return tuple(results)
 
 
