@@ -216,10 +216,15 @@ def _build_sqlbuild_argvs(
             )
             for action in resolve_sqlbuild_test_actions(select=select)
         )
+    sqlbuild_command: tuple[str, ...] = (
+        ("build", "--no-tests", "--no-audits")
+        if command == DbtInteropCommand.RUN
+        else (command.value,)
+    )
     return (
         (
             sqlbuild_executable,
-            command.value,
+            *sqlbuild_command,
             "--select",
             *selected_model_names,
             *sqlbuild_command_args,

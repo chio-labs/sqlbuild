@@ -30,6 +30,18 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class BuildNoTestsNoAuditsFlagE2ETestCase:
+    """Test case for build test/audit opt-out flags."""
+
+    description: str
+    project_name: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
 class PythonBuildE2ETestCase:
     """Test case for direct build Python-node behavior."""
 

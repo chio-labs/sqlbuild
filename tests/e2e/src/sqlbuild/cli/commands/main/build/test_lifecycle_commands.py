@@ -123,7 +123,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     assert test_case.expected_audit_fragment in audit_result.stdout
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     assert run_result.returncode == test_case.expected_exit_code, (

@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.run._test_types import RunE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.build.no_tests_no_audits._test_types import (
+    RunE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
 
 
@@ -13,15 +15,15 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inli
     "test_case",
     [
         RunE2ETestCase(
-            description="run blocks in virtual mode",
-            expected_exit_code=1,
+            description="top level run is rejected",
+            expected_exit_code=2,
             expected_table_names=(),
             expected_view_names=(),
         )
     ],
-    ids=["run blocks in virtual mode"],
+    ids=["top level run is rejected"],
 )
-def test_given_virtual_mode_project_when_running_run_then_cli_blocks_cleanly(
+def test_given_virtual_mode_project_when_running_top_level_run_then_cli_rejects_command(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -44,4 +46,4 @@ def test_given_virtual_mode_project_when_running_run_then_cli_blocks_cleanly(
     )
 
     assert result.returncode == test_case.expected_exit_code
-    assert "run is not supported when virtual_environments = true" in result.stderr
+    assert "invalid choice: 'run'" in result.stderr

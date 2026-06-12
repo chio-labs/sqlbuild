@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import time
-import sys
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.compile.dag import resolve_compile_dag_path
+from sqlbuild.cli.commands.main.helpers.compile.lineage import (
+    build_compile_lineage,
+    compile_analysis_lineage_mode,
+)
 from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.main.helpers.compile.output import (
     format_compile_json,
     format_compile_text,
+)
+from sqlbuild.cli.commands.main.helpers.compile.status import (
+    complete_compile_phase,
+    elapsed_ms,
+    start_compile_phase,
+    start_compile_status,
 )
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
@@ -25,9 +34,7 @@ from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -57,7 +64,7 @@ def run_compile(
     del defer_to
     total_start: float = time.monotonic()
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
-    status: TransientStatusReporter | None = _start_compile_status(
+    status: TransientStatusReporter | None = start_compile_status(
         json_output=json_output,
         no_color=no_color,
     )
@@ -104,13 +111,13 @@ def _run_compile_with_status(
 
     effective_project_dir: Path = project_dir
     discover_start: float = time.monotonic()
-    _start_compile_phase(status, "Discovering project...")
+    start_compile_phase(status, "Discovering project...")
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir,
         sql_analysis_enabled_override=False if profile_skip_discovery_sql_analysis else None,
     )
-    discover_ms: int = _elapsed_ms(discover_start)
-    _complete_compile_phase(status, f"Discovered project. ({discover_ms / 1000:.2f}s)")
+    discover_ms: int = elapsed_ms(discover_start)
+    complete_compile_phase(status, f"Discovered project. ({discover_ms / 1000:.2f}s)")
     adapter: BaseAdapter = resolve_adapter(
         resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
@@ -119,39 +126,39 @@ def _run_compile_with_status(
         project_dir=effective_project_dir,
     )
     graph_start: float = time.monotonic()
-    _start_compile_phase(status, "Compiling project graph...")
+    start_compile_phase(status, "Compiling project graph...")
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
         skip_column_inference=profile_skip_column_inference,
-        column_lineage_mode=_compile_analysis_lineage_mode(lineage_mode),
+        column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
         cli_vars=cli_vars,
     )
-    graph_ms: int = _elapsed_ms(graph_start)
-    _complete_compile_phase(status, f"Compiled project graph. ({graph_ms / 1000:.2f}s)")
+    graph_ms: int = elapsed_ms(graph_start)
+    complete_compile_phase(status, f"Compiled project graph. ({graph_ms / 1000:.2f}s)")
     lineage_start: float = time.monotonic()
-    _start_compile_phase(status, "Analyzing column lineage...")
-    lineage: ProjectColumnLineage | None = _build_compile_lineage(
+    start_compile_phase(status, "Analyzing column lineage...")
+    lineage: ProjectColumnLineage | None = build_compile_lineage(
         graph=graph,
         dialect=adapter.sql_analysis_dialect(),
         mode=lineage_mode,
     )
-    lineage_ms: int = _elapsed_ms(lineage_start)
-    _complete_compile_phase(status, f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)")
+    lineage_ms: int = elapsed_ms(lineage_start)
+    complete_compile_phase(status, f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)")
     contracts_start: float = time.monotonic()
     contract_result: ContractValidationResult
     if profile_skip_contracts:
         contract_result = ContractValidationResult(diagnostics=())
     else:
-        _start_compile_phase(status, "Validating model contracts...")
+        start_compile_phase(status, "Validating model contracts...")
         contract_result = validate_model_contracts(
             graph.project,
             dialect=adapter.sql_analysis_dialect(),
         )
-    contract_ms: int = _elapsed_ms(contracts_start)
+    contract_ms: int = elapsed_ms(contracts_start)
     if not profile_skip_contracts:
-        _complete_compile_phase(status, f"Validated model contracts. ({contract_ms / 1000:.2f}s)")
+        complete_compile_phase(status, f"Validated model contracts. ({contract_ms / 1000:.2f}s)")
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *graph.project.diagnostics,
         *contract_result.diagnostics,
@@ -159,7 +166,7 @@ def _run_compile_with_status(
     manifest_payload: dict[str, object] | None = None
     if manifest:
         manifest_start: float = time.monotonic()
-        _start_compile_phase(status, "Building manifest...")
+        start_compile_phase(status, "Building manifest...")
         loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
         manifest_payload = build_manifest(
             project=graph.project,
@@ -172,12 +179,12 @@ def _run_compile_with_status(
             upstream_deps=graph.upstream_deps,
             downstream_deps=graph.downstream_deps,
         )
-        _complete_compile_phase(
+        complete_compile_phase(
             status, f"Built manifest. ({time.monotonic() - manifest_start:.2f}s)"
         )
     if dag_path is not None:
         dag_start: float = time.monotonic()
-        _start_compile_phase(status, "Writing DAG artifact...")
+        start_compile_phase(status, "Writing DAG artifact...")
         python_graph: PythonNodeGraph = build_discovered_python_node_graph(
             discovered_inputs=discovered_inputs
         )
@@ -194,9 +201,7 @@ def _run_compile_with_status(
             ),
             encoding="utf-8",
         )
-        _complete_compile_phase(
-            status, f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"
-        )
+        complete_compile_phase(status, f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)")
 
     write_start: float = time.monotonic()
     target_dir: Path = effective_project_dir / "target"
@@ -211,23 +216,23 @@ def _run_compile_with_status(
             target_dir=target_dir,
         )
     else:
-        _start_compile_phase(status, "Writing compiled artifacts...")
+        start_compile_phase(status, "Writing compiled artifacts...")
         written = write_static_compile_target(
             target_dir=target_dir,
             adapter=adapter,
             project=graph.project,
             manifest=manifest_payload,
         )
-    write_ms: int = _elapsed_ms(write_start)
+    write_ms: int = elapsed_ms(write_start)
     if not profile_skip_write:
-        _complete_compile_phase(status, f"Wrote compiled artifacts. ({write_ms / 1000:.2f}s)")
+        complete_compile_phase(status, f"Wrote compiled artifacts. ({write_ms / 1000:.2f}s)")
     timings_ms: dict[str, int] = {
         "discover_ms": discover_ms,
         "graph_ms": graph_ms,
         "lineage_ms": lineage_ms,
         "contracts_ms": contract_ms,
         "write_ms": write_ms,
-        "total_ms": _elapsed_ms(total_start),
+        "total_ms": elapsed_ms(total_start),
     }
     exit_code: int = 1 if any(diagnostic.is_error for diagnostic in diagnostics) else 0
 
@@ -260,61 +265,3 @@ def _run_compile_with_status(
         )
     )
     return exit_code
-
-
-def _elapsed_ms(start: float) -> int:
-    return int((time.monotonic() - start) * 1000)
-
-
-def _start_compile_status(
-    *, json_output: bool, no_color: bool
-) -> TransientStatusReporter | None:
-    """Create an interactive-only compile status reporter."""
-
-    if json_output:
-        return None
-    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
-        return None
-    return TransientStatusReporter(
-        stream=sys.stdout,
-        use_color=not no_color,
-    )
-
-
-def _start_compile_phase(status: TransientStatusReporter | None, message: str) -> None:
-    if status is not None:
-        status.start(message)
-
-
-def _complete_compile_phase(status: TransientStatusReporter | None, message: str) -> None:
-    if status is not None:
-        status.complete(message)
-
-
-def _build_compile_lineage(
-    *,
-    graph: ProjectGraph,
-    dialect: str | None,
-    mode: CompileLineageMode,
-) -> ProjectColumnLineage | None:
-    match mode:
-        case CompileLineageMode.NONE:
-            return None
-        case CompileLineageMode.FAST:
-            return build_project_column_lineage(
-                graph.project,
-                dialect=dialect,
-                mode=ColumnLineageMode.FAST,
-            )
-        case CompileLineageMode.RICH:
-            return build_project_column_lineage(
-                graph.project,
-                dialect=dialect,
-                mode=ColumnLineageMode.RICH,
-            )
-
-
-def _compile_analysis_lineage_mode(mode: CompileLineageMode) -> ColumnLineageMode:
-    if mode == CompileLineageMode.RICH:
-        return ColumnLineageMode.RICH
-    return ColumnLineageMode.FAST

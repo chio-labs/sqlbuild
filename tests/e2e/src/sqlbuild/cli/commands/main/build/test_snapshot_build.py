@@ -3798,7 +3798,7 @@ SNAPSHOT_FULL_REFRESH_FAILURE_TEST_CASES: list[SnapshotFullRefreshFailureBuildE2
                 """
         ).strip(),
         initial_command=("--no-color", "build"),
-        full_refresh_command=("--no-color", "run", "--full-refresh"),
+        full_refresh_command=("--no-color", "build", "--no-tests", "--no-audits", "--full-refresh"),
         expected_exit_code=1,
         expected_output_fragments=(
             "full refresh is denied for snapshot model 'customer_snapshot'",

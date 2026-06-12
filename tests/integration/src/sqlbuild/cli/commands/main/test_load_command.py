@@ -18,7 +18,6 @@ from sqlbuild.cli.commands.main.build import run_build
 from sqlbuild.cli.commands.main.helpers.load_selection import select_load_entries
 from sqlbuild.cli.commands.main.load import run_load
 from sqlbuild.cli.commands.main.plan import run_plan
-from sqlbuild.cli.commands.main.run import run_run
 from sqlbuild.cli.commands.main.scenario import run_scenario
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import format_load_execution_json
@@ -511,13 +510,13 @@ BUILD_RUN_AUTO_LOAD_TEST_CASES: list[BuildRunAutoLoadTestCase] = [
         expected_rows=((7, "loaded"),),
     ),
     BuildRunAutoLoadTestCase(
-        description="run auto-loads selected managed source before models",
-        command="run",
+        description="build no tests auto-loads selected managed source before models",
+        command="build",
         expected_stdout_fragments=(
             "raw_orders",
             "Sources to load (1)",
             "raw_orders           table",
-            "Execution  sqb run  (concurrency: 1)",
+            "Execution  sqb build  (concurrency: 1)",
             "1/2  source",
             "2/2  table",
             "rows=1",
@@ -540,8 +539,8 @@ BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES: list[BuildRunAutoLoadFlagTestCase] = [
         expected_stdout_absent_fragments=("source", "rows=1"),
     ),
     BuildRunAutoLoadFlagTestCase(
-        description="run load forces loader when auto load is disabled",
-        command="run",
+        description="build load forces loader when auto load is disabled",
+        command="build",
         project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
         args=("--load", "--select", "stg_orders"),
         setup_sql=(),
@@ -584,8 +583,8 @@ BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES: list[BuildRunAutoLoadFlagTestCase] = [
         expected_stdout_absent_fragments=("Full refresh",),
     ),
     BuildRunAutoLoadFlagTestCase(
-        description="run reload reloads loaders without full refreshing models",
-        command="run",
+        description="build reload reloads loaders without full refreshing models",
+        command="build",
         project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
         args=("--reload", "--select", "stg_orders"),
         setup_sql=(),
@@ -719,8 +718,8 @@ SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
         expected_loaded_source_rows=((7, "loaded"),),
     ),
     SourceDeferralBuildTestCase(
-        description="run cli override reads managed sources from active target",
-        command="run",
+        description="build cli override reads managed sources from active target",
+        command="build",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         defer_sources_to="dev",
         setup_sql=(),
@@ -728,8 +727,8 @@ SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
         expected_loaded_source_rows=((7, "loaded"),),
     ),
     SourceDeferralBuildTestCase(
-        description="run configured target defers managed source reads to prod",
-        command="run",
+        description="build configured target defers managed source reads to prod",
+        command="build",
         project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
         defer_sources_to=None,
         setup_sql=(
@@ -1296,10 +1295,7 @@ def test_given_selected_model_references_managed_source_when_build_or_run_then_a
 ) -> None:
     write_repo_files(tmp_path, _BUILD_RUN_AUTO_LOAD_PROJECT_FILES)
 
-    command_runners: dict[str, Callable[..., int]] = {"build": run_build, "run": run_run}
-    exit_code: int = command_runners[test_case.command](
-        project_dir=tmp_path, no_color=True, select=("stg_orders",)
-    )
+    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
@@ -1380,8 +1376,7 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
     finally:
         setup_connection.close()
 
-    command_runners: dict[str, Callable[..., int]] = {"build": run_build, "run": run_run}
-    exit_code: int = command_runners[test_case.command](
+    exit_code: int = run_build(
         project_dir=tmp_path,
         no_color=True,
         select=("stg_orders",),
@@ -1451,7 +1446,6 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
     command_runners: dict[str, Callable[..., int]] = {
         "audit": run_audit,
         "build": run_build,
-        "run": run_run,
         "scenario": run_scenario,
         "test": run_test,
     }
@@ -1468,7 +1462,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
                 "defer_sources_to": test_case.defer_sources_to,
                 "load_sources": test_case.load_sources,
             }
-            if test_case.command in ("build", "run")
+            if test_case.command == "build"
             else {}
         ),
     )
@@ -1573,8 +1567,7 @@ def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
     finally:
         setup_connection.close()
 
-    command_runners: dict[str, Callable[..., int]] = {"build": run_build, "run": run_run}
-    exit_code: int = command_runners[test_case.command](
+    exit_code: int = run_build(
         project_dir=tmp_path,
         no_color=True,
         select=(test_case.args[test_case.args.index("--select") + 1],),

@@ -386,7 +386,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
     env: dict[str, str] = {"MARKER_PATH": str(marker_path)}
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "provider_task"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "provider_task"),
         project_dir=project_dir,
         env=env,
     )
@@ -423,7 +423,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
 PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ...] = (
     ProviderCommandFailureE2ETestCase(
         description="run provider tears down when command fails after setup",
-        command=("--no-color", "run", "--select", "failing_task"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "failing_task"),
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
@@ -612,7 +612,7 @@ def test_given_provider_project_when_running_compile_or_plan_then_provider_setup
     [
         ProviderCommandDiagnosticE2ETestCase(
             description="alias-imported provider annotation gets CLI diagnostic",
-            command=("--no-color", "run", "--select", "alias_task"),
+            command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "alias_task"),
             expected_error_fragment=(
                 "Import project providers using the project-root providers package path"
             ),

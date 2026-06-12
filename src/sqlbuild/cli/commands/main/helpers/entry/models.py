@@ -53,6 +53,8 @@ class CliNamespace:
     include_python: bool = True
     load_sources: bool | None = None
     reload: bool = False
+    run_tests: bool = True
+    run_audits: bool = True
     allow_snapshot_full_refresh: bool = False
     allow_snapshot_schema_change: bool = False
     allow_partial_promotion: bool = False
@@ -191,31 +193,6 @@ class CliEntrypointHandlers:
             bool,
             bool,
             bool,
-            Path | None,
-        ],
-        int,
-    ]
-    run_run: Callable[
-        [
-            Path | None,
-            bool,
-            str | None,
-            str | None,
-            CursorOverrides | None,
-            bool,
-            bool,
-            bool,
-            bool | None,
-            bool,
-            bool,
-            bool,
-            bool,
-            int | None,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            dict[str, object],
             bool,
             bool,
             Path | None,
