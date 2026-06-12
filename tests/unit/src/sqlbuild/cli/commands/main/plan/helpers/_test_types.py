@@ -28,3 +28,4 @@ class FormatPlanColorTestCase:
     description: str
     plan_output: PlanOutput
     expected_fragments: tuple[str, ...]
+    python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
