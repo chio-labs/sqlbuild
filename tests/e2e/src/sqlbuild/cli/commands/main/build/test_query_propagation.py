@@ -126,7 +126,7 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             + "\n",
         },
         initial_build_command=("--no-color", "build"),
-        plan_command=("plan", "--json"),
+        plan_command=("plan", "--json", "--force"),
         mutation_file="models/marts/hourly_order_activity.sql",
         before_text="SUM(line_total_cents) AS revenue_cents",
         after_text="SUM(line_total_cents) + 0 AS revenue_cents",

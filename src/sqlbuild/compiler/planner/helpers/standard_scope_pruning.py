@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.helpers.selectors import expand_required_build_resources
 from sqlbuild.compiler.planner.helpers.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
@@ -76,7 +77,17 @@ def prune_standard_unchanged_scope(
                 selected_keys.add(key)
             continue
         selected_keys.add(key)
-    return replace(scope, selected_keys=frozenset(selected_keys))
+    return replace(
+        scope,
+        selected_keys=expand_required_build_resources(
+            selected_keys=frozenset(selected_keys),
+            upstream=scope.upstream_deps,
+            downstream=scope.downstream_deps,
+            include_upstream_functions=True,
+            include_upstream_seeds=False,
+            include_downstream_functions=False,
+        ),
+    )
 
 
 def build_standard_identity_stale_model_names(
