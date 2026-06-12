@@ -14,6 +14,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     BuildE2ETestCase,
     DirectChangesOnlyBuildE2ETestCase,
     PythonBuildE2ETestCase,
+    PythonLoaderPersistedResultBuildE2ETestCase,
+    PythonLoaderStatusResultBuildE2ETestCase,
+    PythonPersistedResultBuildE2ETestCase,
+    PythonTargetIsolationBuildE2ETestCase,
     StandardPythonBuildHardeningE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -118,6 +122,54 @@ STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES: list[StandardPythonBuildHardeningE2E
             "no input",
         ),
         expected_absent_tables=("raw_orders", "fact_orders"),
+    ),
+    StandardPythonBuildHardeningE2ETestCase(
+        description="non json python result payload fails at producer",
+        project_name="python_build_non_json_result_project",
+        command=("--no-color", "build", "--select", "produce_bad_result"),
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_build_non_json_result_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_build_non_json_result_project.duckdb"\n'
+            ),
+            "tasks/bad.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_bad_result(ctx):\n"
+                "    return ctx.result(payload={'bad': {'a', 'b'}})\n"
+            ),
+        },
+        expected_exit_code=1,
+        expected_output_fragments=(
+            "produce_bad_result",
+            "non-JSON-serializable payload",
+        ),
+    ),
+    StandardPythonBuildHardeningE2ETestCase(
+        description="non json python result metadata fails at producer",
+        project_name="python_build_non_json_metadata_project",
+        command=("--no-color", "build", "--select", "produce_bad_metadata"),
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_build_non_json_metadata_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_build_non_json_metadata_project.duckdb"\n'
+            ),
+            "tasks/bad.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_bad_metadata(ctx):\n"
+                "    return ctx.result(payload={}, metadata={'bad': {'a', 'b'}})\n"
+            ),
+        },
+        expected_exit_code=1,
+        expected_output_fragments=(
+            "produce_bad_metadata",
+            "non-JSON-serializable metadata",
+        ),
     ),
     StandardPythonBuildHardeningE2ETestCase(
         description="read-side Python failure fails build after SQL succeeds",
@@ -1373,6 +1425,8 @@ def test_given_python_asset_with_json_output_when_building_then_json_includes_py
             expected_table_names=("window_orders", "raw_orders", "fact_orders"),
             expected_notify_text="7",
             expected_fact_orders_rows=((7,),),
+            expected_asset_payload={"order_id": 7},
+            expected_asset_materialized="true",
         )
     ],
     ids=["build executes full Python SQL Python spine in lifecycle order"],
@@ -1415,7 +1469,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
-                "    payload = ctx.payload(prepare_orders)\n"
+                "    payload = ctx.result_of(prepare_orders).payload\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
                 "    marker.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
@@ -1455,7 +1509,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=profile_fact_orders)\n"
                 "def export_fact_orders(ctx):\n"
-                "    payload = ctx.payload(profile_fact_orders)\n"
+                "    payload = ctx.result_of(profile_fact_orders).payload\n"
                 "    return ctx.result(payload=payload, metadata={'exported': True})\n"
             ),
             "tasks/notify.py": (
@@ -1464,7 +1518,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=export_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"
-                "    payload = ctx.payload(export_fact_orders)\n"
+                "    payload = ctx.result_of(export_fact_orders).payload\n"
                 "    output = Path(__file__).parents[1].joinpath('notify.txt')\n"
                 "    output.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(metadata={'notified': True})\n"
@@ -1506,6 +1560,457 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
         sql="SELECT order_id FROM fact_orders",
     )
     assert tuple(rows) == test_case.expected_fact_orders_rows
+    asset_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT payload_json_b64, materialized FROM _sqlbuild_node_results "
+            "WHERE node_type = 'asset' AND node_name = 'publish_prepared_orders'"
+        ),
+    )
+    assert len(asset_rows) == 1
+    assert json.loads(base64.b64decode(asset_rows[0][0]).decode("utf-8")) == (
+        test_case.expected_asset_payload
+    )
+    assert asset_rows[0][1] == test_case.expected_asset_materialized
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonPersistedResultBuildE2ETestCase(
+            description="later task reads persisted history and explicit run id",
+            expected_exit_code=0,
+            expected_consumed_text="84:42:failed:True:84,42:2",
+            expected_success_values=(84, 42),
+            expected_failed_status="failed",
+        )
+    ],
+    ids=["later task reads persisted history and explicit run id"],
+)
+def test_given_prior_python_task_result_when_later_task_reads_result_then_uses_persisted_state(
+    test_case: PythonPersistedResultBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_persisted_result_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_persisted_result_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_persisted_result_project.duckdb"\n'
+            ),
+            "tasks/produce.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'value': 42}, metadata={'source': 'first'})\n"
+            ),
+        },
+    )
+
+    first_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "produce_result"),
+        project_dir=project_dir,
+    )
+    first_run_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "python_persisted_result_project.duckdb",
+        sql="SELECT run_id FROM _sqlbuild_node_results WHERE node_name = 'produce_result'",
+    )
+    first_run_id: str = str(first_run_rows[0][0])
+    (project_dir / "tasks" / "produce.py").write_text(
+        (
+            "from sqlbuild.tasks import task\n\n"
+            "@task\n"
+            "def produce_result(ctx):\n"
+            "    return ctx.result(payload={'value': 84}, metadata={'source': 'second'})\n"
+        ),
+        encoding="utf-8",
+    )
+    updated_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "produce_result"),
+        project_dir=project_dir,
+    )
+    (project_dir / "tasks" / "produce.py").write_text(
+        (
+            "from sqlbuild.tasks import task\n\n"
+            "@task\n"
+            "def produce_result(ctx):\n"
+            "    raise RuntimeError('producer failed after previous success')\n"
+        ),
+        encoding="utf-8",
+    )
+    failed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "produce_result"),
+        project_dir=project_dir,
+    )
+    failed_run_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "python_persisted_result_project.duckdb",
+        sql=(
+            "SELECT run_id FROM _sqlbuild_node_results "
+            "WHERE node_name = 'produce_result' AND status = 'failed'"
+        ),
+    )
+    failed_run_id: str = str(failed_run_rows[0][0])
+    (project_dir / "tasks" / "consume.py").write_text(
+        (
+            "from pathlib import Path\n"
+            "from tasks.produce import produce_result\n"
+            "from sqlbuild.tasks import task\n\n"
+            "@task\n"
+            "def consume_result(ctx):\n"
+            "    latest = ctx.result_of(produce_result)\n"
+            f"    first = ctx.result_of(produce_result, run_id='{first_run_id}')\n"
+            f"    failed = ctx.result_of(produce_result, run_id='{failed_run_id}')\n"
+            "    history = ctx.results_of(produce_result, limit=2)\n"
+            "    values = ','.join(str(item.payload['value']) for item in history)\n"
+            "    output = Path(__file__).parents[1].joinpath('consumed.txt')\n"
+            "    output.write_text(\n"
+            "        f\"{latest.payload['value']}:{first.payload['value']}:\"\n"
+            '        f"{failed.status}:{failed.payload is None}:{values}:"\n'
+            '        f"{len(history)}"\n'
+            "    )\n"
+            "    return ctx.result(metadata={'consumed': True})\n"
+        ),
+        encoding="utf-8",
+    )
+    second_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "consume_result"),
+        project_dir=project_dir,
+    )
+
+    assert first_result.returncode == test_case.expected_exit_code, (
+        first_result.stdout + first_result.stderr
+    )
+    assert updated_result.returncode == test_case.expected_exit_code, (
+        updated_result.stdout + updated_result.stderr
+    )
+    assert failed_result.returncode == 1, failed_result.stdout + failed_result.stderr
+    assert second_result.returncode == test_case.expected_exit_code, (
+        second_result.stdout + second_result.stderr
+    )
+    assert "produce_result" not in second_result.stdout
+    assert (project_dir / "consumed.txt").read_text(encoding="utf-8") == (
+        test_case.expected_consumed_text
+    )
+    result_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "python_persisted_result_project.duckdb",
+        sql=(
+            "SELECT node_name, status, payload_json_b64, metadata_json_b64 "
+            "FROM _sqlbuild_node_results WHERE node_name = 'produce_result' "
+            "ORDER BY ts DESC"
+        ),
+    )
+    assert len(result_rows) == 3
+    assert result_rows[0][1] == test_case.expected_failed_status
+    successful_values: tuple[int, ...] = tuple(
+        int(json.loads(base64.b64decode(row[2]).decode("utf-8"))["value"])
+        for row in result_rows
+        if row[1] == "success"
+    )
+    assert successful_values == test_case.expected_success_values
+    successful_metadata: tuple[object, ...] = tuple(
+        json.loads(base64.b64decode(row[3]).decode("utf-8"))["source"]
+        for row in result_rows
+        if row[1] == "success"
+    )
+    assert successful_metadata == ("second", "first")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonLoaderPersistedResultBuildE2ETestCase(
+            description="later task reads prior persisted loader result",
+            expected_exit_code=0,
+            expected_loader_text="raw_events:raw_events:1",
+        )
+    ],
+    ids=["later task reads prior persisted loader result"],
+)
+def test_given_prior_loader_result_when_later_task_reads_result_then_uses_loader_summary(
+    test_case: PythonLoaderPersistedResultBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_persisted_loader_result_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_persisted_loader_result_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_persisted_loader_result_project.duckdb"\n'
+            ),
+            "loaders/events.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_events(ctx):\n"
+                "    return [{'event_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_events.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+            ),
+            "tasks/consume.py": (
+                "from pathlib import Path\n"
+                "from loaders.events import raw_events\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def consume_loader_result(ctx):\n"
+                "    result = ctx.result_of(raw_events)\n"
+                "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
+                "    output.write_text(\n"
+                "        f\"{result.payload['loader_name']}:{result.payload['source_name']}:\"\n"
+                "        f\"{result.payload['rows_loaded']}\"\n"
+                "    )\n"
+                "    return ctx.result()\n"
+            ),
+        },
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "fact_events"),
+        project_dir=project_dir,
+    )
+    consume_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "consume_loader_result"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    assert consume_result.returncode == test_case.expected_exit_code, (
+        consume_result.stdout + consume_result.stderr
+    )
+    assert "raw_events" not in consume_result.stdout
+    assert (project_dir / "loader_result.txt").read_text(encoding="utf-8") == (
+        test_case.expected_loader_text
+    )
+
+
+LOADER_STATUS_RESULT_TEST_CASES: tuple[PythonLoaderStatusResultBuildE2ETestCase, ...] = (
+    PythonLoaderStatusResultBuildE2ETestCase(
+        description="failed loader persists failed result row",
+        project_name="python_failed_loader_result_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_failed_loader_result_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_failed_loader_result_project.duckdb"\n'
+            ),
+            "loaders/events.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_events(ctx):\n"
+                "    raise RuntimeError('loader failed')\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_events.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+            ),
+        },
+        command=("--no-color", "build", "--select", "fact_events"),
+        expected_exit_code=1,
+        expected_rows=(("raw_events", "failed", "loader failed"),),
+    ),
+    PythonLoaderStatusResultBuildE2ETestCase(
+        description="skipped loader persists skipped result row",
+        project_name="python_skipped_loader_result_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_skipped_loader_result_project"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "python_skipped_loader_result_project.duckdb"\n'
+            ),
+            "tasks/prepare.py": (
+                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_events(ctx):\n"
+                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+            ),
+            "loaders/events.py": (
+                "from tasks.prepare import prepare_events\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(prepare_events,))\n"
+                "def raw_events(ctx):\n"
+                "    return [{'event_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_events.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+            ),
+        },
+        command=("--no-color", "build", "--select", "+fact_events"),
+        expected_exit_code=0,
+        expected_rows=(("raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    LOADER_STATUS_RESULT_TEST_CASES,
+    ids=[case.description for case in LOADER_STATUS_RESULT_TEST_CASES],
+)
+def test_given_loader_status_result_when_building_then_persists_loader_status_row(
+    test_case: PythonLoaderStatusResultBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert (
+        tuple(
+            query_duckdb(
+                db_path=project_dir / f"{test_case.project_name}.duckdb",
+                sql=(
+                    "SELECT node_name, status, error_message "
+                    "FROM _sqlbuild_node_results WHERE node_type = 'loader' ORDER BY node_name"
+                ),
+            )
+        )
+        == test_case.expected_rows
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonTargetIsolationBuildE2ETestCase(
+            description="same node name reads only active target result",
+            expected_exit_code=0,
+            expected_consumed_text="dev",
+            expected_target_rows=(
+                ("dev", "dev"),
+                ("prod", "prod"),
+            ),
+        )
+    ],
+    ids=["same node name reads only active target result"],
+)
+def test_given_same_node_results_in_multiple_targets_when_reading_then_uses_active_target(
+    test_case: PythonTargetIsolationBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_result_target_isolation_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "python_result_target_isolation_project"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                'database = "python_result_target_isolation_project.duckdb"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n\n'
+                "[targets.prod]\n"
+                'schema = "prod"\n'
+            ),
+            "tasks/produce.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'target': ctx.target})\n"
+            ),
+            "tasks/consume.py": (
+                "from pathlib import Path\n"
+                "from tasks.produce import produce_result\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def consume_result(ctx):\n"
+                "    result = ctx.result_of(produce_result)\n"
+                "    output = Path(__file__).parents[1].joinpath('target_result.txt')\n"
+                "    output.write_text(str(result.payload['target']))\n"
+                "    return ctx.result()\n"
+            ),
+        },
+    )
+
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+    dev_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "produce_result"),
+        project_dir=project_dir,
+    )
+    (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "produce_result"),
+        project_dir=project_dir,
+    )
+    (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
+    consume_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "consume_result"),
+        project_dir=project_dir,
+    )
+
+    assert dev_result.returncode == test_case.expected_exit_code, (
+        dev_result.stdout + dev_result.stderr
+    )
+    assert prod_result.returncode == test_case.expected_exit_code, (
+        prod_result.stdout + prod_result.stderr
+    )
+    assert consume_result.returncode == test_case.expected_exit_code, (
+        consume_result.stdout + consume_result.stderr
+    )
+    assert (project_dir / "target_result.txt").read_text(encoding="utf-8") == (
+        test_case.expected_consumed_text
+    )
+    target_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "python_result_target_isolation_project.duckdb",
+        sql=(
+            "SELECT target_schema, payload_json_b64 FROM ("
+            "SELECT target_schema, payload_json_b64 FROM dev._sqlbuild_node_results "
+            "WHERE node_name = 'produce_result' "
+            "UNION ALL "
+            "SELECT target_schema, payload_json_b64 FROM prod._sqlbuild_node_results "
+            "WHERE node_name = 'produce_result'"
+            ") ORDER BY target_schema"
+        ),
+    )
+    decoded_rows: tuple[tuple[object, ...], ...] = tuple(
+        (row[0], json.loads(base64.b64decode(row[1]).decode("utf-8"))["target"])
+        for row in target_rows
+    )
+    assert decoded_rows == test_case.expected_target_rows
 
 
 @pytest.mark.parametrize(

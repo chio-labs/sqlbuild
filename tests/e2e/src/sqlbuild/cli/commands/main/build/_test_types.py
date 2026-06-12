@@ -51,6 +51,50 @@ class PythonBuildE2ETestCase:
     expected_table_names: tuple[str, ...]
     expected_notify_text: str
     expected_fact_orders_rows: tuple[tuple[object, ...], ...]
+    expected_asset_payload: dict[str, object]
+    expected_asset_materialized: str
+
+
+@dataclass(frozen=True)
+class PythonPersistedResultBuildE2ETestCase:
+    """Test case for direct build persisted Python-node results."""
+
+    description: str
+    expected_exit_code: int
+    expected_consumed_text: str
+    expected_success_values: tuple[int, ...]
+    expected_failed_status: str
+
+
+@dataclass(frozen=True)
+class PythonLoaderPersistedResultBuildE2ETestCase:
+    """Test case for persisted direct-mode loader result summaries."""
+
+    description: str
+    expected_exit_code: int
+    expected_loader_text: str
+
+
+@dataclass(frozen=True)
+class PythonLoaderStatusResultBuildE2ETestCase:
+    """Test case for persisted failed/skipped direct-mode loader results."""
+
+    description: str
+    project_name: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PythonTargetIsolationBuildE2ETestCase:
+    """Test case for target-scoped persisted Python-node reads."""
+
+    description: str
+    expected_exit_code: int
+    expected_consumed_text: str
+    expected_target_rows: tuple[tuple[object, ...], ...]
 
 
 @dataclass(frozen=True)

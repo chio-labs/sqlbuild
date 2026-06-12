@@ -63,12 +63,12 @@ def warn_orders_export(ctx):
 
 @check(depends_on=orders_asset, tags=("asset",), group="python-checks")
 def check_orders_asset(ctx):
-    return ctx.payload(orders_asset)["asset_rows"] == 3
+    return ctx.result_of(orders_asset).payload["asset_rows"] == 3
 
 
 @check(depends_on=(export_orders, export_customers), tags=("multi",), group="python-checks")
 def check_order_customer_exports(ctx):
-    return ctx.pass_(metadata={"orders": ctx.metadata(export_orders)["rows"]})
+    return ctx.pass_(metadata={"orders": ctx.result_of(export_orders).metadata["rows"]})
 
 
 @check(depends_on=[export_orders], severity="error", tags=("failure",), group="python-checks")
@@ -170,7 +170,7 @@ from assets.orders import orders_export
 
 @check(depends_on=orders_export)
 def check_orders_export(ctx):
-    return ctx.payload(orders_export)["order_count"] == 1
+    return ctx.result_of(orders_export).payload["order_count"] == 1
 """,
         },
     )

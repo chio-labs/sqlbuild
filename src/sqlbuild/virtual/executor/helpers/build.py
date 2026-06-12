@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
@@ -498,10 +499,12 @@ def run_virtual_build(
         selection=python_selection,
         python_graph=python_graph,
     )
-    previous_python_identities = read_bound_virtual_python_identities(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-        virtual_environment_name=virtual_environment_name,
+    previous_python_identities: dict[tuple[str, str], Fingerprint] = (
+        read_bound_virtual_python_identities(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            virtual_environment_name=virtual_environment_name,
+        )
     )
 
     def record_python_identity(identity: Any, _target_name: str | None) -> None:
@@ -801,6 +804,7 @@ def _run_read_side_python_nodes(
             end_cursor_int=end_cursor_int,
             providers=providers,
             identity_recorder=identity_recorder,
+            persist_node_results=False,
         )
         load_result: LoadExecutionResult
         for load_result in result.load_results:

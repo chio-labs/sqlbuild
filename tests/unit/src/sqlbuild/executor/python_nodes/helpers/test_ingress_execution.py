@@ -19,7 +19,6 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     ingress_calls,
     ingress_loader_function,
     ingress_source_map,
-    prepare_ingress_orders,
     reset_ingress_calls,
 )
 
@@ -72,4 +71,4 @@ def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_orde
         test_case.expected_load_statuses
     )
     assert ingress_calls() == test_case.expected_call_order
-    assert result.run_state.payload(prepare_ingress_orders) == {"prepared": True}
+    assert result.python_results[0].payload == {"prepared": True}

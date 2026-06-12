@@ -115,6 +115,15 @@ class SnowflakeAdapter(BaseAdapter):
         del database, schema
         return ()
 
+    def render_create_node_result_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        del database, schema
+        return ()
+
     def render_prune_fingerprint_history_sql(
         self,
         *,

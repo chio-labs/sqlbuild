@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.helpers.python_checks import execute_python_check_nodes
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
@@ -24,6 +26,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     ExecutionSlackProvider,
     PythonNodeContextTestAdapter,
+    PythonNodeContextTestResultStore,
     build_python_check_graph,
     check_upstream_task,
     context_provider_check,
@@ -97,6 +100,23 @@ def test_given_python_check_when_executing_then_returns_expected_result(
         skip_reason=test_case.upstream_skip_reason,
     )
     run_state.record_result(node_function=check_upstream_task, result=upstream_result)
+    result_store: PythonNodeContextTestResultStore = PythonNodeContextTestResultStore(
+        {
+            (PythonNodeKind.TASK.value, "upstream_task"): (
+                NodeResultEnvelope(
+                    node_type=PythonNodeKind.TASK.value,
+                    node_name="upstream_task",
+                    run_id="run_1",
+                    status=test_case.upstream_status.value,
+                    payload={"rows": 3},
+                    metadata={"rows": 3},
+                    error_message=None,
+                    materialized=None,
+                    ts=datetime(2026, 1, 1),
+                ),
+            )
+        }
+    )
 
     results: tuple[PythonCheckExecutionResult, ...] = execute_python_check_nodes(
         check_functions=(check_function,),
@@ -111,6 +131,7 @@ def test_given_python_check_when_executing_then_returns_expected_result(
         vars={},
         is_reload=False,
         run_state=run_state,
+        result_store=result_store,
     )
 
     assert len(results) == 1

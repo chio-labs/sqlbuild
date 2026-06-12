@@ -306,6 +306,63 @@ def test_given_successful_python_check_when_running_check_then_persists_check_id
             "WHERE node_type = 'check' ORDER BY node_name"
         ),
     ) == [("check", "check_orders_export")]
+    assert query_duckdb(
+        db_path=project_dir / "python_check_project.duckdb",
+        sql=(
+            "SELECT node_type, node_name, status, metadata_json_b64 "
+            "FROM main._sqlbuild_node_results "
+            "WHERE node_type = 'check' AND node_name = 'check_orders_export'"
+        ),
+    ) == [("check", "check_orders_export", "success", "e30=")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CheckCommandTestCase(
+            description="direct Python checks persist warn and fail result rows",
+            command=("--no-color", "check", "--select", "+check:warn_orders_export"),
+            expected_returncode=0,
+            expected_stdout_fragments=("warn_orders_export", "WARN"),
+        )
+    ],
+    ids=["direct Python checks persist warn and fail result rows"],
+)
+def test_given_warning_and_failing_python_checks_when_running_check_then_persists_status_rows(
+    tmp_path: Path,
+    test_case: CheckCommandTestCase,
+) -> None:
+    project_dir: Path = prepare_python_check_project(tmp_path=tmp_path)
+
+    warn_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+    fail_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "check", "--select", "+check:fail_orders_export"),
+        project_dir=project_dir,
+    )
+
+    assert warn_result.returncode == test_case.expected_returncode, (
+        warn_result.stdout + warn_result.stderr
+    )
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in warn_result.stdout
+    assert fail_result.returncode == 1, fail_result.stdout + fail_result.stderr
+    assert query_duckdb(
+        db_path=project_dir / "python_check_project.duckdb",
+        sql=(
+            "SELECT node_name, status, error_message "
+            "FROM main._sqlbuild_node_results "
+            "WHERE node_type = 'check' AND node_name IN "
+            "('warn_orders_export', 'fail_orders_export') "
+            "ORDER BY node_name"
+        ),
+    ) == [
+        ("fail_orders_export", "failed", "orders export failed"),
+        ("warn_orders_export", "warn", "warning check failed"),
+    ]
 
 
 @pytest.mark.parametrize(

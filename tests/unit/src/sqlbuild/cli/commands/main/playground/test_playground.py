@@ -216,7 +216,7 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             ),
             (
                 Path("checks/orders_export.py"),
-                ("@check(depends_on=orders_export", "ctx.payload(orders_export)"),
+                ("@check(depends_on=orders_export", "ctx.result_of(orders_export)"),
             ),
         ),
     ),

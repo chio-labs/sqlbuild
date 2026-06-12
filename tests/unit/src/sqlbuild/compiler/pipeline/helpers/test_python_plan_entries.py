@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.helpers.python_plan_entries import build_python_plan_entries
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.python_nodes.helpers.run_lifecycle import build_python_sql_run_lifecycle_plan
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunSelection
+from sqlbuild.compiler.python_nodes.models import (
+    PythonNodeGraph,
+    PythonNodeIdentity,
+    PythonSqlRunSelection,
+)
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
     PythonPlanIdentityStatusTestCase,
@@ -47,10 +52,10 @@ def test_given_previous_python_identity_when_building_plan_entries_then_sets_sta
     test_case: PythonPlanIdentityStatusTestCase,
 ) -> None:
     graph: PythonNodeGraph = build_orders_python_node_graph()
-    current_identity = graph.nodes_by_name["prepare_orders"].identity
+    current_identity: PythonNodeIdentity | None = graph.nodes_by_name["prepare_orders"].identity
     assert current_identity is not None
     current_version_hash: str = current_identity.version_hash
-    previous_identities = build_previous_python_identity_map(
+    previous_identities: dict[tuple[str, str], Fingerprint] = build_previous_python_identity_map(
         previous_version_hash=test_case.previous_version_hash,
         current_version_hash=current_version_hash,
     )
