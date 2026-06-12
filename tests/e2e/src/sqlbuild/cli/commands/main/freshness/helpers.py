@@ -166,7 +166,7 @@ def persist_standard_source_freshness(*, project_dir: Path) -> None:
         initial_build_result.stdout + initial_build_result.stderr
     )
     changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert changes_only_result.returncode == 0, (

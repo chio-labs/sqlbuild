@@ -298,9 +298,12 @@ def run_janitor(
         pruned_state_count: int = len(result.pruned_direct_state) + len(result.pruned_virtual_state)
         non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
         if non_checkpoint_state_count or pruned_state_count:
+            pruned_state_label: str = (
+                "state tables" if result.pruned_virtual_state else "direct state tables"
+            )
             deleted_message: str = (
                 f"Deleted {len(result.deleted)} objects, deleted {deleted_state_count} "
-                f"state items, and pruned {pruned_state_count} state tables."
+                f"state items, and pruned {pruned_state_count} {pruned_state_label}."
             )
         elif result.deleted_checkpoints:
             deleted_message = (

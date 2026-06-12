@@ -81,7 +81,7 @@ def run_run(
     verbose: bool = False,
     debug: bool = False,
     cli_vars: dict[str, object] | None = None,
-    changes_only: bool = False,
+    force: bool = False,
     json_output: bool = False,
     json_output_path: Path | None = None,
 ) -> int:
@@ -133,7 +133,7 @@ def run_run(
         select=select,
         exclude=exclude,
         full_refresh=full_refresh,
-        changes_only=changes_only,
+        changes_only=not force,
         auto_load_sources=should_load_sources,
         reload_sources=reload_sources,
         connection_config=connection_config,

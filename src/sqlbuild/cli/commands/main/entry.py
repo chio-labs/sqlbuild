@@ -114,7 +114,12 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     plan_parser.add_argument("--virtual-env", default=None)
     plan_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
-    plan_parser.add_argument("--changes-only", action="store_true", default=False)
+    plan_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Include selected resources even when unchanged.",
+    )
     plan_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True
     )
@@ -134,7 +139,12 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser.add_argument("--json", action="store_true", default=False)
     build_parser.add_argument("--virtual-env", default=None)
     build_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
-    build_parser.add_argument("--changes-only", action="store_true", default=False)
+    build_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Include selected resources even when unchanged.",
+    )
     build_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True
     )
@@ -154,7 +164,12 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     run_parser.add_argument("--defer-to", default=None)
     run_parser.add_argument("--defer-sources-to", default=None)
     run_parser.add_argument("--json", action="store_true", default=False)
-    run_parser.add_argument("--changes-only", action="store_true", default=False)
+    run_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Include selected resources even when unchanged.",
+    )
     run_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True
     )
@@ -610,7 +625,7 @@ def _main_with_dependencies(
                 args.verbose,
                 args.vars,
                 args.include_stale_upstreams,
-                args.changes_only,
+                args.force,
             )
         if args.command == CliCommand.DBT:
             if args.dbt_command == "plan":
@@ -653,7 +668,7 @@ def _main_with_dependencies(
                 args.debug,
                 args.vars,
                 args.include_stale_upstreams,
-                args.changes_only,
+                args.force,
                 args.json,
                 args.json_output,
             )
@@ -684,7 +699,7 @@ def _main_with_dependencies(
                 args.verbose,
                 args.debug,
                 args.vars,
-                args.changes_only,
+                args.force,
                 args.json,
                 args.json_output,
             )
