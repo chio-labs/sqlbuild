@@ -3,13 +3,32 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_BODY_SQL as _POLYGLOT_ANALYSIS_BODY_SQL
+from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_CTE_FACTS as _POLYGLOT_ANALYSIS_CTE_FACTS
+from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
+)
+from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_SHAPE_SELECT as _POLYGLOT_ANALYSIS_SHAPE_SELECT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT as _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
+)
+from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
+_CEREMONIAL_SELECT_PATTERN: re.Pattern[str] = re.compile(r"\bSELECT\s+1\s*;?\s*$", re.IGNORECASE)
 
 
 def extract_top_level_ctes_with_sql_analysis(
@@ -21,26 +40,32 @@ def extract_top_level_ctes_with_sql_analysis(
     if polyglot_module is None:
         return None
     try:
-        parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
+        analysis: Any = polyglot_module.analyze_query(sql, {"dialect": "generic"})
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "top-level CTE extraction parse failed; falling back",
+            "top-level CTE compact extraction failed; falling back",
             sqlbuild_file=file_label,
             sqlbuild_error=str(error),
         )
         return None
-
-    with_expression: Any | None = parsed.args.get("with")
-    if with_expression is None:
+    if not isinstance(analysis, dict):
         return None
-    if not _is_ceremonial_select(parsed=parsed):
+    if _CEREMONIAL_SELECT_PATTERN.search(sql) is None:
+        return None
+    if not _is_ceremonial_select_analysis(analysis):
+        return None
+    cte_facts: Any = analysis.get(_POLYGLOT_ANALYSIS_CTE_FACTS)
+    if not isinstance(cte_facts, list) or not cte_facts:
         return None
 
     ctes: list[tuple[str, str]] = []
     seen_cte_names: set[str] = set()
-    for cte in with_expression.get("ctes", ()):
-        cte_name: str | None = _cte_name(cte)
+    cte_fact: Any
+    for cte_fact in cte_facts:
+        if not isinstance(cte_fact, dict):
+            return None
+        cte_name: str | None = _cte_fact_name(cte_fact)
         if cte_name is None:
             return None
         if cte_name in seen_cte_names:
@@ -48,55 +73,30 @@ def extract_top_level_ctes_with_sql_analysis(
                 f"{context_label} '{file_label}' defines duplicate CTE '{cte_name}'"
             )
         seen_cte_names.add(cte_name)
-        body_sql: str | None = _generate_cte_body(polyglot_module=polyglot_module, cte=cte)
-        if body_sql is None:
+        body_sql: Any = cte_fact.get(_POLYGLOT_ANALYSIS_BODY_SQL)
+        if not isinstance(body_sql, str) or not body_sql:
             return None
         ctes.append((cte_name, body_sql))
     return tuple(ctes)
 
 
-def _is_ceremonial_select(*, parsed: Any) -> bool:
-    if parsed.__class__.__name__ != "Select":
+def _is_ceremonial_select_analysis(analysis: dict[str, Any]) -> bool:
+    if analysis.get(_POLYGLOT_ANALYSIS_SHAPE) != _POLYGLOT_ANALYSIS_SHAPE_SELECT:
         return False
-    expressions: list[Any] = list(parsed.expressions)
-    if len(expressions) != 1:
+    projections: Any = analysis.get(_POLYGLOT_ANALYSIS_PROJECTIONS)
+    if not isinstance(projections, list) or len(projections) != 1:
         return False
-    literal: Any = expressions[0]
-    if literal.__class__.__name__ != "Literal" or literal.is_string or str(literal.name) != "1":
+    projection: Any = projections[0]
+    if not isinstance(projection, dict):
         return False
-    ignored_args: set[str] = {
-        "expressions",
-        "leading_comments",
-        "with",
-    }
-    return all(key in ignored_args or _is_empty_arg(value) for key, value in parsed.args.items())
+    if projection.get(_POLYGLOT_ANALYSIS_NAME) is not None:
+        return False
+    if projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_KIND) != _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT:
+        return False
+    upstream: Any = projection.get(_POLYGLOT_ANALYSIS_UPSTREAM)
+    return isinstance(upstream, list) and not upstream
 
 
-def _cte_name(cte: dict[str, Any]) -> str | None:
-    alias: Any | None = cte.get("alias")
-    if not isinstance(alias, dict):
-        return None
-    name: Any | None = alias.get("name")
+def _cte_fact_name(cte_fact: dict[str, Any]) -> str | None:
+    name: Any = cte_fact.get(_POLYGLOT_ANALYSIS_NAME)
     return str(name) if name is not None else None
-
-
-def _generate_cte_body(*, polyglot_module: Any, cte: dict[str, Any]) -> str | None:
-    body: Any | None = cte.get("this")
-    if body is None:
-        return None
-    try:
-        generated: list[str] = polyglot_module.generate(body, dialect="generic")
-    except Exception as error:
-        log_debug_event(
-            _DEBUG_LOGGER,
-            "CTE body generation failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return None
-    if len(generated) != 1:
-        return None
-    return generated[0]
-
-
-def _is_empty_arg(value: Any) -> bool:
-    return value is None or value is False or value == []

@@ -55,7 +55,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -83,6 +83,7 @@ def assemble_compiled_project(
     *,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
@@ -102,6 +103,7 @@ def assemble_compiled_project(
             model_inputs=inputs.model_inputs,
             column_nullability_by_table=column_nullability_by_table,
             inference_profile=profile,
+            allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
         )
     return CompiledProject(
         run_id=inputs.run_id,
@@ -127,6 +129,7 @@ def assemble_compiled_project(
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
                 sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
+                allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
             )
             for model_input in inputs.model_inputs
         ),
@@ -175,6 +178,7 @@ def _assemble_compiled_model(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     sql_analysis: _ModelSqlAnalysis | None = None,
+    allow_compact_analysis: bool = False,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -197,6 +201,7 @@ def _assemble_compiled_model(
                 placeholders=placeholders,
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
+                allow_compact_analysis=allow_compact_analysis,
             )
         )
         if isinstance(polyglot_analysis, tuple):
@@ -251,6 +256,7 @@ def _analyze_model_sql_in_parallel(
     model_inputs: tuple[CompileModelInput, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
 ) -> dict[str, _ModelSqlAnalysis]:
     if not model_inputs:
         return {}
@@ -260,6 +266,7 @@ def _analyze_model_sql_in_parallel(
                 model_input,
                 column_nullability_by_table,
                 inference_profile,
+                allow_compact_analysis,
             )
             for model_input in model_inputs
         }
@@ -271,6 +278,7 @@ def _analyze_model_sql_in_parallel(
                     model_input,
                     column_nullability_by_table,
                     inference_profile,
+                    allow_compact_analysis,
                 ),
                 model_inputs,
             )
@@ -285,6 +293,7 @@ def _analyze_model_sql(
     model_input: CompileModelInput,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
 ) -> _ModelSqlAnalysis:
     placeholders: dict[str, str] | None = _model_placeholders(model_input)
     return _ModelSqlAnalysis(
@@ -294,6 +303,7 @@ def _analyze_model_sql(
             placeholders=placeholders,
             column_nullability_by_table=column_nullability_by_table,
             inference_profile=inference_profile,
+            allow_compact_analysis=allow_compact_analysis,
         ),
         placeholders=placeholders,
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
@@ -800,7 +801,10 @@ def _replace_relation_markers_in_polyglot_dict(
     polyglot_module: Any,
     sql_analysis_dialect: str | None,
     target_for_marker: Any,
+    relation_cache: dict[str, dict[str, Any] | None] | None = None,
 ) -> bool:
+    if relation_cache is None:
+        relation_cache = {}
     changed: bool = False
     if isinstance(node, dict):
         from_clause: Any | None = node.get("from")
@@ -813,6 +817,7 @@ def _replace_relation_markers_in_polyglot_dict(
                         polyglot_module=polyglot_module,
                         sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
+                        relation_cache=relation_cache,
                     )
                     if replacement is not None:
                         expressions[index] = replacement
@@ -828,6 +833,7 @@ def _replace_relation_markers_in_polyglot_dict(
                     polyglot_module=polyglot_module,
                     sql_analysis_dialect=sql_analysis_dialect,
                     target_for_marker=target_for_marker,
+                    relation_cache=relation_cache,
                 )
                 if replacement is not None:
                     join["this"] = replacement
@@ -841,6 +847,7 @@ def _replace_relation_markers_in_polyglot_dict(
                         polyglot_module=polyglot_module,
                         sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
+                        relation_cache=relation_cache,
                     )
                     or changed
                 )
@@ -854,6 +861,7 @@ def _replace_relation_markers_in_polyglot_dict(
                         polyglot_module=polyglot_module,
                         sql_analysis_dialect=sql_analysis_dialect,
                         target_for_marker=target_for_marker,
+                        relation_cache=relation_cache,
                     )
                     or changed
                 )
@@ -866,6 +874,7 @@ def _replacement_relation_expression(
     polyglot_module: Any,
     sql_analysis_dialect: str | None,
     target_for_marker: Any,
+    relation_cache: dict[str, dict[str, Any] | None],
 ) -> dict[str, Any] | None:
     if not isinstance(expression, dict):
         return None
@@ -876,6 +885,7 @@ def _replacement_relation_expression(
             polyglot_module=polyglot_module,
             sql_analysis_dialect=sql_analysis_dialect,
             target_for_marker=target_for_marker,
+            relation_cache=relation_cache,
         )
         if inner_replacement is None:
             return None
@@ -895,11 +905,14 @@ def _replacement_relation_expression(
     target_name: str | None = target_for_marker(function_name, referenced_name)
     if target_name is None:
         return None
-    return _polyglot_relation_dict(
-        target_name=target_name,
-        polyglot_module=polyglot_module,
-        sql_analysis_dialect=sql_analysis_dialect,
-    )
+    if target_name not in relation_cache:
+        relation_cache[target_name] = _polyglot_relation_dict(
+            target_name=target_name,
+            polyglot_module=polyglot_module,
+            sql_analysis_dialect=sql_analysis_dialect,
+        )
+    relation: dict[str, Any] | None = relation_cache[target_name]
+    return None if relation is None else deepcopy(relation)
 
 
 def _polyglot_marker_reference_name(

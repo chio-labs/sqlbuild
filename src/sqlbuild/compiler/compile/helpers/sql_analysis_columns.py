@@ -36,6 +36,15 @@ from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME,
 )
 from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_NULLABILITY as _POLYGLOT_ANALYSIS_NULLABILITY,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL as _POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE as _POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE,
+)
+from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
 )
 from sqlbuild.shared.constants import (
@@ -60,6 +69,9 @@ from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_SOURCE_NAME as _POLYGLOT_ANALYSIS_SOURCE_NAME,
 )
 from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_STAR_PROJECTIONS as _POLYGLOT_ANALYSIS_STAR_PROJECTIONS,
+)
+from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_TABLE as _POLYGLOT_ANALYSIS_TABLE,
 )
 from sqlbuild.shared.constants import (
@@ -79,6 +91,9 @@ from sqlbuild.shared.constants import (
 )
 from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_TRANSFORM_STAR as _POLYGLOT_ANALYSIS_TRANSFORM_STAR,
+)
+from sqlbuild.shared.constants import (
+    POLYGLOT_ANALYSIS_TYPE_HINT as _POLYGLOT_ANALYSIS_TYPE_HINT,
 )
 from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS as _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS,
@@ -256,6 +271,7 @@ def analyze_columns_and_lineage_with_polyglot(
     placeholders: dict[str, str] | None = None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
+    allow_compact_analysis: bool = False,
 ) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool:
     """Infer columns and compact lineage facts from one Polyglot parse."""
 
@@ -275,6 +291,7 @@ def analyze_columns_and_lineage_with_polyglot(
         references=references,
         column_nullability_by_table=column_nullability_by_table or {},
         inference_profile=profile,
+        allow_compact_analysis=allow_compact_analysis,
     )
     if compact_analysis is not None:
         return compact_analysis
@@ -309,14 +326,16 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
     references: tuple[CompileSqlReference, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
 ) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None:
-    if _has_known_nullability(column_nullability_by_table):
-        return None
-    if inference_profile.function_nullability_rules:
+    if not allow_compact_analysis:
         return None
     try:
         options: dict[str, object] = {"dialect": dialect or "generic"}
-        schema: dict[str, object] | None = _compact_analysis_schema(column_nullability_by_table)
+        schema: dict[str, object] | None = _compact_analysis_schema(
+            column_nullability_by_table,
+            table_names=frozenset(reference.ref_name for reference in references),
+        )
         if schema is not None:
             options["schema"] = schema
         analysis: Any = polyglot_module.analyze_query(cleaned_sql, options)
@@ -338,12 +357,14 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
     relation_alias_by_name: dict[str, str | None] = _compact_relation_alias_by_name(analysis)
     columns: list[InferredColumn] = []
     lineage_columns: list[CompiledLineageColumnFact] = []
-    has_star: bool = False
+    has_star: bool = _compact_analysis_has_star(analysis)
+    infer_nullability: bool = (
+        analysis.get(_POLYGLOT_ANALYSIS_SHAPE) != _POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION
+    )
     for projection in projections:
         if not isinstance(projection, dict):
             return None
         if bool(projection.get(_POLYGLOT_ANALYSIS_IS_STAR)):
-            has_star = True
             continue
         output_column: str = str(projection.get(_POLYGLOT_ANALYSIS_NAME) or "")
         if not output_column or output_column == "*":
@@ -351,7 +372,11 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         columns.append(
             InferredColumn(
                 name=output_column,
-                type=_compact_projection_cast_type(projection),
+                type=_compact_projection_type(projection),
+                nullability=_compact_projection_nullability(
+                    projection,
+                    infer_nullability=infer_nullability,
+                ),
             )
         )
         upstream_columns, confidence = _compact_lineage_upstream_columns(
@@ -398,24 +423,41 @@ def _compact_analysis_is_eligible(*, analysis: dict[str, Any], projections: list
 
 def _compact_analysis_schema(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    *,
+    table_names: frozenset[str] | None = None,
 ) -> dict[str, object] | None:
     tables: list[dict[str, object]] = []
     table_name: str
     columns: dict[str, InferredNullability]
     for table_name, columns in sorted(column_nullability_by_table.items()):
+        if table_names is not None and table_name not in table_names:
+            continue
         if not columns:
             continue
         tables.append(
             {
                 "name": table_name,
                 "columns": [
-                    {"name": column_name, "type": "UNKNOWN"} for column_name in sorted(columns)
+                    _compact_analysis_schema_column(column_name, columns[column_name])
+                    for column_name in sorted(columns)
                 ],
             }
         )
     if not tables:
         return None
     return {"tables": tables}
+
+
+def _compact_analysis_schema_column(
+    column_name: str,
+    nullability: InferredNullability,
+) -> dict[str, object]:
+    column: dict[str, object] = {"name": column_name, "type": "UNKNOWN"}
+    if nullability == InferredNullability.NON_NULL:
+        column["nullable"] = False
+    elif nullability == InferredNullability.NULLABLE:
+        column["nullable"] = True
+    return column
 
 
 def _lineage_reference_map(
@@ -450,9 +492,34 @@ def _compact_relation_alias_by_name(analysis: dict[str, Any]) -> dict[str, str |
     return alias_by_name
 
 
-def _compact_projection_cast_type(projection: dict[str, Any]) -> str | None:
+def _compact_analysis_has_star(analysis: dict[str, Any]) -> bool:
+    star_projections: object = analysis.get(_POLYGLOT_ANALYSIS_STAR_PROJECTIONS)
+    return isinstance(star_projections, list) and bool(star_projections)
+
+
+def _compact_projection_type(projection: dict[str, Any]) -> str | None:
     cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
-    return str(cast_type) if isinstance(cast_type, str) and cast_type else None
+    if isinstance(cast_type, str) and cast_type and cast_type != "UNKNOWN":
+        return cast_type
+    type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
+    if isinstance(type_hint, str) and type_hint and type_hint != "UNKNOWN":
+        return type_hint
+    return None
+
+
+def _compact_projection_nullability(
+    projection: dict[str, Any],
+    *,
+    infer_nullability: bool,
+) -> InferredNullability:
+    if not infer_nullability:
+        return InferredNullability.UNKNOWN
+    value: object = projection.get(_POLYGLOT_ANALYSIS_NULLABILITY)
+    if value == _POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL:
+        return InferredNullability.NON_NULL
+    if value == _POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE:
+        return InferredNullability.NULLABLE
+    return InferredNullability.UNKNOWN
 
 
 def _compact_lineage_upstream_columns(
