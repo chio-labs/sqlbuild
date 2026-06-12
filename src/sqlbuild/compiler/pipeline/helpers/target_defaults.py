@@ -70,7 +70,14 @@ def apply_target_defaults(
         )
         for f in project.functions
     )
-    return replace(project, models=models, seeds=seeds, functions=functions)
+    return replace(
+        project,
+        effective_target_database=project.effective_target_database or default_database,
+        effective_target_schema=project.effective_target_schema or default_schema,
+        models=models,
+        seeds=seeds,
+        functions=functions,
+    )
 
 
 def _resolve_function_target(

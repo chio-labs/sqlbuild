@@ -12,7 +12,11 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import (
+    PythonIdentityStatus,
+    PythonNodeKind,
+    PythonRunPhase,
+)
 from sqlbuild.executor.custom.models import PrepareVersionContext
 
 
@@ -23,6 +27,11 @@ class PythonPlanEntry:
     name: str
     kind: PythonNodeKind
     phase: PythonRunPhase
+    identity_status: PythonIdentityStatus = PythonIdentityStatus.UNKNOWN
+    current_definition_json: str | None = None
+    previous_definition_json: str | None = None
+    current_metadata_json: str | None = None
+    previous_metadata_json: str | None = None
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 

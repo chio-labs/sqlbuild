@@ -1290,7 +1290,7 @@ class PostgresAdapter(BaseAdapter):
             return ()
         return (
             "CREATE INDEX IF NOT EXISTS "
-            f"{index_name} ON {table_name} (node_name, ts DESC, run_id DESC)",
+            f"{index_name} ON {table_name} (node_type, node_name, ts DESC, run_id DESC)",
         )
 
     def render_read_latest_fingerprints_sql(
@@ -1327,7 +1327,7 @@ class PostgresAdapter(BaseAdapter):
             f"DELETE FROM {table_name} WHERE ctid IN ("
             "SELECT ctid FROM ("
             "SELECT ctid, ROW_NUMBER() OVER ("
-            "PARTITION BY node_name "
+            "PARTITION BY node_type, node_name "
             "ORDER BY ts DESC, run_id DESC"
             f") AS __sqlbuild_history_rank FROM {table_name}"
             ") AS __sqlbuild_ranked "

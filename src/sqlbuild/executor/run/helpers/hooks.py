@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
+from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
+from sqlbuild.executor.python_nodes.main.fingerprinting import (
+    try_write_python_node_identity_fingerprint,
+)
 from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookRelation
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -149,7 +154,7 @@ def invoke_python_hook(
     providers: ProviderContainer | None = None,
 ) -> None:
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
-    hook_function: Callable[..., object] | None = _find_hook_function(
+    hook_function: DiscoveredHookFunction | None = _find_hook_function(
         name=hook_entry.name,
         hook_functions=hook_functions,
     )
@@ -194,7 +199,7 @@ def invoke_python_hook(
     )
     try:
         invoke_with_providers(
-            function=hook_function,
+            function=hook_function.function,
             context=context,
             providers=providers,
             supplied_kwargs=dict(hook_entry.kwargs),
@@ -218,6 +223,21 @@ def invoke_python_hook(
         hook_type="python",
         label=hook_entry.name,
         status=ExecutionStatus.SUCCESS,
+    )
+    try_write_python_node_identity_fingerprint(
+        identity=build_python_node_identity(
+            node_type=NODE_TYPE_HOOK,
+            node_name=hook_function.name,
+            function=hook_function.function,
+            project_dir=hook_function.file_path.parent,
+            decorator_config={"description": hook_function.description},
+        ),
+        adapter=adapter,
+        connection=connection,
+        run_id=run_id,
+        database=destination.database,
+        schema=destination.schema,
+        target_name=model_name,
     )
 
 
@@ -325,11 +345,11 @@ def build_hook_context(
 
 def _find_hook_function(
     *, name: str, hook_functions: tuple[DiscoveredHookFunction, ...]
-) -> Callable[..., object] | None:
+) -> DiscoveredHookFunction | None:
     hook_function: DiscoveredHookFunction
     for hook_function in hook_functions:
         if hook_function.name == name:
-            return hook_function.function
+            return hook_function
     return None
 
 

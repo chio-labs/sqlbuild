@@ -30,3 +30,12 @@ class FingerprintSet:
 
     schema: str
     fingerprints: dict[str, Fingerprint]
+    fingerprints_by_identity: dict[tuple[str, str], Fingerprint] | None = None
+
+    def __post_init__(self) -> None:
+        if self.fingerprints_by_identity is None:
+            object.__setattr__(
+                self,
+                "fingerprints_by_identity",
+                {(fp.node_type, fp.node_name): fp for fp in self.fingerprints.values()},
+            )

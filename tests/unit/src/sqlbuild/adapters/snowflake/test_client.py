@@ -96,9 +96,10 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
             expected_fragments=(
                 "DELETE FROM ANALYTICS._sqlbuild_fingerprints AS target USING",
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "__sqlbuild_history_rank > 5",
+                "target.node_type = stale.node_type",
                 "target.node_name = stale.node_name",
             ),
         )

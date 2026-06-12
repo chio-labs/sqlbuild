@@ -21,6 +21,9 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
+    try_write_python_node_identity_fingerprint,
+)
 from sqlbuild.executor.python_nodes.helpers.lifecycle_nodes import build_ingress_lifecycle_nodes
 from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import (
@@ -269,6 +272,15 @@ def _execute_ingress_python_node(
     )
     run_state.record_result(node_function=executable_node.function, result=result)
     python_results_by_name[node.name] = result
+    if result.status == PythonNodeStatus.SUCCESS:
+        try_write_python_node_identity_fingerprint(
+            identity=node.identity,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            database=default_database,
+            schema=default_schema,
+        )
     return _python_result_to_lifecycle_result(result)
 
 
@@ -329,6 +341,16 @@ def _execute_ingress_loader(
         providers=providers,
     )
     load_results_by_name[node.name] = result
+    if result.status == ExecutionStatus.SUCCESS:
+        try_write_python_node_identity_fingerprint(
+            identity=node.identity,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            database=adapter.default_database(),
+            schema=adapter.default_schema(),
+            target_name=source_entry.name,
+        )
     if on_node_complete is not None:
         on_node_complete(result)
     return _load_result_to_lifecycle_result(node_name=node.name, result=result)

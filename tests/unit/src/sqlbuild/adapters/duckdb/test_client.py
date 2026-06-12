@@ -146,7 +146,7 @@ def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
             expected_fragments=(
                 "DELETE FROM analytics._sqlbuild_fingerprints WHERE rowid IN",
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "__sqlbuild_history_rank > 5",
             ),

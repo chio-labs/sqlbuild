@@ -111,9 +111,10 @@ def test_given_databricks_string_declared_type_when_rendering_casts_then_uses_st
                 "DELETE FROM `workspace`.`analytics`.`_sqlbuild_fingerprints` "
                 "AS target WHERE EXISTS",
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "__sqlbuild_history_rank > 5",
+                "target.node_type = stale.node_type",
                 "target.node_name = stale.node_name",
             ),
         )

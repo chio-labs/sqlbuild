@@ -152,6 +152,7 @@ def build_plan_output(
             model_entries=model_entry_results.entries,
             source_load_entries=source_load_entries,
         ),
+        python_identity_fingerprints=snapshot.fingerprints.python_nodes,
     )
 
 

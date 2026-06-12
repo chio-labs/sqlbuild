@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import difflib
 import json
+from typing import cast
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
@@ -17,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 
 
 def format_plan_json(
@@ -289,11 +292,120 @@ def _serialize_warning(warning: PlanWarning) -> dict[str, object]:
 
 
 def _serialize_python_plan_entry(entry: PythonPlanEntry) -> dict[str, object]:
-    return {
+    result: dict[str, object] = {
         "name": entry.name,
         "kind": entry.kind.value,
         "phase": entry.phase.value,
+        "identity_status": entry.identity_status.value,
     }
+    identity_diff: dict[str, object] = _serialize_python_identity_diff(entry)
+    if identity_diff:
+        result["identity_diff"] = identity_diff
+    return result
+
+
+def _serialize_python_identity_diff(entry: PythonPlanEntry) -> dict[str, object]:
+    if entry.identity_status != PythonIdentityStatus.CHANGED:
+        return {}
+    result: dict[str, object] = {}
+    source_diff: list[str] = _python_source_diff(entry)
+    if source_diff:
+        result["source_diff"] = source_diff
+    dependency_diff: list[str] = _python_dependency_diff(entry)
+    if dependency_diff:
+        result["dependency_diff"] = dependency_diff
+    return result
+
+
+def _python_source_diff(entry: PythonPlanEntry) -> list[str]:
+    previous: str | None = _python_definition_source_text(entry.previous_definition_json)
+    current: str | None = _python_definition_source_text(entry.current_definition_json)
+    if previous is None or current is None or previous == current:
+        return []
+    return _unified_diff(previous, current)
+
+
+def _python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
+    previous: str | None = _python_dependency_source_text(entry.previous_metadata_json)
+    current: str | None = _python_dependency_source_text(entry.current_metadata_json)
+    if previous is None or current is None or previous == current:
+        return []
+    return _unified_diff(previous, current)
+
+
+def _python_definition_source_text(raw_json: str | None) -> str | None:
+    payload: dict[str, object] | None = _json_object(raw_json)
+    if payload is None:
+        return None
+    source_text: object = payload.get("source_text")
+    return source_text if isinstance(source_text, str) else None
+
+
+def _python_dependency_source_text(raw_json: str | None) -> str | None:
+    payload: dict[str, object] | None = _json_object(raw_json)
+    if payload is None:
+        return None
+    raw_dependencies: object = payload.get("dependencies")
+    if not isinstance(raw_dependencies, list):
+        return None
+    blocks: list[str] = []
+    dependency: object
+    for dependency in sorted(raw_dependencies, key=_python_dependency_sort_key):
+        if not isinstance(dependency, dict):
+            continue
+        dependency_payload: dict[object, object] = cast(dict[object, object], dependency)
+        source_text: object = dependency_payload.get("source_text")
+        if not isinstance(source_text, str):
+            continue
+        source_path: object = dependency_payload.get("source_path")
+        module: object = dependency_payload.get("module")
+        qualname: object = dependency_payload.get("qualname")
+        header_parts: list[str] = []
+        if isinstance(source_path, str) and source_path:
+            header_parts.append(source_path)
+        if isinstance(module, str) and module:
+            header_parts.append(module)
+        if isinstance(qualname, str) and qualname:
+            header_parts.append(qualname)
+        header: str = " :: ".join(header_parts) if header_parts else "dependency"
+        blocks.append(f"# {header}\n{source_text}")
+    return "\n\n".join(blocks)
+
+
+def _python_dependency_sort_key(dependency: object) -> tuple[str, str, str]:
+    if not isinstance(dependency, dict):
+        return ("", "", "")
+    dependency_payload: dict[object, object] = cast(dict[object, object], dependency)
+    source_path: object = dependency_payload.get("source_path")
+    module: object = dependency_payload.get("module")
+    qualname: object = dependency_payload.get("qualname")
+    return (
+        source_path if isinstance(source_path, str) else "",
+        module if isinstance(module, str) else "",
+        qualname if isinstance(qualname, str) else "",
+    )
+
+
+def _json_object(raw_json: str | None) -> dict[str, object] | None:
+    if raw_json is None:
+        return None
+    try:
+        payload: object = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return None
+    return cast(dict[str, object], payload) if isinstance(payload, dict) else None
+
+
+def _unified_diff(previous: str, current: str) -> list[str]:
+    return [
+        line.rstrip("\n")
+        for line in difflib.unified_diff(
+            previous.splitlines(keepends=True),
+            current.splitlines(keepends=True),
+            fromfile="previous",
+            tofile="current",
+        )
+    ]
 
 
 def _serialize_provider_usages(

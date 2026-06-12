@@ -17,6 +17,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProviderUsage,
     DiscoveredTaskFunction,
 )
+from sqlbuild.compiler.python_nodes.helpers.identity import build_python_identity
 from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonAssetMetadata,
     DiscoveredPythonCheckMetadata,
@@ -196,6 +197,21 @@ def _build_loader_node(
             contract=loader.contract,
             connection_mode=loader.connection_mode,
         ),
+        identity=build_python_identity(
+            node_type=PythonNodeKind.LOADER.value,
+            node_name=loader.name,
+            function=loader.function,
+            project_dir=loader.file_path.parent,
+            decorator_config={
+                "contract": loader.contract,
+                "cursor_column": loader.cursor_column,
+                "destination": loader.destination,
+                "unique_key": loader.unique_key,
+                "write_strategy": loader.write_strategy.value
+                if loader.write_strategy is not None
+                else None,
+            },
+        ),
     )
 
 
@@ -216,6 +232,18 @@ def _build_task_node(
         meta=task.meta,
         provider_usages=_provider_usages(function=task.function, provider_by_name=provider_by_name),
         task=DiscoveredPythonTaskMetadata(retry=task.retry),
+        identity=build_python_identity(
+            node_type=PythonNodeKind.TASK.value,
+            node_name=task.name,
+            function=task.function,
+            project_dir=task.file_path.parent,
+            decorator_config={
+                "description": task.description,
+                "group": task.group,
+                "meta": task.meta,
+                "tags": task.tags,
+            },
+        ),
     )
 
 
@@ -242,6 +270,20 @@ def _build_asset_node(
             column_lineage=asset.column_lineage,
             retry=asset.retry,
         ),
+        identity=build_python_identity(
+            node_type=PythonNodeKind.ASSET.value,
+            node_name=asset.name,
+            function=asset.function,
+            project_dir=asset.file_path.parent,
+            decorator_config={
+                "columns": asset.columns,
+                "column_lineage": asset.column_lineage,
+                "description": asset.description,
+                "group": asset.group,
+                "meta": asset.meta,
+                "tags": asset.tags,
+            },
+        ),
     )
 
 
@@ -264,6 +306,19 @@ def _build_check_node(
             function=check.function, provider_by_name=provider_by_name
         ),
         check=DiscoveredPythonCheckMetadata(severity=check.severity),
+        identity=build_python_identity(
+            node_type=PythonNodeKind.CHECK.value,
+            node_name=check.name,
+            function=check.function,
+            project_dir=check.file_path.parent,
+            decorator_config={
+                "description": check.description,
+                "group": check.group,
+                "meta": check.meta,
+                "severity": check.severity.value,
+                "tags": check.tags,
+            },
+        ),
     )
 
 

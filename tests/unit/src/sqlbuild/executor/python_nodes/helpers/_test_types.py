@@ -194,3 +194,12 @@ class PythonCheckExecutorTestCase:
     expected_error_fragment: str | None = None
     upstream_status: PythonNodeStatus = PythonNodeStatus.SUCCESS
     upstream_skip_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class PythonIdentityFingerprintWriteTestCase:
+    description: str
+    schema: str | None
+    expected_sql_count: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()

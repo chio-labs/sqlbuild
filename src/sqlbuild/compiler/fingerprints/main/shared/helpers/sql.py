@@ -79,7 +79,7 @@ def build_create_table_sql(
 def build_read_latest_sql(
     *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
 ) -> str:
-    """Build a windowed SELECT for the latest fingerprint per node name."""
+    """Build a windowed SELECT for the latest fingerprint per node identity."""
 
     qualified_name: str = build_qualified_table_name(
         database=database,
@@ -92,7 +92,7 @@ def build_read_latest_sql(
         f"FROM ("
         f"SELECT {selected_columns}, "
         f"ROW_NUMBER() OVER ("
-        f"PARTITION BY {COLUMN_NODE_NAME} "
+        f"PARTITION BY {COLUMN_NODE_TYPE}, {COLUMN_NODE_NAME} "
         f"ORDER BY {COLUMN_TIMESTAMP} DESC, {COLUMN_RUN_ID} DESC"
         f") AS __sqlbuild_latest_rank "
         f"FROM {qualified_name}"

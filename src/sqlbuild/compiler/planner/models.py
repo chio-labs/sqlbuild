@@ -149,6 +149,7 @@ class WarehouseFingerprints:
     models: dict[str, Fingerprint] = field(default_factory=dict)
     functions: dict[str, Fingerprint] = field(default_factory=dict)
     seeds: dict[str, Fingerprint] = field(default_factory=dict)
+    python_nodes: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -790,4 +791,5 @@ class PlanOutput:
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
     source_freshness: StandardSourceFreshnessPlanningResult | None = None
+    python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)

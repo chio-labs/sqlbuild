@@ -279,6 +279,7 @@ def _build_result(
         python_plan_entries = build_python_plan_entries(
             lifecycle_plan=lifecycle_plan,
             python_graph=python_graph,
+            previous_identities=plan_output.python_identity_fingerprints,
         )
 
     return CompilePipelineResult(

@@ -89,7 +89,7 @@ def test_given_motherduck_adapter_when_checking_defaults_then_returns_duckdb_def
             retain_versions=5,
             expected_fragments=(
                 "DELETE FROM analytics._sqlbuild_fingerprints WHERE rowid IN",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "__sqlbuild_history_rank > 5",
             ),

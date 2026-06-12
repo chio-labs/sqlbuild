@@ -13,6 +13,9 @@ from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
+    try_write_python_node_identity_fingerprint,
+)
 from sqlbuild.executor.python_nodes.helpers.results import normalize_python_check_return
 from sqlbuild.executor.python_nodes.models import (
     CheckContext,
@@ -135,15 +138,23 @@ def execute_python_check_nodes(
             )
             continue
         severity: PythonCheckSeverity = check_result.severity or check_function.severity
-        results.append(
-            PythonCheckExecutionResult(
-                node_name=check_function.name,
-                passed=check_result.passed,
-                severity=severity,
-                message=check_result.message,
-                metadata=check_result.metadata,
-            )
+        result: PythonCheckExecutionResult = PythonCheckExecutionResult(
+            node_name=check_function.name,
+            passed=check_result.passed,
+            severity=severity,
+            message=check_result.message,
+            metadata=check_result.metadata,
         )
+        results.append(result)
+        if not result.failed:
+            try_write_python_node_identity_fingerprint(
+                identity=python_graph.nodes_by_name[check_function.name].identity,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                database=default_database,
+                schema=default_schema,
+            )
     return tuple(results)
 
 

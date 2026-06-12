@@ -159,6 +159,13 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
         db_path=project_dir / "python_hooks_build_project.duckdb",
         sql="SELECT model_name, relation_name, phase FROM main.hook_log",
     ) == list(test_case.expected_hook_log_rows)
+    assert query_duckdb(
+        db_path=project_dir / "python_hooks_build_project.duckdb",
+        sql=(
+            "SELECT node_type, node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'hook' ORDER BY node_name"
+        ),
+    ) == [("hook", "create_hook_data"), ("hook", "record_hook_completion")]
 
 
 @pytest.mark.parametrize(

@@ -431,7 +431,7 @@ class SqlServerAdapter(BaseAdapter):
             f"AND object_id = OBJECT_ID(N'{escaped_table_name}')"
             ") "
             f"CREATE INDEX {index_name} ON {table_name} "
-            "(node_name, ts DESC, run_id DESC)",
+            "(node_type, node_name, ts DESC, run_id DESC)",
         )
 
     def render_read_latest_fingerprints_sql(
@@ -467,7 +467,7 @@ class SqlServerAdapter(BaseAdapter):
         return (
             "WITH __sqlbuild_ranked AS ("
             f"SELECT *, ROW_NUMBER() OVER ("
-            "PARTITION BY node_name "
+            "PARTITION BY node_type, node_name "
             "ORDER BY ts DESC, run_id DESC"
             f") AS __sqlbuild_history_rank FROM {table_name}"
             ") "

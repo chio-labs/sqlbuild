@@ -70,6 +70,11 @@ def test_given_encoded_fingerprint_row_when_reading_then_decodes_query_and_metad
     )
 
     fingerprint: Fingerprint = fingerprints.fingerprints[test_case.expected_model_name]
+    assert fingerprints.fingerprints_by_identity is not None
+    assert (
+        fingerprints.fingerprints_by_identity[("model", test_case.expected_model_name)]
+        is fingerprint
+    )
     assert fingerprint.version_hash == test_case.expected_version_hash
     assert fingerprint.definition == test_case.expected_query_sql
     assert fingerprint.metadata_json == test_case.expected_metadata_json

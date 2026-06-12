@@ -10,6 +10,9 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
+    try_write_python_node_identity_fingerprint,
+)
 from sqlbuild.executor.python_nodes.helpers.ingress_execution import _to_executable_python_node
 from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
@@ -174,6 +177,15 @@ class ReadSidePythonExecutionTracker:
         self._run_state.record_result(node_function=node.function, result=result)
         self._results_by_name[node.name] = result
         self._completed_python_names.add(node.name)
+        if result.status == PythonNodeStatus.SUCCESS:
+            try_write_python_node_identity_fingerprint(
+                identity=node.identity,
+                adapter=self._adapter,
+                connection=self._connection,
+                run_id=self._run_id,
+                database=self._default_database,
+                schema=self._default_schema,
+            )
 
     def _unrun_reason(self, node: DiscoveredPythonNode) -> str:
         sql_dep_name: str

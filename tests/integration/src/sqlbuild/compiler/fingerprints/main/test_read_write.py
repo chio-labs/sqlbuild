@@ -51,6 +51,8 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         expected_node_names=("orders",),
         expected_latest_definition_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
+        expected_latest_definitions={"orders": "SELECT id FROM orders"},
+        expected_latest_version_hashes={"orders": "version_a"},
     ),
     WriteAndReadTestCase(
         description="writes and reads fingerprints for multiple models",
@@ -87,6 +89,11 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         expected_node_names=("customers", "orders"),
         expected_latest_definition_hashes={"orders": "hash_a", "customers": "hash_b"},
         expected_latest_target_names={"orders": "orders", "customers": "customers"},
+        expected_latest_definitions={
+            "orders": "SELECT id FROM orders",
+            "customers": "SELECT id FROM customers",
+        },
+        expected_latest_version_hashes={"orders": "version_a", "customers": "version_b"},
     ),
     WriteAndReadTestCase(
         description="writes and reads multiline query sql with quotes and backslashes",
@@ -110,6 +117,10 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         expected_node_names=("orders",),
         expected_latest_definition_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
+        expected_latest_definitions={
+            "orders": "SELECT '\\n' AS slash_n\nFROM orders\nWHERE note = 'line\\nvalue'"
+        },
+        expected_latest_version_hashes={"orders": "version_a"},
     ),
     WriteAndReadTestCase(
         description="writes and reads audit gate metadata from fingerprint storage",
@@ -161,11 +172,66 @@ WRITE_AND_READ_TEST_CASES: list[WriteAndReadTestCase] = [
         expected_node_names=("orders",),
         expected_latest_definition_hashes={"orders": "hash_a"},
         expected_latest_target_names={"orders": "orders"},
+        expected_latest_definitions={"orders": "SELECT id FROM orders"},
+        expected_latest_version_hashes={"orders": "version_a"},
         expected_metadata_fragments=(
             '"audit_gate":{"binding_set_hash":"binding_hash"',
             '"execution_fingerprint":"execution_hash"',
             '"attached_column_name":"order_id"',
         ),
+    ),
+    WriteAndReadTestCase(
+        description="reads latest fingerprints separately for mixed node types with same name",
+        database=None,
+        schema="test_schema",
+        fingerprints=(
+            Fingerprint(
+                node_type="model",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_001",
+                definition_hash="model_hash_old",
+                version_hash="model_version_old",
+                schema_fingerprint="model_schema_old",
+                definition="SELECT 1",
+                ts=datetime(2026, 1, 15, 10, 0, 0),
+            ),
+            Fingerprint(
+                node_type="model",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name="orders",
+                run_id="run_002",
+                definition_hash="model_hash_new",
+                version_hash="model_version_new",
+                schema_fingerprint="model_schema_new",
+                definition="SELECT 2",
+                ts=datetime(2026, 1, 15, 11, 0, 0),
+            ),
+            Fingerprint(
+                node_type="task",
+                node_name="orders",
+                target_database=None,
+                target_schema=None,
+                target_name=None,
+                run_id="run_003",
+                definition_hash="task_hash_new",
+                version_hash="task_version_new",
+                schema_fingerprint="task_schema_new",
+                definition='{"source_text":"def orders(ctx): ..."}',
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+        ),
+        expected_node_names=("orders",),
+        expected_latest_definition_hashes={"orders": "model_hash_new"},
+        expected_latest_target_names={"orders": "orders"},
+        expected_identity_definition_hashes={
+            ("model", "orders"): "model_hash_new",
+            ("task", "orders"): "task_hash_new",
+        },
     ),
 ]
 
@@ -286,12 +352,18 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     for node_name, expected_target_name in test_case.expected_latest_target_names.items():
         assert result.fingerprints[node_name].target_name == expected_target_name
     fp: Fingerprint
-    for fp in test_case.fingerprints:
-        assert result.fingerprints[fp.node_name].definition == fp.definition
-        assert result.fingerprints[fp.node_name].version_hash == fp.version_hash
+    expected_definition: str
+    for node_name, expected_definition in test_case.expected_latest_definitions.items():
+        assert result.fingerprints[node_name].definition == expected_definition
+    expected_version_hash: str
+    for node_name, expected_version_hash in test_case.expected_latest_version_hashes.items():
+        assert result.fingerprints[node_name].version_hash == expected_version_hash
     fragment: str
     for fragment in test_case.expected_metadata_fragments:
         assert fragment in result.fingerprints[test_case.expected_node_names[0]].metadata_json
+    for identity_key, expected_hash in test_case.expected_identity_definition_hashes.items():
+        assert result.fingerprints_by_identity is not None
+        assert result.fingerprints_by_identity[identity_key].definition_hash == expected_hash
 
 
 @pytest.mark.parametrize(
@@ -571,10 +643,50 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
                     definition="SELECT 11",
                     ts=datetime(2026, 1, 15, 11, 0, 0),
                 ),
+                Fingerprint(
+                    node_type="task",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_task_000",
+                    definition_hash="hash_task_old",
+                    version_hash="version_task_old",
+                    schema_fingerprint="schema_task_old",
+                    definition='{"source_text":"old"}',
+                    ts=datetime(2026, 1, 15, 9, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="task",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_task_001",
+                    definition_hash="hash_task_mid",
+                    version_hash="version_task_mid",
+                    schema_fingerprint="schema_task_mid",
+                    definition='{"source_text":"mid"}',
+                    ts=datetime(2026, 1, 15, 11, 0, 0),
+                ),
+                Fingerprint(
+                    node_type="task",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="run_task_002",
+                    definition_hash="hash_task_latest",
+                    version_hash="version_task_latest",
+                    schema_fingerprint="schema_task_latest",
+                    definition='{"source_text":"latest"}',
+                    ts=datetime(2026, 1, 15, 14, 0, 0),
+                ),
             ),
-            expected_run_ids_by_node={
-                "orders": ("run_003", "run_002"),
-                "customers": ("run_011", "run_010"),
+            expected_run_ids_by_identity={
+                ("model", "orders"): ("run_003", "run_002"),
+                ("model", "customers"): ("run_011", "run_010"),
+                ("task", "orders"): ("run_task_002", "run_task_001"),
             },
             expected_latest_run_id="run_003",
         )
@@ -608,13 +720,14 @@ def test_given_fingerprint_history_when_pruning_then_keeps_latest_versions_per_n
         ),
     )
 
-    node_name: str
+    identity_key: tuple[str, str]
     expected_run_ids: tuple[str, ...]
-    for node_name, expected_run_ids in test_case.expected_run_ids_by_node.items():
+    for identity_key, expected_run_ids in test_case.expected_run_ids_by_identity.items():
+        node_type, node_name = identity_key
         rows: list[tuple[str]] = connection.execute(
             f"SELECT run_id FROM {test_case.schema}.{FINGERPRINT_TABLE_NAME} "
-            "WHERE node_name = ? ORDER BY ts DESC, run_id DESC",
-            (node_name,),
+            "WHERE node_type = ? AND node_name = ? ORDER BY ts DESC, run_id DESC",
+            (node_type, node_name),
         ).fetchall()
         assert tuple(row[0] for row in rows) == expected_run_ids
     latest_result: FingerprintSet = read_latest_fingerprints(

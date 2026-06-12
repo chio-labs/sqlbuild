@@ -72,6 +72,7 @@ class DiscoveredPythonNode:
     task: DiscoveredPythonTaskMetadata | None = None
     asset: DiscoveredPythonAssetMetadata | None = None
     check: DiscoveredPythonCheckMetadata | None = None
+    identity: PythonNodeIdentity | None = None
 
 
 @dataclass(frozen=True)
