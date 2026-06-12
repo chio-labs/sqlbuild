@@ -1086,6 +1086,49 @@ COLOR_TEST_CASES: list[FormatPlanColorTestCase] = [
             "\033[2m      @@",
         ),
     ),
+    FormatPlanColorTestCase(
+        description="styles python dependency diff headers as metadata",
+        plan_output=build_plan_output(),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
+                identity_status=PythonIdentityStatus.CHANGED,
+                previous_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'old'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+                current_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'new'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "\033[2m         # tasks/helpers.py :: tasks.helpers :: order_label\033[0m",
+            "\033[31m      -    return 'old'\033[0m",
+            "\033[32m      +    return 'new'\033[0m",
+        ),
+    ),
 ]
 
 
@@ -1125,7 +1168,11 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
 def test_given_plan_output_when_formatting_with_color_then_styles_semantic_parts(
     test_case: FormatPlanColorTestCase,
 ) -> None:
-    result: str = format_plan(test_case.plan_output, use_color=True)
+    result: str = format_plan(
+        test_case.plan_output,
+        use_color=True,
+        python_plan_entries=test_case.python_plan_entries,
+    )
 
     for fragment in test_case.expected_fragments:
         assert fragment in result, f"Expected '{fragment}' in output:\n{result}"

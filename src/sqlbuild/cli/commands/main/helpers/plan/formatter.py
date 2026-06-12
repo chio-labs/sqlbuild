@@ -515,7 +515,21 @@ def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_dependency_source_text(entry.current_metadata_json)
     if previous is None or current is None or previous == current:
         return []
-    return _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+    return _dim_python_dependency_headers(
+        _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+    )
+
+
+def _dim_python_dependency_headers(lines: list[str]) -> list[str]:
+    style: CliStyle = CliStyle(use_color=True)
+    result: list[str] = []
+    line: str
+    for line in lines:
+        if "# " in _strip_ansi(line):
+            result.append(style.muted(line))
+        else:
+            result.append(line)
+    return result
 
 
 def _python_definition_source_text(raw_json: str | None) -> str | None:
@@ -1478,9 +1492,7 @@ def _format_capped_name_list(
     visible_names: tuple[str, ...] = names if limit is None else names[:limit]
     remaining_count: int = len(names) - len(visible_names)
     rendered_names: tuple[str, ...] = (
-        visible_names
-        if name_style is None
-        else tuple(name_style(name) for name in visible_names)
+        visible_names if name_style is None else tuple(name_style(name) for name in visible_names)
     )
     base: str = ", ".join(rendered_names)
     if remaining_count <= 0:
