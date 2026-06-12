@@ -14,6 +14,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, Model
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,
@@ -59,6 +60,7 @@ def execute_incremental_entry(
     effective_target_name: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one incremental model through its delta/DML lifecycle."""
 
@@ -109,6 +111,7 @@ def execute_incremental_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -408,6 +411,7 @@ def execute_incremental_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(

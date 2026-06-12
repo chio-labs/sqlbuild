@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.python_plan_entries import build_python_plan_entries
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
@@ -18,6 +19,7 @@ def build_virtual_python_plan_entries(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     selection: PythonSqlRunSelection,
+    previous_identities: dict[tuple[str, str], Fingerprint] | None = None,
 ) -> tuple[PythonPlanEntry, ...]:
     """Return display entries for a virtual Python selection."""
 
@@ -28,4 +30,8 @@ def build_virtual_python_plan_entries(
         selection=selection,
         python_graph=python_graph,
     )
-    return build_python_plan_entries(lifecycle_plan=lifecycle_plan, python_graph=python_graph)
+    return build_python_plan_entries(
+        lifecycle_plan=lifecycle_plan,
+        python_graph=python_graph,
+        previous_identities=previous_identities,
+    )

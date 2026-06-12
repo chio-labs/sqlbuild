@@ -31,7 +31,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeRunState,
 )
-from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.executor.python_nodes.types import ExecutablePythonNode, PythonIdentityRecorder
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.lifecycle_scheduler import run_lifecycle_scheduler
 from sqlbuild.executor.shared.helpers.load_execution import load_resource_kind, skipped_load_result
@@ -71,6 +71,7 @@ def execute_ingress_python_loader_nodes(
     on_node_complete: Callable[[object], None] | None = None,
     relation_targets: dict[SqlResourceRef, str] | None = None,
     providers: ProviderContainer | None = None,
+    identity_recorder: PythonIdentityRecorder | None = None,
 ) -> PythonIngressLoaderExecutorResult:
     """Execute Python ingress task/asset/loader nodes in lifecycle topological order."""
 
@@ -129,6 +130,7 @@ def execute_ingress_python_loader_nodes(
             on_node_complete=on_node_complete,
             relation_targets=resolved_relation_targets,
             providers=providers,
+            identity_recorder=identity_recorder,
         ),
     )
     _record_scheduler_skips(
@@ -173,6 +175,7 @@ def _execute_ingress_lifecycle_node(
     on_node_complete: Callable[[object], None] | None,
     relation_targets: dict[SqlResourceRef, str],
     providers: ProviderContainer | None,
+    identity_recorder: PythonIdentityRecorder | None,
 ) -> LifecycleNodeResult:
     discovered_node: DiscoveredPythonNode = python_graph.nodes_by_name[node.name]
     if discovered_node.kind == PythonNodeKind.LOADER:
@@ -197,6 +200,7 @@ def _execute_ingress_lifecycle_node(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
             providers=providers,
+            identity_recorder=identity_recorder,
         )
     return _execute_ingress_python_node(
         node=discovered_node,
@@ -218,6 +222,7 @@ def _execute_ingress_lifecycle_node(
         python_results_by_name=python_results_by_name,
         relation_targets=relation_targets,
         providers=providers,
+        identity_recorder=identity_recorder,
     )
 
 
@@ -242,6 +247,7 @@ def _execute_ingress_python_node(
     python_results_by_name: dict[str, PythonNodeExecutionResult],
     relation_targets: dict[SqlResourceRef, str],
     providers: ProviderContainer | None,
+    identity_recorder: PythonIdentityRecorder | None,
 ) -> LifecycleNodeResult:
     executable_node: ExecutablePythonNode = _to_executable_python_node(node)
     upstream_results: tuple[PythonNodeExecutionResult, ...] = tuple(
@@ -273,14 +279,17 @@ def _execute_ingress_python_node(
     run_state.record_result(node_function=executable_node.function, result=result)
     python_results_by_name[node.name] = result
     if result.status == PythonNodeStatus.SUCCESS:
-        try_write_python_node_identity_fingerprint(
-            identity=node.identity,
-            adapter=adapter,
-            connection=connection,
-            run_id=run_id,
-            database=default_database,
-            schema=default_schema,
-        )
+        if identity_recorder is not None:
+            identity_recorder(node.identity, None)
+        else:
+            try_write_python_node_identity_fingerprint(
+                identity=node.identity,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                database=default_database,
+                schema=default_schema,
+            )
     return _python_result_to_lifecycle_result(result)
 
 
@@ -306,6 +315,7 @@ def _execute_ingress_loader(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
     providers: ProviderContainer | None,
+    identity_recorder: PythonIdentityRecorder | None,
 ) -> LifecycleNodeResult:
     loader: DiscoveredLoaderFunction | None = loader_by_name.get(node.name)
     if loader is None:
@@ -342,15 +352,18 @@ def _execute_ingress_loader(
     )
     load_results_by_name[node.name] = result
     if result.status == ExecutionStatus.SUCCESS:
-        try_write_python_node_identity_fingerprint(
-            identity=node.identity,
-            adapter=adapter,
-            connection=connection,
-            run_id=run_id,
-            database=adapter.default_database(),
-            schema=adapter.default_schema(),
-            target_name=source_entry.name,
-        )
+        if identity_recorder is not None:
+            identity_recorder(node.identity, source_entry.name)
+        else:
+            try_write_python_node_identity_fingerprint(
+                identity=node.identity,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                database=adapter.default_database(),
+                schema=adapter.default_schema(),
+                target_name=source_entry.name,
+            )
     if on_node_complete is not None:
         on_node_complete(result)
     return _load_result_to_lifecycle_result(node_name=node.name, result=result)

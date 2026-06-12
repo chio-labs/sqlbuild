@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
@@ -40,6 +41,7 @@ def execute_view_entry(
     effective_target_name: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one view model through its full materialization lifecycle."""
 
@@ -72,6 +74,7 @@ def execute_view_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -160,6 +163,7 @@ def execute_view_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(

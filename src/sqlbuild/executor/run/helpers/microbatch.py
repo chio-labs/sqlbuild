@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.cursor_bounds import (
     has_model_backed_cursor_inputs,
     resolve_effective_timestamp_grain,
@@ -80,6 +81,7 @@ def execute_microbatch_entry(
     effective_target_name: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one microbatch incremental model through batched delta/DML."""
 
@@ -121,6 +123,7 @@ def execute_microbatch_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -546,6 +549,7 @@ def execute_microbatch_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
