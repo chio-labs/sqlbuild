@@ -18,7 +18,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonNodeStatus,
 )
-from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.python_nodes.helpers.results import (
     build_python_node_failure_result,
@@ -81,7 +81,7 @@ def execute_python_nodes(
         run_state if run_state is not None else PythonNodeRunState()
     )
     result_store: Any | None = (
-        build_direct_node_result_store(
+        build_standard_node_result_store(
             adapter=adapter,
             connection=connection,
             database=default_database,
@@ -213,7 +213,7 @@ def execute_ready_python_node(
         result_store=result_store
         if result_store is not None
         else (
-            build_direct_node_result_store(
+            build_standard_node_result_store(
                 adapter=adapter,
                 connection=connection,
                 database=default_database,

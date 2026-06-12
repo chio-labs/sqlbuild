@@ -14,7 +14,6 @@ from sqlbuild.cli.commands.main.helpers.check import (
     record_python_run_state_results,
     resolve_selected_check_names,
     run_check_read_side_dependencies,
-    validate_selected_check_dependencies,
     write_check_results,
 )
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
@@ -40,7 +39,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
 from sqlbuild.executor.python_nodes.main.ingress import execute_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.models import (
@@ -120,31 +118,18 @@ def run_check(
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=discovered_inputs
     )
-    selected_names: frozenset[str] = resolve_selected_check_names(
+    check_names: frozenset[str] = resolve_selected_check_names(
         graph=python_graph,
         select=select,
         exclude=exclude,
     )
-    check_names: frozenset[str] = frozenset(
-        name
-        for name in selected_names
-        if python_graph.nodes_by_name[name].kind == PythonNodeKind.CHECK
-    )
-    validate_selected_check_dependencies(
-        graph=python_graph,
-        selected_names=selected_names,
-        check_names=check_names,
-    )
     check_functions: tuple[DiscoveredCheckFunction, ...] = tuple(
         check for check in discovered_inputs.check_functions if check.name in check_names
-    )
-    selected_dependency_names: frozenset[str] = frozenset(
-        name for name in selected_names if name not in check_names
     )
     lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
         selection=PythonSqlRunSelection(
             sql_keys=frozenset(),
-            python_node_names=selected_dependency_names,
+            python_node_names=frozenset(),
         ),
         python_graph=python_graph,
     )
@@ -220,6 +205,7 @@ def run_check(
                 default_schema=adapter.default_schema(),
                 relation_targets=relation_targets,
                 providers=provider_session.providers,
+                require_upstream_results=False,
             )
         finally:
             adapter.close(connection)

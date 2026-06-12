@@ -49,6 +49,7 @@ def execute_python_checks(
     identity_recorder: PythonIdentityRecorder | None = None,
     result_store: Any | None = None,
     persist_node_results: bool = True,
+    require_upstream_results: bool = True,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -78,4 +79,5 @@ def execute_python_checks(
         identity_recorder=identity_recorder,
         result_store=result_store,
         persist_node_results=persist_node_results,
+        require_upstream_results=require_upstream_results,
     )

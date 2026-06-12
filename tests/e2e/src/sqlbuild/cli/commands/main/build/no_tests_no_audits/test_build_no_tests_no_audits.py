@@ -707,7 +707,7 @@ def generated_pipeline():
         project_dir=project_dir,
     )
     check_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "check", "--select", "+check:orders_export_check"),
+        command=("--no-color", "check", "--select", "check:orders_export_check"),
         project_dir=project_dir,
     )
     no_python_build_result: subprocess.CompletedProcess[str] = run_sqb(
