@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.display_plan import build_display_only_sqlbuild_plan
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.integrations.dbt.models import DbtCommandResult
 
 
@@ -70,6 +71,11 @@ def build_sqlbuild_plan_output(
                 select=selected_model_names,
                 cursor_overrides=cursor_overrides,
                 full_refresh="--full-refresh" in sqlbuild_args,
+                standard_scope_pruning=(
+                    StandardScopePruning.PRUNE_UNCHANGED
+                    if "--force" not in sqlbuild_args
+                    else StandardScopePruning.NONE
+                ),
                 on_progress=on_progress,
                 deferred_relations=deferred_relations,
             )

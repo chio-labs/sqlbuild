@@ -228,7 +228,7 @@ def _sqlbuild_denylist() -> frozenset[str]:
 
 
 def _sqlbuild_bool_flags() -> frozenset[str]:
-    return frozenset(("--hard-copy", "--fail-fast", "--verbose"))
+    return frozenset(("--hard-copy", "--fail-fast", "--verbose", "--force"))
 
 
 def _allowed_sqlbuild_flags(command: DbtInteropCommand) -> frozenset[str]:
@@ -242,12 +242,13 @@ def _allowed_sqlbuild_flags(command: DbtInteropCommand) -> frozenset[str]:
         *cursor_flags,
         "--defer-to",
         "--fail-fast",
+        "--force",
         "--verbose",
     )
     if command in {DbtInteropCommand.RUN, DbtInteropCommand.BUILD}:
         return frozenset(common_execution_flags)
     if command == DbtInteropCommand.PLAN:
-        return frozenset((*cursor_flags, "--defer-to"))
+        return frozenset((*cursor_flags, "--defer-to", "--force"))
     if command == DbtInteropCommand.TEST:
         return frozenset()
     return frozenset()

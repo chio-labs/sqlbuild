@@ -65,7 +65,7 @@ def test_given_upstream_query_change_when_building_changes_only_then_rebuilds_do
         project_dir=project_dir, amount_cents=test_case.changed_amount_cents
     )
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -132,7 +132,7 @@ def test_given_seed_change_when_building_changes_only_then_reloads_seed_and_down
     assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
 
     unchanged_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert unchanged_result.returncode == 0, unchanged_result.stdout + unchanged_result.stderr
     assert "Plan ready (0 selected)" in unchanged_result.stdout
@@ -143,7 +143,7 @@ def test_given_seed_change_when_building_changes_only_then_reloads_seed_and_down
         test_case.changed_seed_contents, encoding="utf-8"
     )
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
@@ -208,7 +208,7 @@ def test_given_standalone_seed_when_building_changes_only_then_seed_is_current(
     assert seed_result.returncode == 0, seed_result.stdout + seed_result.stderr
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
@@ -273,7 +273,7 @@ def test_given_seed_change_when_planning_json_then_seed_reason_is_reported(
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--changes-only", "--json"), project_dir=project_dir
+        command=("--no-color", "plan", "--json"), project_dir=project_dir
     )
 
     assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
@@ -346,7 +346,7 @@ def test_given_multiple_seed_branches_when_one_seed_changes_then_only_dependent_
     )
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
@@ -420,7 +420,7 @@ def test_given_seed_schema_change_when_building_changes_only_then_seed_and_downs
     )
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
@@ -538,7 +538,7 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
         project_dir=project_dir, amount_cents=test_case.changed_amount_cents
     )
     scoped_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "stg_orders"),
+        command=("--no-color", "build", "--select", "stg_orders"),
         project_dir=project_dir,
     )
 
@@ -553,7 +553,7 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
     ) == [(test_case.initial_amount_cents, test_case.expected_initial_amount_dollars)]
 
     later_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -622,7 +622,7 @@ def test_given_run_despite_unchanged_duration_when_building_changes_only_then_re
     assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -689,14 +689,14 @@ def test_given_scoped_run_despite_unchanged_build_when_building_later_then_downs
     assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
 
     scoped_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "rolling_orders"),
+        command=("--no-color", "build", "--select", "rolling_orders"),
         project_dir=project_dir,
     )
     assert scoped_result.returncode == 0, scoped_result.stdout + scoped_result.stderr
     assert "Plan ready (1 selected)" in scoped_result.stdout
 
     later_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert later_result.returncode == 0, later_result.stdout + later_result.stderr
@@ -986,7 +986,7 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
         "hard_copy": True,
     }
     steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert steady_state_result.returncode == 0, (
@@ -1025,7 +1025,7 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
         prod_result.stdout + prod_result.stderr
     )
     prod_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert prod_changes_only_result.returncode == 0, (
         prod_changes_only_result.stdout + prod_changes_only_result.stderr
@@ -1033,7 +1033,7 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
 
     (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
     scoped_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "stg_orders"),
+        command=("--no-color", "build", "--select", "stg_orders"),
         project_dir=project_dir,
     )
     assert scoped_result.returncode == 0, scoped_result.stdout + scoped_result.stderr
@@ -1055,7 +1055,7 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
     ) == [("stg_orders", "dev", "stg_orders")]
 
     later_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -1112,7 +1112,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
 
     (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
     expanded_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "+fact_orders"),
+        command=("--no-color", "build", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
     assert expanded_result.returncode == test_case.expected_dev_build_exit_code, (
@@ -1127,7 +1127,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
 
     execute_duckdb(db_path=db_path, sql="DROP SCHEMA dev CASCADE")
     tag_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "+tag:marts"),
+        command=("--no-color", "build", "--select", "+tag:marts"),
         project_dir=project_dir,
     )
     assert tag_result.returncode == test_case.expected_dev_build_exit_code, (
@@ -1141,7 +1141,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
 
     execute_duckdb(db_path=db_path, sql="DROP SCHEMA dev CASCADE")
     path_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "+path:models/marts"),
+        command=("--no-color", "build", "--select", "+path:models/marts"),
         project_dir=project_dir,
     )
     assert path_result.returncode == test_case.expected_dev_build_exit_code, (

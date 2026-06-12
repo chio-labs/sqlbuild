@@ -49,7 +49,7 @@ class CliNamespace:
     virtual_env: str | None = None
     skip_locked: bool = False
     include_stale_upstreams: bool = False
-    changes_only: bool = False
+    force: bool = False
     include_python: bool = True
     load_sources: bool | None = None
     reload: bool = False
