@@ -238,7 +238,7 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
     assert len(initial_seed_ref_rows) == 1
 
     unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
@@ -249,7 +249,7 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
         encoding="utf-8",
     )
     changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert changed_build_result.returncode == 0, (
@@ -542,7 +542,7 @@ def test_given_virtual_seed_load_failure_when_building_changes_only_then_seed_st
         encoding="utf-8",
     )
     failed_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert failed_build_result.returncode == 1, (
@@ -605,7 +605,7 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("plan", "--changes-only", "--json"), project_dir=project_dir
+        command=("plan", "--json"), project_dir=project_dir
     )
     assert plan_result.returncode == 0, plan_result.stderr
     plan_payload: dict[str, object] = json.loads(plan_result.stdout)
@@ -620,7 +620,7 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
     ]
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("build", "--changes-only", "--json"), project_dir=project_dir
+        command=("build", "--json"), project_dir=project_dir
     )
     assert build_result.returncode == 0, build_result.stderr
     build_payload: dict[str, object] = json.loads(build_result.stdout)
@@ -685,7 +685,7 @@ def test_given_virtual_seed_schema_change_when_building_changes_only_then_reload
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -744,7 +744,7 @@ def test_given_multi_seed_graph_when_one_seed_changes_then_only_its_closure_is_s
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "plan"), project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -800,7 +800,7 @@ def test_given_model_change_with_current_seed_when_building_then_seed_is_not_rel
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -964,7 +964,7 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
 
     unchanged_changes_only_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert unchanged_changes_only_build_result.returncode == 0, (
@@ -985,7 +985,7 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
         sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
     )
     changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert changed_build_result.returncode == 0, changed_build_result.stderr
@@ -1064,7 +1064,7 @@ def test_given_virtual_run_despite_unchanged_when_building_changes_only_then_bui
     ) == list(test_case.expected_initial_rows)
 
     changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert changes_only_result.returncode == 0, changes_only_result.stderr
@@ -1144,7 +1144,7 @@ def test_given_virtual_timestamp_lag_tolerance_when_building_then_skips_within_t
         sql="UPDATE raw.raw_orders SET id = 8, data_version = '2026-01-01 12:05:00'",
     )
     within_tolerance_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert within_tolerance_build_result.returncode == 0, within_tolerance_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
@@ -1154,7 +1154,7 @@ def test_given_virtual_timestamp_lag_tolerance_when_building_then_skips_within_t
         sql="UPDATE raw.raw_orders SET id = 9, data_version = '2026-01-01 12:11:00'",
     )
     beyond_tolerance_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert beyond_tolerance_build_result.returncode == 0, beyond_tolerance_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 1
@@ -1227,7 +1227,7 @@ def test_given_virtual_source_without_freshness_when_rebuilding_then_it_does_not
         sql="UPDATE raw.raw_orders SET id = 8",
     )
     second_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert second_build_result.returncode == 0, second_build_result.stderr
     assert "fact_orders" in second_build_result.stdout
@@ -1305,7 +1305,7 @@ def test_given_virtual_source_freshness_through_view_when_changed_then_downstrea
     ) == list(test_case.expected_initial_rows)
 
     unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
@@ -1315,7 +1315,7 @@ def test_given_virtual_source_freshness_through_view_when_changed_then_downstrea
         sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
     )
     changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert changed_build_result.returncode == 0, changed_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 2
@@ -1616,7 +1616,7 @@ def test_given_virtual_source_freshness_and_function_when_each_changes_then_mode
         encoding="utf-8",
     )
     function_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert function_build_result.returncode == 0, function_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 1
@@ -1630,7 +1630,7 @@ def test_given_virtual_source_freshness_and_function_when_each_changes_then_mode
         sql="UPDATE raw.raw_orders SET id = 4, data_version = 2",
     )
     source_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "build"), project_dir=project_dir
     )
     assert source_build_result.returncode == 0, source_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count + 2
@@ -1901,7 +1901,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
         encoding="utf-8",
     )
     changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--changes-only", "--select", "+fact_orders"),
+        command=("--no-color", "plan", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
     assert changed_plan_result.returncode == 0, (

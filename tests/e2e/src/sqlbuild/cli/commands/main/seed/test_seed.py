@@ -200,7 +200,7 @@ def test_given_virtual_project_when_running_seed_then_persists_seed_state(
     ) == list(test_case.expected_seed_rows)
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 

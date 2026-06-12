@@ -390,7 +390,7 @@ def test_given_built_direct_project_when_building_changes_only_then_prunes_uncha
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -454,7 +454,7 @@ def test_given_direct_query_change_when_building_changes_only_then_executes_chan
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -589,7 +589,7 @@ def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_rea
     marker_path.unlink()
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "orders profile_orders"),
+        command=("--no-color", "build", "--select", "orders profile_orders"),
         project_dir=project_dir,
     )
 
@@ -667,7 +667,7 @@ def test_given_source_freshness_when_building_normally_then_writes_state_after_s
     assert rows == [("raw_orders", "1")]
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -743,7 +743,7 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -817,7 +817,7 @@ def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_wit
         initial_build_result.stdout + initial_build_result.stderr
     )
     baseline_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert baseline_result.returncode == 0, baseline_result.stdout + baseline_result.stderr
@@ -826,7 +826,7 @@ def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_wit
         source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
     )
     within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -841,7 +841,7 @@ def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_wit
         source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
     )
     beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -908,7 +908,7 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
         initial_build_result.stdout + initial_build_result.stderr
     )
     first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert first_changes_only_result.returncode == 0, (
@@ -936,7 +936,7 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 
@@ -1011,7 +1011,7 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
         initial_build_result.stdout + initial_build_result.stderr
     )
     first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert first_changes_only_result.returncode == 0, (
@@ -1039,7 +1039,7 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
 

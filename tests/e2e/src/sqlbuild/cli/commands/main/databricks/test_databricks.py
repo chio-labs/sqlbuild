@@ -1307,7 +1307,7 @@ def test_given_built_direct_project_when_building_changes_only_on_databricks_the
 
         with databricks_e2e_timing("changes-only sqb build"):
             changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-                command=("--no-color", "build", "--changes-only"),
+                command=("--no-color", "build"),
                 project_dir=project_dir,
             )
 
