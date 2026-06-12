@@ -3,28 +3,37 @@
 </p>
 
 <p align="center">
-  SQL-first warehouse pipelines with ingestion, validation, Python extension points, and local testing.
+  Change-aware SQL pipelines: only rebuild what changed, with all state in the warehouse.
 </p>
 
-SQLBuild is a SQL-first framework for building reliable warehouse pipelines. It keeps a dbt-like floor for SQL models while adding compile-time validation, pre-promotion audits, source loaders, lightweight Python extension points, virtual environments, and local E2E replay.
+SQLBuild is a SQL-first framework for building reliable warehouse pipelines. Every build is change-aware by default -- models, seeds, functions, and Python nodes are fingerprinted, source freshness is tracked, and unchanged work (including audits that already passed) is skipped automatically. All state is persisted as append-only tables in the warehouse alongside your data. No external state database, no manifest files, no paid add-on.
+
+It keeps a low, dbt-like floor for SQL models and can run alongside an existing dbt project. It adds ingestion, Python nodes, providers, and opt-in virtual environments for more advanced use cases, letting you expand scope as your project naturally grows.
 
 ## Key features
 
-- **SQL-first models with compile-time validation** - Define models as SQL files with `MODEL()` headers while SQLBuild resolves references, validates SQL, infers columns, checks contracts, and computes lineage before anything runs.
-- **Audits that block bad data** - Audits run before data reaches the target table. For full table builds, SQLBuild materializes into a staging table and only promotes if audits pass. For incremental models, delta-phase audits validate each batch before DML.
-- **Change-aware incremental rebuilds** - Fingerprint-based query change detection, schema diff tracking, and configurable backfill policies with automatic cascade through the DAG.
-- **Cursor-based incremental processing** - Automatic gap detection and resume. If a model fails for several runs, the next build replays from where it left off. Microbatch mode splits large ranges into configurable batches.
-- **Source loaders** - Load external data into source tables with Python functions while keeping SQL models analyzable. Supports incremental write strategies (table, append, delete\_insert, merge), cursor-based loading, loader-to-loader dependencies, and concurrent execution. Loaders run automatically during builds.
-- **Python macros, not Jinja** - Macros are real Python functions. Testable, debuggable, and composable with standard tooling.
-- **User-defined functions** - SQL and Python UDFs managed as project resources, with table functions for predicate-pushdown-friendly alternatives to final-layer views.
-- **Custom materializations** - Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
-- **SQL unit tests that chain across models** - Mock your sources, assert on the model you care about, and SQLBuild resolves every intermediate model automatically. One test file can be a full integration test across your pipeline.
-- **End-to-end scenarios with local replay** - Define coherent fixture worlds, run the real project graph in an isolated warehouse slice, capture JSONL snapshots, and replay them locally through DuckDB for fast CI feedback.
-- **Environment diffs** - Compare schemas and row-level data between environments with `sqb diff prod:dev`.
-- **Zero-copy cloning** - Branch environments instantly with `sqb clone` without duplicating data. No `manifest.json` required.
-- **Path-between selectors** - `--select fact_orders~daily_activity_rollup` selects every model on the shortest path between two nodes.
-- **Advanced virtual environments** - Optional state-backed workflows for low-copy branching, promotion, and rollback when your team is ready to operate a shared state store.
-- **First-class Dagster integration** - Use Dagster for scheduling, sensors, and cross-system coordination while SQLBuild handles SQL compilation, planning, builds, audits, and tests.
+- **Change-aware builds by default** -- Fingerprint-based tracking for models, seeds, functions, and Python nodes. Source freshness observation. Audits skipped when the model version hasn't changed. Cascade propagation with configurable replay windows (`replay_on_change`). Pass `--force` to override and run everything selected.
+- **Warehouse-native state** -- All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`) in your warehouse schemas. No external state database, no state machine, no corruption risk. The planner reads the latest row per identity, compares, and appends after successful builds.
+- **Reuse from production** -- Dev targets can opt into `reuse_from` to clone or copy unchanged relations from another target (e.g. prod) instead of rebuilding. Zero compute for models that match.
+- **Audits that block bad data** -- Audits run before data reaches the target table. For full table builds, SQLBuild materializes into a staging table and only promotes if audits pass. For incremental models, delta-phase audits validate each batch before DML.
+- **SQL-first models with compile-time validation** -- Define models as SQL files with `MODEL()` headers while SQLBuild resolves references, validates SQL, infers columns, checks contracts, and computes lineage before anything runs.
+- **Cursor-based incremental processing** -- Automatic gap detection and resume. If a model fails for several runs, the next build replays from where it left off. Microbatch mode splits large ranges into configurable batches.
+- **Source freshness** -- Track whether external source data has changed via adapter metadata, column queries, or custom SQL. Lag tolerance prevents jitter from triggering unnecessary rebuilds. `sqb freshness` observes freshness without running a build; `--fail-on-stale` gates CI pipelines.
+- **Source loaders** -- Load external data into source tables with Python `@loader` functions. Supports incremental write strategies (table, append, delete\_insert, merge), cursor-based loading, and concurrent execution. Loaders run automatically during builds.
+- **Python nodes** -- Tasks (`@task`), assets (`@asset`), checks (`@check`), and factories (`@factory`) as first-class DAG nodes alongside SQL models. Identity-tracked with source and dependency diffs shown in the plan.
+- **Providers** -- Shared runtime services (API clients, connections, config) injected into Python nodes and hooks by parameter name. Backed by pydantic-settings for validation and environment variable support.
+- **Python lifecycle hooks** -- Typed `sql("...")`/`python("hook_name")` hooks with compile-time validation and a `HookContext` API. Provider injection supported.
+- **Python macros, not Jinja** -- Macros are real Python functions. Testable, debuggable, and composable with standard tooling.
+- **User-defined functions** -- SQL and Python UDFs managed as project resources, with table functions for predicate-pushdown-friendly alternatives to final-layer views.
+- **Custom materializations** -- Write materialization logic in Python with full framework integration, including audit hooks, schema change signals, and query change detection.
+- **SQL unit tests that chain across models** -- Mock your sources, assert on the model you care about, and SQLBuild resolves every intermediate model automatically. One test file can be a full integration test across your pipeline.
+- **End-to-end scenarios with local replay** -- Define coherent fixture worlds, run the real project graph in an isolated warehouse slice, capture JSONL snapshots, and replay them locally through DuckDB for fast CI feedback.
+- **Data diffs** -- Compare schemas and row-level data between targets with `sqb diff prod:dev`.
+- **Zero-copy cloning** -- Branch targets instantly with `sqb clone` without duplicating data. No `manifest.json` required.
+- **Path-between selectors** -- `--select fact_orders~daily_activity_rollup` selects every model on the shortest path between two nodes.
+- **Virtual environments (alpha)** -- Opt-in state-backed workflows for versioned model outputs, zero-copy branching, instant promotion and rollback, per-PR preview environments. Seeds are versioned alongside models. State stored in PostgreSQL or DuckDB, scoped per environment.
+- **Python you can read, Rust where it counts** -- The framework is Python. For SQL parsing, validation, column inference, lineage, and transpilation, SQLBuild uses [Polyglot](https://github.com/tobilg/polyglot), a Rust reimplementation of SQLGlot's SQL analysis capabilities (MIT, 32+ dialects).
+- **Dagster and Rivers integrations** -- Models, loaders, tasks, assets, and checks map to Dagster/Rivers assets with dependency edges preserved. Python checks become asset checks.
 
 ## Quick start
 
@@ -45,14 +54,13 @@ sqb test
 sqb scenario test
 ```
 
-
 ## How it works
 
 1. **Define** your models as SQL files with `MODEL()` headers that declare configuration, schema, and audits inline
-2. **Compile** to resolve references, validate SQL, infer column types, check contracts, and compute column lineage - all offline
-3. **Plan** what needs to change based on fingerprints, schema diffs, and backfill policies
-4. **Build** by executing the plan: materializing models, validating data before promotion, and ensuring bad data never reaches production
-5. **Test** with chained unit tests, E2E scenario tests, and local replay through DuckDB - no warehouse required
+2. **Compile** to resolve references, validate SQL, infer column types, check contracts, and compute column lineage -- all offline
+3. **Plan** what needs to change by comparing fingerprints, source freshness, seed content, and Python node identities against the warehouse state. Unchanged models, seeds, audits, and Python nodes are skipped. Production relations can optionally be reused when version identities match.
+4. **Build** by executing the plan: materializing only what changed, validating data before promotion, and ensuring bad data never reaches production
+5. **Test** with chained unit tests, E2E scenario tests, and local replay through DuckDB -- no warehouse required
 
 ## Example
 
@@ -86,8 +94,9 @@ MODEL (
   ),
   incremental_mode microbatch,
   batch_size 1d,
+  replay_on_change full,
   tags [marts],
-  post_hook ["grant select on @@CTX:target.qualified to role analytics"],
+  post_hooks [sql('GRANT SELECT ON @@CTX:destination.qualified TO analyst_role')],
 );
 
 SELECT
@@ -195,6 +204,18 @@ sources:
       - name: ordered_at
         type: TIMESTAMP
 ```
+
+## Supported adapters
+
+| Adapter | Status |
+|---------|--------|
+| DuckDB | Supported |
+| MotherDuck | Supported |
+| Snowflake | Supported |
+| BigQuery | Supported |
+| Databricks | Supported |
+| PostgreSQL | Supported |
+| SQL Server | Supported |
 
 ## Documentation
 

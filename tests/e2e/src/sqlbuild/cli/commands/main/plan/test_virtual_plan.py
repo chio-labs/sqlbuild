@@ -1278,7 +1278,7 @@ def test_given_virtual_plan_with_multiple_stale_roots_when_running_cli_then_it_e
         VirtualPlanE2ETestCase(
             description="virtual plan explicit select bypasses stale-driven selection",
             seed_matching_refs=True,
-            command=("--no-color", "plan", "--select", "dim_customers"),
+            command=("--no-color", "plan", "--select", "dim_customers", "--force"),
             expected_fragments=(
                 "Plan ready (1 selected)",
                 "Virtual environment",
