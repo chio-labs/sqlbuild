@@ -35,6 +35,7 @@ def create_read_side_python_execution_tracker(
     end_cursor_int: int | None = None,
     providers: ProviderContainer | None = None,
     identity_recorder: PythonIdentityRecorder | None = None,
+    persist_node_results: bool = True,
 ) -> ReadSidePythonExecutionTracker:
     """Create a read-side Python execution tracker."""
 
@@ -57,4 +58,5 @@ def create_read_side_python_execution_tracker(
         end_cursor_int=end_cursor_int,
         providers=providers,
         identity_recorder=identity_recorder,
+        persist_node_results=persist_node_results,
     )

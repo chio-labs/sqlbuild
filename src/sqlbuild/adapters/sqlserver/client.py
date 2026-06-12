@@ -503,6 +503,44 @@ class SqlServerAdapter(BaseAdapter):
             "observed_at DESC, run_id DESC)",
         )
 
+    def render_create_node_result_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=NODE_RESULTS_TABLE_NAME,
+        )
+        if table_name is None:
+            return ()
+        latest_index_name: str = "_sqlbuild_node_results_latest_idx"
+        run_id_index_name: str = "_sqlbuild_node_results_run_id_idx"
+        escaped_table_name: str = table_name.replace("'", "''")
+        escaped_latest_index_name: str = latest_index_name.replace("'", "''")
+        escaped_run_id_index_name: str = run_id_index_name.replace("'", "''")
+        return (
+            "IF NOT EXISTS ("
+            "SELECT 1 FROM sys.indexes "
+            f"WHERE name = '{escaped_latest_index_name}' "
+            f"AND object_id = OBJECT_ID(N'{escaped_table_name}')"
+            ") "
+            f"CREATE INDEX {latest_index_name} ON {table_name} "
+            "(node_type, node_name, target_database, target_schema, target_name, status, "
+            "ts DESC, run_id DESC)",
+            "IF NOT EXISTS ("
+            "SELECT 1 FROM sys.indexes "
+            f"WHERE name = '{escaped_run_id_index_name}' "
+            f"AND object_id = OBJECT_ID(N'{escaped_table_name}')"
+            ") "
+            f"CREATE INDEX {run_id_index_name} ON {table_name} "
+            "(run_id, node_type, node_name, target_database, target_schema, target_name)",
+        )
+
     def render_read_latest_source_freshness_sql(
         self,
         *,

@@ -253,6 +253,7 @@ def run_virtual_build(
                     default_database=adapter.default_database(),
                     default_schema=adapter.default_schema(),
                     providers=providers,
+                    persist_node_results=False,
                 )
             finally:
                 adapter.close(check_connection)

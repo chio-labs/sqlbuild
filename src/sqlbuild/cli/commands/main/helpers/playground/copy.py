@@ -166,8 +166,9 @@ from assets.orders_export import orders_export
 def check_orders_export(ctx):
     """Validate the Python asset's same-run metadata and payload."""
 
-    payload = ctx.payload(orders_export)
-    metadata = ctx.metadata(orders_export)
+    result = ctx.result_of(orders_export)
+    payload = result.payload
+    metadata = result.metadata
     if payload["order_count"] <= 0:
         return ctx.fail("orders export is empty")
     if "target_uri" not in metadata:

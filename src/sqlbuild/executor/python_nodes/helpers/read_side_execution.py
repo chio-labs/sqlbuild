@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
 from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -47,6 +48,7 @@ class ReadSidePythonExecutionTracker:
         end_cursor_int: int | None = None,
         providers: ProviderContainer | None = None,
         identity_recorder: PythonIdentityRecorder | None = None,
+        persist_node_results: bool = True,
     ) -> None:
         self._python_graph: PythonNodeGraph = python_graph
         self._selected_python_names: frozenset[str] = selected_python_names
@@ -68,6 +70,17 @@ class ReadSidePythonExecutionTracker:
         self._end_cursor_int: int | None = end_cursor_int
         self._providers: ProviderContainer | None = providers
         self._identity_recorder: PythonIdentityRecorder | None = identity_recorder
+        self._persist_node_results: bool = persist_node_results
+        self._result_store: Any | None = (
+            build_direct_node_result_store(
+                adapter=adapter,
+                connection=connection,
+                database=default_database,
+                schema=default_schema,
+            )
+            if persist_node_results
+            else None
+        )
         self._completed_sql_names: set[str] = set()
         self._failed_sql_names: set[str] = set()
         self._completed_python_names: set[str] = set()
@@ -175,7 +188,9 @@ class ReadSidePythonExecutionTracker:
             end_cursor_ts=self._end_cursor_ts,
             start_cursor_int=self._start_cursor_int,
             end_cursor_int=self._end_cursor_int,
+            result_store=self._result_store,
             providers=self._providers,
+            persist_node_results=self._persist_node_results,
         )
         self._run_state.record_result(node_function=node.function, result=result)
         self._results_by_name[node.name] = result

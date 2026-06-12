@@ -21,6 +21,8 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -97,6 +99,12 @@ def execute_ingress_python_loader_nodes(
     )
     python_results_by_name: dict[str, PythonNodeExecutionResult] = {}
     load_results_by_name: dict[str, LoadExecutionResult] = {}
+    result_store: Any | None = build_direct_node_result_store(
+        adapter=adapter,
+        connection=connection,
+        database=default_database,
+        schema=default_schema,
+    )
     resolved_relation_targets: dict[SqlResourceRef, str] = (
         {} if relation_targets is None else relation_targets
     )
@@ -124,6 +132,7 @@ def execute_ingress_python_loader_nodes(
             end_cursor_int=end_cursor_int,
             use_color=use_color,
             run_state=run_state,
+            result_store=result_store,
             python_results_by_name=python_results_by_name,
             load_results_by_name=load_results_by_name,
             on_node_start=on_node_start,
@@ -139,6 +148,8 @@ def execute_ingress_python_loader_nodes(
         source_by_loader_name=source_by_loader_name,
         python_results_by_name=python_results_by_name,
         load_results_by_name=load_results_by_name,
+        result_store=result_store,
+        run_id=run_id,
     )
     return PythonIngressLoaderExecutorResult(
         python_results=tuple(python_results_by_name.values()),
@@ -169,6 +180,7 @@ def _execute_ingress_lifecycle_node(
     end_cursor_int: int | None,
     use_color: bool,
     run_state: PythonNodeRunState,
+    result_store: Any | None,
     python_results_by_name: dict[str, PythonNodeExecutionResult],
     load_results_by_name: dict[str, LoadExecutionResult],
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
@@ -196,6 +208,7 @@ def _execute_ingress_lifecycle_node(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            result_store=result_store,
             load_results_by_name=load_results_by_name,
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
@@ -219,6 +232,7 @@ def _execute_ingress_lifecycle_node(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         run_state=run_state,
+        result_store=result_store,
         python_results_by_name=python_results_by_name,
         relation_targets=relation_targets,
         providers=providers,
@@ -244,6 +258,7 @@ def _execute_ingress_python_node(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
     run_state: PythonNodeRunState,
+    result_store: Any | None,
     python_results_by_name: dict[str, PythonNodeExecutionResult],
     relation_targets: dict[SqlResourceRef, str],
     providers: ProviderContainer | None,
@@ -274,6 +289,7 @@ def _execute_ingress_python_node(
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
+        result_store=result_store,
         providers=providers,
     )
     run_state.record_result(node_function=executable_node.function, result=result)
@@ -311,6 +327,7 @@ def _execute_ingress_loader(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
     use_color: bool,
+    result_store: Any | None,
     load_results_by_name: dict[str, LoadExecutionResult],
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
@@ -351,6 +368,12 @@ def _execute_ingress_loader(
         providers=providers,
     )
     load_results_by_name[node.name] = result
+    _persist_loader_result(
+        result_store=result_store,
+        loader_name=loader.name,
+        result=result,
+        run_id=run_id,
+    )
     if result.status == ExecutionStatus.SUCCESS:
         if identity_recorder is not None:
             identity_recorder(node.identity, source_entry.name)
@@ -369,6 +392,37 @@ def _execute_ingress_loader(
     return _load_result_to_lifecycle_result(node_name=node.name, result=result)
 
 
+def _persist_loader_result(
+    *,
+    result_store: Any | None,
+    loader_name: str,
+    result: LoadExecutionResult,
+    run_id: str,
+) -> None:
+    if result_store is None:
+        return
+    result_store.write(
+        NodeResultRecord(
+            node_type=PythonNodeKind.LOADER.value,
+            node_name=loader_name,
+            target_database=result_store.database,
+            target_schema=result_store.schema,
+            target_name=None,
+            run_id=run_id,
+            status=result.status.value,
+            payload={
+                "source_name": result.source_name,
+                "loader_name": result.loader_name,
+                "rows_loaded": result.rows_loaded,
+                "target": result.target,
+            },
+            metadata={},
+            error_message=result.error_message or result.skip_reason,
+            materialized=None,
+        )
+    )
+
+
 def _record_scheduler_skips(
     *,
     scheduler_result: LifecycleSchedulerResult,
@@ -376,6 +430,8 @@ def _record_scheduler_skips(
     source_by_loader_name: dict[str, SourceEntry],
     python_results_by_name: dict[str, PythonNodeExecutionResult],
     load_results_by_name: dict[str, LoadExecutionResult],
+    result_store: Any | None,
+    run_id: str,
 ) -> None:
     result: LifecycleNodeResult
     for result in scheduler_result.results:
@@ -385,10 +441,17 @@ def _record_scheduler_skips(
         if discovered_node.kind == PythonNodeKind.LOADER:
             source_entry: SourceEntry | None = source_by_loader_name.get(result.name)
             if source_entry is not None and result.name not in load_results_by_name:
-                load_results_by_name[result.name] = skipped_load_result(
+                skipped_result: LoadExecutionResult = skipped_load_result(
                     source_entry,
                     reason=result.skip_reason,
                     mode=result.skip_mode or SkipMode.HARD,
+                )
+                load_results_by_name[result.name] = skipped_result
+                _persist_loader_result(
+                    result_store=result_store,
+                    loader_name=result.name,
+                    result=skipped_result,
+                    run_id=run_id,
                 )
             continue
         if result.name not in python_results_by_name:

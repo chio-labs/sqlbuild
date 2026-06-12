@@ -267,7 +267,9 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
-                "    return ctx.result(payload=ctx.payload(prepare_orders), materialized=True)\n"
+                "    return ctx.result(\n"
+                "        payload=ctx.result_of(prepare_orders).payload, materialized=True\n"
+                "    )\n"
             ),
             "loaders/raw.py": (
                 "from assets.prepare import publish_prepared_orders\n"
@@ -300,7 +302,7 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=profile_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"
-                "    return ctx.result(metadata=ctx.payload(profile_fact_orders))\n"
+                "    return ctx.result(metadata=ctx.result_of(profile_fact_orders).payload)\n"
             ),
         },
     )

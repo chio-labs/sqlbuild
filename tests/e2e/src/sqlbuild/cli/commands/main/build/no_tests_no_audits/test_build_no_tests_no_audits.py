@@ -1333,7 +1333,7 @@ def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=publish_orders)\n"
                 "def notify_orders(ctx):\n"
-                "    metadata = ctx.metadata(publish_orders)\n"
+                "    metadata = ctx.result_of(publish_orders).metadata\n"
                 "    output = Path(__file__).parents[1].joinpath('notify.txt')\n"
                 "    output.write_text(str(metadata['published']))\n"
                 "    return ctx.result()\n"
@@ -1343,7 +1343,7 @@ def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes
                 "from tasks.fetch_orders import fetch_orders\n\n"
                 "@asset(depends_on=fetch_orders)\n"
                 "def publish_orders(ctx):\n"
-                "    payload = ctx.payload(fetch_orders)\n"
+                "    payload = ctx.result_of(fetch_orders).payload\n"
                 "    return ctx.result(payload=payload, metadata={'published': True})\n"
             ),
         },
@@ -1415,7 +1415,7 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
                 "from tasks.orders import summarize_loaded_orders\n\n"
                 "@asset(depends_on=summarize_loaded_orders)\n"
                 "def publish_loaded_orders(ctx):\n"
-                "    payload = ctx.payload(summarize_loaded_orders)\n"
+                "    payload = ctx.result_of(summarize_loaded_orders).payload\n"
                 "    return ctx.result(payload=payload, materialized=False)\n"
             ),
         },
@@ -1943,7 +1943,7 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
                 "from tasks.orders import summarize_stage_orders\n\n"
                 "@asset(depends_on=summarize_stage_orders)\n"
                 "def publish_stage_orders(ctx):\n"
-                "    payload = ctx.payload(summarize_stage_orders)\n"
+                "    payload = ctx.result_of(summarize_stage_orders).payload\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
             ),
         },
@@ -2096,7 +2096,7 @@ def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_ch
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=fetch_orders)\n"
                 "def publish_orders(ctx):\n"
-                "    payload = ctx.payload(fetch_orders)\n"
+                "    payload = ctx.result_of(fetch_orders).payload\n"
                 "    marker = Path(__file__).parents[1].joinpath('asset_ready.txt')\n"
                 "    marker.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
@@ -2350,7 +2350,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
-                "    payload = ctx.payload(prepare_orders)\n"
+                "    payload = ctx.result_of(prepare_orders).payload\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
                 "    marker.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
@@ -2389,7 +2389,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=profile_fact_orders)\n"
                 "def export_fact_orders(ctx):\n"
-                "    payload = ctx.payload(profile_fact_orders)\n"
+                "    payload = ctx.result_of(profile_fact_orders).payload\n"
                 "    return ctx.result(payload=payload, metadata={'exported': True})\n"
             ),
             "tasks/notify.py": (
@@ -2398,7 +2398,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=export_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"
-                "    payload = ctx.payload(export_fact_orders)\n"
+                "    payload = ctx.result_of(export_fact_orders).payload\n"
                 "    output = Path(__file__).parents[1].joinpath('notify.txt')\n"
                 "    output.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(metadata={'notified': True})\n"

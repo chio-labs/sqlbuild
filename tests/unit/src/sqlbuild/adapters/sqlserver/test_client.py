@@ -224,6 +224,45 @@ def test_given_source_freshness_table_when_rendering_indexes_then_sqlserver_uses
 @pytest.mark.parametrize(
     "test_case",
     [
+        SqlServerIndexSqlTestCase(
+            description="renders guarded lookup indexes for node result table",
+            database=None,
+            schema="analytics",
+            expected_statements=(
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+                "WHERE name = '_sqlbuild_node_results_latest_idx' "
+                "AND object_id = OBJECT_ID(N'analytics._sqlbuild_node_results')) "
+                "CREATE INDEX _sqlbuild_node_results_latest_idx "
+                "ON analytics._sqlbuild_node_results ("
+                "node_type, node_name, target_database, target_schema, target_name, status, "
+                "ts DESC, run_id DESC)",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+                "WHERE name = '_sqlbuild_node_results_run_id_idx' "
+                "AND object_id = OBJECT_ID(N'analytics._sqlbuild_node_results')) "
+                "CREATE INDEX _sqlbuild_node_results_run_id_idx "
+                "ON analytics._sqlbuild_node_results ("
+                "run_id, node_type, node_name, target_database, target_schema, target_name)",
+            ),
+        )
+    ],
+    ids=["renders guarded lookup indexes for node result table"],
+)
+def test_given_node_result_table_when_rendering_indexes_then_sqlserver_uses_lookup_keys(
+    test_case: SqlServerIndexSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_node_result_index_sqls(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlServerLatestReadSqlTestCase(
             description="renders windowed fingerprint latest read",
             database=None,

@@ -34,7 +34,9 @@ def run_ready_python_node(
     end_cursor_ts: datetime | None = None,
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
+    result_store: Any | None = None,
     providers: ProviderContainer | None = None,
+    persist_node_results: bool = True,
 ) -> PythonNodeExecutionResult:
     """Execute one scheduler-ready task/asset Python node."""
 
@@ -57,5 +59,7 @@ def run_ready_python_node(
         end_cursor_ts=end_cursor_ts,
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
+        result_store=result_store,
         providers=providers,
+        persist_node_results=persist_node_results,
     )

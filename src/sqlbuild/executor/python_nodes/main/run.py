@@ -31,6 +31,7 @@ def run_python_nodes(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     providers: ProviderContainer | None = None,
+    persist_node_results: bool = True,
 ) -> PythonNodeExecutorResult:
     """Execute task/asset Python nodes in dependency order."""
 
@@ -51,4 +52,5 @@ def run_python_nodes(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         providers=providers,
+        persist_node_results=persist_node_results,
     )

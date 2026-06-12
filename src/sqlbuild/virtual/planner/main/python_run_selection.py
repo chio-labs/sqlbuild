@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import PlanOutput
@@ -40,7 +41,7 @@ def build_virtual_python_run_selection(
     selected_python_names: frozenset[str] = planned_source_loader_python_names(
         plan_output=plan_output, python_graph=python_graph
     )
-    validation_sql_keys = frozenset(plan_output.selected_keys)
+    validation_sql_keys: frozenset[CompiledObjectKey] = frozenset(plan_output.selected_keys)
     if include_python:
         raw_select: tuple[str, ...] = select or selected_model_names
         if raw_select:

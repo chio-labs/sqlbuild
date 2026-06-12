@@ -18,6 +18,8 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonNodeStatus,
 )
+from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.python_nodes.helpers.results import (
     build_python_node_failure_result,
     evaluate_python_node_fan_in,
@@ -67,7 +69,9 @@ def execute_python_nodes(
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
+    result_store: Any | None = None,
     providers: ProviderContainer | None = None,
+    persist_node_results: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutorResult:
@@ -75,6 +79,16 @@ def execute_python_nodes(
 
     resolved_run_state: PythonNodeRunState = (
         run_state if run_state is not None else PythonNodeRunState()
+    )
+    result_store: Any | None = (
+        build_direct_node_result_store(
+            adapter=adapter,
+            connection=connection,
+            database=default_database,
+            schema=default_schema,
+        )
+        if persist_node_results
+        else None
     )
     node_by_name: dict[str, ExecutablePythonNode] = {node.name: node for node in nodes}
     node_by_dependency_key: dict[object | tuple[str, str], ExecutablePythonNode] = {
@@ -124,6 +138,7 @@ def execute_python_nodes(
             end_cursor_int=end_cursor_int,
             logger=logger,
             run_state=resolved_run_state,
+            result_store=result_store,
             providers=providers,
             sleep=sleep,
             monotonic=monotonic,
@@ -167,7 +182,9 @@ def execute_ready_python_node(
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
+    result_store: Any | None = None,
     providers: ProviderContainer | None = None,
+    persist_node_results: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutionResult:
@@ -193,6 +210,18 @@ def execute_ready_python_node(
         end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state if run_state is not None else PythonNodeRunState(),
+        result_store=result_store
+        if result_store is not None
+        else (
+            build_direct_node_result_store(
+                adapter=adapter,
+                connection=connection,
+                database=default_database,
+                schema=default_schema,
+            )
+            if persist_node_results
+            else None
+        ),
         providers=providers,
         sleep=sleep,
         monotonic=monotonic,
@@ -220,6 +249,7 @@ def _execute_ready_node(
     end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
+    result_store: Any | None,
     providers: ProviderContainer | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
@@ -229,20 +259,24 @@ def _execute_ready_node(
         upstream_results=upstream_results
     )
     if decision.action == PythonNodeFanInAction.SKIP:
-        return PythonNodeExecutionResult(
+        result: PythonNodeExecutionResult = PythonNodeExecutionResult(
             node_name=node.name,
             kind=node_kind,
             status=PythonNodeStatus.SKIPPED,
             skip_mode=decision.skip_mode,
             skip_reason=decision.reason,
         )
+        _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
+        return result
     if decision.action == PythonNodeFanInAction.BLOCK:
-        return PythonNodeExecutionResult(
+        result: PythonNodeExecutionResult = PythonNodeExecutionResult(
             node_name=node.name,
             kind=node_kind,
             status=PythonNodeStatus.FAILED,
             error_message=decision.reason,
         )
+        _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
+        return result
     context: TaskContext | AssetContext = _build_context(
         node=node,
         node_kind=node_kind,
@@ -263,6 +297,7 @@ def _execute_ready_node(
         end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state,
+        result_store=result_store,
         providers=providers,
     )
     try:
@@ -275,15 +310,41 @@ def _execute_ready_node(
             monotonic=monotonic,
         )
     except Exception as error:
-        return build_python_node_failure_result(
+        result = build_python_node_failure_result(
             node_name=node.name,
             kind=node_kind,
             error=error,
         )
-    return normalize_python_node_return(
+        _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
+        return result
+    result = normalize_python_node_return(
         node_name=node.name,
         kind=node_kind,
         returned=returned,
+    )
+    _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
+    return result
+
+
+def _persist_python_node_result(
+    *, result_store: Any | None, result: PythonNodeExecutionResult, run_id: str
+) -> None:
+    if result_store is None:
+        return
+    result_store.write(
+        NodeResultRecord(
+            node_type=result.kind.value,
+            node_name=result.node_name,
+            target_database=result_store.database,
+            target_schema=result_store.schema,
+            target_name=None,
+            run_id=run_id,
+            status=result.status.value,
+            payload=result.payload,
+            metadata=result.metadata,
+            error_message=result.error_message or result.skip_reason,
+            materialized=result.materialized,
+        )
     )
 
 
@@ -358,6 +419,7 @@ def _build_context(
     end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
+    result_store: Any | None,
     providers: ProviderContainer | None,
 ) -> TaskContext | AssetContext:
     context_logger: logging.Logger = logger or logging.getLogger(
@@ -375,6 +437,7 @@ def _build_context(
             logger=context_logger,
             statement_recorder=statement_recorder,
             run_state=run_state,
+            result_store=result_store,
             default_database=default_database,
             default_schema=default_schema,
             relation_targets=relation_targets,
@@ -400,6 +463,7 @@ def _build_context(
         logger=context_logger,
         statement_recorder=statement_recorder,
         run_state=run_state,
+        result_store=result_store,
         default_database=default_database,
         default_schema=default_schema,
         relation_targets=relation_targets,

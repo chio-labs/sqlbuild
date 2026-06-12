@@ -52,6 +52,7 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
         target="dev",
         vars={},
         is_reload=False,
+        default_schema="default_schema",
     )
 
     sql_name: str
@@ -102,6 +103,7 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
         target="dev",
         vars={},
         is_reload=False,
+        default_schema="default_schema",
     )
 
     sql_name: str

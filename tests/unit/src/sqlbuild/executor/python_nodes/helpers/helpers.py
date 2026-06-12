@@ -10,7 +10,7 @@ from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.assets import AssetContext
+from sqlbuild.assets import AssetContext, asset
 from sqlbuild.checks import CheckContext
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
@@ -30,7 +30,10 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.python_node_scheduler import unlock_downstream_python_nodes
 from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
 from sqlbuild.providers import Provider
@@ -38,7 +41,7 @@ from sqlbuild.refs import model
 from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.tasks import TaskContext
+from sqlbuild.tasks import TaskContext, task
 from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     build_intermediate_loader_asset_dependency_python_node_graph,
     build_orders_python_node_graph,
@@ -86,6 +89,44 @@ class PythonNodeContextTestAdapter(BaseAdapter):
         return f"result:{sql}"
 
 
+class PythonNodeContextTestResultStore:
+    """In-memory stand-in for persisted node result reads."""
+
+    def __init__(self, results: dict[tuple[str, str], tuple[NodeResultEnvelope, ...]]) -> None:
+        self._results: dict[tuple[str, str], tuple[NodeResultEnvelope, ...]] = results
+        self.written_records: list[NodeResultRecord] = []
+        self.database: str | None = None
+        self.schema: str | None = "default_schema"
+
+    def write(self, record: NodeResultRecord) -> None:
+        self.written_records.append(record)
+
+    def result_of(
+        self,
+        *,
+        node_type: str,
+        node_name: str,
+        run_id: str | None = None,
+        default: object,
+    ) -> NodeResultEnvelope | object:
+        del run_id
+        results: tuple[NodeResultEnvelope, ...] = self._results.get((node_type, node_name), ())
+        if results:
+            return results[0]
+        if default is not MISSING_DEFAULT:
+            return default
+        raise ExecutorInputError(f"No persisted result found for Python node '{node_name}'")
+
+    def results_of(
+        self,
+        *,
+        node_type: str,
+        node_name: str,
+        limit: int,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        return self._results.get((node_type, node_name), ())[:limit]
+
+
 def provider_task(ctx: TaskContext, slack_provider: ExecutionSlackProvider) -> dict[str, object]:
     return {"target": ctx.target, "provider": slack_provider.label}
 
@@ -129,6 +170,7 @@ def build_task_context(
     statement_recorder: StatementRecorder,
     logger_name: str,
     run_state: PythonNodeRunState | None = None,
+    result_store: object | None = None,
 ) -> TaskContext:
     return TaskContext(
         adapter=adapter,
@@ -141,6 +183,7 @@ def build_task_context(
         logger=logging.getLogger(logger_name),
         statement_recorder=statement_recorder,
         run_state=run_state,
+        result_store=result_store,
         default_database="default_db",
         default_schema="default_schema",
     )
@@ -152,6 +195,7 @@ def build_asset_context(
     statement_recorder: StatementRecorder,
     logger_name: str,
     run_state: PythonNodeRunState | None = None,
+    result_store: object | None = None,
 ) -> AssetContext:
     return AssetContext(
         adapter=adapter,
@@ -164,6 +208,7 @@ def build_asset_context(
         logger=logging.getLogger(logger_name),
         statement_recorder=statement_recorder,
         run_state=run_state,
+        result_store=result_store,
         default_database="default_db",
         default_schema="default_schema",
     )
@@ -175,6 +220,7 @@ def build_check_context(
     statement_recorder: StatementRecorder,
     logger_name: str,
     run_state: PythonNodeRunState | None = None,
+    result_store: object | None = None,
 ) -> CheckContext:
     return CheckContext(
         adapter=adapter,
@@ -187,19 +233,23 @@ def build_check_context(
         logger=logging.getLogger(logger_name),
         statement_recorder=statement_recorder,
         run_state=run_state,
+        result_store=result_store,
         default_database="default_db",
         default_schema="default_schema",
     )
 
 
+@task
 def upstream_task(_ctx: object) -> object:
     return None
 
 
+@task
 def skipped_upstream_task(_ctx: object) -> object:
     return None
 
 
+@task
 def fetch_orders(ctx: TaskContext) -> object:
     return ctx.result(
         payload={"file": "orders.json"},
@@ -207,13 +257,15 @@ def fetch_orders(ctx: TaskContext) -> object:
     )
 
 
+@asset(depends_on=(fetch_orders,))
 def export_orders(ctx: AssetContext) -> object:
-    payload: object = ctx.payload(fetch_orders)
-    metadata: object = ctx.metadata(fetch_orders)
+    upstream_result: NodeResultEnvelope = cast(NodeResultEnvelope, ctx.result_of(fetch_orders))
+    payload: object = upstream_result.payload
+    metadata: object = upstream_result.metadata
     if not isinstance(payload, dict) or not isinstance(metadata, dict):
         raise TypeError("Expected upstream payload and metadata dictionaries")
     payload_dict: dict[str, object] = cast(dict[str, object], payload)
-    metadata_dict: dict[str, object] = cast(dict[str, object], metadata)
+    metadata_dict: dict[str, object] = metadata
     file_name: object | None = payload_dict.get("file")
     if not isinstance(file_name, str):
         raise TypeError("Expected upstream file payload")
@@ -335,6 +387,7 @@ def ingress_calls() -> tuple[str, ...]:
     return tuple(INGRESS_CALLS)
 
 
+@task
 def prepare_ingress_orders(ctx: TaskContext) -> object:
     INGRESS_CALLS.append("prepare_ingress_orders")
     return ctx.result(payload={"prepared": True})
@@ -395,14 +448,19 @@ def read_side_calls() -> tuple[str, ...]:
     return tuple(READ_SIDE_CALLS)
 
 
+@task(depends_on=(model("stg_orders"),))
 def profile_stg_orders(ctx: TaskContext) -> object:
     READ_SIDE_CALLS.append("profile_stg_orders")
     return ctx.result(payload={"profiled": True})
 
 
+@asset(depends_on=(profile_stg_orders,))
 def export_stg_profile(ctx: AssetContext) -> object:
     READ_SIDE_CALLS.append("export_stg_profile")
-    return ctx.result(payload=ctx.payload(profile_stg_orders), materialized=False)
+    return ctx.result(
+        payload=cast(NodeResultEnvelope, ctx.result_of(profile_stg_orders)).payload,
+        materialized=False,
+    )
 
 
 def build_read_side_sql_task_asset_graph() -> PythonNodeGraph:
@@ -432,12 +490,15 @@ def build_read_side_sql_task_asset_graph() -> PythonNodeGraph:
     )
 
 
+@task(name="upstream_task")
 def check_upstream_task(_ctx: object) -> object:
     return {"rows": 3}
 
 
 def passing_python_check(ctx: CheckContext) -> object:
-    metadata: dict[str, object] = cast(dict[str, object], ctx.metadata(check_upstream_task))
+    metadata: dict[str, object] = cast(
+        NodeResultEnvelope, ctx.result_of(check_upstream_task)
+    ).metadata
     return ctx.pass_("passed", metadata={"rows": metadata["rows"]})
 
 
