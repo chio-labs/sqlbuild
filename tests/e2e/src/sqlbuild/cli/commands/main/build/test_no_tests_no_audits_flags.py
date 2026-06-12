@@ -2,80 +2,52 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from textwrap import dedent
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    prepare_inline_project,
-    run_sqb,
+import pytest
+
+from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    BuildNoTestsNoAuditsFlagE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    prepare_build_test_audit_flag_project,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+
+TEST_CASES: tuple[BuildNoTestsNoAuditsFlagE2ETestCase, ...] = (
+    BuildNoTestsNoAuditsFlagE2ETestCase(
+        description="no tests skips SQL tests but runs audits",
+        project_name="build_no_tests_project",
+        command=("--no-color", "build", "--no-tests"),
+        expected_stdout_fragments=("audit     not_null",),
+        unexpected_stdout_fragments=("test      test_orders",),
+    ),
+    BuildNoTestsNoAuditsFlagE2ETestCase(
+        description="no audits skips audits but runs SQL tests",
+        project_name="build_no_audits_project",
+        command=("--no-color", "build", "--no-audits"),
+        expected_stdout_fragments=("test      test_orders",),
+        unexpected_stdout_fragments=("audit     not_null",),
+    ),
 )
 
 
-def test_given_build_no_tests_when_building_then_skips_sql_tests_but_runs_audits(
+@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+def test_given_build_test_audit_flag_when_building_then_applies_execution_filter(
+    test_case: BuildNoTestsNoAuditsFlagE2ETestCase,
     tmp_path: Path,
 ) -> None:
-    project_dir: Path = _prepare_project(tmp_path=tmp_path, project_name="build_no_tests_project")
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "test      test_orders" not in result.stdout
-    assert "audit     not_null" in result.stdout
-
-
-def test_given_build_no_audits_when_building_then_skips_audits_but_runs_sql_tests(
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = _prepare_project(tmp_path=tmp_path, project_name="build_no_audits_project")
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-audits"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "test      test_orders" in result.stdout
-    assert "audit     not_null" not in result.stdout
-
-
-def _prepare_project(*, tmp_path: Path, project_name: str) -> Path:
-    return prepare_inline_project(
+    project_dir: Path = prepare_build_test_audit_flag_project(
         tmp_path=tmp_path,
-        project_name=project_name,
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                f"""
-                name = "{project_name}"
-                adapter = "duckdb"
-
-                [connection]
-                database = "warehouse.duckdb"
-                """
-            ).strip()
-            + "\n",
-            "models/orders.sql": dedent(
-                """
-                MODEL (
-                  materialized table,
-                  columns (order_id (audits [not_null])),
-                );
-
-                SELECT 1 AS order_id
-                """
-            ).strip()
-            + "\n",
-            "tests/unit/test_orders.sql": dedent(
-                """
-                TEST();
-
-                WITH
-                __ref__orders AS (SELECT 1 AS order_id),
-                __expected__orders AS (SELECT 1 AS order_id)
-                SELECT 1
-                """
-            ).strip()
-            + "\n",
-        },
+        project_name=test_case.project_name,
     )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    for fragment in test_case.unexpected_stdout_fragments:
+        assert fragment not in result.stdout
