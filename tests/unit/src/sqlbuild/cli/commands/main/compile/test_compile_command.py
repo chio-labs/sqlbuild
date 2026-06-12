@@ -137,6 +137,67 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
     assert not (project_dir / "target" / "manifest.json").exists()
 
 
+def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_static_compile_project(tmp_path)
+    started_messages: list[str] = []
+    completed_messages: list[str] = []
+
+    class FakeStdout:
+        def isatty(self) -> bool:
+            return True
+
+        def write(self, text: str) -> int:
+            return len(text)
+
+        def flush(self) -> None:
+            return None
+
+    class FakeStatusReporter:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def start(self, message: str) -> None:
+            started_messages.append(message)
+
+        def update(self, message: str) -> None:
+            started_messages.append(message)
+
+        def complete(self, message: str, *, blank_line_after: bool = False) -> None:
+            del blank_line_after
+            completed_messages.append(message)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(compile_command.sys, "stdout", FakeStdout())
+    monkeypatch.setattr(compile_command, "TransientStatusReporter", FakeStatusReporter)
+    monkeypatch.setattr(
+        compile_command,
+        "resolve_adapter",
+        lambda *args, **kwargs: NoConnectDuckDbAdapter(),
+    )
+
+    exit_code: int = run_compile(project_dir=project_dir, no_sql_validation=True)
+
+    assert exit_code == 0
+    assert started_messages == [
+        "Discovering project...",
+        "Compiling project graph...",
+        "Analyzing column lineage...",
+        "Validating model contracts...",
+        "Writing compiled artifacts...",
+    ]
+    assert len(completed_messages) == 5
+    assert completed_messages[0].startswith("Discovered project. (")
+    assert completed_messages[1].startswith("Compiled project graph. (")
+    assert completed_messages[2].startswith("Analyzed column lineage. (")
+    assert completed_messages[3].startswith("Validated model contracts. (")
+    assert completed_messages[4].startswith("Wrote compiled artifacts. (")
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
