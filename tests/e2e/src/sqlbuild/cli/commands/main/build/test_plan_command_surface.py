@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waff
 TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
     PlanCommandBuildE2ETestCase(
         description="plan select no-color scopes to marts",
-        command=("--no-color", "plan", "--select", "path:models/marts"),
+        command=("--no-color", "plan", "--select", "path:models/marts", "--force"),
         expected_exit_code=0,
         expected_fragments=(
             "Plan ready (10 selected)",
@@ -35,6 +35,7 @@ TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
             "plan",
             "--select",
             "/models/marts",
+            "--force",
             "--exclude",
             "hourly_order_activity",
         ),

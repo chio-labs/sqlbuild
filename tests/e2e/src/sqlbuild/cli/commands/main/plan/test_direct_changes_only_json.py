@@ -113,7 +113,7 @@ def test_given_first_run_when_planning_json_then_reports_missing_identity(
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--json"),
+        command=("--no-color", "plan", "--json", "--force"),
         project_dir=project_dir,
     )
 
@@ -161,7 +161,7 @@ def test_given_current_build_when_planning_json_then_reports_current_identity(
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--json"),
+        command=("--no-color", "plan", "--json", "--force"),
         project_dir=project_dir,
     )
 
