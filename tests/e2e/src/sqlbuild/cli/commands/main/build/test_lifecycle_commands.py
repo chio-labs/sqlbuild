@@ -132,7 +132,7 @@ def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are
     assert test_case.expected_run_fragment in run_result.stdout
 
     rerun_plan_json: subprocess.CompletedProcess[str] = run_sqb(
-        command=("plan", "--json"),
+        command=("plan", "--json", "--force"),
         project_dir=project_dir,
     )
     assert rerun_plan_json.returncode == test_case.expected_exit_code, (

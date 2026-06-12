@@ -973,7 +973,7 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
 
     explicit_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--select", "fact_orders"),
+        command=("--no-color", "build", "--select", "fact_orders", "--force"),
         project_dir=project_dir,
     )
     assert explicit_build_result.returncode == 0, explicit_build_result.stderr
