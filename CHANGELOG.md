@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.31.0](https://github.com/chio-labs/sqlbuild/compare/v0.30.1...v0.31.0) (2026-06-12)
+
+
+### Features
+
+* add audit always-run reuse guard ([9197f89](https://github.com/chio-labs/sqlbuild/commit/9197f8988136abd7d13d5e937b81d2a9b1887fd7))
+* add audit gate identity hashing ([5729672](https://github.com/chio-labs/sqlbuild/commit/5729672c007ea94252733b7c13864a4d6d92b30d))
+* add audit gate reuse proof decisions ([c5c38e6](https://github.com/chio-labs/sqlbuild/commit/c5c38e6032e8a2dfaa9e787a6094770ebb379690))
+* add direct plan identity diagnostics ([c58a833](https://github.com/chio-labs/sqlbuild/commit/c58a833f2a3c1111c0cfceabb45686c4dc003015))
+* add direct replay-on-change planning ([5a6d8d8](https://github.com/chio-labs/sqlbuild/commit/5a6d8d89b8955f45b8957ac8ad73afd26d9874f2))
+* add direct reuse planning decisions ([d3c3202](https://github.com/chio-labs/sqlbuild/commit/d3c32027f6540a9d7c4ea29d05427fb5b0bea4af))
+* add direct target reuse config ([83c0deb](https://github.com/chio-labs/sqlbuild/commit/83c0deb6197fe4d6c34768dee8f827367aadcda2))
+* add run despite unchanged planning ([5dc3973](https://github.com/chio-labs/sqlbuild/commit/5dc3973e613efb4c88bfe1f12a681091464e4d68))
+* add standard relation reuse execution ([7805ffa](https://github.com/chio-labs/sqlbuild/commit/7805ffa459ab39a4cd4c13058ce47a89ee4b2bc9))
+* add standard reuse origin plumbing ([6b52ea6](https://github.com/chio-labs/sqlbuild/commit/6b52ea67cdb7c8b79352b29da93c5174b481d12b))
+* add virtual seed state refs ([a996052](https://github.com/chio-labs/sqlbuild/commit/a996052e3429da6ff912de0f128e07cdcc0f3362))
+* complete virtual seed lifecycle ([d266670](https://github.com/chio-labs/sqlbuild/commit/d2666709dea604baf49f52726ddec38e80794e5c))
+* compute python node identities ([2315096](https://github.com/chio-labs/sqlbuild/commit/231509668d3f8f568c89a32cb65106d2d0a4af00))
+* enforce hard-copy relation reuse ([6f864dd](https://github.com/chio-labs/sqlbuild/commit/6f864dd592f2e17fc97f2868874e4bc04de9fd73))
+* gate expanded polyglot compile analysis ([e806367](https://github.com/chio-labs/sqlbuild/commit/e806367541149d6198f273aef630ce9f350f6803))
+* generate structure skill ([c059bcd](https://github.com/chio-labs/sqlbuild/commit/c059bcda7b0c804f873928c57627d15d0bf79a3b))
+* harden standard relation reuse coverage ([819f592](https://github.com/chio-labs/sqlbuild/commit/819f5921b127d984941d85a210e86482848ce5a7))
+* include seeds in virtual version identity ([d7e555c](https://github.com/chio-labs/sqlbuild/commit/d7e555c6a996448f9a8d7d8de8a1c77003b0b401))
+* make change pruning the default ([8daaf63](https://github.com/chio-labs/sqlbuild/commit/8daaf636714de7d311bb848eeb1a246f77d7d7ac))
+* make change pruning the default ([425463c](https://github.com/chio-labs/sqlbuild/commit/425463c08bc20e94512bfe5e9d8326077766eddf))
+* persist audit gate fingerprint metadata ([7b32376](https://github.com/chio-labs/sqlbuild/commit/7b32376f55add2d7d26d94789e22dd99e908d9e2))
+* persist python node identities ([27e47a7](https://github.com/chio-labs/sqlbuild/commit/27e47a7a95b7f1b301d9d48cde1878fa4622caa8))
+* physicalize virtual seed artifacts ([d296a18](https://github.com/chio-labs/sqlbuild/commit/d296a18a5fa950d0b4e7405c12f343fcb5e738a2))
+* prune direct state history in janitor ([1fb16ad](https://github.com/chio-labs/sqlbuild/commit/1fb16ad5fad8ef51e16956b890b6c2b9114f68b8))
+* remove sqlglot runtime dependency ([82d432e](https://github.com/chio-labs/sqlbuild/commit/82d432e97e0632337e563151ca89cf77d60d9bbb))
+* reuse origin audit proof for table reuse ([2e611e1](https://github.com/chio-labs/sqlbuild/commit/2e611e14141f01bc0c449853dd30248c0bae4247))
+* show compile phase progress ([12c642a](https://github.com/chio-labs/sqlbuild/commit/12c642a59dab3c065634b2e2e8de7f3ba017a4d6))
+* snapshot direct reuse source state ([bbf2c58](https://github.com/chio-labs/sqlbuild/commit/bbf2c5833b503171528e8447834026a82da96171))
+* store virtual python identities in state ([5c4edeb](https://github.com/chio-labs/sqlbuild/commit/5c4edebb0f75abb43b57e8023b3dd6cae2078c89))
+* store virtual python identities in state ([b47a42e](https://github.com/chio-labs/sqlbuild/commit/b47a42e0ef8a475a6a1b1773fd27241ec2a239a7))
+* support custom baseline relation reuse ([76282ed](https://github.com/chio-labs/sqlbuild/commit/76282ed4cbf3d4e6dcf1a13fd0a49f9600b9cff5))
+* support run despite unchanged in virtual planning ([d6480f0](https://github.com/chio-labs/sqlbuild/commit/d6480f00dca67c2efa882aef72fce9ab8a02e8df))
+* support snapshot relation reuse seeding ([efa8c5e](https://github.com/chio-labs/sqlbuild/commit/efa8c5efba2cb64ca0572de9ba97fe83d55d49dd))
+* support virtual seed state planning ([08146a5](https://github.com/chio-labs/sqlbuild/commit/08146a5c523d53a0dca5cd5c966db002475b376b))
+* track seed changes in standard planning ([538faf8](https://github.com/chio-labs/sqlbuild/commit/538faf8e0a54a13e2470250a7413e523170cf045))
+* use compact polyglot query analysis ([7c42dfa](https://github.com/chio-labs/sqlbuild/commit/7c42dfac83a70a90fabf82497dfb68bae7a9ee3e))
+
+
+### Bug Fixes
+
+* align virtual seed artifact selection ([01e82b2](https://github.com/chio-labs/sqlbuild/commit/01e82b21f069ba4897d230fccaacacfa625cadea))
+* harden metadata state handling ([71acc4b](https://github.com/chio-labs/sqlbuild/commit/71acc4b3adab3200179513192c9f3d2d27317970))
+* keep required functions in pruned plans ([f082fa7](https://github.com/chio-labs/sqlbuild/commit/f082fa7b5f47213f79135af631e6924e4175b9dd))
+* normalize databricks string casts ([261b9a2](https://github.com/chio-labs/sqlbuild/commit/261b9a2d68cccab43d9ee939988036767d5e82e0))
+* render scenario relation names through the adapter ([aeb7956](https://github.com/chio-labs/sqlbuild/commit/aeb79565973e5348d88c6fa6e4ba82a13d9c4d0f))
+* repair sqlserver virtual test config ([abb6557](https://github.com/chio-labs/sqlbuild/commit/abb65570dcc77d397a37e4d1879855db35a9e6cc))
+* replace exception-swallowing existence probes with adapter metadata checks ([c55248d](https://github.com/chio-labs/sqlbuild/commit/c55248d50d4d4a0f360ea8a5c55352e48201093d))
+* restore bigquery regression coverage ([05ecaee](https://github.com/chio-labs/sqlbuild/commit/05ecaee8c36ccf6f3fe0eda28565ebf4ed45154a))
+* update reuse audit output expectations ([efa5770](https://github.com/chio-labs/sqlbuild/commit/efa5770bdf474e255371424489d55727a7b95a87))
+
+
+### Performance Improvements
+
+* expand compact sql analysis usage ([a2b30df](https://github.com/chio-labs/sqlbuild/commit/a2b30df23afd62747d6bbf467cf343e66d41a84e))
+* read latest direct state in SQL ([616284b](https://github.com/chio-labs/sqlbuild/commit/616284b892fc24d08bc69c88bfbc96fa605ef3cf))
+
+
+### Documentation
+
+* refresh project readme ([bd92c31](https://github.com/chio-labs/sqlbuild/commit/bd92c3185fe8d705e7089c3e090289cdfe75b2ee))
+
 ## [0.30.1](https://github.com/chio-labs/sqlbuild/compare/v0.30.0...v0.30.1) (2026-06-08)
 
 
