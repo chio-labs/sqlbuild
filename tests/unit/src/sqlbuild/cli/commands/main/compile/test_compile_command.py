@@ -8,10 +8,11 @@ import pytest
 
 from sqlbuild.cli.commands.main import compile as compile_command
 from sqlbuild.cli.commands.main.compile import run_compile
+from sqlbuild.cli.commands.main.helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands.main.helpers.compile import status as compile_status
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileCommandTestCase,
     CompileDagArtifactTestCase,
@@ -80,7 +81,7 @@ CONTRACT_DIAGNOSTIC_TEST_CASES: tuple[CompileCommandTestCase, ...] = (
     ),
 )
 
-LINEAGE_MODE_TEST_CASES: tuple[CompileLineageModeTestCase, ...] = (
+LINEAGE_ANALYSIS_MODE_TEST_CASES: tuple[CompileLineageModeTestCase, ...] = (
     CompileLineageModeTestCase(
         description="uses fast lineage by default",
         lineage_mode=CompileLineageMode.FAST,
@@ -90,11 +91,6 @@ LINEAGE_MODE_TEST_CASES: tuple[CompileLineageModeTestCase, ...] = (
         description="uses rich lineage when requested",
         lineage_mode=CompileLineageMode.RICH,
         expected_lineage_mode_values=(ColumnLineageMode.RICH.value,),
-    ),
-    CompileLineageModeTestCase(
-        description="skips lineage when disabled",
-        lineage_mode=CompileLineageMode.NONE,
-        expected_lineage_mode_values=(),
     ),
 )
 
@@ -418,34 +414,36 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_MODE_TEST_CASES,
-    ids=[case.description for case in LINEAGE_MODE_TEST_CASES],
+    LINEAGE_ANALYSIS_MODE_TEST_CASES,
+    ids=[case.description for case in LINEAGE_ANALYSIS_MODE_TEST_CASES],
 )
-def test_given_lineage_mode_when_running_compile_then_uses_expected_lineage_analyzer(
+def test_given_lineage_mode_when_resolving_compile_analysis_then_returns_expected_mode(
     test_case: CompileLineageModeTestCase,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project_dir: Path = prepare_static_compile_project(tmp_path)
-    received_modes: list[ColumnLineageMode] = []
-    monkeypatch.setattr(
-        compile_command,
-        "resolve_adapter",
-        lambda *args, **kwargs: NoConnectDuckDbAdapter(),
+    mode: ColumnLineageMode = compile_lineage.compile_analysis_lineage_mode(test_case.lineage_mode)
+
+    assert (mode.value,) == test_case.expected_lineage_mode_values
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileLineageModeTestCase(
+            description="skips lineage when disabled",
+            lineage_mode=CompileLineageMode.NONE,
+            expected_lineage_mode_values=(),
+        )
+    ],
+    ids=["skips lineage when disabled"],
+)
+def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyzer(
+    test_case: CompileLineageModeTestCase,
+) -> None:
+    lineage: object = compile_lineage.build_compile_lineage(
+        graph=cast(ProjectGraph, object()),
+        dialect=None,
+        mode=test_case.lineage_mode,
     )
 
-    def build_lineage_spy(*args: object, **kwargs: object) -> ProjectColumnLineage:
-        del args
-        received_modes.append(cast(ColumnLineageMode, kwargs["mode"]))
-        return ProjectColumnLineage(models={}, edges=())
-
-    monkeypatch.setattr(compile_command, "build_project_column_lineage", build_lineage_spy)
-
-    exit_code: int = run_compile(
-        project_dir=project_dir,
-        no_sql_validation=True,
-        lineage_mode=test_case.lineage_mode,
-    )
-
-    assert exit_code == 0
-    assert tuple(mode.value for mode in received_modes) == test_case.expected_lineage_mode_values
+    assert lineage is None
+    assert test_case.expected_lineage_mode_values == ()
