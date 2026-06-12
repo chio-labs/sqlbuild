@@ -492,12 +492,13 @@ def _append_python_identity_diff(lines: list[str], entry: PythonPlanEntry) -> No
     if not source_diff and not dependency_diff:
         return
 
-    lines.append("    python diff:")
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(style.label("    python diff:"))
     if source_diff:
-        lines.append("      source diff:")
+        lines.append(style.label("      source diff:"))
         lines.extend(source_diff)
     if dependency_diff:
-        lines.append("      dependency diff:")
+        lines.append(style.label("      dependency diff:"))
         lines.extend(dependency_diff)
 
 
@@ -834,7 +835,8 @@ def _append_schema_diff(lines: list[str], entry: ModelPlanEntry) -> None:
 
     if not entry.schema_findings:
         return
-    lines.append("    schema diff:")
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(style.label("    schema diff:"))
     lines.extend(_format_schema_findings(entry.schema_findings))
 
 
@@ -845,7 +847,8 @@ def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
         return
     if entry.reason != PlanReason.QUERY_CHANGED:
         return
-    lines.append("    query diff:")
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(style.label("    query diff:"))
     lines.extend(_format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
 
 
@@ -860,7 +863,8 @@ def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
     current_config: str = _format_config_json(entry.fingerprint_metadata_json)
     if previous_config == current_config:
         return
-    lines.append("    config diff:")
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(style.label("    config diff:"))
     lines.extend(_format_query_diff(previous_config, current_config))
 
 
@@ -1163,7 +1167,8 @@ def _format_function_entry(
             policy_value: str = _backfill_value(function_entry.backfill.action, duration)
             lines.append(f"    policy: replay_on_change={policy_value}")
         if function_entry.previous_query_sql is not None:
-            lines.append("    query diff:")
+            style: CliStyle = CliStyle(use_color=True)
+            lines.append(style.label("    query diff:"))
             lines.extend(
                 _format_query_diff(
                     function_entry.previous_query_sql, function_entry.fingerprint_query_sql
@@ -1338,36 +1343,64 @@ def _format_standard_source_freshness_metadata(
     )
     if not observed_source_names and not unknown_source_names:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(section_header_style("Source freshness"))
-    lines.append(f"  observed: {len(observed_source_names)}")
+    lines.append(_source_freshness_count_line(style, "observed", observed_source_names))
     if observed_source_names:
         lines.append(
-            "  observed set: "
-            + _format_capped_name_list(observed_source_names, display_options=display_options)
+            _source_freshness_set_line(
+                style,
+                "observed set",
+                observed_source_names,
+                display_options=display_options,
+            )
         )
-    lines.append(f"  changed: {len(changed_source_names)}")
+    lines.append(
+        _source_freshness_count_line(style, "changed", changed_source_names, warn_nonzero=True)
+    )
     if changed_source_names:
         lines.append(
-            "  changed set: "
-            + _format_capped_name_list(changed_source_names, display_options=display_options)
+            _source_freshness_set_line(
+                style,
+                "changed set",
+                changed_source_names,
+                display_options=display_options,
+                warn=True,
+            )
         )
-    lines.append(f"  unchanged: {len(unchanged_source_names)}")
+    lines.append(_source_freshness_count_line(style, "unchanged", unchanged_source_names))
     if unchanged_source_names:
         lines.append(
-            "  unchanged set: "
-            + _format_capped_name_list(unchanged_source_names, display_options=display_options)
+            _source_freshness_set_line(
+                style,
+                "unchanged set",
+                unchanged_source_names,
+                display_options=display_options,
+            )
         )
-    lines.append(f"  unknown: {len(unknown_source_names)}")
+    lines.append(
+        _source_freshness_count_line(style, "unknown", unknown_source_names, warn_nonzero=True)
+    )
     if unknown_source_names:
         lines.append(
-            "  unknown set: "
-            + _format_capped_name_list(unknown_source_names, display_options=display_options)
+            _source_freshness_set_line(
+                style,
+                "unknown set",
+                unknown_source_names,
+                display_options=display_options,
+                warn=True,
+            )
         )
     if stale_model_names:
         lines.append(
-            "  source-stale models: "
-            + _format_capped_name_list(stale_model_names, display_options=display_options)
+            _source_freshness_set_line(
+                style,
+                "source-stale models",
+                stale_model_names,
+                display_options=display_options,
+                warn=True,
+            )
         )
 
 
@@ -1399,13 +1432,57 @@ def _metadata_string_tuple(raw_value: object | None) -> tuple[str, ...]:
     return tuple(str(item) for item in raw_value) if isinstance(raw_value, (tuple, list)) else ()
 
 
-def _format_capped_name_list(names: tuple[str, ...], *, display_options: DisplayOptions) -> str:
+def _source_freshness_count_line(
+    style: CliStyle,
+    label: str,
+    names: tuple[str, ...],
+    *,
+    warn_nonzero: bool = False,
+) -> str:
+    count_text: str = str(len(names))
+    styled_count: str
+    if warn_nonzero and names:
+        styled_count = style.warning(count_text)
+    elif not names:
+        styled_count = style.muted(count_text)
+    else:
+        styled_count = count_text
+    return f"  {style.label(label + ':')} {styled_count}"
+
+
+def _source_freshness_set_line(
+    style: CliStyle,
+    label: str,
+    names: tuple[str, ...],
+    *,
+    display_options: DisplayOptions,
+    warn: bool = False,
+) -> str:
+    formatted_names: str = _format_capped_name_list(
+        names,
+        display_options=display_options,
+        name_style=style.warning if warn else style.object_name,
+    )
+    return f"  {style.label(label + ':')} {formatted_names}"
+
+
+def _format_capped_name_list(
+    names: tuple[str, ...],
+    *,
+    display_options: DisplayOptions,
+    name_style: Callable[[str], str] | None = None,
+) -> str:
     """Format a capped comma-separated name list."""
 
     limit: int | None = display_options.max_entries_per_section
     visible_names: tuple[str, ...] = names if limit is None else names[:limit]
     remaining_count: int = len(names) - len(visible_names)
-    base: str = ", ".join(visible_names)
+    rendered_names: tuple[str, ...] = (
+        visible_names
+        if name_style is None
+        else tuple(name_style(name) for name in visible_names)
+    )
+    base: str = ", ".join(rendered_names)
     if remaining_count <= 0:
         return base
     return f"{base}, ... (+{remaining_count} more; use {display_options.overflow_flag} to show all)"
@@ -1486,6 +1563,8 @@ def _format_query_diff(previous: str, current: str) -> list[str]:
             result.append(style.success(formatted))
         elif stripped.startswith("-") and not stripped.startswith("---"):
             result.append(style.error(formatted))
+        elif stripped.startswith(("---", "+++", "@@")):
+            result.append(style.muted(formatted))
         else:
             result.append(formatted)
     return result

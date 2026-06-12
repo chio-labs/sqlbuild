@@ -1052,6 +1052,40 @@ COLOR_TEST_CASES: list[FormatPlanColorTestCase] = [
             "\033[2mused by 1 selected Python surface\033[0m",
         ),
     ),
+    FormatPlanColorTestCase(
+        description="styles source freshness and diff metadata semantically",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.QUERY_CHANGED,
+                    previous_query_sql="SELECT old_amount FROM raw_orders",
+                ),
+            ),
+            metadata={
+                "standard_source_freshness": {
+                    "observed_source_names": ("raw_orders",),
+                    "changed_source_names": ("raw_orders",),
+                    "unchanged_source_names": (),
+                    "unknown_source_names": (),
+                    "stale_model_names": ("fact_orders",),
+                }
+            },
+        ),
+        expected_fragments=(
+            "\033[2mobserved:\033[0m 1",
+            "\033[2mobserved set:\033[0m \033[34m\033[1mraw_orders\033[0m",
+            "\033[2mchanged:\033[0m \033[33m1\033[0m",
+            "\033[2mchanged set:\033[0m \033[33mraw_orders\033[0m",
+            "\033[2munchanged:\033[0m \033[2m0\033[0m",
+            "\033[2msource-stale models:\033[0m \033[33mfact_orders\033[0m",
+            "\033[2m    query diff:\033[0m",
+            "\033[2m      --- previous\033[0m",
+            "\033[2m      +++ current\033[0m",
+            "\033[2m      @@",
+        ),
+    ),
 ]
 
 
