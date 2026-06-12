@@ -26,6 +26,8 @@ class MainTestCase:
     expected_debug: bool = False
     expected_json: bool = False
     expected_json_output_path: Path | None = None
+    expected_run_tests: bool = True
+    expected_run_audits: bool = True
     expected_fail_on_error: bool = False
     expected_fail_on_stale: bool = False
     expected_state: bool = False

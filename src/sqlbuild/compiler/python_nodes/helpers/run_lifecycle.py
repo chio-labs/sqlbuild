@@ -1,4 +1,4 @@
-"""Lifecycle classification for `sqb run` SQL/Python selections."""
+"""Lifecycle classification for build-style SQL/Python selections."""
 
 from __future__ import annotations
 

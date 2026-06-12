@@ -99,12 +99,6 @@ EXECUTION_JSON_TEST_CASES: list[MainTestCase] = [
         expected_json=True,
     ),
     MainTestCase(
-        description="dispatches run json flag",
-        argv=["run", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
         description="dispatches test json flag",
         argv=["test", "--json"],
         expected_exit_code=0,
@@ -172,6 +166,11 @@ COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
     MainTestCase(
         description="returns parser error for command local no color",
         argv=["plan", "--no-color"],
+        expected_exit_code=2,
+    ),
+    MainTestCase(
+        description="returns parser error for removed top level run command",
+        argv=["run"],
         expected_exit_code=2,
     ),
 ]
@@ -1042,7 +1041,6 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
         argv=test_case.argv,
         handlers=build_handlers(
             run_build=record_json_handler,
-            run_run=record_json_handler,
             run_test=record_json_handler,
             run_audit=record_json_handler,
             run_seed=record_json_handler,
@@ -2052,6 +2050,25 @@ BUILD_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
         expected_exit_code=5,
         expected_reload=True,
     ),
+    MainTestCase(
+        description="passes no tests to build handler",
+        argv=["build", "--no-tests"],
+        expected_exit_code=5,
+        expected_run_tests=False,
+    ),
+    MainTestCase(
+        description="passes no audits to build handler",
+        argv=["build", "--no-audits"],
+        expected_exit_code=5,
+        expected_run_audits=False,
+    ),
+    MainTestCase(
+        description="passes no tests and no audits to build handler",
+        argv=["build", "--no-tests", "--no-audits"],
+        expected_exit_code=5,
+        expected_run_tests=False,
+        expected_run_audits=False,
+    ),
 ]
 
 
@@ -2064,7 +2081,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool]
+        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool, bool, bool]
     ] = []
 
     def run_build(
@@ -2090,6 +2107,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         cli_vars: dict[str, object] | None = None,
         include_stale_upstreams: bool = False,
         force: bool = False,
+        run_tests: bool = True,
+        run_audits: bool = True,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
@@ -2118,6 +2137,8 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 reload_sources,
                 allow_snapshot_full_refresh,
                 allow_snapshot_schema_change,
+                run_tests,
+                run_audits,
                 debug,
             )
         )
@@ -2139,114 +2160,9 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_reload,
             test_case.expected_allow_snapshot_full_refresh,
             test_case.expected_allow_snapshot_schema_change,
+            test_case.expected_run_tests,
+            test_case.expected_run_audits,
             test_case.expected_debug,
-        )
-    ]
-
-
-RUN_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="passes full refresh flag to run handler",
-        argv=["run", "--full-refresh"],
-        expected_exit_code=6,
-        expected_full_refresh=True,
-    ),
-    MainTestCase(
-        description="passes no load to run handler",
-        argv=["run", "--no-load"],
-        expected_exit_code=6,
-        expected_load_sources=False,
-    ),
-    MainTestCase(
-        description="passes load to run handler",
-        argv=["run", "--load"],
-        expected_exit_code=6,
-        expected_load_sources=True,
-    ),
-    MainTestCase(
-        description="passes reload to run handler",
-        argv=["run", "--reload"],
-        expected_exit_code=6,
-        expected_reload=True,
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    RUN_EXECUTION_FLAG_TEST_CASES,
-    ids=[case.description for case in RUN_EXECUTION_FLAG_TEST_CASES],
-)
-def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
-    test_case: MainTestCase,
-) -> None:
-    received_args: list[tuple[bool, bool | None, bool, bool, bool]] = []
-
-    def run_run(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        defer_sources_to: str | None,
-        cursor_overrides: object,
-        no_color: bool,
-        fail_fast: bool,
-        full_refresh: bool,
-        load_sources: bool | None,
-        reload_sources: bool,
-        include_python: bool,
-        allow_snapshot_full_refresh: bool,
-        allow_snapshot_schema_change: bool,
-        concurrency: int | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool = False,
-        debug: bool = False,
-        cli_vars: dict[str, object] | None = None,
-        force: bool = False,
-        json_output: bool = False,
-        json_output_path: Path | None = None,
-    ) -> int:
-        del project_dir
-        del no_sql_validation
-        del defer_to
-        del defer_sources_to
-        del cursor_overrides
-        del no_color
-        del fail_fast
-        del concurrency
-        del select
-        del exclude
-        del verbose
-        del debug
-        del cli_vars
-        del force
-        del json_output
-        del json_output_path
-        del include_python
-        received_args.append(
-            (
-                full_refresh,
-                load_sources,
-                reload_sources,
-                allow_snapshot_full_refresh,
-                allow_snapshot_schema_change,
-            )
-        )
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=test_case.argv,
-        handlers=build_handlers(run_run=run_run),
-    )
-
-    assert exit_code == test_case.expected_exit_code
-    assert received_args == [
-        (
-            test_case.expected_full_refresh,
-            test_case.expected_load_sources,
-            test_case.expected_reload,
-            False,
-            False,
         )
     ]
 

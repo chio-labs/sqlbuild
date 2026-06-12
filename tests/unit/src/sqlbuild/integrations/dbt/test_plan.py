@@ -25,7 +25,9 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         command="run",
         dbt_command_argv=("dbt", "run", "--select", "tag:nightly"),
         dbt_ls_unique_ids=("model.analytics.int_orders",),
-        sqlbuild_command_argvs=(("sqb", "run", "--select", "fact_orders"),),
+        sqlbuild_command_argvs=(
+            ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_orders"),
+        ),
         selection_sqlbuild_model_names=("fact_orders", "mart_orders"),
         selection_dbt_required_unique_ids=(),
         selection_dbt_anchor_terms=(),
@@ -55,7 +57,9 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         command="run",
         dbt_command_argv=("dbt", "run", "--select", "local_only"),
         dbt_ls_unique_ids=(),
-        sqlbuild_command_argvs=(("sqb", "run", "--select", "local_only"),),
+        sqlbuild_command_argvs=(
+            ("sqb", "build", "--no-tests", "--no-audits", "--select", "local_only"),
+        ),
         selection_sqlbuild_model_names=("local_only",),
         selection_dbt_required_unique_ids=(),
         selection_dbt_anchor_terms=(),
@@ -105,7 +109,9 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         command="run",
         dbt_command_argv=("dbt", "run", "--select", "model.analytics.int_orders"),
         dbt_ls_unique_ids=(),
-        sqlbuild_command_argvs=(("sqb", "run", "--select", "fact_orders"),),
+        sqlbuild_command_argvs=(
+            ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_orders"),
+        ),
         selection_sqlbuild_model_names=("fact_orders",),
         selection_dbt_required_unique_ids=("model.analytics.int_orders",),
         selection_dbt_anchor_terms=(),
@@ -158,7 +164,9 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         command="run",
         dbt_command_argv=("dbt", "run", "--select", "package:stripe+"),
         dbt_ls_unique_ids=("model.stripe.stg_charges",),
-        sqlbuild_command_argvs=(("sqb", "run", "--select", "fact_charges"),),
+        sqlbuild_command_argvs=(
+            ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_charges"),
+        ),
         selection_sqlbuild_model_names=("fact_charges",),
         selection_dbt_required_unique_ids=("model.stripe.stg_charges",),
         selection_dbt_anchor_terms=("package:stripe+",),

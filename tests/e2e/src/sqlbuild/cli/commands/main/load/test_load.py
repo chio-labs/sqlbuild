@@ -520,7 +520,14 @@ def test_given_chained_loader_project_when_building_source_model_then_runs_loade
     [
         SourceLoaderSchemaEvolutionE2ETestCase(
             description="run auto-loads intermediate loader dependencies",
-            command=("--no-color", "run", "--select", "+fact_events"),
+            command=(
+                "--no-color",
+                "build",
+                "--no-tests",
+                "--no-audits",
+                "--select",
+                "+fact_events",
+            ),
             expected_rows=((1, "loaded"), (2, "loaded")),
         )
     ],

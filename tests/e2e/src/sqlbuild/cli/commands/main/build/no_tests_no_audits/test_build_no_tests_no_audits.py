@@ -1,4 +1,4 @@
-"""E2E tests for sqb run command."""
+"""E2E tests for sqb build --no-tests --no-audits command."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.run._test_types import RunE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.build.no_tests_no_audits._test_types import (
+    RunE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
     prepare_waffle_shop,
@@ -30,7 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             expected_table_names=("orders", "hook_log"),
             expected_view_names=(),
             expected_output_fragments=(
-                "Execution  sqb run",
+                "Execution  sqb build",
                 "table     orders",
                 "pre_hook  python  log_hook",
                 "post_hook python  log_hook",
@@ -98,7 +100,7 @@ def test_given_project_with_python_hooks_when_running_run_then_hooks_execute(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     db_path: Path = project_dir / "python_hooks_run_project.duckdb"
@@ -144,7 +146,7 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
     db_path: Path = project_dir / "waffle_shop.duckdb"
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"), project_dir=project_dir
+        command=("--no-color", "build", "--no-tests", "--no-audits"), project_dir=project_dir
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
@@ -202,7 +204,7 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
         },
     )
     initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     assert initial_run_result.returncode == test_case.expected_exit_code, (
@@ -210,7 +212,7 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
 
@@ -268,12 +270,12 @@ def test_given_run_despite_unchanged_duration_when_running_changes_only_then_exe
         },
     )
     initial_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"), project_dir=project_dir
+        command=("--no-color", "build", "--no-tests", "--no-audits"), project_dir=project_dir
     )
     assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
 
@@ -327,7 +329,7 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
         },
     )
     initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     assert initial_run_result.returncode == test_case.expected_exit_code, (
@@ -335,7 +337,7 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
 
@@ -355,7 +357,7 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
     assert rows == [("raw_orders", "1")]
 
     steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
 
@@ -409,13 +411,13 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         },
     )
     initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"), project_dir=project_dir
+        command=("--no-color", "build", "--no-tests", "--no-audits"), project_dir=project_dir
     )
     assert initial_run_result.returncode == test_case.expected_exit_code, (
         initial_run_result.stdout + initial_run_result.stderr
     )
     baseline_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"), project_dir=project_dir
+        command=("--no-color", "build", "--no-tests", "--no-audits"), project_dir=project_dir
     )
     assert baseline_result.returncode == test_case.expected_exit_code, (
         baseline_result.stdout + baseline_result.stderr
@@ -425,7 +427,7 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
     )
     within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"), project_dir=project_dir
+        command=("--no-color", "build", "--no-tests", "--no-audits"), project_dir=project_dir
     )
 
     assert within_tolerance_result.returncode == test_case.expected_exit_code, (
@@ -438,7 +440,7 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
     )
     beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"), project_dir=project_dir
+        command=("--no-color", "build", "--no-tests", "--no-audits"), project_dir=project_dir
     )
 
     assert beyond_tolerance_result.returncode == test_case.expected_exit_code, (
@@ -489,12 +491,12 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
         },
     )
     initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     assert initial_run_result.returncode == 0, initial_run_result.stdout + initial_run_result.stderr
     first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     assert first_changes_only_result.returncode == 0, (
@@ -516,7 +518,7 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
 
@@ -579,7 +581,7 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_
         },
     )
     initial_run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
     assert initial_run_result.returncode == test_case.expected_exit_code, (
@@ -587,7 +589,7 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run"),
+        command=("--no-color", "build", "--no-tests", "--no-audits"),
         project_dir=project_dir,
     )
 
@@ -678,15 +680,22 @@ def generated_pipeline():
     db_path: Path = project_dir / "factory_nodes_project.duckdb"
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+asset:orders_export"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "+asset:orders_export",
+        ),
         project_dir=project_dir,
     )
     bare_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "prepare_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "prepare_orders"),
         project_dir=project_dir,
     )
     tag_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "tag:runtime"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "tag:runtime"),
         project_dir=project_dir,
     )
     dag_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -711,7 +720,7 @@ def generated_pipeline():
     )
     assert "prepare_orders" in run_result.stdout
     assert "orders_export" in run_result.stdout
-    assert "Python checks" not in run_result.stdout
+    assert "Python checks" in run_result.stdout
     assert bare_result.returncode == test_case.expected_exit_code, (
         bare_result.stdout + bare_result.stderr
     )
@@ -801,7 +810,7 @@ def test_given_existing_intermediate_target_when_running_source_only_then_reuses
     assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "raw_events"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "raw_events"),
         project_dir=project_dir,
     )
 
@@ -852,7 +861,14 @@ def test_given_task_selector_when_running_run_then_task_executes(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "task:prepare_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "task:prepare_orders",
+        ),
         project_dir=project_dir,
     )
 
@@ -900,7 +916,14 @@ def test_given_asset_selector_when_running_run_then_asset_executes(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "asset:prepared_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "asset:prepared_orders",
+        ),
         project_dir=project_dir,
     )
 
@@ -949,7 +972,9 @@ def test_given_task_selector_with_json_output_when_running_run_then_json_include
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=(
             "--no-color",
-            "run",
+            "build",
+            "--no-tests",
+            "--no-audits",
             "--json-output",
             str(json_output_path),
             "--select",
@@ -972,6 +997,9 @@ def test_given_task_selector_with_json_output_when_running_run_then_json_include
         "failure_count": 0,
         "skipped_count": 0,
         "warning_count": 0,
+        "python_check_pass_count": 0,
+        "python_check_warn_count": 0,
+        "python_check_fail_count": 0,
     }
 
 
@@ -1014,7 +1042,9 @@ def test_given_failing_task_selector_when_running_run_then_command_fails(
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=(
             "--no-color",
-            "run",
+            "build",
+            "--no-tests",
+            "--no-audits",
             "--json-output",
             str(json_output_path),
             "--select",
@@ -1036,6 +1066,9 @@ def test_given_failing_task_selector_when_running_run_then_command_fails(
         "failure_count": 1,
         "skipped_count": 0,
         "warning_count": 0,
+        "python_check_pass_count": 0,
+        "python_check_warn_count": 0,
+        "python_check_fail_count": 0,
     }
 
 
@@ -1103,13 +1136,13 @@ def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+fact_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     assert "python    task      prepare_orders" in result.stdout
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("prepare_orders") < execution_output.index("fact_orders")
     db_path: Path = project_dir / "python_loader_run_project.duckdb"
     for table_name in test_case.expected_table_names:
@@ -1171,12 +1204,19 @@ def test_given_model_and_task_selector_when_running_run_then_task_can_read_built
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders summarize_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "fact_orders summarize_orders",
+        ),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("fact_orders") < execution_output.index("summarize_orders")
     assert (project_dir / "summary.txt").read_text(encoding="utf-8") == "1"
     db_path: Path = project_dir / "python_model_task_run_project.duckdb"
@@ -1235,12 +1275,19 @@ def test_given_asset_depends_on_terminal_model_when_running_run_then_asset_reads
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders export_fact_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "fact_orders export_fact_orders",
+        ),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("fact_orders") < execution_output.index("export_fact_orders")
     assert (project_dir / "export.txt").read_text(encoding="utf-8") == "1"
     db_path: Path = project_dir / "python_model_asset_run_project.duckdb"
@@ -1303,7 +1350,7 @@ def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+notify_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+notify_orders"),
         project_dir=project_dir,
     )
 
@@ -1377,7 +1424,9 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=(
             "--no-color",
-            "run",
+            "build",
+            "--no-tests",
+            "--no-audits",
             "--select",
             "+raw_orders summarize_loaded_orders publish_loaded_orders",
         ),
@@ -1385,7 +1434,7 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("raw_orders") < execution_output.index("summarize_loaded_orders")
     assert execution_output.index("summarize_loaded_orders") < execution_output.index(
         "publish_loaded_orders"
@@ -1440,7 +1489,9 @@ def test_given_skip_and_asset_selection_with_json_when_running_run_then_json_rec
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=(
             "--no-color",
-            "run",
+            "build",
+            "--no-tests",
+            "--no-audits",
             "--json-output",
             str(json_output_path),
             "--select",
@@ -1465,6 +1516,9 @@ def test_given_skip_and_asset_selection_with_json_when_running_run_then_json_rec
         "failure_count": 0,
         "skipped_count": 1,
         "warning_count": 0,
+        "python_check_pass_count": 0,
+        "python_check_warn_count": 0,
+        "python_check_fail_count": 0,
     }
 
 
@@ -1521,7 +1575,14 @@ def test_given_independent_python_and_sql_selectors_when_running_run_then_all_br
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "fact_orders branch_a branch_b"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "fact_orders branch_a branch_b",
+        ),
         project_dir=project_dir,
     )
 
@@ -1587,12 +1648,19 @@ def test_given_task_depends_on_model_when_running_run_then_task_runs_before_down
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "stg_orders fact_orders profile_stg_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "stg_orders fact_orders profile_stg_orders",
+        ),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("stg_orders") < execution_output.index("profile_stg_orders")
     assert execution_output.index("profile_stg_orders") < execution_output.index("fact_orders")
     db_path: Path = project_dir / "python_read_side_run_project.duckdb"
@@ -1655,12 +1723,19 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+raw_orders profile_raw_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "+raw_orders profile_raw_orders",
+        ),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("raw_orders") < execution_output.index("profile_raw_orders")
     db_path: Path = project_dir / "python_read_side_source_run_project.duckdb"
     for table_name in test_case.expected_table_names:
@@ -1721,7 +1796,9 @@ def test_given_sql_ready_task_fails_when_running_run_then_footer_json_and_exit_f
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=(
             "--no-color",
-            "run",
+            "build",
+            "--no-tests",
+            "--no-audits",
             "--json-output",
             str(json_output_path),
             "--select",
@@ -1797,7 +1874,14 @@ def test_given_task_depends_on_terminal_loader_when_running_run_then_command_rej
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "summarize_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "summarize_orders",
+        ),
         project_dir=project_dir,
     )
 
@@ -1866,12 +1950,19 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+publish_stage_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "+publish_stage_orders",
+        ),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("stage_orders") < execution_output.index("summarize_stage_orders")
     assert execution_output.index("summarize_stage_orders") < execution_output.index(
         "publish_stage_orders"
@@ -1954,12 +2045,12 @@ def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_c
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+fact_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("window_orders") < execution_output.index("prepare_raw_orders")
     assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
     db_path: Path = project_dir / "python_loader_task_loader_run_project.duckdb"
@@ -2037,12 +2128,12 @@ def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_ch
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+fact_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("fetch_orders") < execution_output.index("publish_orders")
     assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
     db_path: Path = project_dir / "python_task_asset_loader_run_project.duckdb"
@@ -2123,12 +2214,12 @@ def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+fact_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("window_orders") < execution_output.index("prepare_asset_orders")
     assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
     db_path: Path = project_dir / "python_loader_asset_loader_run_project.duckdb"
@@ -2196,12 +2287,12 @@ def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "+fact_orders"),
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("window_orders") < execution_output.index("raw_orders")
     assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
     db_path: Path = project_dir / "python_loader_loader_run_project.duckdb"
@@ -2318,7 +2409,9 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=(
             "--no-color",
-            "run",
+            "build",
+            "--no-tests",
+            "--no-audits",
             "--select",
             "+fact_orders +notify_fact_orders",
         ),
@@ -2326,7 +2419,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb run") :]
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
     assert execution_output.index("window_orders") < execution_output.index("prepare_orders")
     assert execution_output.index("prepare_orders") < execution_output.index(
         "publish_prepared_orders"
@@ -2407,7 +2500,14 @@ def test_given_source_task_loader_chain_when_running_run_then_command_rejects_bo
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "loader:stage_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "loader:stage_orders",
+        ),
         project_dir=project_dir,
     )
 
@@ -2477,7 +2577,14 @@ def test_given_model_task_loader_chain_when_running_run_then_command_rejects_bou
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "loader:stage_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "loader:stage_orders",
+        ),
         project_dir=project_dir,
     )
 
@@ -2530,13 +2637,20 @@ def test_given_check_selector_when_running_run_then_command_rejects_check(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--select", "check:check_orders_export"),
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--select",
+            "check:check_orders_export",
+        ),
         project_dir=project_dir,
     )
 
     assert result.returncode == test_case.expected_exit_code
     combined_output: str = result.stdout + result.stderr
     assert (
-        "sqb run does not execute Python checks: check_orders_export. Use sqb check instead."
-        in combined_output
+        "sqb build --no-tests --no-audits does not execute Python checks: "
+        "check_orders_export. Use sqb check instead." in combined_output
     )

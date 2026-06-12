@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild.cli.commands.main import compile as compile_command
 from sqlbuild.cli.commands.main.compile import run_compile
+from sqlbuild.cli.commands.main.helpers.compile import status as compile_status
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -137,7 +138,25 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
     assert not (project_dir / "target" / "manifest.json").exists()
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileCommandTestCase(
+            description="persists phase timings for tty stdout",
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Discovered project.",
+                "Compiled project graph.",
+                "Analyzed column lineage.",
+                "Validated model contracts.",
+                "Wrote compiled artifacts.",
+            ),
+        )
+    ],
+    ids=["persists phase timings for tty stdout"],
+)
 def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
+    test_case: CompileCommandTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -172,8 +191,8 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(compile_command.sys, "stdout", FakeStdout())
-    monkeypatch.setattr(compile_command, "TransientStatusReporter", FakeStatusReporter)
+    monkeypatch.setattr(compile_status.sys, "stdout", FakeStdout())
+    monkeypatch.setattr(compile_status, "TransientStatusReporter", FakeStatusReporter)
     monkeypatch.setattr(
         compile_command,
         "resolve_adapter",
@@ -182,7 +201,7 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
 
     exit_code: int = run_compile(project_dir=project_dir, no_sql_validation=True)
 
-    assert exit_code == 0
+    assert exit_code == test_case.expected_exit_code
     assert started_messages == [
         "Discovering project...",
         "Compiling project graph...",
@@ -190,12 +209,9 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
         "Validating model contracts...",
         "Writing compiled artifacts...",
     ]
-    assert len(completed_messages) == 5
-    assert completed_messages[0].startswith("Discovered project. (")
-    assert completed_messages[1].startswith("Compiled project graph. (")
-    assert completed_messages[2].startswith("Analyzed column lineage. (")
-    assert completed_messages[3].startswith("Validated model contracts. (")
-    assert completed_messages[4].startswith("Wrote compiled artifacts. (")
+    assert len(completed_messages) == len(test_case.expected_stdout_fragments)
+    for index, fragment in enumerate(test_case.expected_stdout_fragments):
+        assert completed_messages[index].startswith(f"{fragment} (")
 
 
 @pytest.mark.parametrize(

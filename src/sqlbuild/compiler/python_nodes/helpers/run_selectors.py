@@ -25,10 +25,9 @@ def resolve_python_sql_run_selectors(
     project_graph: ProjectGraph,
     python_graph: PythonNodeGraph,
 ) -> PythonSqlRunSelection:
-    """Resolve `sqb run` selectors across SQL resources and Python nodes.
+    """Resolve build-style selectors across SQL resources and Python nodes.
 
-    Python checks are intentionally excluded from `run`; use `sqb check` once check execution
-    is wired.
+    Python checks are intentionally excluded; use `sqb check` instead.
     """
 
     selection: PythonSqlSelection = resolve_python_sql_selectors(
@@ -46,7 +45,8 @@ def resolve_python_sql_run_selectors(
     if select and selected_check_names:
         check_list: str = ", ".join(sorted(selected_check_names))
         raise PlannerInputError(
-            f"sqb run does not execute Python checks: {check_list}. Use sqb check instead."
+            "sqb build --no-tests --no-audits does not execute Python checks: "
+            f"{check_list}. Use sqb check instead."
         )
     runnable_python_names: frozenset[str] = frozenset(
         name
