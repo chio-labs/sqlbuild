@@ -17,6 +17,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeRunState,
 )
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 
@@ -45,6 +46,7 @@ def execute_python_checks(
     end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     providers: ProviderContainer | None = None,
+    identity_recorder: PythonIdentityRecorder | None = None,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -71,4 +73,5 @@ def execute_python_checks(
         end_cursor_int=end_cursor_int,
         logger=logger,
         providers=providers,
+        identity_recorder=identity_recorder,
     )

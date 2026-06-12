@@ -16,6 +16,7 @@ from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
 from sqlbuild.executor.python_nodes.helpers.ingress_execution import _to_executable_python_node
 from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
@@ -45,6 +46,7 @@ class ReadSidePythonExecutionTracker:
         start_cursor_int: int | None = None,
         end_cursor_int: int | None = None,
         providers: ProviderContainer | None = None,
+        identity_recorder: PythonIdentityRecorder | None = None,
     ) -> None:
         self._python_graph: PythonNodeGraph = python_graph
         self._selected_python_names: frozenset[str] = selected_python_names
@@ -65,6 +67,7 @@ class ReadSidePythonExecutionTracker:
         self._start_cursor_int: int | None = start_cursor_int
         self._end_cursor_int: int | None = end_cursor_int
         self._providers: ProviderContainer | None = providers
+        self._identity_recorder: PythonIdentityRecorder | None = identity_recorder
         self._completed_sql_names: set[str] = set()
         self._failed_sql_names: set[str] = set()
         self._completed_python_names: set[str] = set()
@@ -178,14 +181,17 @@ class ReadSidePythonExecutionTracker:
         self._results_by_name[node.name] = result
         self._completed_python_names.add(node.name)
         if result.status == PythonNodeStatus.SUCCESS:
-            try_write_python_node_identity_fingerprint(
-                identity=node.identity,
-                adapter=self._adapter,
-                connection=self._connection,
-                run_id=self._run_id,
-                database=self._default_database,
-                schema=self._default_schema,
-            )
+            if self._identity_recorder is not None:
+                self._identity_recorder(node.identity, None)
+            else:
+                try_write_python_node_identity_fingerprint(
+                    identity=node.identity,
+                    adapter=self._adapter,
+                    connection=self._connection,
+                    run_id=self._run_id,
+                    database=self._default_database,
+                    schema=self._default_schema,
+                )
 
     def _unrun_reason(self, node: DiscoveredPythonNode) -> str:
         sql_dep_name: str

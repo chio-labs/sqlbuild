@@ -11,6 +11,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    PythonNodeVersionRecord,
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
@@ -25,6 +26,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
@@ -110,6 +112,26 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, seed_name: str, version_hash: str
     ) -> SeedVersionRecord | None:
         """Return a seed version row if it exists."""
+        ...
+
+    @abstractmethod
+    def upsert_python_node_version(
+        self, connection: Any, *, schema: str, record: PythonNodeVersionRecord
+    ) -> None:
+        """Insert or replace a Python node identity version row."""
+        ...
+
+    @abstractmethod
+    def get_python_node_version(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        node_type: str,
+        node_name: str,
+        version_hash: str,
+    ) -> PythonNodeVersionRecord | None:
+        """Return a Python node identity version row if it exists."""
         ...
 
     @abstractmethod
@@ -264,6 +286,34 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentSeedRefRecord, ...]:
         """Return seed refs for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def upsert_virtual_environment_python_node_ref(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        ref: VirtualEnvironmentPythonNodeRefRecord,
+    ) -> None:
+        """Insert or replace one Python node ref for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_python_node_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentPythonNodeRefRecord, ...]:
+        """Return Python node refs for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def count_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+        """Return count of Python node versions not referenced by any virtual environment."""
+        ...
+
+    @abstractmethod
+    def prune_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+        """Delete Python node versions not referenced by any virtual environment."""
         ...
 
     @abstractmethod

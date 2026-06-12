@@ -12,7 +12,9 @@ from sqlbuild.executor.janitor.models import (
     JanitorExecutionResult,
     JanitorPlan,
     JanitorRelationKey,
+    JanitorVirtualStatePruneCandidate,
 )
+from sqlbuild.virtual.state.constants import PYTHON_NODE_VERSION_TABLE
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorExecuteTestCase,
     JanitorPlanTestCase,
@@ -178,6 +180,11 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
             "relation matches exclude pattern '_sqlbuild_fingerprints'",
         ),
     ),
+    JanitorPlanTestCase(
+        description="virtual state pruning candidates are preserved",
+        relation_infos=(),
+        expected_virtual_state_table_names=(PYTHON_NODE_VERSION_TABLE,),
+    ),
 ]
 
 EXECUTE_TEST_CASES: list[JanitorExecuteTestCase] = [
@@ -191,6 +198,12 @@ EXECUTE_TEST_CASES: list[JanitorExecuteTestCase] = [
         relation_infos=(relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),),
         expected_dropped_targets=(),
         expected_pruned_table_names=(FINGERPRINT_TABLE_NAME,),
+    ),
+    JanitorExecuteTestCase(
+        description="prunes virtual state orphan tables",
+        relation_infos=(),
+        expected_dropped_targets=(),
+        expected_pruned_virtual_table_names=(PYTHON_NODE_VERSION_TABLE,),
     ),
 ]
 
@@ -217,6 +230,15 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         delete_tracked_only=test_case.delete_tracked_only,
         exclude_patterns=test_case.exclude_patterns,
         protected_relation_keys=test_case.protected_relation_keys,
+        virtual_state_prune_candidates=(
+            JanitorVirtualStatePruneCandidate(
+                schema="sqlbuild_state",
+                table_name=PYTHON_NODE_VERSION_TABLE,
+                reason="1 unreferenced Python identity version(s)",
+            ),
+        )
+        if test_case.expected_virtual_state_table_names
+        else (),
         direct_state_history_versions=test_case.direct_state_history_versions,
     )
 
@@ -228,6 +250,9 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     )
     assert tuple(candidate.table_name for candidate in plan.direct_state_prune_candidates) == (
         test_case.expected_direct_state_table_names
+    )
+    assert tuple(candidate.table_name for candidate in plan.virtual_state_prune_candidates) == (
+        test_case.expected_virtual_state_table_names
     )
     assert (
         tuple(
@@ -254,12 +279,25 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
+        virtual_state_prune_candidates=(
+            JanitorVirtualStatePruneCandidate(
+                schema="sqlbuild_state",
+                table_name=PYTHON_NODE_VERSION_TABLE,
+                reason="1 unreferenced Python identity version(s)",
+            ),
+        )
+        if test_case.expected_pruned_virtual_table_names
+        else (),
     )
+    pruned_virtual_table_names: list[str] = []
 
     result: JanitorExecutionResult = execute_janitor_plan(
         plan=plan,
         adapter=adapter,
         connection=object(),
+        prune_virtual_state=lambda candidate: pruned_virtual_table_names.append(
+            candidate.table_name
+        ),
     )
 
     assert tuple(adapter.dropped_targets) == test_case.expected_dropped_targets
@@ -269,3 +307,7 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
     assert tuple(candidate.table_name for candidate in result.pruned_direct_state) == (
         test_case.expected_pruned_table_names
     )
+    assert tuple(candidate.table_name for candidate in result.pruned_virtual_state) == (
+        test_case.expected_pruned_virtual_table_names
+    )
+    assert tuple(pruned_virtual_table_names) == test_case.expected_pruned_virtual_table_names

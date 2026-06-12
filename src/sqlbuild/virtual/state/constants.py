@@ -10,12 +10,14 @@ STATE_VERSION_TABLE: str = "state_versions"
 MODEL_VERSION_TABLE: str = "model_versions"
 FUNCTION_VERSION_TABLE: str = "function_versions"
 SEED_VERSION_TABLE: str = "seed_versions"
+PYTHON_NODE_VERSION_TABLE: str = "python_node_versions"
 PHYSICAL_RELATION_TABLE: str = "physical_relations"
 PHYSICAL_RELATION_ANCESTRY_TABLE: str = "physical_relation_ancestry"
 VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
 VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE: str = "virtual_environment_model_refs"
 VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: str = "virtual_environment_function_refs"
 VIRTUAL_ENVIRONMENT_SEED_REF_TABLE: str = "virtual_environment_seed_refs"
+VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE: str = "virtual_environment_python_node_refs"
 SOURCE_FRESHNESS_OBSERVATION_TABLE: str = "source_freshness_observations"
 VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: str = "virtual_environment_checkpoints"
 VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE: str = "virtual_environment_checkpoint_model_refs"
@@ -37,12 +39,14 @@ STATE_TABLES: tuple[str, ...] = (
     MODEL_VERSION_TABLE,
     FUNCTION_VERSION_TABLE,
     SEED_VERSION_TABLE,
+    PYTHON_NODE_VERSION_TABLE,
     PHYSICAL_RELATION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
     VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE,
     VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE,
     VIRTUAL_ENVIRONMENT_SEED_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
@@ -112,6 +116,19 @@ SEED_VERSION_COLUMNS: dict[str, StateColumnType] = {
     "updated_at": StateColumnType.TIMESTAMP,
 }
 
+PYTHON_NODE_VERSION_COLUMNS: dict[str, StateColumnType] = {
+    "node_type": StateColumnType.TEXT,
+    "node_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+    "definition_hash": StateColumnType.TEXT,
+    "identity_metadata_hash": StateColumnType.TEXT,
+    "definition_json_b64": StateColumnType.TEXT,
+    "identity_metadata_json_b64": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
 PHYSICAL_RELATION_COLUMNS: dict[str, StateColumnType] = {
     "artifact_type": StateColumnType.TEXT,
     "artifact_name": StateColumnType.TEXT,
@@ -160,6 +177,14 @@ VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS: dict[str, StateColumnType] = {
 VIRTUAL_ENVIRONMENT_SEED_REF_COLUMNS: dict[str, StateColumnType] = {
     "virtual_environment_name": StateColumnType.TEXT,
     "seed_name": StateColumnType.TEXT,
+    "version_hash": StateColumnType.TEXT,
+    "updated_at": StateColumnType.TIMESTAMP,
+}
+
+VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_COLUMNS: dict[str, StateColumnType] = {
+    "virtual_environment_name": StateColumnType.TEXT,
+    "node_type": StateColumnType.TEXT,
+    "node_name": StateColumnType.TEXT,
     "version_hash": StateColumnType.TEXT,
     "updated_at": StateColumnType.TIMESTAMP,
 }
@@ -256,12 +281,14 @@ STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
     MODEL_VERSION_TABLE: MODEL_VERSION_COLUMNS,
     FUNCTION_VERSION_TABLE: FUNCTION_VERSION_COLUMNS,
     SEED_VERSION_TABLE: SEED_VERSION_COLUMNS,
+    PYTHON_NODE_VERSION_TABLE: PYTHON_NODE_VERSION_COLUMNS,
     PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
     PHYSICAL_RELATION_ANCESTRY_TABLE: PHYSICAL_RELATION_ANCESTRY_COLUMNS,
     VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
     VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE: VIRTUAL_ENVIRONMENT_MODEL_REF_COLUMNS,
     VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS,
     VIRTUAL_ENVIRONMENT_SEED_REF_TABLE: VIRTUAL_ENVIRONMENT_SEED_REF_COLUMNS,
+    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE: VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_COLUMNS,
     SOURCE_FRESHNESS_OBSERVATION_TABLE: SOURCE_FRESHNESS_OBSERVATION_COLUMNS,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: VIRTUAL_ENVIRONMENT_CHECKPOINT_COLUMNS,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE: (
@@ -292,6 +319,13 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
     SEED_VERSION_TABLE: {
         "idx_sqb_seed_versions_identity": ("seed_name", "version_hash"),
     },
+    PYTHON_NODE_VERSION_TABLE: {
+        "idx_sqb_python_node_versions_identity": (
+            "node_type",
+            "node_name",
+            "version_hash",
+        ),
+    },
     PHYSICAL_RELATION_TABLE: {
         "idx_sqb_physical_relations_identity": (
             "artifact_type",
@@ -321,6 +355,13 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
         "idx_sqb_virtual_environment_seed_refs_identity": (
             "virtual_environment_name",
             "seed_name",
+        ),
+    },
+    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE: {
+        "idx_sqb_virtual_environment_python_node_refs_identity": (
+            "virtual_environment_name",
+            "node_type",
+            "node_name",
         ),
     },
     SOURCE_FRESHNESS_OBSERVATION_TABLE: {

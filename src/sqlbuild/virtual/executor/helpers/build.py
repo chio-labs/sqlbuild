@@ -70,6 +70,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
 )
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -103,6 +104,7 @@ from sqlbuild.virtual.freshness.main.runtime_persistence import (
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
+from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
@@ -112,6 +114,9 @@ from sqlbuild.virtual.planner.main.semantics import (
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_environment_checkpoint
+from sqlbuild.virtual.state.main.python_node_identity_write import (
+    try_record_virtual_python_node_identity,
+)
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -491,9 +496,29 @@ def run_virtual_build(
         selection=python_selection,
         python_graph=python_graph,
     )
+    previous_python_identities = read_bound_virtual_python_identities(
+        discovered_inputs=discovered_inputs,
+        project_dir=project_dir,
+        virtual_environment_name=virtual_environment_name,
+    )
+
+    def record_python_identity(identity: Any, _target_name: str | None) -> None:
+        state_connection: Any = backend.connect(config.connection)
+        try:
+            try_record_virtual_python_node_identity(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                virtual_environment_name=target_vde_name,
+                identity=identity,
+            )
+        finally:
+            backend.close(state_connection)
+
     python_plan_entries: tuple[PythonPlanEntry, ...] = build_virtual_python_plan_entries(
         discovered_inputs=discovered_inputs,
         selection=python_selection,
+        previous_identities=previous_python_identities,
     )
     relation_targets: dict[SqlResourceRef, str] = build_python_relation_targets(
         adapter=adapter,
@@ -532,6 +557,7 @@ def run_virtual_build(
                 on_node_complete=hooks.on_node_complete,
                 relation_targets=relation_targets,
                 providers=providers,
+                identity_recorder=record_python_identity,
             )
         finally:
             adapter.close(ingress_connection)
@@ -591,6 +617,7 @@ def run_virtual_build(
             end_cursor_int=end_cursor_int,
             query_change_tracking=False,
             providers=providers,
+            python_identity_recorder=record_python_identity,
         )
     if result.status == BuildStatus.SUCCESS and available_seed_physical_relations:
         result = replace(
@@ -642,6 +669,7 @@ def run_virtual_build(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             providers=providers,
+            identity_recorder=record_python_identity,
         )
         if any(
             python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results
@@ -746,6 +774,7 @@ def _run_read_side_python_nodes(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
     providers: ProviderContainer | None,
+    identity_recorder: PythonIdentityRecorder | None,
 ) -> tuple[PythonNodeExecutionResult, ...]:
     if not lifecycle_plan.read_side_python_node_names:
         return ()
@@ -769,6 +798,7 @@ def _run_read_side_python_nodes(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             providers=providers,
+            identity_recorder=identity_recorder,
         )
         load_result: LoadExecutionResult
         for load_result in result.load_results:

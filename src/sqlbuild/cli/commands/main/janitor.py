@@ -38,6 +38,7 @@ from sqlbuild.cli.commands.main.helpers.janitor.state_cleanup import (
     expired_lock_candidates,
     state_backup_candidates,
     state_janitor_retention,
+    virtual_state_prune_candidates,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
@@ -67,6 +68,9 @@ from sqlbuild.virtual.state.main.delete_checkpoint import delete_virtual_environ
 from sqlbuild.virtual.state.main.delete_lock import delete_lock
 from sqlbuild.virtual.state.main.delete_state_backup import delete_state_backup
 from sqlbuild.virtual.state.main.delete_virtual_environment import delete_virtual_environment
+from sqlbuild.virtual.state.main.prune_python_node_identities import (
+    prune_unreferenced_python_node_versions,
+)
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     DetachedVirtualEnvironmentInspection,
@@ -220,6 +224,9 @@ def run_janitor(
             ),
             state_backup_candidates=state_backup_candidates(retention=state_retention),
             expired_lock_candidates=expired_lock_candidates(retention=state_retention),
+            virtual_state_prune_candidates=virtual_state_prune_candidates(
+                retention=state_retention
+            ),
             direct_state_history_versions=effective_direct_state_history_versions,
         )
         status.complete(
@@ -235,6 +242,7 @@ def run_janitor(
             and not plan.state_backup_candidates
             and not plan.expired_lock_candidates
             and not plan.direct_state_prune_candidates
+            and not plan.virtual_state_prune_candidates
         ):
             return 0
         if not auto_approve and not _confirm(plan=plan):
@@ -275,6 +283,10 @@ def run_janitor(
                 discovered_inputs=discovered_inputs,
                 lock_key=candidate.lock_key,
             ),
+            prune_virtual_state=lambda candidate: prune_unreferenced_python_node_versions(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
         )
         deleted_state_count: int = (
             len(result.deleted_checkpoints)
@@ -283,12 +295,12 @@ def run_janitor(
             + len(result.deleted_state_backups)
             + len(result.deleted_expired_locks)
         )
-        pruned_state_count: int = len(result.pruned_direct_state)
+        pruned_state_count: int = len(result.pruned_direct_state) + len(result.pruned_virtual_state)
         non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
         if non_checkpoint_state_count or pruned_state_count:
             deleted_message: str = (
                 f"Deleted {len(result.deleted)} objects, deleted {deleted_state_count} "
-                f"state items, and pruned {pruned_state_count} direct state tables."
+                f"state items, and pruned {pruned_state_count} state tables."
             )
         elif result.deleted_checkpoints:
             deleted_message = (
@@ -312,8 +324,11 @@ def _confirm(*, plan: JanitorPlan) -> bool:
         + len(plan.expired_virtual_environment_candidates)
         + len(plan.state_backup_candidates)
         + len(plan.expired_lock_candidates)
+        + len(plan.virtual_state_prune_candidates)
     )
-    prune_count: int = len(plan.direct_state_prune_candidates)
+    prune_count: int = len(plan.direct_state_prune_candidates) + len(
+        plan.virtual_state_prune_candidates
+    )
     if state_candidate_count or prune_count:
         deletion_count: int = len(plan.candidates) + state_candidate_count + prune_count
         sys.stdout.write(

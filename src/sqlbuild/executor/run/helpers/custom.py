@@ -20,6 +20,7 @@ from sqlbuild.executor.custom.models import (
     MaterializationResult,
     PrepareVersionContext,
 )
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
@@ -58,6 +59,7 @@ def execute_custom_entry(
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
     effective_target_name: str | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
@@ -95,6 +97,7 @@ def execute_custom_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -308,6 +311,7 @@ def execute_custom_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         _cleanup_relations(

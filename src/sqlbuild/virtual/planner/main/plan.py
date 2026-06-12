@@ -62,6 +62,7 @@ from sqlbuild.virtual.planner.helpers.state_metadata import (
     read_previous_function_query_sqls,
 )
 from sqlbuild.virtual.planner.helpers.targets import build_destination_from_physical_relation
+from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
@@ -317,6 +318,11 @@ def run_virtual_plan_pipeline(
             selected_model_names=effective_select,
             include_python=include_python,
         )
+        previous_python_identities = read_bound_virtual_python_identities(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            virtual_environment_name=virtual_environment_name,
+        )
         return CompilePipelineResult(
             project=graph.project,
             plan_output=plan_output,
@@ -324,6 +330,7 @@ def run_virtual_plan_pipeline(
             python_plan_entries=build_virtual_python_plan_entries(
                 discovered_inputs=discovered_inputs,
                 selection=python_selection,
+                previous_identities=previous_python_identities,
             ),
         )
     finally:

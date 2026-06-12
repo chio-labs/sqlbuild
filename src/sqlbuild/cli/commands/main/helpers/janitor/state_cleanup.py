@@ -8,7 +8,9 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.janitor.models import (
     JanitorExpiredLockCandidate,
     JanitorStateBackupCandidate,
+    JanitorVirtualStatePruneCandidate,
 )
+from sqlbuild.virtual.state.constants import PYTHON_NODE_VERSION_TABLE
 from sqlbuild.virtual.state.main.state_janitor_retention import inspect_state_janitor_retention
 from sqlbuild.virtual.state.models import StateJanitorInspection
 
@@ -63,4 +65,24 @@ def expired_lock_candidates(
             expires_at=lock.expires_at,
         )
         for lock in retention.expired_locks
+    )
+
+
+def virtual_state_prune_candidates(
+    *,
+    retention: StateJanitorInspection | None,
+) -> tuple[JanitorVirtualStatePruneCandidate, ...]:
+    """Build janitor virtual-state orphan cleanup candidates."""
+
+    if retention is None or retention.unreferenced_python_node_versions == 0:
+        return ()
+    return (
+        JanitorVirtualStatePruneCandidate(
+            schema=retention.schema,
+            table_name=PYTHON_NODE_VERSION_TABLE,
+            reason=(
+                f"{retention.unreferenced_python_node_versions} unreferenced Python identity "
+                "version(s)"
+            ),
+        ),
     )

@@ -10,6 +10,7 @@ from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.python_nodes.helpers.read_side_execution import (
     ReadSidePythonExecutionTracker,
 )
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
 
@@ -33,6 +34,7 @@ def create_read_side_python_execution_tracker(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     providers: ProviderContainer | None = None,
+    identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ReadSidePythonExecutionTracker:
     """Create a read-side Python execution tracker."""
 
@@ -54,4 +56,5 @@ def create_read_side_python_execution_tracker(
         start_cursor_int=start_cursor_int,
         end_cursor_int=end_cursor_int,
         providers=providers,
+        identity_recorder=identity_recorder,
     )
