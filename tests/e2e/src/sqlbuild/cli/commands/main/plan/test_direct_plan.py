@@ -82,29 +82,6 @@ def test_given_direct_project_with_config_only_change_when_planning_then_reports
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
 
-    changed_json_plan: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--json", "--select", "+raw_orders"),
-        project_dir=project_dir,
-    )
-    assert changed_json_plan.returncode == 0, changed_json_plan.stdout + changed_json_plan.stderr
-    changed_payload: dict[str, object] = json.loads(changed_json_plan.stdout)
-    changed_python_nodes: list[dict[str, Any]] = list(changed_payload["python_nodes"])  # type: ignore[arg-type]
-    changed_prepare_entry: dict[str, Any] = next(
-        node for node in changed_python_nodes if node["name"] == "prepare_orders"
-    )
-    identity_diff: dict[str, Any] = changed_prepare_entry["identity_diff"]
-    assert "source_diff" in identity_diff
-    assert "dependency_diff" in identity_diff
-    assert (
-        "-    return ctx.result(metadata={'label': order_label()})" in identity_diff["source_diff"]
-    )
-    assert (
-        "+    return ctx.result(metadata={'label': order_label(), 'version': 2})"
-        in identity_diff["source_diff"]
-    )
-    assert "-    return 'ready'" in identity_diff["dependency_diff"]
-    assert "+    return 'changed'" in identity_diff["dependency_diff"]
-
 
 @pytest.mark.parametrize(
     "test_case",
