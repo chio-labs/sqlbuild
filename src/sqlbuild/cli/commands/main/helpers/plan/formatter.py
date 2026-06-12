@@ -29,7 +29,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus, PythonRunPhase
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
@@ -469,10 +469,11 @@ def _format_python_plan_entries(
         lines.append(
             _format_name_value_line(
                 entry.name,
-                entry.kind.value,
+                f"{entry.kind.value} ({entry.identity_status.value})",
                 name_column_width=name_column_width,
             )
         )
+        _append_python_identity_diff(lines, entry)
     append_overflow_line(
         lines,
         total_count=len(entries),
@@ -480,6 +481,108 @@ def _format_python_plan_entries(
         indent="  ",
         options=display_options,
     )
+
+
+def _append_python_identity_diff(lines: list[str], entry: PythonPlanEntry) -> None:
+    if entry.identity_status != PythonIdentityStatus.CHANGED:
+        return
+
+    source_diff: list[str] = _format_python_source_diff(entry)
+    dependency_diff: list[str] = _format_python_dependency_diff(entry)
+    if not source_diff and not dependency_diff:
+        return
+
+    lines.append("    python diff:")
+    if source_diff:
+        lines.append("      source diff:")
+        lines.extend(source_diff)
+    if dependency_diff:
+        lines.append("      dependency diff:")
+        lines.extend(dependency_diff)
+
+
+def _format_python_source_diff(entry: PythonPlanEntry) -> list[str]:
+    previous: str | None = _python_definition_source_text(entry.previous_definition_json)
+    current: str | None = _python_definition_source_text(entry.current_definition_json)
+    if previous is None or current is None or previous == current:
+        return []
+    return _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+
+
+def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
+    previous: str | None = _python_dependency_source_text(entry.previous_metadata_json)
+    current: str | None = _python_dependency_source_text(entry.current_metadata_json)
+    if previous is None or current is None or previous == current:
+        return []
+    return _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+
+
+def _python_definition_source_text(raw_json: str | None) -> str | None:
+    payload: dict[str, object] | None = _json_object(raw_json)
+    if payload is None:
+        return None
+    source_text: object = payload.get("source_text")
+    return source_text if isinstance(source_text, str) else None
+
+
+def _python_dependency_source_text(raw_json: str | None) -> str | None:
+    payload: dict[str, object] | None = _json_object(raw_json)
+    if payload is None:
+        return None
+    raw_dependencies: object = payload.get("dependencies")
+    if not isinstance(raw_dependencies, list):
+        return None
+
+    dependency_blocks: list[str] = []
+    dependency: object
+    for dependency in sorted(raw_dependencies, key=_python_dependency_sort_key):
+        if not isinstance(dependency, dict):
+            continue
+        dependency_payload: dict[object, object] = cast(dict[object, object], dependency)
+        source_text: object = dependency_payload.get("source_text")
+        if not isinstance(source_text, str):
+            continue
+        source_path: object = dependency_payload.get("source_path")
+        module: object = dependency_payload.get("module")
+        qualname: object = dependency_payload.get("qualname")
+        header_parts: list[str] = []
+        if isinstance(source_path, str) and source_path:
+            header_parts.append(source_path)
+        if isinstance(module, str) and module:
+            header_parts.append(module)
+        if isinstance(qualname, str) and qualname:
+            header_parts.append(qualname)
+        header: str = " :: ".join(header_parts) if header_parts else "dependency"
+        dependency_blocks.append(f"# {header}\n{source_text}")
+    return "\n\n".join(dependency_blocks)
+
+
+def _python_dependency_sort_key(dependency: object) -> tuple[str, str, str]:
+    if not isinstance(dependency, dict):
+        return ("", "", "")
+    dependency_payload: dict[object, object] = cast(dict[object, object], dependency)
+    source_path: object = dependency_payload.get("source_path")
+    module: object = dependency_payload.get("module")
+    qualname: object = dependency_payload.get("qualname")
+    return (
+        source_path if isinstance(source_path, str) else "",
+        module if isinstance(module, str) else "",
+        qualname if isinstance(qualname, str) else "",
+    )
+
+
+def _json_object(raw_json: str | None) -> dict[str, object] | None:
+    if raw_json is None:
+        return None
+    try:
+        payload: object = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return None
+    return cast(dict[str, object], payload) if isinstance(payload, dict) else None
+
+
+def _indent_diff(lines: list[str], *, extra_indent: str) -> list[str]:
+    return [f"{extra_indent}{line}" for line in lines]
 
 
 def _format_source_loads(

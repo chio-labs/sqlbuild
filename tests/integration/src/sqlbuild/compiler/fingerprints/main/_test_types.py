@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 
@@ -13,6 +13,9 @@ class WriteAndReadTestCase:
     expected_latest_definition_hashes: dict[str, str]
     expected_latest_target_names: dict[str, str | None]
     expected_metadata_fragments: tuple[str, ...] = ()
+    expected_identity_definition_hashes: dict[tuple[str, str], str] = field(default_factory=dict)
+    expected_latest_definitions: dict[str, str] = field(default_factory=dict)
+    expected_latest_version_hashes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -66,5 +69,5 @@ class PruneFingerprintHistoryTestCase:
     schema: str
     retain_versions: int
     fingerprints: tuple[Fingerprint, ...]
-    expected_run_ids_by_node: dict[str, tuple[str, ...]]
+    expected_run_ids_by_identity: dict[tuple[str, str], tuple[str, ...]]
     expected_latest_run_id: str

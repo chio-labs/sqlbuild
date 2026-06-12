@@ -84,6 +84,12 @@ def prepare_standard_python_lifecycle(
         project=pipeline_result.project,
         plan_output=plan_output,
     )
+    default_database: str | None = pipeline_result.project.effective_target_database
+    if default_database is None:
+        default_database = adapter.default_database()
+    default_schema: str | None = pipeline_result.project.effective_target_schema
+    if default_schema is None:
+        default_schema = adapter.default_schema()
     ingress_source_map: dict[str, SourceEntry] = dict(plan_output.source_map)
     ingress_source_map.update(
         build_intermediate_source_map(
@@ -111,8 +117,8 @@ def prepare_standard_python_lifecycle(
                 target=pipeline_result.project.effective_target_name,
                 vars=pipeline_result.project.effective_vars,
                 is_reload=reload_sources,
-                default_database=adapter.default_database(),
-                default_schema=adapter.default_schema(),
+                default_database=default_database,
+                default_schema=default_schema,
                 start_cursor_ts=start_cursor_ts,
                 end_cursor_ts=end_cursor_ts,
                 start_cursor_int=start_cursor_int,
@@ -151,8 +157,8 @@ def prepare_standard_python_lifecycle(
             target=pipeline_result.project.effective_target_name,
             vars=pipeline_result.project.effective_vars,
             is_reload=reload_sources,
-            default_database=adapter.default_database(),
-            default_schema=adapter.default_schema(),
+            default_database=default_database,
+            default_schema=default_schema,
             relation_targets=relation_targets,
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,

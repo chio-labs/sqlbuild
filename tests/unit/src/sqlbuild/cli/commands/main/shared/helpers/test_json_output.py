@@ -20,7 +20,11 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import (
+    PythonIdentityStatus,
+    PythonNodeKind,
+    PythonRunPhase,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_discovered_provider_usage,
     build_model_entry,
@@ -231,6 +235,63 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             '"name": "export_orders"',
             '"kind": "asset"',
             '"phase": "read_side"',
+        ),
+    ),
+    JsonOutputTestCase(
+        description="plan json includes changed python identity diffs",
+        plan_output=build_plan_output(),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
+                identity_status=PythonIdentityStatus.CHANGED,
+                previous_definition_json=json.dumps(
+                    {"source_text": "def prepare_orders(ctx):\n    return 1\n"},
+                    sort_keys=True,
+                ),
+                current_definition_json=json.dumps(
+                    {"source_text": "def prepare_orders(ctx):\n    return 2\n"},
+                    sort_keys=True,
+                ),
+                previous_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'old'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+                current_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'new'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        ),
+        expected_keys=("python_nodes",),
+        expected_fragments=(
+            '"identity_diff"',
+            '"source_diff"',
+            '"dependency_diff"',
+            '"-    return 1"',
+            '"+    return 2"',
+            "tasks/helpers.py :: tasks.helpers :: order_label",
+            "\"-    return 'old'\"",
+            "\"+    return 'new'\"",
         ),
     ),
     JsonOutputTestCase(

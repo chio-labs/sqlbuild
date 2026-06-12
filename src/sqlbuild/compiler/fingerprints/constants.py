@@ -20,6 +20,11 @@ COLUMN_TIMESTAMP: str = "ts"
 NODE_TYPE_MODEL: str = "model"
 NODE_TYPE_FUNCTION: str = "function"
 NODE_TYPE_SEED: str = "seed"
+NODE_TYPE_LOADER: str = "loader"
+NODE_TYPE_TASK: str = "task"
+NODE_TYPE_ASSET: str = "asset"
+NODE_TYPE_CHECK: str = "check"
+NODE_TYPE_HOOK: str = "hook"
 
 FINGERPRINT_COLUMNS: tuple[str, ...] = (
     COLUMN_NODE_TYPE,

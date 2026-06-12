@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 from pathlib import Path
@@ -16,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
     table_exists,
 )
@@ -79,6 +81,29 @@ def test_given_direct_project_with_config_only_change_when_planning_then_reports
         assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
+
+    changed_json_plan: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--json", "--select", "+raw_orders"),
+        project_dir=project_dir,
+    )
+    assert changed_json_plan.returncode == 0, changed_json_plan.stdout + changed_json_plan.stderr
+    changed_payload: dict[str, object] = json.loads(changed_json_plan.stdout)
+    changed_python_nodes: list[dict[str, Any]] = list(changed_payload["python_nodes"])  # type: ignore[arg-type]
+    changed_prepare_entry: dict[str, Any] = next(
+        node for node in changed_python_nodes if node["name"] == "prepare_orders"
+    )
+    identity_diff: dict[str, Any] = changed_prepare_entry["identity_diff"]
+    assert "source_diff" in identity_diff
+    assert "dependency_diff" in identity_diff
+    assert (
+        "-    return ctx.result(metadata={'label': order_label()})" in identity_diff["source_diff"]
+    )
+    assert (
+        "+    return ctx.result(metadata={'label': order_label(), 'version': 2})"
+        in identity_diff["source_diff"]
+    )
+    assert "-    return 'ready'" in identity_diff["dependency_diff"]
+    assert "+    return 'changed'" in identity_diff["dependency_diff"]
 
 
 @pytest.mark.parametrize(
@@ -1703,6 +1728,223 @@ def test_given_direct_source_with_task_ingress_when_planning_without_expansion_t
     "test_case",
     [
         DirectPlanE2ETestCase(
+            description="direct Python task plan shows persisted identity statuses",
+            expected_fragments=(
+                "Python ingress (1)",
+                "prepare_orders",
+                "task (changed)",
+                "python diff:",
+                "source diff:",
+                "dependency diff:",
+                "-    return ctx.result(metadata={'label': order_label()})",
+                "+    return ctx.result(metadata={'label': order_label(), 'version': 2})",
+                "helpers.py :: tasks.helpers :: order_label",
+                "-    return 'ready'",
+                "+    return 'changed'",
+            ),
+            unexpected_fragments=("task (new)",),
+        )
+    ],
+    ids=["direct Python task plan shows persisted identity statuses"],
+)
+def test_given_direct_python_task_identity_when_planning_then_reports_identity_status(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_python_identity_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_python_identity_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_python_identity_plan.duckdb"\n'
+            ),
+            "tasks/helpers.py": ("def order_label():\n    return 'ready'\n"),
+            "tasks/prepare.py": (
+                "from sqlbuild.tasks import task\n"
+                "from tasks.helpers import order_label\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result(metadata={'label': order_label()})\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_orders\n\n"
+                "@loader(depends_on=[prepare_orders])\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+        },
+    )
+
+    initial_plan: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "+raw_orders"),
+        project_dir=project_dir,
+    )
+    assert initial_plan.returncode == 0, initial_plan.stdout + initial_plan.stderr
+    assert "task (new)" in initial_plan.stdout
+
+    run_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+raw_orders"),
+        project_dir=project_dir,
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "direct_python_identity_plan.duckdb",
+        sql=(
+            "SELECT node_type, node_name, definition_b64, metadata_json_b64 "
+            "FROM main._sqlbuild_fingerprints "
+            "WHERE node_type IN ('task', 'loader') "
+            "ORDER BY node_type, node_name"
+        ),
+    )
+    assert [row[0:2] for row in rows] == [("loader", "raw_orders"), ("task", "prepare_orders")]
+    task_row: tuple[object, ...] = rows[1]
+    definition_payload: str = base64.b64decode(str(task_row[2]).encode("ascii")).decode("utf-8")
+    metadata_payload: str = base64.b64decode(str(task_row[3]).encode("ascii")).decode("utf-8")
+    loader_definition_payload: str = base64.b64decode(str(rows[0][2]).encode("ascii")).decode(
+        "utf-8"
+    )
+    assert "def raw_orders(ctx):" in loader_definition_payload
+    assert "def prepare_orders(ctx):" in definition_payload
+    assert "def order_label():" in metadata_payload
+
+    unchanged_plan: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "+raw_orders"),
+        project_dir=project_dir,
+    )
+    assert unchanged_plan.returncode == 0, unchanged_plan.stdout + unchanged_plan.stderr
+    assert "task (unchanged)" in unchanged_plan.stdout
+
+    (project_dir / "tasks" / "helpers.py").write_text(
+        "def order_label():\n    return 'changed'\n",
+        encoding="utf-8",
+    )
+    (project_dir / "tasks" / "prepare.py").write_text(
+        "from sqlbuild.tasks import task\n"
+        "from tasks.helpers import order_label\n\n"
+        "@task\n"
+        "def prepare_orders(ctx):\n"
+        "    return ctx.result(metadata={'label': order_label(), 'version': 2})\n",
+        encoding="utf-8",
+    )
+
+    changed_plan: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--select", "+raw_orders"),
+        project_dir=project_dir,
+    )
+
+    assert changed_plan.returncode == 0, changed_plan.stdout + changed_plan.stderr
+    output: str = changed_plan.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
+            description=(
+                "changed Python identity remains display only for changes-only SQL selection"
+            ),
+            expected_fragments=(
+                "Plan ready (0 selected",
+                "Python ingress (1)",
+                "prepare_orders",
+                "task (changed)",
+                "python diff:",
+            ),
+            unexpected_fragments=("Models (", "First run (", "Query changed (", "fact_orders"),
+        )
+    ],
+    ids=["changed Python identity remains display only for changes-only SQL selection"],
+)
+def test_given_changed_python_identity_when_planning_changes_only_then_sql_work_is_not_selected(
+    test_case: DirectPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="direct_python_identity_display_only_plan",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "direct_python_identity_display_only_plan"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "direct_python_identity_display_only_plan.duckdb"\n'
+            ),
+            "tasks/helpers.py": "def order_label():\n    return 'ready'\n",
+            "tasks/prepare.py": (
+                "from sqlbuild.tasks import task\n"
+                "from tasks.helpers import order_label\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.result(metadata={'label': order_label()})\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n"
+                "from tasks.prepare import prepare_orders\n\n"
+                "@loader(depends_on=[prepare_orders])\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT order_id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+fact_orders"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    (project_dir / "tasks" / "helpers.py").write_text(
+        "def order_label():\n    return 'changed'\n",
+        encoding="utf-8",
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--select", "+fact_orders"),
+        project_dir=project_dir,
+    )
+
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    output: str = plan_result.stdout
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectPlanE2ETestCase(
             description="direct source plan warns for skipped asset ingress dependency",
             expected_fragments=(
                 "Plan ready (0 selected, 1 source to load)",
@@ -1811,21 +2053,25 @@ def test_given_python_lifecycle_project_when_planning_json_then_includes_python_
         "name": "prepare_orders",
         "kind": "task",
         "phase": "pre_sql_ingress",
+        "identity_status": "new",
     }
     assert nodes_by_name["publish_prepared_orders"] == {
         "name": "publish_prepared_orders",
         "kind": "asset",
         "phase": "pre_sql_ingress",
+        "identity_status": "new",
     }
     assert nodes_by_name["profile_fact_orders"] == {
         "name": "profile_fact_orders",
         "kind": "task",
         "phase": "read_side",
+        "identity_status": "new",
     }
     assert nodes_by_name["notify_fact_orders"] == {
         "name": "notify_fact_orders",
         "kind": "task",
         "phase": "read_side",
+        "identity_status": "new",
     }
 
 

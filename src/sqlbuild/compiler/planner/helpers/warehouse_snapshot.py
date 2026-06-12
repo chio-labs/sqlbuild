@@ -197,6 +197,8 @@ def gather_warehouse_snapshot(
 def _resolve_database(project: CompiledProject) -> str | None:
     """Extract the database from the first model target that declares one."""
 
+    if project.effective_target_database is not None:
+        return project.effective_target_database
     model: CompiledModel
     for model in project.models:
         if model.destination.database is not None:
@@ -216,6 +218,8 @@ def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
     """Collect distinct non-null target schemas from models, seeds, and functions."""
 
     schemas: set[str] = set()
+    if project.effective_target_schema is not None:
+        schemas.add(project.effective_target_schema)
     model: CompiledModel
     for model in project.models:
         if model.destination.schema is not None:
@@ -366,6 +370,7 @@ def _gather_fingerprints(
     model_fingerprints: dict[str, Fingerprint] = {}
     function_fingerprints: dict[str, Fingerprint] = {}
     seed_fingerprints: dict[str, Fingerprint] = {}
+    python_fingerprints: dict[tuple[str, str], Fingerprint] = {}
     schema: str
     for schema in schemas:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
@@ -386,10 +391,20 @@ def _gather_fingerprints(
                 function_fingerprints[node_name] = fingerprint
             elif fingerprint.node_type == NODE_TYPE_SEED:
                 seed_fingerprints[node_name] = fingerprint
+        if fingerprint_set.fingerprints_by_identity is not None:
+            identity_key: tuple[str, str]
+            for identity_key, fingerprint in fingerprint_set.fingerprints_by_identity.items():
+                if fingerprint.node_type not in {
+                    NODE_TYPE_MODEL,
+                    NODE_TYPE_FUNCTION,
+                    NODE_TYPE_SEED,
+                }:
+                    python_fingerprints[identity_key] = fingerprint
     return WarehouseFingerprints(
         models=model_fingerprints,
         functions=function_fingerprints,
         seeds=seed_fingerprints,
+        python_nodes=python_fingerprints,
     )
 
 

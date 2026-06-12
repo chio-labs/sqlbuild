@@ -107,7 +107,7 @@ def test_given_sql_function_when_rendering_create_then_postgres_declares_languag
             schema="analytics",
             expected_statements=(
                 "CREATE INDEX IF NOT EXISTS analytics._sqlbuild_fingerprints_latest_idx "
-                "ON analytics._sqlbuild_fingerprints (node_name, ts DESC, run_id DESC)",
+                "ON analytics._sqlbuild_fingerprints (node_type, node_name, ts DESC, run_id DESC)",
             ),
         )
     ],
@@ -165,7 +165,7 @@ def test_given_source_freshness_table_when_rendering_indexes_then_postgres_uses_
             schema="analytics",
             expected_fragments=(
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "FROM analytics._sqlbuild_fingerprints",
             ),
@@ -231,7 +231,7 @@ def test_given_source_freshness_when_rendering_latest_read_then_postgres_uses_wi
             expected_fragments=(
                 "DELETE FROM analytics._sqlbuild_fingerprints WHERE ctid IN",
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "__sqlbuild_history_rank > 5",
             ),

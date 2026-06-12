@@ -894,7 +894,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"DELETE FROM {table_name} WHERE rowid IN ("
             "SELECT rowid FROM ("
             "SELECT rowid, ROW_NUMBER() OVER ("
-            "PARTITION BY node_name "
+            "PARTITION BY node_type, node_name "
             "ORDER BY ts DESC, run_id DESC"
             f") AS __sqlbuild_history_rank FROM {table_name}"
             ") AS __sqlbuild_ranked "

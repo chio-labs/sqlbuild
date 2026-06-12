@@ -15,10 +15,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.check.helpers import (
     assert_expected_file_fragments,
     initialize_state_when_requested,
     prepare_check_project_by_kind,
+    prepare_python_check_project,
     prepare_read_side_python_check_project,
     resolve_check_command,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
 
 TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     CheckCommandTestCase(
@@ -263,6 +264,42 @@ def test_given_python_checks_when_running_check_then_reports_expected_results(
     for fragment in test_case.expected_absent_fragments:
         assert fragment not in combined_output
     assert_expected_file_fragments(project_dir=project_dir, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CheckCommandTestCase(
+            description="direct selected Python check persists check identity",
+            command=("--no-color", "check", "--select", "+check_orders_export"),
+            expected_returncode=0,
+            expected_stdout_fragments=("check_orders_export",),
+        )
+    ],
+    ids=["direct selected Python check persists check identity"],
+)
+def test_given_successful_python_check_when_running_check_then_persists_check_identity(
+    tmp_path: Path,
+    test_case: CheckCommandTestCase,
+) -> None:
+    project_dir: Path = prepare_python_check_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    assert query_duckdb(
+        db_path=project_dir / "python_check_project.duckdb",
+        sql=(
+            "SELECT node_type, node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'check' ORDER BY node_name"
+        ),
+    ) == [("check", "check_orders_export")]
 
 
 @pytest.mark.parametrize(

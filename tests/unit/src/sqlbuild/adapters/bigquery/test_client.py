@@ -108,9 +108,10 @@ def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expe
                 "DELETE FROM `example-project.analytics._sqlbuild_fingerprints` "
                 "AS target WHERE EXISTS",
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 "__sqlbuild_history_rank > 5",
+                "target.node_type = stale.node_type",
                 "target.node_name = stale.node_name",
             ),
         )

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
@@ -64,11 +64,18 @@ def read_latest_fingerprints(
         ) from error
     rows: list[tuple[Any, ...]] = result.fetchall()
     fingerprints: dict[str, Fingerprint] = {}
+    fingerprints_by_identity: dict[tuple[str, str], Fingerprint] = {}
     row: tuple[Any, ...]
     for row in rows:
         fingerprint: Fingerprint = _row_to_fingerprint(row, qualified_name=qualified_name)
-        fingerprints[fingerprint.node_name] = fingerprint
-    return FingerprintSet(schema=schema, fingerprints=fingerprints)
+        fingerprints_by_identity[(fingerprint.node_type, fingerprint.node_name)] = fingerprint
+        if fingerprint.node_type == NODE_TYPE_MODEL or fingerprint.node_name not in fingerprints:
+            fingerprints[fingerprint.node_name] = fingerprint
+    return FingerprintSet(
+        schema=schema,
+        fingerprints=fingerprints,
+        fingerprints_by_identity=fingerprints_by_identity,
+    )
 
 
 def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:

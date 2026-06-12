@@ -189,7 +189,7 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
             schema="staging",
             expected_contains=(
                 "ROW_NUMBER() OVER",
-                "PARTITION BY node_name",
+                "PARTITION BY node_type, node_name",
                 "ORDER BY ts DESC, run_id DESC",
                 f"FROM staging.{FINGERPRINT_TABLE_NAME}",
                 "WHERE __sqlbuild_latest_rank = 1",

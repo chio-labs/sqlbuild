@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
@@ -17,7 +19,11 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import (
+    PythonIdentityStatus,
+    PythonNodeKind,
+    PythonRunPhase,
+)
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
@@ -483,6 +489,65 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Sources to load (1)",
             "First run (1)",
             "Python read-side (1)",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="changed python identity shows source and dependency diffs",
+        plan_output=build_plan_output(),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
+                identity_status=PythonIdentityStatus.CHANGED,
+                previous_definition_json=json.dumps(
+                    {"source_text": "def prepare_orders(ctx):\n    return 1\n"},
+                    sort_keys=True,
+                ),
+                current_definition_json=json.dumps(
+                    {"source_text": "def prepare_orders(ctx):\n    return 2\n"},
+                    sort_keys=True,
+                ),
+                previous_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'old'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+                current_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'new'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Python ingress (1)",
+            "prepare_orders",
+            "task (changed)",
+            "python diff:",
+            "source diff:",
+            "dependency diff:",
+            "-    return 1",
+            "+    return 2",
+            "tasks/helpers.py :: tasks.helpers :: order_label",
+            "-    return 'old'",
+            "+    return 'new'",
         ),
     ),
     FormatPlanTestCase(
