@@ -2089,7 +2089,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
         include_stale_upstreams: bool = False,
-        changes_only: bool = False,
+        force: bool = False,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
@@ -2106,7 +2106,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del json_output
         del json_output_path
         del include_stale_upstreams
-        del changes_only
+        del force
         del include_python
         received_args.append(
             (
@@ -2202,7 +2202,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         verbose: bool = False,
         debug: bool = False,
         cli_vars: dict[str, object] | None = None,
-        changes_only: bool = False,
+        force: bool = False,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
@@ -2219,7 +2219,7 @@ def test_given_run_full_refresh_when_running_then_dispatches_expected_flag(
         del verbose
         del debug
         del cli_vars
-        del changes_only
+        del force
         del json_output
         del json_output_path
         del include_python
@@ -2303,7 +2303,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         verbose: bool,
         cli_vars: dict[str, object],
         include_stale_upstreams: bool = False,
-        changes_only: bool = False,
+        force: bool = False,
     ) -> int:
         del include_python
         received_args.append(
@@ -2380,7 +2380,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         verbose: bool,
         cli_vars: dict[str, object],
         include_stale_upstreams: bool = False,
-        changes_only: bool = False,
+        force: bool = False,
     ) -> int:
         del (
             project_dir,
@@ -2398,7 +2398,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             verbose,
             cli_vars,
             include_stale_upstreams,
-            changes_only,
+            force,
         )
         received_load_sources.append(load_sources)
         return test_case.expected_exit_code
@@ -2448,7 +2448,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         verbose: bool,
         cli_vars: dict[str, object],
         include_stale_upstreams: bool = False,
-        changes_only: bool = False,
+        force: bool = False,
     ) -> int:
         del (
             project_dir,
@@ -2466,7 +2466,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             verbose,
             cli_vars,
             include_stale_upstreams,
-            changes_only,
+            force,
         )
         received_selects.append(select)
         return test_case.expected_exit_code

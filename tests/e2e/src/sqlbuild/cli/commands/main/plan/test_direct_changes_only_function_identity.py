@@ -51,7 +51,7 @@ def test_given_function_change_when_building_dependent_then_model_version_hash_c
 
     rewrite_direct_is_large_order_function(project_dir=project_dir, operator=">=")
     changed_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only", "--select", "+orders"),
+        command=("--no-color", "build", "--select", "+orders"),
         project_dir=project_dir,
     )
 
@@ -102,7 +102,7 @@ def test_given_function_change_when_planning_with_selector_then_respects_functio
     rewrite_direct_is_large_order_function(project_dir=project_dir, operator=">=")
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--changes-only", "--select", test_case.selector),
+        command=("--no-color", "plan", "--select", test_case.selector),
         project_dir=project_dir,
     )
 

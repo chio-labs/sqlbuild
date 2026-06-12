@@ -210,7 +210,7 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
 
@@ -273,7 +273,7 @@ def test_given_run_despite_unchanged_duration_when_running_changes_only_then_exe
     assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
 
@@ -335,7 +335,7 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
 
@@ -355,7 +355,7 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
     assert rows == [("raw_orders", "1")]
 
     steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
 
@@ -415,7 +415,7 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         initial_run_result.stdout + initial_run_result.stderr
     )
     baseline_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "run"), project_dir=project_dir
     )
     assert baseline_result.returncode == test_case.expected_exit_code, (
         baseline_result.stdout + baseline_result.stderr
@@ -425,7 +425,7 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
     )
     within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "run"), project_dir=project_dir
     )
 
     assert within_tolerance_result.returncode == test_case.expected_exit_code, (
@@ -438,7 +438,7 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
     )
     beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"), project_dir=project_dir
+        command=("--no-color", "run"), project_dir=project_dir
     )
 
     assert beyond_tolerance_result.returncode == test_case.expected_exit_code, (
@@ -494,7 +494,7 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
     )
     assert initial_run_result.returncode == 0, initial_run_result.stdout + initial_run_result.stderr
     first_changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
     assert first_changes_only_result.returncode == 0, (
@@ -516,7 +516,7 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
 
@@ -587,7 +587,7 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_
     )
 
     run_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "run", "--changes-only"),
+        command=("--no-color", "run"),
         project_dir=project_dir,
     )
 
