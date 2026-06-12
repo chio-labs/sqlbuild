@@ -55,8 +55,13 @@ def execute_sqlbuild_build_work(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=False
     )
     effective_concurrency: int = project.settings.concurrency
+    display_command: str = (
+        "sqb build --no-tests --no-audits"
+        if command == DbtInteropCommand.RUN
+        else f"sqb {command.value}"
+    )
     header: str = format_build_header(
-        command=f"sqb {command.value}", target=None, concurrency=effective_concurrency
+        command=display_command, target=None, concurrency=effective_concurrency
     )
     style: CliStyle = CliStyle(use_color=use_color)
     execution_label: str = style.object_name("SQLBuild execution")

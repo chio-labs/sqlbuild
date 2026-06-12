@@ -9,7 +9,6 @@ class CliCommand(StrEnum):
     COMPILE = "compile"
     DAG = "dag"
     PLAN = "plan"
-    RUN = "run"
     FRESHNESS = "freshness"
     BUILD = "build"
     TEST = "test"

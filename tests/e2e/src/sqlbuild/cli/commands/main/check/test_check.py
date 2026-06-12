@@ -203,11 +203,17 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
         initialize_state=True,
     ),
     CheckCommandTestCase(
-        description="run does not execute Python checks by default",
-        command=("--no-color", "run"),
+        description="build without tests or audits still executes Python checks",
+        command=(
+            "--no-color",
+            "build",
+            "--no-tests",
+            "--no-audits",
+            "--exclude",
+            "tag:failure",
+        ),
         expected_returncode=0,
-        expected_stdout_fragments=("Execution  sqb run",),
-        expected_absent_fragments=("Python checks", "check_orders_export"),
+        expected_stdout_fragments=("Execution  sqb build", "Python checks", "check_orders_export"),
     ),
     CheckCommandTestCase(
         description="audit remains SQL audit only",

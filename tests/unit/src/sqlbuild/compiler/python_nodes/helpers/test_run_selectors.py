@@ -69,14 +69,18 @@ PYTHON_SQL_RUN_SELECTOR_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] =
         select=("check:check_orders_export",),
         exclude=(),
         expected_error_type=ValueError,
-        expected_error_fragment="sqb run does not execute Python checks: check_orders_export",
+        expected_error_fragment=(
+            "sqb build --no-tests --no-audits does not execute Python checks: check_orders_export"
+        ),
     ),
     PythonSqlSelectorErrorTestCase(
         description="rejects tag selector that includes a check for run",
         select=("tag:exports",),
         exclude=(),
         expected_error_type=ValueError,
-        expected_error_fragment="sqb run does not execute Python checks: check_orders_export",
+        expected_error_fragment=(
+            "sqb build --no-tests --no-audits does not execute Python checks: check_orders_export"
+        ),
     ),
     PythonSqlSelectorErrorTestCase(
         description="rejects direct asset path with unselected Python dependency for run",
