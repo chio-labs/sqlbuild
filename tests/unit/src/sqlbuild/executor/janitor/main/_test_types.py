@@ -21,6 +21,7 @@ class JanitorPlanTestCase:
     protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
     expected_candidate_names: tuple[str, ...] = field(default_factory=tuple)
     expected_direct_state_table_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_virtual_state_table_names: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_relation_reasons: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_schema_sources: tuple[str, ...] = field(default_factory=tuple)
 
@@ -31,6 +32,7 @@ class JanitorExecuteTestCase:
     relation_infos: tuple[RelationInfo, ...]
     expected_dropped_targets: tuple[str, ...]
     expected_pruned_table_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_pruned_virtual_table_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

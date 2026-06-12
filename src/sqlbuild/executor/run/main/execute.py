@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, Model
 from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.audit_reuse import (
     audit_plan_binding_key,
     reused_final_audit_results_by_binding_key,
@@ -79,6 +80,7 @@ def execute_table_entry(
     effective_target_name: str | None = None,
     effective_vars: Mapping[str, object] | None = None,
     providers: ProviderContainer | None = None,
+    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one table model through its full materialization lifecycle."""
 
@@ -173,6 +175,7 @@ def execute_table_entry(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -212,6 +215,7 @@ def execute_table_entry(
             effective_target_name=effective_target_name,
             effective_vars=effective_vars,
             providers=providers,
+            python_identity_recorder=python_identity_recorder,
         )
 
     if entry.contract_enforced:
@@ -250,6 +254,7 @@ def execute_table_entry(
         effective_target_name=effective_target_name,
         effective_vars=effective_vars,
         providers=providers,
+        python_identity_recorder=python_identity_recorder,
     )
 
 
@@ -280,6 +285,7 @@ def _staged_lifecycle(
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
     providers: ProviderContainer | None,
+    python_identity_recorder: PythonIdentityRecorder | None,
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
@@ -467,6 +473,7 @@ def _staged_lifecycle(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(
@@ -524,6 +531,7 @@ def _direct_lifecycle(
     effective_target_name: str | None,
     effective_vars: Mapping[str, object] | None,
     providers: ProviderContainer | None,
+    python_identity_recorder: PythonIdentityRecorder | None,
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
@@ -647,6 +655,7 @@ def _direct_lifecycle(
                 statement_recorder=statement_recorder,
                 hook_results=hook_results,
                 providers=providers,
+                python_identity_recorder=python_identity_recorder,
             )
     except Exception as exc:
         return build_failed_result(

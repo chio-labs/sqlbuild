@@ -35,6 +35,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorSkippedRelation,
     JanitorSkippedSchema,
     JanitorStateBackupCandidate,
+    JanitorVirtualStatePruneCandidate,
 )
 from sqlbuild.shared.helpers.scenario_artifact_names import is_scenario_artifact_physical_name
 
@@ -59,6 +60,7 @@ def build_janitor_plan(
     ] = (),
     state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = (),
     expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = (),
+    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = (),
     direct_state_history_versions: int = 20,
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
@@ -75,6 +77,7 @@ def build_janitor_plan(
             expired_virtual_environment_candidates=expired_virtual_environment_candidates,
             state_backup_candidates=state_backup_candidates,
             expired_lock_candidates=expired_lock_candidates,
+            virtual_state_prune_candidates=virtual_state_prune_candidates,
             direct_state_prune_candidates=(),
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
@@ -226,6 +229,7 @@ def build_janitor_plan(
         expired_virtual_environment_candidates=expired_virtual_environment_candidates,
         state_backup_candidates=state_backup_candidates,
         expired_lock_candidates=expired_lock_candidates,
+        virtual_state_prune_candidates=virtual_state_prune_candidates,
         direct_state_prune_candidates=tuple(direct_state_prune_candidates),
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),

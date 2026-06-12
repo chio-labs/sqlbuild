@@ -116,6 +116,20 @@ class SeedVersionRecord:
 
 
 @dataclass(frozen=True)
+class PythonNodeVersionRecord:
+    """Current state row for one Python node identity version."""
+
+    node_type: str
+    node_name: str
+    version_hash: str
+    definition_hash: str
+    identity_metadata_hash: str
+    definition_json_b64: str
+    identity_metadata_json_b64: str
+    status: ModelVersionStatus
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentRecord:
     """Current state row for one virtual data environment."""
 
@@ -158,6 +172,16 @@ class VirtualEnvironmentSeedRefRecord:
 
     virtual_environment_name: str
     seed_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
+class VirtualEnvironmentPythonNodeRefRecord:
+    """Current state row mapping a VDE Python node ref to an identity version."""
+
+    virtual_environment_name: str
+    node_type: str
+    node_name: str
     version_hash: str
 
 
@@ -240,8 +264,10 @@ class ExpiredVirtualEnvironmentInspection:
 class StateJanitorInspection:
     """State-only janitor cleanup candidates."""
 
+    schema: str
     state_backups: tuple[StateBackupRecord, ...]
     expired_locks: tuple[StateLockRecord, ...]
+    unreferenced_python_node_versions: int = 0
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from sqlbuild.virtual.state.constants import (
     MODEL_VERSION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
+    PYTHON_NODE_VERSION_TABLE,
     RECONCILE_EVENT_TABLE,
     SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
@@ -29,6 +30,7 @@ from sqlbuild.virtual.state.constants import (
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
     VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE,
     VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_SEED_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
@@ -44,6 +46,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    PythonNodeVersionRecord,
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
@@ -58,6 +61,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
@@ -466,6 +470,79 @@ class PostgresStateBackend(StateBackend):
             status=ModelVersionStatus(row[4]),
         )
 
+    def upsert_python_node_version(
+        self, connection: Any, *, schema: str, record: PythonNodeVersionRecord
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                existing_created_at: datetime | None = self._created_at_for_key(
+                    cursor,
+                    schema=schema,
+                    table_name=PYTHON_NODE_VERSION_TABLE,
+                    where_sql="node_type = %s AND node_name = %s AND version_hash = %s",
+                    params=[record.node_type, record.node_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"DELETE FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                    "WHERE node_type = %s AND node_name = %s AND version_hash = %s",
+                    [record.node_type, record.node_name, record.version_hash],
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                    "(node_type, node_name, version_hash, definition_hash, "
+                    "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, "
+                    "status, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, "
+                    "COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
+                    [
+                        record.node_type,
+                        record.node_name,
+                        record.version_hash,
+                        record.definition_hash,
+                        record.identity_metadata_hash,
+                        record.definition_json_b64,
+                        record.identity_metadata_json_b64,
+                        record.status.value,
+                        existing_created_at,
+                    ],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_python_node_version(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        node_type: str,
+        node_name: str,
+        version_hash: str,
+    ) -> PythonNodeVersionRecord | None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT node_type, node_name, version_hash, definition_hash, "
+                "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, status "
+                f"FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                "WHERE node_type = %s AND node_name = %s AND version_hash = %s",
+                [node_type, node_name, version_hash],
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        if row is None:
+            return None
+        return PythonNodeVersionRecord(
+            node_type=row[0],
+            node_name=row[1],
+            version_hash=row[2],
+            definition_hash=row[3],
+            identity_metadata_hash=row[4],
+            definition_json_b64=row[5],
+            identity_metadata_json_b64=row[6],
+            status=ModelVersionStatus(row[7]),
+        )
+
     def upsert_physical_relation(
         self, connection: Any, *, schema: str, record: PhysicalRelationRecord
     ) -> None:
@@ -729,6 +806,12 @@ class PostgresStateBackend(StateBackend):
                 )
                 cursor.execute(
                     "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                    "WHERE virtual_environment_name = %s",
+                    [virtual_environment_name],
+                )
+                cursor.execute(
+                    "DELETE FROM "
                     f"{self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                     "WHERE virtual_environment_name = %s",
                     [virtual_environment_name],
@@ -895,6 +978,90 @@ class PostgresStateBackend(StateBackend):
             )
             for row in rows
         )
+
+    def upsert_virtual_environment_python_node_ref(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        ref: VirtualEnvironmentPythonNodeRefRecord,
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                cursor.execute(
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                    "WHERE virtual_environment_name = %s AND node_type = %s AND node_name = %s",
+                    [ref.virtual_environment_name, ref.node_type, ref.node_name],
+                )
+                cursor.execute(
+                    "INSERT INTO "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                    "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
+                    "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)",
+                    [ref.virtual_environment_name, ref.node_type, ref.node_name, ref.version_hash],
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_virtual_environment_python_node_refs(
+        self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> tuple[VirtualEnvironmentPythonNodeRefRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT virtual_environment_name, node_type, node_name, version_hash "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                "WHERE virtual_environment_name = %s ORDER BY node_type, node_name",
+                [virtual_environment_name],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentPythonNodeRefRecord(
+                virtual_environment_name=row[0],
+                node_type=row[1],
+                node_name=row[2],
+                version_hash=row[3],
+            )
+            for row in rows
+        )
+
+    def count_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) "
+                f"FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} versions "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 "
+                "FROM "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                "refs "
+                "WHERE refs.node_type = versions.node_type "
+                "AND refs.node_name = versions.node_name "
+                "AND refs.version_hash = versions.version_hash)"
+            )
+            row: tuple[Any, ...] = cursor.fetchone()
+        return int(row[0])
+
+    def prune_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+        before_count: int = self.count_unreferenced_python_node_versions(connection, schema=schema)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM "
+                f"{self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                "AS versions "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 "
+                "FROM "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                "refs "
+                "WHERE refs.node_type = versions.node_type "
+                "AND refs.node_name = versions.node_name "
+                "AND refs.version_hash = versions.version_hash)"
+            )
+        return before_count
 
     def replace_virtual_environment_source_freshness(
         self,

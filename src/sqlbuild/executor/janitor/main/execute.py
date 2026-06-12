@@ -17,6 +17,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorStateBackupCandidate,
+    JanitorVirtualStatePruneCandidate,
 )
 
 
@@ -34,6 +35,7 @@ def execute_janitor_plan(
     | None = None,
     delete_state_backup: Callable[[JanitorStateBackupCandidate], None] | None = None,
     delete_expired_lock: Callable[[JanitorExpiredLockCandidate], None] | None = None,
+    prune_virtual_state: Callable[[JanitorVirtualStatePruneCandidate], object] | None = None,
 ) -> JanitorExecutionResult:
     """Delete all candidates in a janitor plan."""
 
@@ -88,6 +90,13 @@ def execute_janitor_plan(
         adapter.execute(connection, direct_state_candidate.prune_sql)
         pruned_direct_state.append(direct_state_candidate)
 
+    pruned_virtual_state: list[JanitorVirtualStatePruneCandidate] = []
+    if prune_virtual_state is not None:
+        virtual_state_candidate: JanitorVirtualStatePruneCandidate
+        for virtual_state_candidate in plan.virtual_state_prune_candidates:
+            prune_virtual_state(virtual_state_candidate)
+            pruned_virtual_state.append(virtual_state_candidate)
+
     return JanitorExecutionResult(
         deleted=plan.candidates,
         deleted_checkpoints=tuple(deleted_checkpoints),
@@ -96,4 +105,5 @@ def execute_janitor_plan(
         deleted_state_backups=tuple(deleted_state_backups),
         deleted_expired_locks=tuple(deleted_expired_locks),
         pruned_direct_state=tuple(pruned_direct_state),
+        pruned_virtual_state=tuple(pruned_virtual_state),
     )

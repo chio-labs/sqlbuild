@@ -13,6 +13,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
+    PythonNodeVersionRecord,
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
@@ -25,6 +26,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
@@ -48,6 +50,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendLifecycleTestCase,
     DuckDbStateBackendLockTestCase,
     DuckDbStateBackendOperationEventTestCase,
+    DuckDbStateBackendPythonNodeIdentityTestCase,
     DuckDbStateBackendRollbackTestCase,
     DuckDbStateBackendSeedRefTestCase,
     DuckDbStateBackendSourceFreshnessTestCase,
@@ -127,7 +130,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=23,
+            expected_issue_count=25,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -992,6 +995,156 @@ def test_given_duplicate_duckdb_source_freshness_records_when_replacing_then_blo
             )
 
         assert test_case.expected_message_fragment in str(exc_info.value)
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendPythonNodeIdentityTestCase(
+            description="persists python node versions and separate VDE refs",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            first_virtual_environment_name="dev_alice",
+            second_virtual_environment_name="dev_bob",
+            node_type="task",
+            node_name="prepare_orders",
+            first_version_hash="version-one",
+            second_version_hash="version-two",
+            expected_ref_versions=("version-one", "version-two"),
+            orphan_version_hash="version-orphan",
+            expected_pruned_count=1,
+        )
+    ],
+    ids=["persists python node versions and separate VDE refs"],
+)
+def test_given_duckdb_state_backend_when_upserting_python_node_identity_then_round_trips_refs(
+    test_case: DuckDbStateBackendPythonNodeIdentityTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        first_record: PythonNodeVersionRecord = PythonNodeVersionRecord(
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.first_version_hash,
+            definition_hash="definition-one",
+            identity_metadata_hash="metadata-one",
+            definition_json_b64="e30=",
+            identity_metadata_json_b64="e30=",
+            status=ModelVersionStatus.READY,
+        )
+        second_record: PythonNodeVersionRecord = PythonNodeVersionRecord(
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.second_version_hash,
+            definition_hash="definition-two",
+            identity_metadata_hash="metadata-two",
+            definition_json_b64="e30=",
+            identity_metadata_json_b64="e30=",
+            status=ModelVersionStatus.READY,
+        )
+        orphan_record: PythonNodeVersionRecord = PythonNodeVersionRecord(
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            version_hash=test_case.orphan_version_hash,
+            definition_hash="definition-orphan",
+            identity_metadata_hash="metadata-orphan",
+            definition_json_b64="e30=",
+            identity_metadata_json_b64="e30=",
+            status=ModelVersionStatus.READY,
+        )
+
+        backend.upsert_python_node_version(connection, schema=test_case.schema, record=first_record)
+        backend.upsert_python_node_version(
+            connection, schema=test_case.schema, record=second_record
+        )
+        backend.upsert_python_node_version(
+            connection, schema=test_case.schema, record=orphan_record
+        )
+        backend.upsert_virtual_environment_python_node_ref(
+            connection,
+            schema=test_case.schema,
+            ref=VirtualEnvironmentPythonNodeRefRecord(
+                virtual_environment_name=test_case.first_virtual_environment_name,
+                node_type=test_case.node_type,
+                node_name=test_case.node_name,
+                version_hash=test_case.first_version_hash,
+            ),
+        )
+        backend.upsert_virtual_environment_python_node_ref(
+            connection,
+            schema=test_case.schema,
+            ref=VirtualEnvironmentPythonNodeRefRecord(
+                virtual_environment_name=test_case.second_virtual_environment_name,
+                node_type=test_case.node_type,
+                node_name=test_case.node_name,
+                version_hash=test_case.second_version_hash,
+            ),
+        )
+
+        first_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
+            backend.get_virtual_environment_python_node_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.first_virtual_environment_name,
+            )
+        )
+        second_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
+            backend.get_virtual_environment_python_node_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.second_virtual_environment_name,
+            )
+        )
+
+        assert (
+            backend.get_python_node_version(
+                connection,
+                schema=test_case.schema,
+                node_type=test_case.node_type,
+                node_name=test_case.node_name,
+                version_hash=test_case.first_version_hash,
+            )
+            == first_record
+        )
+        assert tuple(ref.version_hash for ref in (*first_refs, *second_refs)) == (
+            test_case.expected_ref_versions
+        )
+        assert (
+            backend.count_unreferenced_python_node_versions(connection, schema=test_case.schema)
+            == test_case.expected_pruned_count
+        )
+        assert (
+            backend.prune_unreferenced_python_node_versions(connection, schema=test_case.schema)
+            == test_case.expected_pruned_count
+        )
+        assert (
+            backend.get_python_node_version(
+                connection,
+                schema=test_case.schema,
+                node_type=test_case.node_type,
+                node_name=test_case.node_name,
+                version_hash=test_case.orphan_version_hash,
+            )
+            is None
+        )
+        assert (
+            backend.get_python_node_version(
+                connection,
+                schema=test_case.schema,
+                node_type=test_case.node_type,
+                node_name=test_case.node_name,
+                version_hash=test_case.second_version_hash,
+            )
+            == second_record
+        )
     finally:
         backend.close(connection)
 

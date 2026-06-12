@@ -121,6 +121,7 @@ class VirtualPythonHooksBuildE2ETestCase:
     expected_exit_code: int
     expected_model_rows: tuple[tuple[object, ...], ...]
     expected_hook_log_rows: tuple[tuple[object, ...], ...]
+    expected_identity_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -194,6 +195,17 @@ class VirtualPythonBuildE2ETestCase:
     expected_profile_text: str | None = None
     expected_source_profile_text: str | None = None
     expected_profile_exists: bool | None = None
+
+
+@dataclass(frozen=True)
+class VirtualPythonIdentityBuildE2ETestCase:
+    """Test case for virtual Python identity persistence behavior."""
+
+    description: str
+    expected_state_identity_rows: tuple[tuple[object, ...], ...]
+    expected_warehouse_fingerprint_table_count: int
+    expected_changed_plan_fragments: tuple[str, ...]
+    unexpected_changed_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
