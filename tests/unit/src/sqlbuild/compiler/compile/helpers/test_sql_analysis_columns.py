@@ -375,6 +375,7 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
     ) = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        allow_compact_analysis=True,
     )
 
     assert isinstance(result, tuple)
@@ -429,6 +430,7 @@ def test_given_compact_query_analysis_when_ast_parse_would_fail_then_returns_com
     ) = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        allow_compact_analysis=True,
     )
 
     assert isinstance(result, tuple)
@@ -443,7 +445,10 @@ COMPACT_ANALYSIS_NO_AST_TEST_CASES: list[PolyglotAnalysisTestCase] = [
         description="uses compact analysis for aggregate transforms",
         query_sql='SELECT COUNT(*) AS n, SUM(amount) AS total FROM __ref("orders")',
         references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
-        expected_columns=(InferredColumn(name="n"), InferredColumn(name="total")),
+        expected_columns=(
+            InferredColumn(name="n", type="BIGINT", nullability=InferredNullability.NON_NULL),
+            InferredColumn(name="total", type="DECIMAL"),
+        ),
         expected_lineage_columns=(
             CompiledLineageColumnFact(
                 output_column="n",
@@ -617,12 +622,123 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
         query_sql=test_case.query_sql,
         references=test_case.references,
         column_nullability_by_table=test_case.column_nullability_by_table,
+        allow_compact_analysis=True,
     )
 
     assert isinstance(result, tuple)
     columns, lineage_columns, has_star = result
     assert columns == test_case.expected_columns
     assert lineage_columns == test_case.expected_lineage_columns
+    assert has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="keeps star lineage conservative on fast path",
+            query_sql='SELECT * FROM __ref("orders")',
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={
+                "orders": {
+                    "order_id": InferredNullability.NON_NULL,
+                    "status": InferredNullability.NULLABLE,
+                }
+            },
+            expected_columns=(),
+            expected_lineage_columns=(),
+            expected_has_star=True,
+        )
+    ],
+    ids=["keeps star lineage conservative on fast path"],
+)
+def test_given_star_projection_when_compact_analysis_disabled_then_marks_star_without_expansion(
+    test_case: PolyglotAnalysisTestCase,
+) -> None:
+    result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+    )
+
+    assert isinstance(result, tuple)
+    columns, lineage_columns, has_star = result
+    assert columns == test_case.expected_columns
+    assert lineage_columns == test_case.expected_lineage_columns
+    assert has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="expands star lineage on rich compact path",
+            query_sql='SELECT * FROM __ref("orders")',
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={
+                "orders": {
+                    "order_id": InferredNullability.NON_NULL,
+                    "status": InferredNullability.NULLABLE,
+                }
+            },
+            expected_columns=(
+                InferredColumn(name="order_id", nullability=InferredNullability.NON_NULL),
+                InferredColumn(name="status", nullability=InferredNullability.NULLABLE),
+            ),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="order_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="order_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+                CompiledLineageColumnFact(
+                    output_column="status",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="status",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=True,
+        )
+    ],
+    ids=["expands star lineage on rich compact path"],
+)
+def test_given_star_projection_when_compact_analysis_enabled_then_expands_schema_lineage(
+    test_case: PolyglotAnalysisTestCase,
+) -> None:
+    result: (
+        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
+    ) = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+        allow_compact_analysis=True,
+    )
+
+    assert isinstance(result, tuple)
+    columns, lineage_columns, has_star = result
+    assert (
+        tuple(sorted(columns or (), key=lambda column: column.name)) == test_case.expected_columns
+    )
+    assert (
+        tuple(sorted(lineage_columns, key=lambda column: column.output_column))
+        == test_case.expected_lineage_columns
+    )
     assert has_star is test_case.expected_has_star
 
 
@@ -640,6 +756,7 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
     ) = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        allow_compact_analysis=True,
     )
     assert isinstance(compact_result, tuple)
     assert compact_result[2] is test_case.expected_has_star
@@ -657,6 +774,7 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
     ) = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        allow_compact_analysis=True,
     )
 
     assert isinstance(fallback_result, tuple)

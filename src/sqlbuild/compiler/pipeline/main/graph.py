@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_all_keys,
     build_static_downstream_deps,
@@ -29,6 +30,7 @@ def build_project_graph(
     adapter: BaseAdapter,
     no_sql_validation: bool = False,
     skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     on_progress: Callable[[str], None] | None = None,
@@ -43,6 +45,7 @@ def build_project_graph(
         adapter=adapter,
         no_sql_validation=no_sql_validation,
         skip_column_inference=skip_column_inference,
+        column_lineage_mode=column_lineage_mode,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
