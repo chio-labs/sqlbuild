@@ -9,16 +9,16 @@ from dataclasses import dataclass, field
 class ClonePolicy:
     """Environment clone policy."""
 
-    allow_as_source: bool = False
-    allow_as_target: bool = False
+    allow_as_clone_origin: bool = False
+    allow_as_clone_destination: bool = False
 
 
 @dataclass(frozen=True)
 class LocalClonePolicy:
     """Local environment clone policy overrides."""
 
-    allow_as_source: bool | None = None
-    allow_as_target: bool | None = None
+    allow_as_clone_origin: bool | None = None
+    allow_as_clone_destination: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,8 @@ class TargetConfig:
     database: str | None = None
     schema: str | None = None
     defer_sources_to: str | None = None
+    reuse_from: str | None = None
+    reuse_hard_copy: bool = False
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
 
@@ -65,6 +67,8 @@ class LocalTargetConfig:
     database: str | None = None
     schema: str | None = None
     defer_sources_to: str | None = None
+    reuse_from: str | None = None
+    reuse_hard_copy: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
 
@@ -97,8 +101,8 @@ class DefaultsConfig:
     cursor_start: object | None = None
     lookback: str | None = None
     batch_size: str | int | None = None
-    query_change_backfill: str | None = None
-    schema_change_backfill: dict[str, str] = field(default_factory=dict)
+    replay_on_change: str | None = None
+    run_despite_unchanged: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     tags: tuple[str, ...] = field(default_factory=tuple)
@@ -114,6 +118,7 @@ class JanitorConfig:
     enabled: bool = False
     retention_days: int = 30
     max_checkpoints: int = 20
+    direct_state_history_versions: int = 20
     delete_tracked_only: bool = True
     exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
 

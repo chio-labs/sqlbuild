@@ -16,6 +16,21 @@ from scripts.structure.structure_conventions.constants import (
 )
 from scripts.structure.structure_conventions.models import Violation
 
+_TARGET_REUSE_PATH_MARKERS: tuple[str, ...] = (
+    "standard_reuse",
+    "reuse.py",
+)
+_TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
+    "source_relation",
+    "source_cursor",
+    "source_fingerprint",
+    "source_version",
+    "target_relation",
+    "target_cursor",
+    "REUSE_RELATION",
+    "reuse_relation",
+)
+
 
 def parse_python_module(file_path: Path) -> ast.Module:
     """Parse a Python file into an AST module."""
@@ -39,6 +54,36 @@ def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Viola
                     ),
                 )
             )
+    return violations
+
+
+def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
+    """Reject ambiguous source/target wording in target-reuse implementation modules."""
+
+    path_text: str = file_path.as_posix()
+    if not any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS):
+        return []
+
+    violations: list[Violation] = []
+    lines: list[str] = file_path.read_text(encoding="utf-8").splitlines()
+    line_number: int
+    line: str
+    for line_number, line in enumerate(lines, start=1):
+        term: str
+        for term in _TARGET_REUSE_FORBIDDEN_TERMS:
+            if term in line:
+                violations.append(
+                    Violation(
+                        code="SC045",
+                        path=file_path,
+                        line=line_number,
+                        message=(
+                            f"target-reuse modules must not use ambiguous term '{term}'; "
+                            "use origin/destination/reuse_from terminology unless this is real "
+                            "SQLBuild source logic"
+                        ),
+                    )
+                )
     return violations
 
 
@@ -615,6 +660,34 @@ def check_no_raw_runtime_diagnostics(file_path: Path, module: ast.Module) -> lis
                     ),
                 )
             )
+    return violations
+
+
+def check_no_swallowed_exception_probes(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject broad exception handlers that silently answer existence probes."""
+
+    if not _is_runtime_source_file(file_path):
+        return []
+
+    violations: list[Violation] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+        if not _is_bare_exception_handler(node):
+            continue
+        if not _handler_body_is_single_swallow(node.body):
+            continue
+        violations.append(
+            Violation(
+                code="SC044",
+                path=file_path,
+                line=node.lineno,
+                message=(
+                    "runtime code must not swallow broad exceptions as existence probe "
+                    "answers; use adapter metadata checks or log best-effort fallbacks"
+                ),
+            )
+        )
     return violations
 
 
@@ -1249,9 +1322,9 @@ def check_cross_package_internal_imports(
     )
 
     violations: list[Violation] = []
-    _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers", "classes"})
+    _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers"})
     _PUBLIC_MODULES: frozenset[str] = frozenset(
-        {"models", "types", "constants", "exceptions", "__init__", "main"}
+        {"classes", "models", "types", "constants", "exceptions", "__init__", "main"}
     )
 
     for node in ast.walk(module):
@@ -1283,7 +1356,7 @@ def check_cross_package_internal_imports(
                         message=(
                             f"cross-package import reaches into internal structure of "
                             f"'{'.'.join(imported_parts[:3])}'; import from its public "
-                            f"surface (models, types, constants, exceptions, or a thin "
+                            f"surface (classes, models, types, constants, exceptions, or a thin "
                             f"main/ entry module). If the code is helper logic rather than "
                             f"an entrypoint, move it to helpers/ or, if broadly reused "
                             f"across domains, shared/"
@@ -1308,7 +1381,7 @@ def check_cross_package_internal_imports(
                         message=(
                             f"cross-package import reaches into internal structure of "
                             f"'{'.'.join(imported_parts[:2])}'; import from its public "
-                            f"surface (models, types, constants, exceptions, or a thin "
+                            f"surface (classes, models, types, constants, exceptions, or a thin "
                             f"main/ entry module). If the code is helper logic rather than "
                             f"an entrypoint, move it to helpers/ or, if broadly reused "
                             f"across domains, shared/"
@@ -1605,6 +1678,32 @@ def _raise_uses_raw_builtin(node: ast.Raise) -> bool:
         _base_name(node.exc.func) if isinstance(node.exc, ast.Call) else _base_name(node.exc)
     )
     return raised_name in RAW_BUILTIN_RAISE_NAMES
+
+
+def _is_bare_exception_handler(node: ast.ExceptHandler) -> bool:
+    return node.name is None and isinstance(node.type, ast.Name) and node.type.id == "Exception"
+
+
+def _handler_body_is_single_swallow(body: list[ast.stmt]) -> bool:
+    if len(body) != 1:
+        return False
+
+    statement: ast.stmt = body[0]
+    if isinstance(statement, ast.Continue):
+        return True
+    if not isinstance(statement, ast.Return):
+        return False
+    return _is_swallowed_probe_return_value(statement.value)
+
+
+def _is_swallowed_probe_return_value(node: ast.expr | None) -> bool:
+    if isinstance(node, ast.Constant):
+        return node.value is None or node.value is False
+    if isinstance(node, ast.Dict):
+        return not node.keys and not node.values
+    if isinstance(node, ast.Tuple):
+        return not node.elts
+    return False
 
 
 def _decorator_name(node: ast.expr) -> str:

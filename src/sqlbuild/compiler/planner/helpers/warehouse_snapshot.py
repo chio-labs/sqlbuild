@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,13 +15,18 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.constants import (
+    FINGERPRINT_TABLE_NAME,
+    NODE_TYPE_FUNCTION,
+    NODE_TYPE_MODEL,
+    NODE_TYPE_SEED,
+)
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
@@ -31,14 +37,17 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ModelCursorSnapshot,
     PlannerScope,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
 
 @dataclass(frozen=True)
@@ -82,7 +91,7 @@ def build_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
 ) -> WarehouseSnapshot:
     """Gather warehouse state and validate selected upstream availability."""
@@ -97,7 +106,7 @@ def build_warehouse_snapshot(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         on_progress=on_progress,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
     )
     missing: tuple[MissingUpstream, ...] = check_buildability(
         selected_keys=scope.selected_keys,
@@ -125,7 +134,7 @@ def gather_warehouse_snapshot(
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -153,7 +162,7 @@ def gather_warehouse_snapshot(
         schemas=query_schemas,
         names=metadata_names,
     )
-    fingerprints: dict[str, Fingerprint] = _gather_fingerprints(
+    fingerprints: WarehouseFingerprints = _gather_fingerprints(
         adapter=adapter,
         connection=connection,
         execute=execute,
@@ -174,7 +183,7 @@ def gather_warehouse_snapshot(
             existing_relations=relations,
             selected_keys=selected_keys,
             on_progress=on_progress,
-            deferred_targets=deferred_targets,
+            deferred_locations=deferred_locations,
         )
 
     return WarehouseSnapshot(
@@ -188,6 +197,8 @@ def gather_warehouse_snapshot(
 def _resolve_database(project: CompiledProject) -> str | None:
     """Extract the database from the first model target that declares one."""
 
+    if project.effective_target_database is not None:
+        return project.effective_target_database
     model: CompiledModel
     for model in project.models:
         if model.destination.database is not None:
@@ -207,6 +218,8 @@ def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
     """Collect distinct non-null target schemas from models, seeds, and functions."""
 
     schemas: set[str] = set()
+    if project.effective_target_schema is not None:
+        schemas.add(project.effective_target_schema)
     model: CompiledModel
     for model in project.models:
         if model.destination.schema is not None:
@@ -349,23 +362,50 @@ def _gather_fingerprints(
     execute: Any,
     database: str | None,
     schemas: tuple[str, ...] | None,
-) -> dict[str, Fingerprint]:
-    """Read latest fingerprints across all target schemas."""
+) -> WarehouseFingerprints:
+    """Read latest fingerprints across all target schemas grouped by node type."""
 
     if schemas is None:
-        return {}
-    merged: dict[str, Fingerprint] = {}
+        return WarehouseFingerprints()
+    model_fingerprints: dict[str, Fingerprint] = {}
+    function_fingerprints: dict[str, Fingerprint] = {}
+    seed_fingerprints: dict[str, Fingerprint] = {}
+    python_fingerprints: dict[tuple[str, str], Fingerprint] = {}
     schema: str
     for schema in schemas:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=execute,
+            relation_exists=adapter.relation_exists,
             database=database,
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
         )
-        merged.update(fingerprint_set.fingerprints)
-    return merged
+        node_name: str
+        fingerprint: Fingerprint
+        for node_name, fingerprint in fingerprint_set.fingerprints.items():
+            if fingerprint.node_type == NODE_TYPE_MODEL:
+                model_fingerprints[node_name] = fingerprint
+            elif fingerprint.node_type == NODE_TYPE_FUNCTION:
+                function_fingerprints[node_name] = fingerprint
+            elif fingerprint.node_type == NODE_TYPE_SEED:
+                seed_fingerprints[node_name] = fingerprint
+        if fingerprint_set.fingerprints_by_identity is not None:
+            identity_key: tuple[str, str]
+            for identity_key, fingerprint in fingerprint_set.fingerprints_by_identity.items():
+                if fingerprint.node_type not in {
+                    NODE_TYPE_MODEL,
+                    NODE_TYPE_FUNCTION,
+                    NODE_TYPE_SEED,
+                }:
+                    python_fingerprints[identity_key] = fingerprint
+    return WarehouseFingerprints(
+        models=model_fingerprints,
+        functions=function_fingerprints,
+        seeds=seed_fingerprints,
+        python_nodes=python_fingerprints,
+    )
 
 
 def _gather_cursor_snapshots(
@@ -377,7 +417,7 @@ def _gather_cursor_snapshots(
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
     on_progress: Callable[[str], None] | None,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
@@ -391,7 +431,7 @@ def _gather_cursor_snapshots(
         source_map=source_map,
         existing_relations=existing_relations,
         selected_keys=selected_keys,
-        deferred_targets=deferred_targets,
+        deferred_locations=deferred_locations,
     )
     if not cursor_models:
         return {}
@@ -421,7 +461,7 @@ def _collect_cursor_models(
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
@@ -462,7 +502,7 @@ def _collect_cursor_models(
                 adapter=adapter,
                 model_map=model_map,
                 source_map=source_map,
-                deferred_targets=deferred_targets,
+                deferred_locations=deferred_locations,
                 selected_names=selected_names,
             )
             if upstream_relation is None:
@@ -591,7 +631,13 @@ def _execute_cursor_batch(
 
     try:
         result: Any = execute(connection, sql)
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "cursor bounds batch query failed; treating batch as unavailable",
+            sqlbuild_batch_tags=", ".join(query.tag for query in batch),
+            sqlbuild_error=str(error),
+        )
         return {}
     rows: list[Any] = result.fetchall()
     output: dict[str, str] = {}
@@ -656,15 +702,19 @@ def _resolve_upstream_qualified_name(
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     selected_names: frozenset[str] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
         is_selected: bool = selected_names is not None and ref.ref_name in selected_names
-        if deferred_targets is not None and ref.ref_name in deferred_targets and not is_selected:
-            return deferred_targets[ref.ref_name].qualified_name
+        if (
+            deferred_locations is not None
+            and ref.ref_name in deferred_locations
+            and not is_selected
+        ):
+            return deferred_locations[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.destination.qualified_name

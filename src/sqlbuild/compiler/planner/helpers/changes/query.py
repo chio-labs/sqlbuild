@@ -12,4 +12,4 @@ def detect_query_change(
 ) -> bool:
     """Compare compiled hashes against the stored fingerprint to detect query changes."""
 
-    return compiled_query_hash != fingerprint.query_hash
+    return compiled_query_hash != fingerprint.definition_hash

@@ -109,7 +109,7 @@ def virtual_seed_orders_model(*, amount_expression: str) -> str:
         "  cursor ordered_at,\n"
         "  cursor_type timestamp,\n"
         "  cursor_grain day,\n"
-        "  query_change_backfill bounded-7d\n"
+        "  replay_on_change bounded-7d\n"
         ");\n\n"
         f"SELECT id, ordered_at, {amount_expression} AS amount_cents\n"
         'FROM __source("raw_orders")\n'
@@ -282,14 +282,14 @@ def prepare_snowflake_diff_project(*, tmp_path: Path) -> tuple[Path, str, str]:
         f'database = "{database_name}"\n'
         f'schema = "{dev_schema}"\n\n'
         "[targets.dev.clone]\n"
-        "allow_as_source = true\n"
-        "allow_as_target = true\n\n"
+        "allow_as_clone_origin = true\n"
+        "allow_as_clone_destination = true\n\n"
         "[targets.prod]\n"
         f'database = "{database_name}"\n'
         f'schema = "{prod_schema}"\n\n'
         "[targets.prod.clone]\n"
-        "allow_as_source = true\n"
-        "allow_as_target = false\n\n"
+        "allow_as_clone_origin = true\n"
+        "allow_as_clone_destination = false\n\n"
         "[defaults]\n"
         'materialized = "table"\n\n'
         "models/staging/stg_orders.sql: invalid\n"

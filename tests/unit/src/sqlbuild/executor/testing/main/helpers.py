@@ -47,7 +47,11 @@ def build_comparison_test_entry_with_helper_ctes(
     )
 
 
-def build_table_function_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestPlanEntry:
+def build_table_function_test_entry(
+    *,
+    sql_analysis_enabled: bool = True,
+    resolved_sql: str = "SELECT * FROM `workspace`.`test`.`customer_orders`(1)",
+) -> SqlTestPlanEntry:
     return SqlTestPlanEntry(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
@@ -57,7 +61,7 @@ def build_table_function_test_entry(*, sql_analysis_enabled: bool = True) -> Sql
         chain=(
             ChainStep(
                 model_name="table_fn returns customer orders",
-                resolved_sql=("SELECT * FROM `workspace`.`test`.`customer_orders`(1)"),
+                resolved_sql=resolved_sql,
                 expected_cte_sql="SELECT 1 AS order_id",
             ),
         ),

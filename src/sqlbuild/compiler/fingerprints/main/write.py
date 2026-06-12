@@ -23,6 +23,7 @@ def write_fingerprint(
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
     render_create_table_sql: Callable[..., str] | None = None,
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
 ) -> None:
     """Append one fingerprint row, creating the table if needed."""
 
@@ -37,17 +38,23 @@ def write_fingerprint(
         )
     )
     execute(connection, create_sql)
+    if render_create_index_sqls is not None:
+        index_sql: str
+        for index_sql in render_create_index_sqls(database=database, schema=schema):
+            execute(connection, index_sql)
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,
-        model_name=fingerprint.model_name,
+        node_type=fingerprint.node_type,
+        node_name=fingerprint.node_name,
         target_database=fingerprint.target_database,
         target_schema=fingerprint.target_schema,
         target_name=fingerprint.target_name,
         run_id=fingerprint.run_id,
-        query_hash=fingerprint.query_hash,
+        definition_hash=fingerprint.definition_hash,
+        version_hash=fingerprint.version_hash,
         schema_fingerprint=fingerprint.schema_fingerprint,
-        query_sql=fingerprint.query_sql,
+        definition=fingerprint.definition,
         metadata_json=fingerprint.metadata_json,
         ts=fingerprint.ts.isoformat(),
         render_qualified_name=render_qualified_name,

@@ -14,7 +14,7 @@ from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     DetachedVirtualEnvironmentInspection,
     PhysicalRelationRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRetentionRecord,
 )
 
@@ -36,17 +36,19 @@ def inspect_detached_environment_retention(
         environments: tuple[VirtualEnvironmentRetentionRecord, ...] = (
             backend.list_virtual_environments(connection, schema=config.schema)
         )
-        refs_by_environment: dict[str, tuple[VirtualEnvironmentRefRecord, ...]] = {}
+        refs_by_environment: dict[str, tuple[VirtualEnvironmentModelRefRecord, ...]] = {}
         physical_relations_by_ref: dict[tuple[str, str], PhysicalRelationRecord] = {}
         environment: VirtualEnvironmentRetentionRecord
         for environment in environments:
-            refs: tuple[VirtualEnvironmentRefRecord, ...] = backend.get_virtual_environment_refs(
-                connection,
-                schema=config.schema,
-                virtual_environment_name=environment.virtual_environment_name,
+            refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+                backend.get_virtual_environment_model_refs(
+                    connection,
+                    schema=config.schema,
+                    virtual_environment_name=environment.virtual_environment_name,
+                )
             )
             refs_by_environment[environment.virtual_environment_name] = refs
-            ref: VirtualEnvironmentRefRecord
+            ref: VirtualEnvironmentModelRefRecord
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
                     connection,

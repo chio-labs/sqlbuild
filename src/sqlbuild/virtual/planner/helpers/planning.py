@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
 
@@ -10,18 +9,31 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
+from sqlbuild.compiler.planner.main.model_upstream_closure import build_upstream_model_names
+from sqlbuild.compiler.planner.main.seed_identity import build_seed_identity
 from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
     build_function_local_hashes as build_shared_function_local_hashes,
 )
+from sqlbuild.compiler.planner.main.version_identity_local_hash import (
+    build_model_local_identity_hash,
+)
 from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.main.version_identity_stale_model_names import (
+    build_version_identity_stale_model_names,
+)
+from sqlbuild.compiler.planner.main.version_identity_version_hash import (
+    build_model_version_identity_hash,
+)
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 
 
@@ -45,13 +57,9 @@ def build_expected_local_hashes(
         model: Any | None = models_by_name.get(key.name)
         if model is None:
             continue
-        expected_local_hashes[model.name] = _stable_hash(
-            "\n".join(
-                (
-                    model.query_sql,
-                    model_metadata_jsons[model.name],
-                )
-            )
+        expected_local_hashes[model.name] = build_model_local_identity_hash(
+            query_sql=model.query_sql,
+            metadata_json=model_metadata_jsons[model.name],
         )
     return expected_local_hashes
 
@@ -60,6 +68,26 @@ def build_function_local_hashes(*, graph: ProjectGraph) -> dict[str, str]:
     """Derive local-only semantic hashes for functions."""
 
     return build_shared_function_local_hashes(functions=graph.project.functions)
+
+
+def build_expected_seed_version_hashes(*, graph: ProjectGraph) -> dict[str, str]:
+    """Derive expected seed version hashes from current compiled seed identities."""
+
+    return {
+        seed.name: seed_version_hash
+        for seed in graph.project.seeds
+        for seed_version_hash, _metadata_json in (build_seed_identity(seed),)
+    }
+
+
+def build_seed_identity_metadata_jsons(*, graph: ProjectGraph) -> dict[str, str]:
+    """Build deterministic seed identity metadata JSON by seed name."""
+
+    return {
+        seed.name: metadata_json
+        for seed in graph.project.seeds
+        for _seed_version_hash, metadata_json in (build_seed_identity(seed),)
+    }
 
 
 def build_model_fingerprint_metadata_jsons(
@@ -93,6 +121,7 @@ def build_expected_version_hashes(
     graph: ProjectGraph,
     expected_local_hashes: dict[str, str],
     source_version_hashes: dict[str, str] | None = None,
+    seed_version_hashes: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Derive expected model version hashes from current code and upstream hashes."""
 
@@ -100,6 +129,7 @@ def build_expected_version_hashes(
     expected_hashes: dict[str, str] = {
         function.name: expected_local_hashes[function.name] for function in graph.project.functions
     }
+    expected_hashes.update(seed_version_hashes or build_expected_seed_version_hashes(graph=graph))
     models_by_name: dict[str, Any] = {model.name: model for model in graph.project.models}
 
     key: Any
@@ -109,29 +139,11 @@ def build_expected_version_hashes(
         model: Any | None = models_by_name.get(key.name)
         if model is None:
             continue
-        upstream_hashes: list[str] = []
-        upstream_key: Any
-        for upstream_key in model.deps:
-            if upstream_key.resource_type == CompiledResourceType.SOURCE:
-                source_hash: str | None = source_hashes.get(upstream_key.name)
-                if source_hash is not None:
-                    upstream_hashes.append(source_hash)
-                continue
-            if upstream_key.resource_type not in (
-                CompiledResourceType.MODEL,
-                CompiledResourceType.FUNCTION,
-            ):
-                continue
-            upstream_hash: str | None = expected_hashes.get(upstream_key.name)
-            if upstream_hash is not None:
-                upstream_hashes.append(upstream_hash)
-        expected_hashes[model.name] = _stable_hash(
-            "\n".join(
-                (
-                    expected_local_hashes[model.name],
-                    *upstream_hashes,
-                )
-            )
+        expected_hashes[model.name] = build_model_version_identity_hash(
+            local_hash=expected_local_hashes[model.name],
+            upstream_deps=model.deps,
+            upstream_version_hashes=expected_hashes,
+            source_version_hashes=source_hashes,
         )
     return expected_hashes
 
@@ -165,11 +177,59 @@ def build_source_freshness_incomplete_model_names(
 
 
 def build_bound_version_hashes(
-    refs: tuple[VirtualEnvironmentRefRecord, ...],
+    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
 ) -> dict[str, str]:
     """Index bound version hashes by model name from VDE refs."""
 
     return {ref.model_name: ref.version_hash for ref in refs}
+
+
+def build_bound_seed_version_hashes(
+    refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
+) -> dict[str, str]:
+    """Index bound version hashes by seed name from VDE seed refs."""
+
+    return {ref.seed_name: ref.version_hash for ref in refs}
+
+
+def build_stale_seed_names(
+    *,
+    seed_names: tuple[str, ...],
+    expected_seed_version_hashes: dict[str, str],
+    bound_seed_version_hashes: dict[str, str],
+) -> tuple[str, ...]:
+    """Return seed names whose bound and expected version hashes differ."""
+
+    return tuple(
+        sorted(
+            seed_name
+            for seed_name in seed_names
+            if bound_seed_version_hashes.get(seed_name)
+            != expected_seed_version_hashes.get(seed_name)
+        )
+    )
+
+
+def build_seed_plan_reasons(
+    *,
+    seed_names: tuple[str, ...],
+    expected_seed_version_hashes: dict[str, str],
+    bound_seed_version_hashes: dict[str, str],
+) -> dict[str, PlanReason]:
+    """Classify VDE seed plan reasons from typed seed refs."""
+
+    reasons: dict[str, PlanReason] = {}
+    seed_name: str
+    for seed_name in seed_names:
+        bound_version_hash: str | None = bound_seed_version_hashes.get(seed_name)
+        expected_version_hash: str | None = expected_seed_version_hashes.get(seed_name)
+        if bound_version_hash is None:
+            reasons[seed_name] = PlanReason.FIRST_RUN
+        elif expected_version_hash is not None and bound_version_hash != expected_version_hash:
+            reasons[seed_name] = PlanReason.CONFIG_CHANGED
+        else:
+            reasons[seed_name] = PlanReason.NO_CHANGE
+    return reasons
 
 
 def build_source_version_hashes(
@@ -209,12 +269,11 @@ def build_stale_model_names(
 ) -> tuple[str, ...]:
     """Return model names whose bound and expected hashes differ."""
 
-    incomplete: set[str] = set(source_freshness_incomplete_model_names)
-    return tuple(
-        model_name
-        for model_name in model_names
-        if model_name in incomplete
-        or bound_version_hashes.get(model_name) != expected_version_hashes.get(model_name)
+    return build_version_identity_stale_model_names(
+        model_names=model_names,
+        expected_version_hashes=expected_version_hashes,
+        built_version_hashes=bound_version_hashes,
+        forced_stale_model_names=source_freshness_incomplete_model_names,
     )
 
 
@@ -224,7 +283,7 @@ def build_bound_local_hashes(
     """Index bound local semantic hashes by model name from model-version records."""
 
     return {
-        model_name: model_version.data_hash
+        model_name: model_version.definition_identity_hash
         for model_name, model_version in model_versions.items()
         if model_version is not None
     }
@@ -389,25 +448,19 @@ def build_default_virtual_selection(
 ) -> tuple[str, ...]:
     """Return stale models plus their downstream model closure."""
 
-    selected: set[str] = set(stale_model_names)
-    stale_model_name: str
-    for stale_model_name in stale_model_names:
-        start_key: Any | None = graph.all_keys.get(stale_model_name)
-        if start_key is None:
-            continue
-        stack: list[Any] = [start_key]
-        visited: set[Any] = set()
-        while stack:
-            current: Any = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current.resource_type == CompiledResourceType.MODEL:
-                selected.add(current.name)
-            downstream_key: Any
-            for downstream_key in graph.downstream_deps.get(current, ()):  # pragma: no branch
-                stack.append(downstream_key)
-    return tuple(sorted(selected))
+    start_keys: tuple[CompiledObjectKey, ...] = tuple(
+        key
+        for model_name in stale_model_names
+        if (key := graph.all_keys.get(model_name)) is not None
+    )
+    return tuple(
+        sorted(
+            build_downstream_model_names(
+                start_keys=start_keys,
+                downstream_deps=graph.downstream_deps,
+            )
+        )
+    )
 
 
 def resolve_virtual_model_selection(
@@ -418,7 +471,7 @@ def resolve_virtual_model_selection(
     default_selection: tuple[str, ...],
     stale_model_names: tuple[str, ...],
     include_stale_upstreams: bool = False,
-    changes_only: bool = False,
+    work_selection_policy: WorkSelectionPolicy = WorkSelectionPolicy.ALL_SELECTED,
 ) -> tuple[str, ...]:
     """Resolve and guard the effective virtual model selection."""
 
@@ -431,7 +484,7 @@ def resolve_virtual_model_selection(
             exclude=exclude,
         )
     )
-    if changes_only:
+    if work_selection_policy == WorkSelectionPolicy.STALE_ONLY:
         default_set: set[str] = set(default_selection)
         selected_model_names = tuple(
             model_name for model_name in selected_model_names if model_name in default_set
@@ -466,26 +519,18 @@ def build_stale_required_upstream_closure(
 
     selected: set[str] = set(selected_model_names)
     stale: set[str] = set(stale_model_names)
-    required: set[str] = set()
-    selected_model_name: str
-    for selected_model_name in selected_model_names:
-        start_key: Any | None = graph.all_keys.get(selected_model_name)
-        if start_key is None:
-            continue
-        stack: list[Any] = list(graph.upstream_deps.get(start_key, ()))
-        visited: set[Any] = set()
-        while stack:
-            current: Any = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current.resource_type == CompiledResourceType.MODEL:
-                if current.name in stale and current.name not in selected:
-                    required.add(current.name)
-            upstream_key: Any
-            for upstream_key in graph.upstream_deps.get(current, ()):  # pragma: no branch
-                stack.append(upstream_key)
-    return tuple(sorted(required))
+    start_keys: tuple[CompiledObjectKey, ...] = tuple(
+        key
+        for model_name in selected_model_names
+        if (key := graph.all_keys.get(model_name)) is not None
+    )
+    required: frozenset[str] = build_upstream_model_names(
+        start_keys=tuple(
+            upstream_key for key in start_keys for upstream_key in graph.upstream_deps.get(key, ())
+        ),
+        upstream_deps=graph.upstream_deps,
+    )
+    return tuple(sorted(model_name for model_name in required if model_name in stale - selected))
 
 
 def _resolve_selected_model_names(
@@ -518,10 +563,6 @@ def _apply_exclude_to_model_names(
         return model_names
     excluded: set[str] = set(_resolve_selected_model_names(graph=graph, select=exclude, exclude=()))
     return tuple(model_name for model_name in model_names if model_name not in excluded)
-
-
-def _stable_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _topologically_order_keys(graph: ProjectGraph) -> tuple[Any, ...]:

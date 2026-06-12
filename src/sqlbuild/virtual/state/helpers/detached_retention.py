@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlbuild.virtual.state.models import (
     DetachedVirtualEnvironmentInspection,
     PhysicalRelationRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRetentionRecord,
 )
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
@@ -16,7 +16,7 @@ from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 def build_detached_environment_inspection(
     *,
     environments: tuple[VirtualEnvironmentRetentionRecord, ...],
-    refs_by_environment: dict[str, tuple[VirtualEnvironmentRefRecord, ...]],
+    refs_by_environment: dict[str, tuple[VirtualEnvironmentModelRefRecord, ...]],
     physical_relations_by_ref: dict[tuple[str, str], PhysicalRelationRecord],
     retention_days: int,
     now: datetime,
@@ -36,11 +36,11 @@ def build_detached_environment_inspection(
     retained_relations: dict[tuple[str | None, str, str], PhysicalRelationRecord] = {}
     environment: VirtualEnvironmentRetentionRecord
     for environment in environments:
-        refs: tuple[VirtualEnvironmentRefRecord, ...] = refs_by_environment.get(
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...] = refs_by_environment.get(
             environment.virtual_environment_name,
             (),
         )
-        ref: VirtualEnvironmentRefRecord
+        ref: VirtualEnvironmentModelRefRecord
         for ref in refs:
             relation: PhysicalRelationRecord | None = physical_relations_by_ref.get(
                 (ref.model_name, ref.version_hash)

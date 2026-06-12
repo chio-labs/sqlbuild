@@ -52,7 +52,7 @@ QUALIFIED_NAME_TEST_CASES: list[BuildQualifiedNameTestCase] = [
         expected_qualified="`example-project.dev.orders__delta`",
     ),
     BuildQualifiedNameTestCase(
-        description="bigquery quotes fingerprint table names separately from model targets",
+        description="bigquery quotes fingerprint table names separately from model locations",
         adapter_name="bigquery",
         database="example-project",
         schema="dev",

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.executor.janitor.models import JanitorRelationKey
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
 def collect_tracked_relation_keys(
@@ -29,11 +33,20 @@ def collect_tracked_relation_keys(
             fingerprint_set: FingerprintSet = read_latest_fingerprints(
                 connection=connection,
                 execute=adapter.execute,
+                relation_exists=adapter.relation_exists,
                 database=database,
                 schema=schema,
                 render_qualified_name=adapter.render_qualified_name,
+                render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
             )
-        except Exception:
+        except Exception as error:
+            log_debug_event(
+                _DEBUG_LOGGER,
+                "janitor fingerprint tracking read failed; skipping schema",
+                database=database,
+                schema=schema,
+                sqlbuild_error=str(error),
+            )
             continue
         fingerprint: Fingerprint
         for fingerprint in fingerprint_set.fingerprints.values():

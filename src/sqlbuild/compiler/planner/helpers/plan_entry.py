@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompileSqlReference,
 )
@@ -31,10 +31,10 @@ from sqlbuild.compiler.planner.helpers.resolve.cursor import (
     compute_cursor_bounds,
 )
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
-    apply_deferred_targets,
-    build_function_targets,
-    build_model_targets,
-    build_seed_targets,
+    apply_deferred_locations,
+    build_function_locations,
+    build_model_locations,
+    build_seed_locations,
 )
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.source_deferral import build_source_read_map
@@ -58,8 +58,13 @@ from sqlbuild.compiler.planner.models import (
     PlannerResolvedActions,
     PlannerScope,
     PlanWarning,
+    RelationReusePlan,
     ResolvedModelAction,
+    RunDespiteUnchangedDecision,
+    RunDespiteUnchangedPlanningResult,
     SchemaAction,
+    StandardReuseDecisionResults,
+    StandardReuseModelDecision,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
@@ -72,6 +77,8 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
+    StandardReuseDecisionKind,
 )
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
@@ -91,24 +98,24 @@ def build_planner_relations_context(
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
-    deferred_targets: dict[str, CompiledRelationDestination] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
 ) -> PlannerRelationsContext:
-    """Resolve relation targets and source metadata for plan entry construction."""
+    """Resolve relation locations and source metadata for plan entry construction."""
 
-    model_targets: dict[str, CompiledRelationDestination] = build_model_targets(project.models)
-    seed_targets: dict[str, CompiledRelationDestination] = build_seed_targets(project.seeds)
-    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+    model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
+    seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
+    function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
         project.functions
     )
-    if deferred_targets is not None:
-        apply_deferred_targets(
-            model_targets=model_targets,
-            seed_targets=seed_targets,
-            deferred_targets=deferred_targets,
+    if deferred_locations is not None:
+        apply_deferred_locations(
+            model_locations=model_locations,
+            seed_locations=seed_locations,
+            deferred_locations=deferred_locations,
             selected_keys=scope.selected_keys,
         )
     source_map: dict[str, SourceEntry] = build_source_load_map(
@@ -128,9 +135,9 @@ def build_planner_relations_context(
         else source_map
     )
     return PlannerRelationsContext(
-        model_targets=model_targets,
-        seed_targets=seed_targets,
-        function_targets=function_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        function_locations=function_locations,
         source_map=source_map,
         source_read_map=source_read_map,
         source_warehouse_columns=gather_source_columns(
@@ -148,10 +155,10 @@ def plan_model(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -177,10 +184,10 @@ def plan_model(
         model=model,
         snapshot=snapshot,
         adapter=adapter,
-        model_targets=model_targets,
+        model_locations=model_locations,
         models_by_name=models_by_name,
-        seed_targets=seed_targets,
-        function_targets=function_targets,
+        seed_locations=seed_locations,
+        function_locations=function_locations,
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
@@ -204,6 +211,9 @@ def build_plan_entries(
     resolved_actions: PlannerResolvedActions,
     cursor_overrides: CursorOverrides | None,
     full_refresh: bool,
+    standard_reuse_decisions: StandardReuseDecisionResults | None = None,
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
+    custom_prepare_version_materializations: frozenset[str] = frozenset(),
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
 ) -> PlannerModelEntryResults:
@@ -236,10 +246,10 @@ def build_plan_entries(
             model=model,
             snapshot=snapshot,
             adapter=adapter,
-            model_targets=relations.model_targets,
+            model_locations=relations.model_locations,
             models_by_name=scope.models_by_name,
-            seed_targets=relations.seed_targets,
-            function_targets=relations.function_targets,
+            seed_locations=relations.seed_locations,
+            function_locations=relations.function_locations,
             source_map=relations.source_read_map,
             source_warehouse_columns=relations.source_warehouse_columns,
             star_exclude_keyword=relations.star_exclude_keyword,
@@ -253,9 +263,135 @@ def build_plan_entries(
         )
         if resolved.cascade is not None:
             entry = replace(entry, cascade=resolved.cascade)
+        if run_despite_unchanged is not None:
+            run_decision: RunDespiteUnchangedDecision | None = run_despite_unchanged.decisions.get(
+                entry.name
+            )
+            if run_decision is not None:
+                entry = replace(entry, run_despite_unchanged=run_decision)
+        reuse_decision: StandardReuseModelDecision | None = (
+            standard_reuse_decisions.models.get(entry.name)
+            if standard_reuse_decisions is not None
+            else None
+        )
+        if standard_reuse_decisions is not None and reuse_decision is not None:
+            if _can_use_relation_reuse(entry=entry, reuse_decision=reuse_decision):
+                entry = replace(
+                    entry,
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.NO_CHANGE,
+                    logical_ddl="",
+                    relation_reuse=_relation_reuse_plan(
+                        kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+                        project=project,
+                        reuse_decision=reuse_decision,
+                        standard_reuse_decisions=standard_reuse_decisions,
+                    ),
+                )
+            elif _can_use_seeded_relation_reuse(entry=entry, reuse_decision=reuse_decision):
+                entry = replace(
+                    entry,
+                    action=_seeded_relation_reuse_action(entry),
+                    reason=_seeded_relation_reuse_reason(entry),
+                    relation_reuse=_relation_reuse_plan(
+                        kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+                        project=project,
+                        reuse_decision=reuse_decision,
+                        standard_reuse_decisions=standard_reuse_decisions,
+                    ),
+                )
+            elif _can_use_custom_relation_reuse(
+                entry=entry,
+                reuse_decision=reuse_decision,
+                custom_prepare_version_materializations=custom_prepare_version_materializations,
+            ):
+                entry = replace(
+                    entry,
+                    action=PlanAction.CUSTOM,
+                    relation_reuse=_relation_reuse_plan(
+                        kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+                        project=project,
+                        reuse_decision=reuse_decision,
+                        standard_reuse_decisions=standard_reuse_decisions,
+                    ),
+                )
         entries.append(entry)
         warnings.extend(entry_warnings)
     return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
+
+
+def _can_use_relation_reuse(
+    *, entry: ModelPlanEntry, reuse_decision: StandardReuseModelDecision | None
+) -> bool:
+    if reuse_decision is None:
+        return False
+    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+        return False
+    return entry.materialization_type == MaterializationType.TABLE
+
+
+def _relation_reuse_plan(
+    *,
+    kind: RelationReuseKind,
+    project: CompiledProject,
+    reuse_decision: StandardReuseModelDecision,
+    standard_reuse_decisions: StandardReuseDecisionResults,
+) -> RelationReusePlan:
+    return RelationReusePlan(
+        kind=kind,
+        origin=reuse_decision.reuse_origin,
+        reuse_from_target_name=standard_reuse_decisions.reuse_from_target_name,
+        hard_copy=standard_reuse_decisions.hard_copy,
+        fingerprint_database=reuse_decision.reuse_origin_fingerprint_database,
+        fingerprint_schema=reuse_decision.reuse_origin_fingerprint_schema,
+        destination_target_name=project.effective_target_name,
+    )
+
+
+def _can_use_seeded_relation_reuse(
+    *, entry: ModelPlanEntry, reuse_decision: StandardReuseModelDecision | None
+) -> bool:
+    if reuse_decision is None:
+        return False
+    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+        return False
+    return entry.materialization_type in {
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    }
+
+
+def _can_use_custom_relation_reuse(
+    *,
+    entry: ModelPlanEntry,
+    reuse_decision: StandardReuseModelDecision | None,
+    custom_prepare_version_materializations: frozenset[str],
+) -> bool:
+    if reuse_decision is None:
+        return False
+    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+        return False
+    return (
+        entry.materialization_type == MaterializationType.CUSTOM
+        and entry.custom_materialization_name in custom_prepare_version_materializations
+    )
+
+
+def _seeded_relation_reuse_action(entry: ModelPlanEntry) -> PlanAction:
+    if entry.materialization_type == MaterializationType.SNAPSHOT:
+        return PlanAction.SNAPSHOT
+    action_map: dict[str, PlanAction] = {
+        IncrementalStrategy.APPEND.value: PlanAction.INCREMENTAL_APPEND,
+        IncrementalStrategy.DELETE_INSERT.value: PlanAction.INCREMENTAL_DELETE_INSERT,
+        IncrementalStrategy.MERGE.value: PlanAction.INCREMENTAL_MERGE,
+    }
+    return action_map.get(entry.incremental_strategy or "", entry.action)
+
+
+def _seeded_relation_reuse_reason(entry: ModelPlanEntry) -> PlanReason:
+    if entry.materialization_type == MaterializationType.SNAPSHOT:
+        return entry.reason
+    return PlanReason.NORMAL_INCREMENTAL
 
 
 def plan_model_from_change(
@@ -263,10 +399,10 @@ def plan_model_from_change(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -292,9 +428,9 @@ def plan_model_from_change(
         adapter=adapter,
         model=model,
         snapshot=snapshot,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
-        function_targets=function_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        function_locations=function_locations,
         source_map=source_map,
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
@@ -349,9 +485,9 @@ def plan_model_from_change(
         cursor_input_relations = _build_cursor_input_relations(
             model=model,
             adapter=adapter,
-            model_targets=model_targets,
+            model_locations=model_locations,
             models_by_name=models_by_name,
-            seed_targets=seed_targets,
+            seed_locations=seed_locations,
             source_map=source_map,
             cursor_column=cursor_column,
         )
@@ -407,8 +543,8 @@ def plan_model_from_change(
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
     )
 
-    fingerprint: Fingerprint | None = snapshot.fingerprints.get(model.name)
-    previous_query_sql: str | None = fingerprint.query_sql if fingerprint is not None else None
+    fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
+    previous_query_sql: str | None = fingerprint.definition if fingerprint is not None else None
 
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = {}
@@ -484,6 +620,8 @@ def plan_model_from_change(
         previous_query_sql=previous_query_sql,
         fingerprint_metadata_json=change_result.fingerprint_metadata_json,
         previous_metadata_json=change_result.previous_metadata_json,
+        fingerprint_version_hash=change_result.fingerprint_version_hash,
+        previous_version_hash=change_result.previous_version_hash,
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,
@@ -821,6 +959,8 @@ def _compute_plan_cursor_bounds(
         return None
     if full_refresh:
         return None
+    if start_cursor_override is not None and end_cursor_override is not None:
+        return CursorBounds(start=start_cursor_override, end=end_cursor_override)
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
@@ -852,7 +992,7 @@ def _build_logical_ddl_from_adapter(
     adapter: BaseAdapter,
     action: PlanAction,
     resolved_sql: str,
-    destination: CompiledRelationDestination,
+    destination: CompiledRelationLocation,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
     cursor_column: str | None = None,
@@ -863,19 +1003,23 @@ def _build_logical_ddl_from_adapter(
     qualified_name: str = destination.qualified_name or destination.name
 
     if action == PlanAction.CREATE_VIEW:
-        return ";\n\n".join(adapter.render_create_view_as(target=qualified_name, sql=resolved_sql))
+        return ";\n\n".join(
+            adapter.render_create_view_as(destination=qualified_name, sql=resolved_sql)
+        )
 
     if action == PlanAction.CREATE_TABLE:
-        return ";\n\n".join(adapter.render_create_table_as(target=qualified_name, sql=resolved_sql))
+        return ";\n\n".join(
+            adapter.render_create_table_as(destination=qualified_name, sql=resolved_sql)
+        )
 
     if action == PlanAction.INCREMENTAL_APPEND:
-        return ";\n\n".join(adapter.render_append(target=qualified_name, sql=resolved_sql))
+        return ";\n\n".join(adapter.render_append(destination=qualified_name, sql=resolved_sql))
 
     if action == PlanAction.INCREMENTAL_DELETE_INSERT:
         if cursor_column is not None and cursor_bounds is not None:
             return ";\n\n".join(
                 adapter.render_delete_insert_cursor(
-                    target=qualified_name,
+                    destination=qualified_name,
                     sql=resolved_sql,
                     cursor_column=cursor_column,
                     cursor_start=cursor_bounds.start,
@@ -884,7 +1028,7 @@ def _build_logical_ddl_from_adapter(
             )
         return ";\n\n".join(
             adapter.render_delete_insert(
-                target=qualified_name,
+                destination=qualified_name,
                 sql=resolved_sql,
                 unique_key=unique_key,
             )
@@ -894,7 +1038,7 @@ def _build_logical_ddl_from_adapter(
         source_columns: tuple[str, ...] = tuple(col.name for col in warehouse_columns)
         return ";\n\n".join(
             adapter.render_merge(
-                target=qualified_name,
+                destination=qualified_name,
                 sql=resolved_sql,
                 unique_key=unique_key,
                 source_columns=source_columns,
@@ -908,9 +1052,9 @@ def _build_cursor_input_relations(
     *,
     model: CompiledModel,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
-    seed_targets: dict[str, CompiledRelationDestination],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
 ) -> tuple[CursorInputRelation, ...]:
@@ -930,8 +1074,8 @@ def _build_cursor_input_relations(
         relation: str | None = _resolve_cursor_input_relation(
             ref=ref,
             adapter=adapter,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
         )
         if relation is not None:
@@ -944,7 +1088,7 @@ def _build_cursor_input_relations(
                         models_by_name=models_by_name,
                     ),
                     is_model_backed=(
-                        ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_targets
+                        ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_locations
                     ),
                 )
             )
@@ -1043,16 +1187,16 @@ def _resolve_cursor_input_relation(
     *,
     ref: CompileSqlReference,
     adapter: BaseAdapter,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
 ) -> str | None:
     """Resolve one cursor input reference to a qualified relation name."""
 
     if ref.ref_kind == SqlReferenceKind.REF:
-        target: CompiledRelationDestination | None = model_targets.get(ref.ref_name)
+        target: CompiledRelationLocation | None = model_locations.get(ref.ref_name)
         if target is None:
-            target = seed_targets.get(ref.ref_name)
+            target = seed_locations.get(ref.ref_name)
         return target.qualified_name if target is not None else None
     if ref.ref_kind == SqlReferenceKind.SOURCE:
         source: SourceEntry | None = source_map.get(ref.ref_name)

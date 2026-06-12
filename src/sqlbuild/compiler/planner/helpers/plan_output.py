@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMaterializationFile,
     DiscoveredProviderUsage,
 )
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
 from sqlbuild.compiler.planner.helpers.loader_dag import upstream_loader_dependency_names
@@ -44,6 +45,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -58,6 +60,9 @@ def build_plan_output(
     changes: PlannerChangeResults,
     model_entry_results: PlannerModelEntryResults,
     reload_sources: bool,
+    seed_version_hashes: dict[str, str] | None = None,
+    seed_metadata_jsons: dict[str, str] | None = None,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanOutput:
     seed_entries: list[SeedPlanEntry] = [
         SeedPlanEntry(
@@ -67,6 +72,15 @@ def build_plan_output(
             file_path=seed.seed_file.file_path,
             columns=extract_seed_columns(seed),
             csv_settings=seed.schema_entry.csv_settings,
+            fingerprint_definition=(seed_metadata_jsons or {}).get(seed.name, ""),
+            fingerprint_version_hash=(seed_version_hashes or {}).get(seed.name, ""),
+            fingerprint_metadata_json=(seed_metadata_jsons or {}).get(seed.name, "{}"),
+            reason=_resolve_seed_plan_reason(
+                seed_name=seed.name,
+                expected_version_hash=(seed_version_hashes or {}).get(seed.name),
+                snapshot=snapshot,
+                seed_plan_reasons=seed_plan_reasons,
+            ),
         )
         for seed in project.seeds
         if seed.key in scope.selected_keys
@@ -127,9 +141,9 @@ def build_plan_output(
         warnings=(*model_entry_results.warnings, *test_warnings),
         upstream_deps=scope.upstream_deps,
         downstream_deps=scope.downstream_deps,
-        model_targets=relations.model_targets,
-        seed_targets=relations.seed_targets,
-        function_targets=relations.function_targets,
+        model_locations=relations.model_locations,
+        seed_locations=relations.seed_locations,
+        function_locations=relations.function_locations,
         source_map=relations.source_map,
         source_read_map=relations.source_read_map,
         hook_functions=project.hook_functions,
@@ -138,7 +152,26 @@ def build_plan_output(
             model_entries=model_entry_results.entries,
             source_load_entries=source_load_entries,
         ),
+        python_identity_fingerprints=snapshot.fingerprints.python_nodes,
     )
+
+
+def _resolve_seed_plan_reason(
+    *,
+    seed_name: str,
+    expected_version_hash: str | None,
+    snapshot: WarehouseSnapshot,
+    seed_plan_reasons: dict[str, PlanReason] | None = None,
+) -> PlanReason:
+    reason: PlanReason | None = (seed_plan_reasons or {}).get(seed_name)
+    if reason is not None:
+        return reason
+    fingerprint: Fingerprint | None = snapshot.fingerprints.seeds.get(seed_name)
+    if fingerprint is None:
+        return PlanReason.FIRST_RUN
+    if expected_version_hash is not None and fingerprint.version_hash != expected_version_hash:
+        return PlanReason.CONFIG_CHANGED
+    return PlanReason.NO_CHANGE
 
 
 def _build_provider_usages(
@@ -310,9 +343,9 @@ def _build_function_entries(
                 body_sql=resolve_function_sql(
                     adapter=adapter,
                     function=function,
-                    model_targets=relations.model_targets,
-                    seed_targets=relations.seed_targets,
-                    function_targets=relations.function_targets,
+                    model_locations=relations.model_locations,
+                    seed_locations=relations.seed_locations,
+                    function_locations=relations.function_locations,
                     source_map=relations.source_read_map,
                     source_warehouse_columns=relations.source_warehouse_columns,
                     star_exclude_keyword=relations.star_exclude_keyword,
@@ -326,8 +359,8 @@ def _build_function_entries(
                 entry_point=function.entry_point,
                 packages=function.packages,
                 previous_query_sql=(
-                    snapshot.fingerprints[function.name].query_sql
-                    if function.name in snapshot.fingerprints
+                    snapshot.fingerprints.functions[function.name].definition
+                    if function.name in snapshot.fingerprints.functions
                     else None
                 ),
                 reason=function_change.reason,
@@ -353,8 +386,8 @@ def _build_audit_entries(
         entries.append(
             plan_audit(
                 audit=audit,
-                model_targets=relations.model_targets,
-                seed_targets=relations.seed_targets,
+                model_locations=relations.model_locations,
+                seed_locations=relations.seed_locations,
                 source_map=relations.source_read_map,
                 adapter=adapter,
                 upstream_deps=scope.upstream_deps,

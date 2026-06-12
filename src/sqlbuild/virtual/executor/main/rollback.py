@@ -22,8 +22,10 @@ from sqlbuild.virtual.executor.helpers.rollback import (
     publish_function_versions,
     read_function_versions,
     read_physical_relations,
+    read_seed_physical_relations,
     resolve_selected_model_names,
     resolve_target_checkpoint,
+    selected_upstream_seed_names,
     stale_after_rollback,
     validate_physical_relations_exist,
 )
@@ -36,11 +38,13 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockLease,
     VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointRefRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
+    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
@@ -125,8 +129,8 @@ def run_virtual_rollback(
                 f"virtual environment '{virtual_environment_name}' is detached",
                 code="S028",
             )
-        current_refs: tuple[VirtualEnvironmentRefRecord, ...] = (
-            backend.get_virtual_environment_refs(
+        current_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
                 state_connection,
                 schema=config.schema,
                 virtual_environment_name=virtual_environment_name,
@@ -145,7 +149,7 @@ def run_virtual_rollback(
                 virtual_environment_name=virtual_environment_name,
             )
         )
-        target_checkpoint, target_checkpoint_refs = resolve_target_checkpoint(
+        target_checkpoint, target_checkpoint_model_refs = resolve_target_checkpoint(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
@@ -165,29 +169,68 @@ def run_virtual_rollback(
             schema=config.schema,
             checkpoint_id=target_checkpoint.checkpoint_id,
         )
+        target_checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
+            backend.get_virtual_environment_checkpoint_seed_refs(
+                state_connection,
+                schema=config.schema,
+                checkpoint_id=target_checkpoint.checkpoint_id,
+            )
+        )
         selected_model_names: tuple[str, ...] = resolve_selected_model_names(
             graph=graph,
             select=select,
             exclude=exclude,
             all_model_names=tuple(model.name for model in graph.project.models),
-            target_checkpoint_refs=target_checkpoint_refs,
+            target_checkpoint_model_refs=target_checkpoint_model_refs,
         )
         checkpoint_ref_map: dict[str, str] = {
-            ref.model_name: ref.version_hash for ref in target_checkpoint_refs
+            ref.model_name: ref.version_hash for ref in target_checkpoint_model_refs
         }
-        missing_checkpoint_refs: tuple[str, ...] = tuple(
+        checkpoint_seed_ref_map: dict[str, str] = {
+            ref.seed_name: ref.version_hash for ref in target_checkpoint_seed_refs
+        }
+        missing_checkpoint_model_refs: tuple[str, ...] = tuple(
             model_name
             for model_name in selected_model_names
             if model_name not in checkpoint_ref_map
         )
-        if missing_checkpoint_refs:
+        if missing_checkpoint_model_refs:
             raise PlannerInputError(
-                "checkpoint is missing selected refs: " + ", ".join(missing_checkpoint_refs),
+                "checkpoint is missing selected refs: " + ", ".join(missing_checkpoint_model_refs),
                 code="S025",
             )
         final_version_hashes: dict[str, str] = dict(current_ref_map)
         for model_name in selected_model_names:
             final_version_hashes[model_name] = checkpoint_ref_map[model_name]
+        current_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
+                state_connection,
+                schema=config.schema,
+                virtual_environment_name=virtual_environment_name,
+            )
+        )
+        final_seed_hashes: dict[str, str] = {
+            ref.seed_name: ref.version_hash for ref in current_seed_refs
+        }
+        selected_seed_names: tuple[str, ...] = selected_upstream_seed_names(
+            graph=graph,
+            selected_model_names=selected_model_names,
+            all_seed_names=tuple(seed.name for seed in graph.project.seeds),
+            include_all=not bool(select or exclude),
+        )
+        missing_checkpoint_seed_refs: tuple[str, ...] = tuple(
+            seed_name
+            for seed_name in selected_seed_names
+            if seed_name not in checkpoint_seed_ref_map
+        )
+        if missing_checkpoint_seed_refs:
+            raise PlannerInputError(
+                "checkpoint is missing selected seed refs: "
+                + ", ".join(missing_checkpoint_seed_refs),
+                code="S025",
+            )
+        for seed_name in selected_seed_names:
+            final_seed_hashes[seed_name] = checkpoint_seed_ref_map[seed_name]
         stale_after: tuple[str, ...] = stale_after_rollback(
             graph=graph,
             final_version_hashes=final_version_hashes,
@@ -220,12 +263,25 @@ def run_virtual_rollback(
             state_connection=state_connection,
             schema=config.schema,
             refs=tuple(
-                VirtualEnvironmentCheckpointRefRecord(
+                VirtualEnvironmentCheckpointModelRefRecord(
                     checkpoint_id=target_checkpoint.checkpoint_id,
                     model_name=model_name,
                     version_hash=version_hash,
                 )
                 for model_name, version_hash in sorted(final_version_hashes.items())
+            ),
+        )
+        seed_physical_relations: dict[str, PhysicalRelationRecord] = read_seed_physical_relations(
+            backend=backend,
+            state_connection=state_connection,
+            schema=config.schema,
+            refs=tuple(
+                VirtualEnvironmentCheckpointSeedRefRecord(
+                    checkpoint_id=target_checkpoint.checkpoint_id,
+                    seed_name=seed_name,
+                    version_hash=version_hash,
+                )
+                for seed_name, version_hash in sorted(final_seed_hashes.items())
             ),
         )
         validate_physical_relations_exist(
@@ -234,8 +290,8 @@ def run_virtual_rollback(
             models_by_name=models_by_name,
             physical_relations=physical_relations,
         )
-        target_refs: tuple[VirtualEnvironmentRefRecord, ...] = tuple(
-            VirtualEnvironmentRefRecord(
+        target_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
+            VirtualEnvironmentModelRefRecord(
                 virtual_environment_name=virtual_environment_name,
                 model_name=model_name,
                 version_hash=version_hash,
@@ -255,11 +311,25 @@ def run_virtual_rollback(
                 status=status,
             ),
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             refs=target_refs,
+        )
+        destination_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=virtual_environment_name,
+                seed_name=seed_name,
+                version_hash=version_hash,
+            )
+            for seed_name, version_hash in sorted(final_seed_hashes.items())
+        )
+        backend.replace_virtual_environment_seed_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=virtual_environment_name,
+            refs=destination_seed_refs,
         )
         target_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
             VirtualEnvironmentFunctionRefRecord(
@@ -311,6 +381,7 @@ def run_virtual_rollback(
         virtual_environment_name=virtual_environment_name,
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         physical_relations=physical_relations,
+        seed_physical_relations=seed_physical_relations,
         on_connection_start=on_connection_start,
         on_connection_complete=on_connection_complete,
         on_connection_error=on_connection_error,

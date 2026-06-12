@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import gettempdir
 from typing import Any
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
@@ -13,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -51,7 +52,7 @@ def build_project_from_test_case(
     models: list[CompiledModel] = []
     model_name: str
     target_schema: str
-    for model_name, target_schema in test_case.model_targets.items():
+    for model_name, target_schema in test_case.model_locations.items():
         config_values: dict[str, object] = test_case.model_configs.get(model_name, {})
         query_sql: str = test_case.model_queries.get(model_name, f"SELECT * FROM {model_name}")
         dep_names: tuple[str, ...] = test_case.model_deps.get(model_name, ())
@@ -73,7 +74,7 @@ def build_project_from_test_case(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(values=config_values),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -84,7 +85,8 @@ def build_project_from_test_case(
 
     seeds: list[CompiledSeed] = []
     seed_name: str
-    for seed_name, target_schema in test_case.seed_targets.items():
+    for seed_name, target_schema in test_case.seed_locations.items():
+        seed_file_path: Path = _ensure_test_seed_file(seed_name)
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(
@@ -94,7 +96,7 @@ def build_project_from_test_case(
                 deps=(),
                 name=seed_name,
                 seed_file=DiscoveredSeedFile(
-                    file_path=Path(f"seeds/{seed_name}.csv"),
+                    file_path=seed_file_path,
                     relative_path=Path(f"seeds/{seed_name}.csv"),
                 ),
                 schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
@@ -105,7 +107,7 @@ def build_project_from_test_case(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -116,7 +118,7 @@ def build_project_from_test_case(
 
     functions: list[CompiledFunction] = []
     function_name: str
-    for function_name, target_schema in test_case.function_targets.items():
+    for function_name, target_schema in test_case.function_locations.items():
         body_sql: str = test_case.function_bodies.get(function_name, "value = 1")
         language: FunctionLanguage = test_case.function_languages.get(
             function_name, FunctionLanguage.SQL
@@ -133,13 +135,13 @@ def build_project_from_test_case(
                 arguments=(FunctionArgument(name="value", type="INTEGER"),),
                 returns="INTEGER",
                 body_sql=body_sql,
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=function_name,
                     qualified_name=f"{target_schema}.{function_name}",
                 ),
-                fingerprint_destination=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=function_name,
@@ -147,7 +149,7 @@ def build_project_from_test_case(
                 ),
                 language=language,
                 entry_point="main" if language == FunctionLanguage.PYTHON else None,
-                query_change_backfill=test_case.function_query_change_backfills.get(function_name),
+                replay_on_change=test_case.function_replay_on_changes.get(function_name),
             )
         )
 
@@ -223,7 +225,7 @@ def build_project_from_source_cursor_input_test_case(
                 "cursor_inputs": {test_case.source_name: test_case.cursor_input_column},
             }
         ),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name=test_case.model_name,
@@ -269,14 +271,15 @@ def write_previous_function_fingerprints(
             database=function.destination.database,
             schema=function.destination.schema or "",
             fingerprint=Fingerprint(
-                model_name=function.name,
+                node_type="function",
+                node_name=function.name,
                 target_database=function.destination.database,
                 target_schema=function.destination.schema,
                 target_name=function.destination.name,
                 run_id="previous_run",
-                query_hash=compute_query_hash(fingerprint_sql),
+                definition_hash=compute_query_hash(fingerprint_sql),
                 schema_fingerprint=compute_query_hash(""),
-                query_sql=fingerprint_sql,
+                definition=fingerprint_sql,
                 ts=datetime.now(tz=UTC),
             ),
             render_qualified_name=adapter.render_qualified_name,
@@ -292,7 +295,7 @@ def build_project_from_format_test_case(
     models: list[CompiledModel] = []
     model_name: str
     target_schema: str
-    for model_name, target_schema in test_case.model_targets.items():
+    for model_name, target_schema in test_case.model_locations.items():
         config_values: dict[str, object] = test_case.model_configs.get(model_name, {})
         query_sql: str = test_case.model_queries.get(model_name, f"SELECT * FROM {model_name}")
         dep_names: tuple[str, ...] = test_case.model_deps.get(model_name, ())
@@ -310,7 +313,7 @@ def build_project_from_format_test_case(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
                 config=CompileModelConfig(values=config_values),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -321,7 +324,8 @@ def build_project_from_format_test_case(
 
     seeds: list[CompiledSeed] = []
     seed_name: str
-    for seed_name, target_schema in test_case.seed_targets.items():
+    for seed_name, target_schema in test_case.seed_locations.items():
+        seed_file_path: Path = _ensure_test_seed_file(seed_name)
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(
@@ -331,7 +335,7 @@ def build_project_from_format_test_case(
                 deps=(),
                 name=seed_name,
                 seed_file=DiscoveredSeedFile(
-                    file_path=Path(f"seeds/{seed_name}.csv"),
+                    file_path=seed_file_path,
                     relative_path=Path(f"seeds/{seed_name}.csv"),
                 ),
                 schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
@@ -342,7 +346,7 @@ def build_project_from_format_test_case(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -359,3 +363,12 @@ def build_project_from_format_test_case(
         models=tuple(models),
         seeds=tuple(seeds),
     )
+
+
+def _ensure_test_seed_file(seed_name: str) -> Path:
+    seed_dir: Path = Path(gettempdir()) / "sqlbuild_planner_seed_fixtures"
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    seed_path: Path = seed_dir / f"{seed_name}.csv"
+    if not seed_path.exists():
+        seed_path.write_text("id,code\n1,US\n", encoding="utf-8")
+    return seed_path

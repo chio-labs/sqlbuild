@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -20,11 +22,16 @@ from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     StateBackendConfig,
+    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRefRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+)
 
 
 def build_virtual_plan_project_toml() -> str:
@@ -46,6 +53,120 @@ def build_virtual_plan_project_toml() -> str:
     )
 
 
+def build_direct_changes_only_project_toml(*, project_name: str) -> str:
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "duckdb"\n\n'
+        "[connection]\n"
+        'database = "warehouse.duckdb"\n'
+    )
+
+
+def direct_changes_only_stg_orders_sql(*, amount_cents: int, tags: str = "") -> str:
+    return (
+        f"MODEL (materialized table{tags});\n\n"
+        "SELECT\n"
+        "  1 AS order_id,\n"
+        f"  {amount_cents} AS amount_cents\n"
+    )
+
+
+def direct_changes_only_orders_model_sql(
+    *,
+    amount_expression: str,
+    policy_fragment: str,
+    columns_fragment: str,
+    extra_select_fragment: str = "",
+) -> str:
+    return (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  cursor id,\n"
+        "  cursor_type integer,\n"
+        "  unique_key id"
+        f"{policy_fragment}"
+        f"{',' if columns_fragment else ''}\n"
+        f"  {columns_fragment}\n"
+        ");\n\n"
+        "SELECT\n"
+        "  1 AS id,\n"
+        f"  {amount_expression} AS amount_cents"
+        f"{extra_select_fragment}\n"
+    )
+
+
+def prepare_direct_changes_only_incremental_project(
+    *, tmp_path: Path, project_name: str, model_sql: str
+) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_direct_changes_only_project_toml(
+                project_name=project_name
+            ),
+            "models/orders.sql": model_sql,
+        },
+    )
+
+
+def prepare_direct_function_identity_project(*, tmp_path: Path, project_name: str) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_direct_changes_only_project_toml(
+                project_name=project_name
+            ),
+            "functions/sql/is_large_order.sql": direct_is_large_order_function_sql(operator=">"),
+            "models/orders.sql": (
+                "MODEL (materialized table);\n\n"
+                'SELECT 1 AS id, __udf("is_large_order")(150) AS is_large\n'
+            ),
+        },
+    )
+
+
+def direct_is_large_order_function_sql(*, operator: str) -> str:
+    return (
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
+        f"replay_on_change bounded-14d);\n\namount {operator} 100\n"
+    )
+
+
+def rewrite_direct_is_large_order_function(*, project_dir: Path, operator: str) -> None:
+    (project_dir / "functions" / "sql" / "is_large_order.sql").write_text(
+        direct_is_large_order_function_sql(operator=operator),
+        encoding="utf-8",
+    )
+
+
+def standard_model_version_hashes(*, db_path: Path, model_name: str) -> list[tuple[object, ...]]:
+    return query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT version_hash FROM main._sqlbuild_fingerprints "
+            f"WHERE node_name = '{model_name}' ORDER BY ts"
+        ),
+    )
+
+
+def plan_changes_only_json(*, project_dir: Path) -> dict[str, object]:
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--json"),
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    return cast(dict[str, object], json.loads(plan_result.stdout))
+
+
+def only_json_model(payload: dict[str, object]) -> dict[str, object]:
+    models: list[dict[str, object]] = cast(list[dict[str, object]], payload["models"])
+    assert len(models) == 1, payload
+    return models[0]
+
+
 def build_virtual_plan_repo_files(
     *, stg_orders_sql: str, dim_customers_sql: str = "SELECT 1 AS customer_id"
 ) -> dict[str, str]:
@@ -55,6 +176,62 @@ def build_virtual_plan_repo_files(
         "models/fact_orders.sql": 'MODEL ();\n\nSELECT id FROM __ref("stg_orders")\n',
         "models/dim_customers.sql": f"MODEL ();\n\n{dim_customers_sql}\n",
     }
+
+
+def prepare_virtual_run_despite_unchanged_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    run_despite_unchanged: str,
+    data_version_sql: str,
+    include_freshness: bool = True,
+    source_freshness_type: str = "timestamp",
+    warehouse_column_type: str = "TIMESTAMP",
+) -> Path:
+    freshness_fragment: str = (
+        "\n"
+        "    freshness:\n"
+        "      strategy: column\n"
+        "      column: order_ts\n"
+        f"      type: {source_freshness_type}"
+        if include_freshness
+        else ""
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    schema: raw\n"
+                "    table: raw_orders"
+                f"{freshness_fragment}\n"
+            ),
+            "models/rolling_orders.sql": (
+                f"MODEL (materialized table, run_despite_unchanged {run_despite_unchanged});\n\n"
+                'SELECT id, order_ts FROM __source("raw_orders")\n'
+            ),
+            "models/orders_mart.sql": (
+                'MODEL (materialized table);\n\nSELECT id, order_ts FROM __ref("rolling_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "CREATE SCHEMA raw;\n"
+            f"CREATE TABLE raw.raw_orders (id INTEGER, order_ts {warehouse_column_type});\n"
+            f"INSERT INTO raw.raw_orders VALUES (7, {data_version_sql});"
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    return project_dir
 
 
 def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
@@ -166,11 +343,11 @@ def seed_matching_virtual_refs(
                 record=ModelVersionRecord(
                     model_name=model_name,
                     version_hash=expected_hashes[model_name],
-                    data_hash=expected_local_hashes[model_name],
-                    metadata_hash=expected_hashes[model_name],
+                    definition_identity_hash=expected_local_hashes[model_name],
+                    identity_metadata_hash=expected_hashes[model_name],
                     status=ModelVersionStatus.READY,
-                    fingerprint_query_sql_b64=encode_state_text(query_sqls[model_name]),
-                    fingerprint_metadata_json_b64=encode_state_text(metadata_jsons[model_name]),
+                    definition_text_b64=encode_state_text(query_sqls[model_name]),
+                    identity_metadata_json_b64=encode_state_text(metadata_jsons[model_name]),
                 ),
             )
         backend.upsert_virtual_environment(
@@ -181,12 +358,12 @@ def seed_matching_virtual_refs(
                 status=VirtualEnvironmentStatus.FINALIZED,
             ),
         )
-        backend.replace_virtual_environment_refs(
+        backend.replace_virtual_environment_model_refs(
             connection,
             schema=config.schema,
             virtual_environment_name="dev",
             refs=tuple(
-                VirtualEnvironmentRefRecord(
+                VirtualEnvironmentModelRefRecord(
                     virtual_environment_name="dev",
                     model_name=model_name,
                     version_hash=expected_hashes[model_name],

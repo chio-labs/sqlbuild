@@ -11,7 +11,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run.helpers.snapshot import (
     _apply_snapshot_schema_change,
@@ -134,8 +134,8 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id=test_case.run_id,
@@ -153,7 +153,8 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     fingerprint_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)
         for row in connection.execute(
-            f"SELECT model_name, target_name, run_id FROM main.{FINGERPRINT_TABLE_NAME}"
+            f"SELECT node_name, target_name, run_id FROM main.{FINGERPRINT_TABLE_NAME} "
+            f"WHERE node_type = '{NODE_TYPE_MODEL}'"
         ).fetchall()
     )
     lifecycle_sql: tuple[str, ...] = tuple(event.content for event in result.lifecycle_events)
@@ -198,8 +199,8 @@ def test_given_python_snapshot_hook_failure_when_executing_then_reports_hook_pha
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id="snapshot_hook_failure_run",
@@ -302,8 +303,8 @@ def test_given_snapshot_contract_violation_when_executing_then_fails_before_targ
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id=test_case.run_id,

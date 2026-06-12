@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
+from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
@@ -23,13 +24,29 @@ class FakeSourceFreshnessExecute:
     def __init__(self, *, rows: list[tuple[Any, ...]], read_error: Exception | None = None) -> None:
         self._rows: list[tuple[Any, ...]] = rows
         self._read_error: Exception | None = read_error
+        self.executed_sql: list[str] = []
 
     def __call__(self, _connection: object, sql: str) -> Any:
-        if "WHERE 1 = 0" in sql:
-            return _FakeResult([])
+        self.executed_sql.append(sql)
         if self._read_error is not None:
             raise self._read_error
         return _FakeResult(self._rows)
+
+
+class FakeSourceFreshnessWriteExecute:
+    def __init__(self) -> None:
+        self.executed_sql: list[str] = []
+
+    def __call__(self, connection: Any, sql: str) -> None:
+        del connection
+        self.executed_sql.append(sql)
+
+
+def freshness_table_relation_exists(
+    connection: Any, *, database: str | None, schema: str | None, name: str
+) -> bool:
+    del connection, database, schema, name
+    return True
 
 
 class _FakeResult:
@@ -46,6 +63,26 @@ def render_qualified_name(*, database: str | None, schema: str | None, name: str
     if database is not None:
         return f"{database}.{schema}.{name}"
     return f"{schema}.{name}"
+
+
+def render_read_latest_sql(*, database: str | None, schema: str) -> str:
+    return build_read_latest_sql(
+        database=database,
+        schema=schema,
+        render_qualified_name=render_qualified_name,
+    )
+
+
+def render_sentinel_read_latest_sql(*, database: str | None, schema: str) -> str:
+    del database, schema
+    return "SELECT 'sentinel latest source freshness sql'"
+
+
+def render_create_source_freshness_index_sqls(
+    *, database: str | None, schema: str
+) -> tuple[str, ...]:
+    del database, schema
+    return ("CREATE INDEX sentinel_source_freshness_idx",)
 
 
 def write_optional_previous_record(
@@ -95,6 +132,7 @@ def write_previous_record_to_schema(
     schema: str,
     source_name: str,
     data_version: str,
+    observed_at: datetime = datetime(2026, 1, 15, 10, 0, 0),
 ) -> None:
     write_source_freshness_record(
         connection=connection,
@@ -116,7 +154,7 @@ def write_previous_record_to_schema(
                 value_kind=SourceFreshnessValueKind.INTEGER,
                 data_version=data_version,
             ),
-            observed_at=datetime(2026, 1, 15, 10, 0, 0),
+            observed_at=observed_at,
         ),
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,

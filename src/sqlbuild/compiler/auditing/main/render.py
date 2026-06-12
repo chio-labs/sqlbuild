@@ -6,7 +6,7 @@ import re
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -14,8 +14,8 @@ from sqlbuild.spec.models.source import SourceEntry
 def render_audit_sql(
     *,
     unresolved_sql: str,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     adapter: BaseAdapter | None = None,
     relation_overrides: dict[str, str] | None = None,
@@ -23,7 +23,7 @@ def render_audit_sql(
     """Render audit SQL from unresolved markers with optional relation overrides.
 
     Relation overrides take precedence for specific ref names. All other refs
-    and sources resolve normally through model/seed targets and source map.
+    and sources resolve normally through model/seed locations and source map.
     """
 
     effective_overrides: dict[str, str] = (
@@ -31,8 +31,8 @@ def render_audit_sql(
     )
     resolved: str = _render_refs(
         sql=unresolved_sql,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         relation_overrides=effective_overrides,
     )
     resolved = _render_sources(
@@ -46,8 +46,8 @@ def render_audit_sql(
 def _render_refs(
     *,
     sql: str,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     relation_overrides: dict[str, str],
 ) -> str:
     """Replace __ref() calls using overrides first, then normal targets."""
@@ -57,16 +57,16 @@ def _render_refs(
         override: str | None = relation_overrides.get(ref_name)
         if override is not None:
             return override
-        target: CompiledRelationDestination | None = model_targets.get(ref_name)
+        target: CompiledRelationLocation | None = model_locations.get(ref_name)
         if target is None:
-            target = seed_targets.get(ref_name)
+            target = seed_locations.get(ref_name)
         if target is None or target.qualified_name is None:
             return match.group(0)
         return target.qualified_name
 
     def _replace_seed(match: re.Match[str]) -> str:
         seed_name: str = match.group(1)
-        target: CompiledRelationDestination | None = seed_targets.get(seed_name)
+        target: CompiledRelationLocation | None = seed_locations.get(seed_name)
         if target is None or target.qualified_name is None:
             return match.group(0)
         return target.qualified_name

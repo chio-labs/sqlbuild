@@ -46,7 +46,7 @@ def build_display_only_sqlbuild_plan(
                 incremental_mode=_as_optional_string(model.config.values.get("incremental_mode")),
                 cursor_column=_as_optional_string(model.config.values.get("cursor_column")),
                 cursor_type=_as_optional_string(model.config.values.get("cursor_type")),
-                backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 custom_materialization_name=(
                     _as_optional_string(model.config.values.get("materialized"))
                     if materialization_type == MaterializationType.CUSTOM

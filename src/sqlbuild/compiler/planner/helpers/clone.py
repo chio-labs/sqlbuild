@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.helpers.graph import (
     build_downstream_deps,
@@ -22,9 +22,9 @@ from sqlbuild.compiler.planner.helpers.plan_entry import (
     gather_source_columns,
 )
 from sqlbuild.compiler.planner.helpers.resolve.refs import (
-    build_function_targets,
-    build_model_targets,
-    build_seed_targets,
+    build_function_locations,
+    build_model_locations,
+    build_seed_locations,
 )
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.selectors import resolve_selectors
@@ -86,9 +86,9 @@ def build_clone_model_entries(
     adapter: BaseAdapter,
     connection: Any,
 ) -> tuple[ModelPlanEntry, ...]:
-    model_targets: dict[str, CompiledRelationDestination] = build_model_targets(project.models)
-    seed_targets: dict[str, CompiledRelationDestination] = build_seed_targets(project.seeds)
-    function_targets: dict[str, CompiledRelationDestination] = build_function_targets(
+    model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
+    seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
+    function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
         project.functions
     )
     source_map: dict[str, SourceEntry] = {
@@ -111,13 +111,13 @@ def build_clone_model_entries(
                 adapter=adapter,
                 model=model,
                 snapshot=WarehouseSnapshot(),
-                model_targets=model_targets,
-                seed_targets=seed_targets,
-                function_targets=function_targets,
+                model_locations=model_locations,
+                seed_locations=seed_locations,
+                function_locations=function_locations,
                 source_map=source_map,
                 source_warehouse_columns=source_warehouse_columns,
                 star_exclude_keyword=adapter.star_exclude_keyword(),
-                backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 full_refresh=False,
                 start_cursor_override=None,
                 end_cursor_override=None,
@@ -141,7 +141,7 @@ def build_clone_model_entries(
     return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
 
 
-def build_source_model_entries(
+def build_origin_model_entries(
     *,
     project: CompiledProject,
     selected_names: frozenset[str],
@@ -192,7 +192,7 @@ def build_clone_seed_entries(
     )
 
 
-def build_source_seed_entries(
+def build_origin_seed_entries(
     *,
     project: CompiledProject,
     selected_names: frozenset[str],

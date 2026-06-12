@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_FUNCTION
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
@@ -66,7 +67,7 @@ def execute_function(
         )
         adapter.create_function(
             connection,
-            target=function_entry.destination.qualified_name,
+            destination=function_entry.destination.qualified_name,
             arguments=function_entry.arguments,
             returns=function_entry.returns,
             body_sql=function_entry.body_sql,
@@ -139,14 +140,16 @@ def _try_write_function_fingerprint(
         )
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
-            model_name=entry.name,
+            node_type=NODE_TYPE_FUNCTION,
+            node_name=entry.name,
             target_database=entry.destination.database,
             target_schema=entry.destination.schema,
             target_name=entry.destination.name,
             run_id=run_id,
-            query_hash=compute_query_hash(entry.fingerprint_query_sql),
+            definition_hash=compute_query_hash(entry.fingerprint_query_sql),
+            version_hash=compute_query_hash(entry.fingerprint_query_sql),
             schema_fingerprint=schema_fp,
-            query_sql=entry.fingerprint_query_sql,
+            definition=entry.fingerprint_query_sql,
             metadata_json="{}",
             ts=datetime.now(tz=UTC),
         )
@@ -159,6 +162,7 @@ def _try_write_function_fingerprint(
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,
             render_create_table_sql=adapter.render_create_fingerprint_table_sql,
+            render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
         )
     except Exception as exc:
         warnings.append(

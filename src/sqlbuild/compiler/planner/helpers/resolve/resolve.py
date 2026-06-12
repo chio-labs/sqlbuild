@@ -7,7 +7,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.helpers.resolve.config import (
@@ -44,9 +44,9 @@ def resolve_model_sql(
     adapter: BaseAdapter,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination] | None = None,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation] | None = None,
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -69,8 +69,8 @@ def resolve_model_sql(
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
     )
 
@@ -91,8 +91,8 @@ def resolve_model_sql(
 
     query_sql = resolve_ref_references(
         query_sql=query_sql,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         cursor_bounds=cursor_bounds,
         cursor_inputs=cursor_inputs,
         adapter=adapter,
@@ -106,12 +106,12 @@ def resolve_model_sql(
     )
     query_sql = resolve_udf_references(
         query_sql=query_sql,
-        function_targets=function_targets or {},
+        function_locations=function_locations or {},
         adapter=adapter,
     )
     query_sql = resolve_table_function_references(
         query_sql=query_sql,
-        function_targets=function_targets or {},
+        function_locations=function_locations or {},
         adapter=adapter,
     )
 
@@ -122,9 +122,9 @@ def resolve_function_sql(
     *,
     adapter: BaseAdapter,
     function: CompiledFunction,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
-    function_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
@@ -144,8 +144,8 @@ def resolve_function_sql(
     )
     query_sql = resolve_ref_references(
         query_sql=query_sql,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         cursor_bounds=None,
         cursor_inputs={},
         adapter=adapter,
@@ -155,12 +155,12 @@ def resolve_function_sql(
     query_sql = resolve_dbt_ref_references(query_sql=query_sql)
     query_sql = resolve_udf_references(
         query_sql=query_sql,
-        function_targets=function_targets,
+        function_locations=function_locations,
         adapter=adapter,
     )
     return resolve_table_function_references(
         query_sql=query_sql,
-        function_targets=function_targets,
+        function_locations=function_locations,
         adapter=adapter,
     )
 
@@ -173,8 +173,8 @@ def _compute_model_cursor_bounds(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     suppress_runtime_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
@@ -190,11 +190,13 @@ def _compute_model_cursor_bounds(
 
     if has_model_backed_cursor_inputs(
         model=model,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         cursor_inputs=_get_cursor_inputs(model),
     ):
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+    if start_cursor_override is not None and end_cursor_override is not None:
+        return CursorBounds(start=start_cursor_override, end=end_cursor_override)
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:

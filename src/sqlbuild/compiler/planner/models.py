@@ -17,7 +17,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -31,6 +31,8 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
+    RunDespiteUnchangedMode,
     ScenarioArtifactKind,
     SchemaActionKind,
     SchemaChangeKind,
@@ -38,7 +40,7 @@ from sqlbuild.compiler.planner.types import (
     SelectorKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
@@ -141,12 +143,22 @@ class CursorInputRelation:
 
 
 @dataclass(frozen=True)
+class WarehouseFingerprints:
+    """Latest standard fingerprints grouped by node type."""
+
+    models: dict[str, Fingerprint] = field(default_factory=dict)
+    functions: dict[str, Fingerprint] = field(default_factory=dict)
+    seeds: dict[str, Fingerprint] = field(default_factory=dict)
+    python_nodes: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
     existing_relations: dict[str, RelationInfo] = field(default_factory=dict)
     existing_columns: dict[str, tuple[ColumnInfo, ...]] = field(default_factory=dict)
-    fingerprints: dict[str, Fingerprint] = field(default_factory=dict)
+    fingerprints: WarehouseFingerprints = field(default_factory=WarehouseFingerprints)
     cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
 
 
@@ -167,6 +179,27 @@ class BackfillResult:
 
     action: BackfillAction
     duration: str | None = None
+
+
+@dataclass(frozen=True)
+class RunDespiteUnchangedDecision:
+    """One model-level changes-only override decision."""
+
+    model_name: str
+    mode: RunDespiteUnchangedMode
+    duration: str | None = None
+    newest_source_name: str | None = None
+    newest_source_data_age_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class RunDespiteUnchangedPlanningResult:
+    """Planner-time changes-only override roots and propagated stale models."""
+
+    root_model_names: frozenset[str] = frozenset()
+    stale_model_names: frozenset[str] = frozenset()
+    decisions: dict[str, RunDespiteUnchangedDecision] = field(default_factory=dict)
+    downstream_root_causes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -201,9 +234,11 @@ class ChangeDetectionResult:
     config_changed: bool = False
     fingerprint_metadata_json: str | None = None
     previous_metadata_json: str | None = None
+    fingerprint_version_hash: str | None = None
+    previous_version_hash: str | None = None
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
 
 
@@ -231,9 +266,9 @@ class PlannerWarehouseSnapshotResult:
 class PlannerRelationsContext:
     """Resolved relation and source inputs for plan entry construction."""
 
-    model_targets: dict[str, CompiledRelationDestination]
-    seed_targets: dict[str, CompiledRelationDestination]
-    function_targets: dict[str, CompiledRelationDestination]
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
     source_read_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
@@ -247,7 +282,7 @@ class FunctionChangeResult:
     fingerprint_sql: str
     reason: PlanReason = PlanReason.NO_CHANGE
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
 
 
@@ -273,6 +308,76 @@ class PlannerResolvedActions:
     """Cascade-resolved planning decisions keyed by model name."""
 
     models: dict[str, ResolvedModelAction]
+
+
+@dataclass(frozen=True)
+class StandardModelVersionIdentities:
+    """Current standard model version identity values by model name."""
+
+    function_local_hashes: dict[str, str]
+    seed_version_hashes: dict[str, str]
+    seed_metadata_jsons: dict[str, str]
+    model_metadata_jsons: dict[str, str]
+    model_local_hashes: dict[str, str]
+    model_version_hashes: dict[str, str]
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetModelSnapshot:
+    """One model's relation and fingerprint state in the reuse_from target."""
+
+    model_name: str
+    reuse_origin: CompiledRelationLocation
+    reuse_origin_fingerprint_database: str | None
+    reuse_origin_fingerprint_schema: str
+    relation_exists: bool
+    built_version_hash: str | None = None
+    reuse_origin_cursor_max: str | None = None
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetSnapshot:
+    """Resolved reuse_from target state used to decide standard target reuse eligibility."""
+
+    reuse_from_target_name: str
+    model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot]
+    hard_copy: bool = False
+
+
+@dataclass(frozen=True)
+class StandardReuseModelDecision:
+    """Planner-side standard reuse decision for one selected model."""
+
+    model_name: str
+    decision: str
+    reuse_from_target_name: str
+    reuse_origin: CompiledRelationLocation
+    reuse_origin_fingerprint_database: str | None
+    reuse_origin_fingerprint_schema: str
+    reuse_origin_relation_exists: bool
+    reuse_origin_built_version_present: bool
+    reuse_origin_matches_expected: bool
+    reuse_from_source_freshness_current: bool = True
+    reuse_origin_cursor_max: str | None = None
+    destination_cursor_max: str | None = None
+
+
+@dataclass(frozen=True)
+class StandardReuseDecisionResults:
+    """Planner-side standard reuse decisions for a reuse_from target."""
+
+    reuse_from_target_name: str
+    models: dict[str, StandardReuseModelDecision]
+    hard_copy: bool = False
+
+
+@dataclass(frozen=True)
+class StandardReusePlanningResult:
+    """Complete planner-side standard reuse analysis for one plan build."""
+
+    snapshot: StandardReuseFromTargetSnapshot
+    decisions: StandardReuseDecisionResults
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +408,19 @@ class PlanWarning:
 
 
 @dataclass(frozen=True)
+class RelationReusePlan:
+    """Execution metadata for copying or cloning an origin relation."""
+
+    kind: RelationReuseKind
+    origin: CompiledRelationLocation
+    reuse_from_target_name: str
+    hard_copy: bool
+    fingerprint_database: str | None
+    fingerprint_schema: str
+    destination_target_name: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelPlanEntry:
     """Per-model execution plan entry with action, reason, and resolved artifacts."""
 
@@ -312,7 +430,7 @@ class ModelPlanEntry:
     materialization_type: MaterializationType
     action: PlanAction
     reason: PlanReason
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     fingerprint_query_sql: str
     resolved_sql: str
     logical_ddl: str
@@ -348,15 +466,65 @@ class ModelPlanEntry:
     previous_query_sql: str | None = None
     fingerprint_metadata_json: str | None = None
     previous_metadata_json: str | None = None
+    fingerprint_version_hash: str | None = None
+    previous_version_hash: str | None = None
     schema_actions: tuple[SchemaAction, ...] = field(default_factory=tuple)
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
     cascade: CascadeResult | None = None
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
+    relation_reuse: RelationReusePlan | None = None
+    run_despite_unchanged: RunDespiteUnchangedDecision | None = None
+
+    def __post_init__(self) -> None:
+        if self.relation_reuse is None:
+            return
+        if self.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE:
+            if self.materialization_type != MaterializationType.TABLE:
+                raise PlannerInputError(
+                    f"model '{self.name}' complete relation reuse requires table materialization"
+                )
+            if self.action != PlanAction.CREATE_TABLE:
+                raise PlannerInputError(
+                    f"model '{self.name}' complete relation reuse requires create_table action"
+                )
+            return
+        if self.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE:
+            if self.materialization_type not in {
+                MaterializationType.INCREMENTAL,
+                MaterializationType.SNAPSHOT,
+                MaterializationType.CUSTOM,
+            }:
+                raise PlannerInputError(
+                    f"model '{self.name}' seeded relation reuse requires "
+                    "incremental, snapshot, or custom materialization"
+                )
+            if self.materialization_type == MaterializationType.CUSTOM:
+                if self.action != PlanAction.CUSTOM:
+                    raise PlannerInputError(
+                        f"model '{self.name}' seeded relation reuse requires custom action"
+                    )
+                return
+            incremental_actions: frozenset[PlanAction] = frozenset(
+                {
+                    PlanAction.INCREMENTAL_APPEND,
+                    PlanAction.INCREMENTAL_DELETE_INSERT,
+                    PlanAction.INCREMENTAL_MERGE,
+                }
+            )
+            snapshot_action: bool = (
+                self.materialization_type == MaterializationType.SNAPSHOT
+                and self.action == PlanAction.SNAPSHOT
+            )
+            if not snapshot_action and self.action not in incremental_actions:
+                raise PlannerInputError(
+                    f"model '{self.name}' seeded relation reuse requires an incremental "
+                    "or snapshot action"
+                )
 
 
 @dataclass(frozen=True)
@@ -365,11 +533,15 @@ class SeedPlanEntry:
 
     key: CompiledObjectKey
     name: str
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     file_path: Path
     columns: tuple[ColumnInfo, ...]
     csv_settings: SeedCsvSettings
+    fingerprint_definition: str = ""
+    fingerprint_version_hash: str = ""
+    fingerprint_metadata_json: str = "{}"
     action: PlanAction = PlanAction.LOAD_SEED
+    reason: PlanReason = PlanReason.FIRST_RUN
 
 
 @dataclass(frozen=True)
@@ -395,12 +567,12 @@ class FunctionPlanEntry:
     key: CompiledObjectKey
     name: str
     relative_path: Path
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     arguments: tuple[object, ...]
     returns: str
     body_sql: str
     fingerprint_query_sql: str
-    fingerprint_destination: CompiledRelationDestination
+    fingerprint_destination: CompiledRelationLocation
     return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
     language: FunctionLanguage = FunctionLanguage.SQL
     source_file_path: Path | None = None
@@ -410,7 +582,7 @@ class FunctionPlanEntry:
     previous_query_sql: str | None = None
     reason: PlanReason = PlanReason.NO_CHANGE
     backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.WARN_ONLY)
+        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
 
 
@@ -429,6 +601,7 @@ class AuditPlanEntry:
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     attached_target_name: str | None = None
     attached_column_name: str | None = None
+    always_run: bool = False
 
 
 @dataclass(frozen=True)
@@ -517,18 +690,18 @@ class ScenarioRelationMap:
 
 @dataclass(frozen=True)
 class ScenarioRelationPlan:
-    """Resolved scenario relation targets for model/source/seed ref resolution."""
+    """Resolved scenario relation locations for model/source/seed ref resolution."""
 
     scenario_name: str
     relation_map: ScenarioRelationMap
-    model_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    seed_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
+    model_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     project_source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
-    source_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    ref_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    seed_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    dbt_ref_fixture_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
+    source_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    ref_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    dbt_ref_fixture_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -537,7 +710,7 @@ class ScenarioFixturePlan:
 
     kind: ScenarioArtifactKind
     logical_name: str
-    destination: CompiledRelationDestination
+    destination: CompiledRelationLocation
     sql: str
 
 
@@ -546,7 +719,7 @@ class ScenarioExpectedExpectationPlan:
     """Expected-output comparison inputs for one scenario target model."""
 
     model_name: str
-    actual_destination: CompiledRelationDestination
+    actual_destination: CompiledRelationLocation
     expected_sql: str
 
 
@@ -610,12 +783,13 @@ class PlanOutput:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
-    model_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    seed_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
-    function_targets: dict[str, CompiledRelationDestination] = field(default_factory=dict)
+    model_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    seed_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
+    function_locations: dict[str, CompiledRelationLocation] = field(default_factory=dict)
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
-    source_freshness: DirectSourceFreshnessPlanningResult | None = None
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
+    python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)

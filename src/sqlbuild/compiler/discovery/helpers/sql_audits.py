@@ -17,6 +17,10 @@ from sqlbuild.compiler.discovery.helpers.constants import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
 
+_SUPPORTED_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
+    {"name", "severity", "run_scope", "always_run"}
+)
+
 
 def parse_sql_audit_file(contents: str, file_path: Path) -> tuple[DiscoveredAuditBlock, ...]:
     """Parse one SQL audit file into one or more raw AUDIT(...) blocks."""
@@ -116,11 +120,12 @@ def _parse_audit_header(*, header: str, file_path: Path) -> dict[str, object]:
             f"AUDIT() header in '{file_path}' must be a mapping like `AUDIT (name: \"...\");`"
         )
 
-    unsupported_keys: tuple[str, ...] = tuple(str(key) for key in parsed_header if key != "name")
+    unsupported_keys: tuple[str, ...] = tuple(
+        str(key) for key in parsed_header if key not in _SUPPORTED_AUDIT_HEADER_KEYS
+    )
     if unsupported_keys:
         raise SqlAuditParseError(
-            f"AUDIT() in '{file_path}' only supports `name` right now; unsupported keys: "
-            f"{', '.join(unsupported_keys)}"
+            f"AUDIT() in '{file_path}' has unsupported keys: {', '.join(unsupported_keys)}"
         )
 
     name_value: object | None = parsed_header.get("name")

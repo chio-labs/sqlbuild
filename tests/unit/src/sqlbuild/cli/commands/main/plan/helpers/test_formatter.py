@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
@@ -13,10 +15,15 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+    RelationReuseKind,
     SchemaChangeKind,
     WarningSeverity,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import (
+    PythonIdentityStatus,
+    PythonNodeKind,
+    PythonRunPhase,
+)
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
@@ -29,6 +36,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,
     build_plan_provider_usage,
+    build_relation_reuse_plan,
     build_schema_finding,
     build_seed_entry,
     build_source_load_entry,
@@ -75,6 +83,60 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "view",
         ),
         unexpected_fragments=("Normal",),
+    ),
+    FormatPlanTestCase(
+        description="relation reuse is visible and hash-free in plan output",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.TABLE,
+                    fingerprint_version_hash="expected_hash",
+                    relation_reuse=build_relation_reuse_plan(
+                        kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+                        hard_copy=True,
+                    ),
+                ),
+                build_model_entry(
+                    name="customer_snapshot",
+                    action=PlanAction.SNAPSHOT,
+                    reason=PlanReason.FIRST_RUN,
+                    materialization_type=MaterializationType.SNAPSHOT,
+                    snapshot_strategy="timestamp",
+                    relation_reuse=build_relation_reuse_plan(
+                        kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+                        origin_name="customer_snapshot",
+                        hard_copy=False,
+                    ),
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "orders",
+            "table (hard-copy reuse from prod)",
+            "customer_snapshot",
+            "snapshot (timestamp) (cheap baseline reuse from prod)",
+        ),
+        unexpected_fragments=("expected_hash", "version_hash"),
+    ),
+    FormatPlanTestCase(
+        description="human plan output omits identity hashes",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                    reason=PlanReason.QUERY_CHANGED,
+                    materialization_type=MaterializationType.INCREMENTAL,
+                    fingerprint_version_hash="expected_hash",
+                    previous_version_hash="built_hash",
+                ),
+            ),
+        ),
+        expected_fragments=("Query changed (1)", "fact_orders"),
+        unexpected_fragments=("expected_hash", "built_hash", "version_hash"),
     ),
     FormatPlanTestCase(
         description="first run shows materialization label with strategy and microbatch",
@@ -173,7 +235,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "mode: microbatch",
             "2026-03-26",
             "2026-04-25",
-            "policy: query_change_backfill=bounded-30d",
+            "policy: replay_on_change=bounded-30d",
             "query diff:",
         ),
     ),
@@ -278,7 +340,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
                     incremental_strategy="delete_insert",
                     cursor_column="event_time",
                     cursor_type="timestamp",
-                    backfill_action=BackfillAction.WARN_ONLY,
+                    backfill_action=BackfillAction.FORWARD_ONLY,
                     cascade=CascadeResult(
                         effective_action=BackfillAction.BOUNDED,
                         effective_duration="90d",
@@ -341,6 +403,20 @@ TEST_CASES: list[FormatPlanTestCase] = [
         expected_fragments=(
             "Seeds (1)",
             "country_codes",
+            "first_run",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="seeds section shows changed seed reason",
+        plan_output=build_plan_output(
+            model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
+            seed_entries=(
+                build_seed_entry(name="country_codes", reason=PlanReason.CONFIG_CHANGED),
+            ),
+        ),
+        expected_fragments=(
+            "Seeds (1)",
+            "country_codes  (seed_changed)",
         ),
     ),
     FormatPlanTestCase(
@@ -416,6 +492,65 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
+        description="changed python identity shows source and dependency diffs",
+        plan_output=build_plan_output(),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
+                identity_status=PythonIdentityStatus.CHANGED,
+                previous_definition_json=json.dumps(
+                    {"source_text": "def prepare_orders(ctx):\n    return 1\n"},
+                    sort_keys=True,
+                ),
+                current_definition_json=json.dumps(
+                    {"source_text": "def prepare_orders(ctx):\n    return 2\n"},
+                    sort_keys=True,
+                ),
+                previous_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'old'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+                current_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'new'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "Python ingress (1)",
+            "prepare_orders",
+            "task (changed)",
+            "python diff:",
+            "source diff:",
+            "dependency diff:",
+            "-    return 1",
+            "+    return 2",
+            "tasks/helpers.py :: tasks.helpers :: order_label",
+            "-    return 'old'",
+            "+    return 'new'",
+        ),
+    ),
+    FormatPlanTestCase(
         description="header includes source reloads when sources will reload",
         plan_output=build_plan_output(
             model_entries=(build_model_entry(name="stg_orders", action=PlanAction.CREATE_TABLE),),
@@ -480,7 +615,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Changed functions (1)",
             "is_completed_order",
             "sql udf",
-            "policy: query_change_backfill=full",
+            "policy: replay_on_change=full",
             "query diff:",
             "--- previous",
             "+++ current",
@@ -526,7 +661,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
                     name="orders",
                     action=PlanAction.SKIP,
                     reason=PlanReason.NO_CHANGE,
-                    backfill_action=BackfillAction.WARN_ONLY,
+                    backfill_action=BackfillAction.FORWARD_ONLY,
                 ),
             ),
             warnings=(
@@ -773,6 +908,35 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
     ),
     FormatPlanTestCase(
+        description="direct metadata caps remaining stale models after partial selection",
+        plan_output=build_plan_output(
+            metadata={
+                "standard_remaining_stale_model_names": tuple(
+                    f"model_{index:02d}" for index in range(55)
+                ),
+            },
+        ),
+        expected_fragments=(
+            "Remaining stale",
+            "models outside selection: 55",
+            "model set: model_00",
+            "... (+5 more; use --verbose to show all)",
+        ),
+    ),
+    FormatPlanTestCase(
+        description="direct metadata shows full remaining stale set in verbose output",
+        plan_output=build_plan_output(
+            metadata={
+                "standard_remaining_stale_model_names": tuple(
+                    f"model_{index:02d}" for index in range(3)
+                ),
+            },
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        expected_fragments=("model set: model_00, model_01, model_02",),
+        unexpected_fragments=("use --verbose",),
+    ),
+    FormatPlanTestCase(
         description="provider usages show compact selected Python surface counts",
         plan_output=build_plan_output(
             provider_usages=(
@@ -888,6 +1052,83 @@ COLOR_TEST_CASES: list[FormatPlanColorTestCase] = [
             "\033[2mused by 1 selected Python surface\033[0m",
         ),
     ),
+    FormatPlanColorTestCase(
+        description="styles source freshness and diff metadata semantically",
+        plan_output=build_plan_output(
+            model_entries=(
+                build_model_entry(
+                    name="fact_orders",
+                    action=PlanAction.CREATE_TABLE,
+                    reason=PlanReason.QUERY_CHANGED,
+                    previous_query_sql="SELECT old_amount FROM raw_orders",
+                ),
+            ),
+            metadata={
+                "standard_source_freshness": {
+                    "observed_source_names": ("raw_orders",),
+                    "changed_source_names": ("raw_orders",),
+                    "unchanged_source_names": (),
+                    "unknown_source_names": (),
+                    "stale_model_names": ("fact_orders",),
+                }
+            },
+        ),
+        expected_fragments=(
+            "\033[2mobserved:\033[0m 1",
+            "\033[2mobserved set:\033[0m \033[34m\033[1mraw_orders\033[0m",
+            "\033[2mchanged:\033[0m \033[33m1\033[0m",
+            "\033[2mchanged set:\033[0m \033[33mraw_orders\033[0m",
+            "\033[2munchanged:\033[0m \033[2m0\033[0m",
+            "\033[2msource-stale models:\033[0m \033[33mfact_orders\033[0m",
+            "\033[2m    query diff:\033[0m",
+            "\033[2m      --- previous\033[0m",
+            "\033[2m      +++ current\033[0m",
+            "\033[2m      @@",
+        ),
+    ),
+    FormatPlanColorTestCase(
+        description="styles python dependency diff headers as metadata",
+        plan_output=build_plan_output(),
+        python_plan_entries=(
+            PythonPlanEntry(
+                name="prepare_orders",
+                kind=PythonNodeKind.TASK,
+                phase=PythonRunPhase.PRE_SQL_INGRESS,
+                identity_status=PythonIdentityStatus.CHANGED,
+                previous_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'old'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+                current_metadata_json=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "module": "tasks.helpers",
+                                "qualname": "order_label",
+                                "source_path": "tasks/helpers.py",
+                                "source_text": "def order_label():\n    return 'new'\n",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        ),
+        expected_fragments=(
+            "\033[2m         # tasks/helpers.py :: tasks.helpers :: order_label\033[0m",
+            "\033[31m      -    return 'old'\033[0m",
+            "\033[32m      +    return 'new'\033[0m",
+        ),
+    ),
 ]
 
 
@@ -927,7 +1168,11 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
 def test_given_plan_output_when_formatting_with_color_then_styles_semantic_parts(
     test_case: FormatPlanColorTestCase,
 ) -> None:
-    result: str = format_plan(test_case.plan_output, use_color=True)
+    result: str = format_plan(
+        test_case.plan_output,
+        use_color=True,
+        python_plan_entries=test_case.python_plan_entries,
+    )
 
     for fragment in test_case.expected_fragments:
         assert fragment in result, f"Expected '{fragment}' in output:\n{result}"

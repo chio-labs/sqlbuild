@@ -11,12 +11,12 @@ from sqlbuild.shared.helpers.cli_style import CliStyle
 def render_clone_output(
     *,
     result: CloneExecutionResult,
-    from_target: str,
-    to_target: str,
+    origin_target_name: str,
+    destination_target_name: str,
     use_color: bool,
 ) -> None:
     style: CliStyle = CliStyle(use_color=use_color)
-    print(f"sqb clone  from={from_target} to={to_target}\n")
+    print(f"sqb clone  origin={origin_target_name} destination={destination_target_name}\n")
     name_column_width: int = resolve_name_column_width(
         tuple(item.name for item in result.item_results)
     )

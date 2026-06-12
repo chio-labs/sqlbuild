@@ -116,3 +116,19 @@ class JanitorInvalidConfigE2ETestCase:
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorDirectStatePruningE2ETestCase:
+    description: str
+    build_command: tuple[str, ...]
+    janitor_command: tuple[str, ...]
+    plan_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_fingerprint_count_before: int
+    expected_fingerprint_count_after: int
+    expected_source_freshness_count_before: int
+    expected_source_freshness_count_after: int
+    expected_fingerprint_run_ids_after: tuple[str, ...]
+    expected_source_freshness_run_ids_after: tuple[str, ...]

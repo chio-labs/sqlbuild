@@ -46,6 +46,7 @@ class MainTestCase:
     expected_state_backup_id: str | None = None
     expected_auto_approve: bool = False
     expected_vars: dict[str, object] | None = None
+    expected_direct_state_history_versions: int | None = None
 
 
 @dataclass(frozen=True)

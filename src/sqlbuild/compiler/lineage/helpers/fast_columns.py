@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.models.core import (
@@ -38,7 +39,10 @@ from sqlbuild.shared.constants import (
     POLYGLOT_KIND_UNION,
     POLYGLOT_SET_OPERATION_KINDS,
 )
+from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+
+_DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")
 
 
 def build_fast_project_column_lineage(
@@ -138,7 +142,13 @@ def _build_polyglot_fast_model_column_lineage(
     normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
     try:
         parsed: Any = polyglot_module.parse_one(normalized_sql, dialect=dialect or "generic")
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "fast column lineage parse failed; falling back",
+            sqlbuild_model=model.name,
+            sqlbuild_error=str(error),
+        )
         return None
     parsed_kind: str = str(getattr(parsed, "kind", ""))
     if parsed_kind == POLYGLOT_KIND_UNION:
@@ -434,7 +444,12 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
         )
     try:
         payload: object = expression.to_dict()
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "fast column lineage expression payload extraction failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return ()
     refs: list[tuple[str, str]] = []
 
@@ -476,7 +491,12 @@ def _polyglot_name_payload_value(payload: object) -> str:
 def _polyglot_column_table_name(column: Any) -> str:
     try:
         payload: object = column.to_dict().get("column", {})
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "fast column lineage column table extraction failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return ""
     if not isinstance(payload, dict):
         return ""
@@ -542,6 +562,11 @@ def _polyglot_classify_transform(
 def _polyglot_has_aggregation(expression: Any) -> bool:
     try:
         nodes: tuple[Any, ...] = tuple(expression.walk())
-    except Exception:
+    except Exception as error:
+        log_debug_event(
+            _DEBUG_LOGGER,
+            "fast column lineage aggregation detection failed; falling back",
+            sqlbuild_error=str(error),
+        )
         return False
     return any(str(getattr(node, "kind", "")) in POLYGLOT_AGGREGATE_KINDS for node in nodes)

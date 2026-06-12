@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_destination
 
 
 def build_virtual_logical_destination(
     *,
     adapter: BaseAdapter,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     virtual_environment_name: str,
     unsuffixed_virtual_environment_name: str | None = None,
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     """Build the logical virtual target for a model or function."""
 
     return build_virtual_destination(

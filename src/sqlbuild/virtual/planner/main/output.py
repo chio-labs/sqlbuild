@@ -25,6 +25,8 @@ def apply_virtual_plan_output(
         stale_root_causes=semantics.stale_root_causes,
         stale_root_cause_reasons=semantics.stale_root_cause_reasons,
         previous_query_sqls=semantics.bound_previous_query_sqls,
+        run_despite_unchanged=semantics.run_despite_unchanged,
+        seed_plan_reasons=semantics.seed_plan_reasons,
     )
     return with_virtual_metadata(
         plan_output=rewritten,

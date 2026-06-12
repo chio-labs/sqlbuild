@@ -9,6 +9,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_
 from tests.e2e.src.sqlbuild.cli.commands.main.reconcile._test_types import (
     ReconcileE2ETestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.reconcile.helpers import (
+    build_virtual_seed_reconcile_repo_files,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
@@ -39,6 +42,195 @@ def test_given_healthy_virtual_environment_when_reconciling_then_report_is_clean
     )
     assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
     assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReconcileE2ETestCase(
+            description="report detects missing logical seed view",
+            command=("reconcile", "--virtual-env", "dev"),
+            expected_fragments=(
+                "Reconcile report for dev:",
+                "missing logical seed target: order_amounts",
+            ),
+        )
+    ],
+    ids=["report detects missing logical seed view"],
+)
+def test_given_missing_logical_seed_view_when_reconciling_then_report_flags_seed_issue(
+    test_case: ReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_reconcile_seed_report",
+        repo_files=build_virtual_seed_reconcile_repo_files(),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql='DROP VIEW "dev__dev"."order_amounts"',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReconcileE2ETestCase(
+            description="repair-view recreates missing logical seed view",
+            command=(
+                "reconcile",
+                "repair-view",
+                "--virtual-env",
+                "dev",
+                "--seed",
+                "order_amounts",
+            ),
+            expected_fragments=(
+                "Repair",
+                "seed    order_amounts",
+                "VDE     dev",
+                "action  recreate logical seed view from state",
+                "result  repaired",
+            ),
+            expected_query_results=(
+                ("SELECT id, amount_cents FROM dev__dev.order_amounts ORDER BY id", ((1, 100),)),
+            ),
+        )
+    ],
+    ids=["repair-view recreates missing logical seed view"],
+)
+def test_given_missing_logical_seed_view_when_repairing_then_it_is_recreated(
+    test_case: ReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_reconcile_seed_repair",
+        repo_files=build_virtual_seed_reconcile_repo_files(),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql='DROP VIEW "dev__dev"."order_amounts"',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout + result.stderr
+    for query_sql, expected_rows in test_case.expected_query_results:
+        assert query_duckdb(db_path=project_dir / "warehouse.duckdb", sql=query_sql) == list(
+            expected_rows
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReconcileE2ETestCase(
+            description="report detects missing physical seed relation",
+            command=("reconcile", "--virtual-env", "dev"),
+            expected_fragments=(
+                "Reconcile report for dev:",
+                "missing physical seed relation: order_amounts",
+            ),
+        )
+    ],
+    ids=["report detects missing physical seed relation"],
+)
+def test_given_missing_physical_seed_relation_when_reconciling_then_report_flags_seed_issue(
+    test_case: ReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_reconcile_seed_physical_report",
+        repo_files=build_virtual_seed_reconcile_repo_files(),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    physical_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts' "
+            "ORDER BY updated_at DESC LIMIT 1"
+        ),
+    )
+    schema_name, relation_name = physical_rows[0]
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=f'DROP TABLE "{schema_name}"."{relation_name}"',
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReconcileE2ETestCase(
+            description="report detects missing tracked physical seed state",
+            command=("reconcile", "--virtual-env", "dev"),
+            expected_fragments=(
+                "Reconcile report for dev:",
+                "missing tracked physical seed relation: order_amounts",
+            ),
+        )
+    ],
+    ids=["report detects missing tracked physical seed state"],
+)
+def test_given_missing_seed_physical_state_when_reconciling_then_report_flags_seed_issue(
+    test_case: ReconcileE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_reconcile_seed_physical_state_report",
+        repo_files=build_virtual_seed_reconcile_repo_files(),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "DELETE FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts'"
+        ),
+    )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,
@@ -159,7 +351,8 @@ def test_given_missing_physical_relation_when_reconciling_and_repairing_then_it_
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = physical_rows[0]
@@ -235,7 +428,8 @@ def test_given_tracked_physical_relation_when_attaching_then_logical_ref_is_rebo
         sql=(
             "SELECT schema_name, relation_name, version_hash "
             "FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name, _version_hash = attach_relation_rows[0]
@@ -339,7 +533,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -352,7 +546,8 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'dim_customers' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'dim_customers' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = wrong_model_relation_rows[0]
@@ -379,7 +574,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
@@ -414,7 +609,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -422,7 +617,8 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = attach_relation_rows[0]
@@ -449,7 +645,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
@@ -531,7 +727,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -550,7 +746,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' "
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
             "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
@@ -585,7 +781,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )
@@ -683,7 +879,7 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
     original_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
         ),
     )
@@ -701,7 +897,8 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
-            "WHERE model_name = 'fact_orders' ORDER BY updated_at DESC LIMIT 1"
+            "WHERE artifact_type = 'model' AND artifact_name = 'fact_orders' "
+            "ORDER BY updated_at DESC LIMIT 1"
         ),
     )
     schema_name, relation_name = attach_relation_rows[0]
@@ -737,7 +934,7 @@ def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_bef
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT version_hash FROM sqlbuild_state.virtual_environment_refs "
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_model_refs "
                 "WHERE virtual_environment_name = 'dev' AND model_name = 'fact_orders'"
             ),
         )

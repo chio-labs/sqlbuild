@@ -35,7 +35,7 @@ def write_loader_rows_to_staging(
     inferred_types: dict[str, LoaderLogicalType] = {}
     adapter.drop(
         connection,
-        target=staging,
+        destination=staging,
         if_exists=True,
         statement_recorder=statement_recorder,
     )
@@ -54,7 +54,7 @@ def write_loader_rows_to_staging(
         if staging_created and schema.added_columns:
             adapter.add_columns(
                 connection,
-                target=staging,
+                destination=staging,
                 columns=schema.added_columns,
                 statement_recorder=statement_recorder,
             )
@@ -68,7 +68,7 @@ def write_loader_rows_to_staging(
         if staging_created:
             adapter.append(
                 connection,
-                target=staging,
+                destination=staging,
                 sql=sql,
                 columns=column_names,
                 statement_recorder=statement_recorder,
@@ -76,7 +76,7 @@ def write_loader_rows_to_staging(
         else:
             adapter.create_table_as(
                 connection,
-                target=staging,
+                destination=staging,
                 sql=sql,
                 statement_recorder=statement_recorder,
             )
@@ -92,7 +92,7 @@ def write_loader_rows_to_staging(
         )
         adapter.create_table_as(
             connection,
-            target=staging,
+            destination=staging,
             sql=sql,
             statement_recorder=statement_recorder,
         )

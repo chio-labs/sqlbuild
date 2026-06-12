@@ -92,3 +92,12 @@ class SnowflakeTableFreshnessMetadataErrorTestCase:
     description: str
     row: tuple[object, ...] | None
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SnowflakePruneSqlTestCase:
+    description: str
+    database: str | None
+    schema: str
+    retain_versions: int
+    expected_fragments: tuple[str, ...]

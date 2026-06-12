@@ -420,7 +420,8 @@ def test_given_tracked_physical_relation_when_attaching_on_bigquery_then_view_is
             sql=(
                 "SELECT database_name, schema_name, relation_name "
                 "FROM sqlbuild_state.physical_relations "
-                "WHERE model_name = 'orders' ORDER BY updated_at DESC LIMIT 1"
+                "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+                "ORDER BY updated_at DESC LIMIT 1"
             ),
         )[0]
         physical_relation: str = f"`{project_id}.{physical_dataset_name}.{physical_relation_name}`"
@@ -627,7 +628,7 @@ def test_given_detached_vde_when_running_janitor_on_bigquery_then_refs_are_prune
         ) == [(test_case.expected_virtual_environment_count_after,)]
         assert query_duckdb(
             db_path=project_dir / "state.duckdb",
-            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
         ) == [(test_case.expected_ref_count_after,)]
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)

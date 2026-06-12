@@ -1,23 +1,23 @@
-"""Public direct source freshness downstream propagation entrypoint."""
+"""Public standard source freshness downstream propagation entrypoint."""
 
 from __future__ import annotations
 
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.helpers import propagation as propagation_helpers
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
+    StandardSourceFreshnessPlanningResult,
+    StandardSourceFreshnessPropagationResult,
 )
 
 
-def build_direct_source_freshness_propagation_result(
+def build_standard_source_freshness_propagation_result(
     *,
-    source_freshness: DirectSourceFreshnessPlanningResult,
+    source_freshness: StandardSourceFreshnessPlanningResult,
     scope: PlannerScope,
-) -> DirectSourceFreshnessPropagationResult:
+) -> StandardSourceFreshnessPropagationResult:
     """Map changed/unknown source freshness roots to downstream model names."""
 
-    return propagation_helpers.build_direct_source_freshness_propagation_result(
+    return propagation_helpers.build_standard_source_freshness_propagation_result(
         source_freshness=source_freshness,
         scope=scope,
     )

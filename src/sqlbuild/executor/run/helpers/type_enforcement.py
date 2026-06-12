@@ -60,19 +60,19 @@ def enforce_types_staged(
     enforced_qualified: str = f"{staging_qualified}__enforced"
     adapter.create_table_as(
         connection,
-        target=enforced_qualified,
+        destination=enforced_qualified,
         sql=f"SELECT {projection_sql} FROM {staging_qualified}",
         statement_recorder=statement_recorder,
     )
     adapter.drop(
         connection,
-        target=staging_qualified,
+        destination=staging_qualified,
         if_exists=True,
         statement_recorder=statement_recorder,
     )
     adapter.rename(
         connection,
-        source=enforced_qualified,
-        target=staging_qualified,
+        origin=enforced_qualified,
+        destination=staging_qualified,
         statement_recorder=statement_recorder,
     )

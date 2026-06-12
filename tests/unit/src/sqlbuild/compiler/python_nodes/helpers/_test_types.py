@@ -96,3 +96,33 @@ class PythonSqlRunLifecycleTestCase:
     expected_ingress_loader_names: frozenset[str]
     expected_read_side_python_names: frozenset[str]
     expected_read_side_sql_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PythonNodeIdentityTestCase:
+    description: str
+    repo_files: dict[str, str]
+    entry_module_path: str
+    function_name: str
+    node_type: str
+    expected_source_path: str
+    expected_dependency_qualnames: tuple[str, ...]
+    expected_definition_fragments: tuple[str, ...]
+    expected_metadata_fragments: tuple[str, ...]
+    unexpected_metadata_fragments: tuple[str, ...] = ()
+    extra_sys_paths: tuple[str, ...] = ()
+    decorator_config: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class PythonNodeIdentityChangeTestCase:
+    description: str
+    before_repo_files: dict[str, str]
+    after_repo_files: dict[str, str]
+    entry_module_path: str
+    function_name: str
+    node_type: str
+    expected_definition_hash_changed: bool
+    expected_version_hash_changed: bool
+    before_decorator_config: dict[str, object] | None = None
+    after_decorator_config: dict[str, object] | None = None

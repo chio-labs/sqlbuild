@@ -28,7 +28,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -55,7 +55,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
@@ -83,6 +83,7 @@ def assemble_compiled_project(
     *,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
@@ -102,6 +103,7 @@ def assemble_compiled_project(
             model_inputs=inputs.model_inputs,
             column_nullability_by_table=column_nullability_by_table,
             inference_profile=profile,
+            allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
         )
     return CompiledProject(
         run_id=inputs.run_id,
@@ -127,6 +129,7 @@ def assemble_compiled_project(
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
                 sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
+                allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
             )
             for model_input in inputs.model_inputs
         ),
@@ -175,6 +178,7 @@ def _assemble_compiled_model(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     sql_analysis: _ModelSqlAnalysis | None = None,
+    allow_compact_analysis: bool = False,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     inferred_columns: tuple[InferredColumn, ...] | None = None
@@ -197,6 +201,7 @@ def _assemble_compiled_model(
                 placeholders=placeholders,
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
+                allow_compact_analysis=allow_compact_analysis,
             )
         )
         if isinstance(polyglot_analysis, tuple):
@@ -251,6 +256,7 @@ def _analyze_model_sql_in_parallel(
     model_inputs: tuple[CompileModelInput, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
 ) -> dict[str, _ModelSqlAnalysis]:
     if not model_inputs:
         return {}
@@ -260,6 +266,7 @@ def _analyze_model_sql_in_parallel(
                 model_input,
                 column_nullability_by_table,
                 inference_profile,
+                allow_compact_analysis,
             )
             for model_input in model_inputs
         }
@@ -271,6 +278,7 @@ def _analyze_model_sql_in_parallel(
                     model_input,
                     column_nullability_by_table,
                     inference_profile,
+                    allow_compact_analysis,
                 ),
                 model_inputs,
             )
@@ -285,6 +293,7 @@ def _analyze_model_sql(
     model_input: CompileModelInput,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
 ) -> _ModelSqlAnalysis:
     placeholders: dict[str, str] | None = _model_placeholders(model_input)
     return _ModelSqlAnalysis(
@@ -294,6 +303,7 @@ def _analyze_model_sql(
             placeholders=placeholders,
             column_nullability_by_table=column_nullability_by_table,
             inference_profile=inference_profile,
+            allow_compact_analysis=allow_compact_analysis,
         ),
         placeholders=placeholders,
     )
@@ -403,7 +413,7 @@ def _assemble_compiled_seed(
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> CompiledSeed:
-    target: CompiledRelationDestination = _build_seed_relation_target(
+    target: CompiledRelationLocation = _build_seed_relation_target(
         seed_entry=seed_input.schema_entry,
         defaults=defaults,
         target_config=target_config,
@@ -440,13 +450,13 @@ def _assemble_compiled_function(
         body_sql=function_input.body_sql,
         return_columns=function_input.return_columns,
         references=function_input.references,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=function_input.database,
             schema=function_input.schema,
             name=function_input.name,
             qualified_name=None,
         ),
-        fingerprint_destination=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationLocation(
             database=function_input.fingerprint_database,
             schema=function_input.fingerprint_schema,
             name=function_input.name,
@@ -457,7 +467,7 @@ def _assemble_compiled_function(
         runtime_version=function_input.runtime_version,
         entry_point=function_input.entry_point,
         packages=function_input.packages,
-        query_change_backfill=function_input.query_change_backfill,
+        replay_on_change=function_input.replay_on_change,
     )
 
 
@@ -483,6 +493,7 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
         attached_column_name=audit_input.attached_column_name,
         severity=audit_input.severity,
         run_scope=audit_input.run_scope,
+        always_run=audit_input.always_run,
     )
 
 
@@ -694,14 +705,14 @@ def _resolve_test_name(test_input: CompileSqlTestInput) -> str:
 
 def _build_model_relation_target(
     *, model_input: CompileModelInput, model_name: str
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     raw_database: object | None = model_input.config.values.get("database")
     raw_schema: object | None = model_input.config.values.get("schema")
     raw_alias: object | None = model_input.config.values.get("alias")
     database: str | None = raw_database if isinstance(raw_database, str) else None
     schema: str | None = raw_schema if isinstance(raw_schema, str) else None
     name: str = raw_alias if isinstance(raw_alias, str) else model_name
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=name,
@@ -717,7 +728,7 @@ def _build_seed_relation_target(
     defaults: DefaultsConfig,
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     resolved_namespace: tuple[str | None, str | None] = _resolve_target_namespace(
         defaults=defaults,
         target_config=target_config,
@@ -743,7 +754,7 @@ def _build_seed_relation_target(
             effective_vars=effective_vars,
             context_label=f"seed '{seed_entry.name}' schema",
         )
-    return CompiledRelationDestination(
+    return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=seed_entry.name,

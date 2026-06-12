@@ -64,6 +64,6 @@ class ResolveBackfillTestCase:
 @dataclass(frozen=True)
 class ResolveSchemaBackfillTestCase:
     description: str
-    schema_change_backfill: dict[str, str]
+    replay_on_change: dict[str, str]
     findings: tuple[SchemaFinding, ...]
     expected_result: BackfillResult

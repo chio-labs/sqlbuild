@@ -10,14 +10,16 @@ from sqlbuild.spec.models.source import SourceEntry
 class GatherWarehouseSnapshotTestCase:
     description: str
     setup_sql: tuple[str, ...]
-    model_targets: dict[str, str | None]
-    seed_targets: dict[str, str | None]
+    model_locations: dict[str, str | None]
+    seed_locations: dict[str, str | None]
     selected_keys: frozenset[CompiledObjectKey] | None = None
     model_deps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     fingerprints_to_write: tuple[tuple[str, Fingerprint], ...] = field(default_factory=tuple)
     expected_relation_names: frozenset[str] = field(default_factory=frozenset)
     expected_column_table_names: frozenset[str] = field(default_factory=frozenset)
     expected_fingerprint_names: frozenset[str] = field(default_factory=frozenset)
+    expected_function_fingerprint_names: frozenset[str] = field(default_factory=frozenset)
+    expected_seed_fingerprint_names: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -39,8 +41,8 @@ class GatherCursorSnapshotTestCase:
     expected_cursor_model_names: frozenset[str]
     expected_cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     expected_progress_calls: int = 0
-    deferred_targets: dict[str, str] | None = None
-    extra_model_targets: dict[str, str | None] = field(default_factory=dict)
+    deferred_locations: dict[str, str] | None = None
+    extra_model_locations: dict[str, str | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,6 @@ class ExecuteAuditTestCase:
     description: str
     setup_sql: tuple[str, ...]
     audit_sql: str
-    model_targets: dict[str, str]
+    model_locations: dict[str, str]
     source_map: dict[str, SourceEntry]
     expected_row_count: int

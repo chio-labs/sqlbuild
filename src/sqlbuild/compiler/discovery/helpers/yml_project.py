@@ -362,10 +362,6 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             file_path=file_path,
         )
     )
-    schema_change_backfill: dict[str, str] = _load_string_mapping(
-        payload=mapping.get("schema_change_backfill"),
-        file_path=file_path,
-    )
     row_diff_tolerances: dict[str, object] = _optional_mapping(
         payload=mapping,
         key="row_diff_tolerances",
@@ -384,8 +380,8 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
-        query_change_backfill=_optional_str(payload=mapping, key="query_change_backfill"),
-        schema_change_backfill=schema_change_backfill,
+        replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
+        run_despite_unchanged=_optional_str(payload=mapping, key="run_despite_unchanged"),
         row_diff_exclude_columns=row_diff_exclude_columns,
         row_diff_tolerances=row_diff_tolerances,
         tags=tags,
@@ -446,15 +442,21 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
+            reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
+            reuse_hard_copy=_optional_bool(
+                mapping=target_mapping,
+                key="reuse_hard_copy",
+                default=False,
+            ),
             clone=ClonePolicy(
-                allow_as_source=_optional_bool(
+                allow_as_clone_origin=_optional_bool(
                     mapping=clone_mapping,
-                    key="allow_as_source",
+                    key="allow_as_clone_origin",
                     default=False,
                 ),
-                allow_as_target=_optional_bool(
+                allow_as_clone_destination=_optional_bool(
                     mapping=clone_mapping,
-                    key="allow_as_target",
+                    key="allow_as_clone_destination",
                     default=False,
                 ),
             ),
@@ -505,14 +507,19 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
+            reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
+            reuse_hard_copy=_optional_nullable_bool(
+                mapping=target_mapping,
+                key="reuse_hard_copy",
+            ),
             clone=LocalClonePolicy(
-                allow_as_source=_optional_nullable_bool(
+                allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
-                    key="allow_as_source",
+                    key="allow_as_clone_origin",
                 ),
-                allow_as_target=_optional_nullable_bool(
+                allow_as_clone_destination=_optional_nullable_bool(
                     mapping=clone_mapping,
-                    key="allow_as_target",
+                    key="allow_as_clone_destination",
                 ),
             ),
             state=LocalStateConfig(
@@ -539,6 +546,11 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
     retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=30)
     max_checkpoints: int = _optional_int(mapping=mapping, key="max_checkpoints", default=20)
+    direct_state_history_versions: int = _optional_int(
+        mapping=mapping,
+        key="direct_state_history_versions",
+        default=20,
+    )
     delete_tracked_only: bool = _optional_bool(
         mapping=mapping,
         key="delete_tracked_only",
@@ -555,10 +567,13 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
         raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
     if max_checkpoints < 1:
         raise ProjectConfigError(f"{file_path} janitor.max_checkpoints must be >= 1")
+    if direct_state_history_versions < 0:
+        raise ProjectConfigError(f"{file_path} janitor.direct_state_history_versions must be >= 0")
     return JanitorConfig(
         enabled=enabled,
         retention_days=retention_days,
         max_checkpoints=max_checkpoints,
+        direct_state_history_versions=direct_state_history_versions,
         delete_tracked_only=delete_tracked_only,
         exclude_patterns=exclude_patterns,
     )

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
@@ -14,7 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -45,24 +47,41 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
 from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    PlannerScope,
     PlanOutput,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
+    StandardReuseFromTargetModelSnapshot,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+    StandardSourceFreshnessPlanningResult,
+)
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
+from sqlbuild.spec.models.schema import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SeedCsvSettings,
+)
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.models.types import (
+    SourceFreshnessStrategy,
+    SourceWriteStrategy,
+)
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
@@ -89,10 +108,409 @@ class PlannerTestAdapter(BaseAdapter):
         del connection
 
 
+class StandardReuseFromTargetTestResult:
+    """Minimal DB-API-style result for standard reuse_from tests."""
+
+    def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
+        self._rows: tuple[tuple[object, ...], ...] = rows
+
+    def fetchall(self) -> tuple[tuple[object, ...], ...]:
+        return self._rows
+
+
+class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
+    """Adapter test double for standard reuse_from snapshot tests."""
+
+    def __init__(
+        self,
+        *,
+        fingerprint_rows: tuple[tuple[object, ...], ...],
+        existing_relations: frozenset[tuple[str | None, str | None, str]],
+        fingerprint_table_exists: bool = True,
+        fingerprint_read_fails: bool = False,
+    ) -> None:
+        self.fingerprint_rows: tuple[tuple[object, ...], ...] = fingerprint_rows
+        self.existing_relations: frozenset[tuple[str | None, str | None, str]] = existing_relations
+        self.fingerprint_table_exists: bool = fingerprint_table_exists
+        self.fingerprint_read_fails: bool = fingerprint_read_fails
+
+    def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
+        del connection, sql
+        if self.fingerprint_read_fails:
+            raise RuntimeError("cannot select fingerprint rows")
+        return StandardReuseFromTargetTestResult(self.fingerprint_rows)
+
+    def relation_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        del connection
+        if name == FINGERPRINT_TABLE_NAME:
+            return self.fingerprint_table_exists
+        return (database, schema, name) in self.existing_relations
+
+    def render_qualified_name(
+        self,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        if database is not None and schema is not None:
+            return f"{database}.{schema}.{name}"
+        if schema is not None:
+            return f"{schema}.{name}"
+        return name
+
+
 def model_key(name: str) -> CompiledObjectKey:
     """Build a model object key."""
 
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+
+
+def build_run_despite_unchanged_scope(
+    *, run_despite_unchanged: object, materialized: str
+) -> PlannerScope:
+    """Build a source -> rolling table -> mart planner scope."""
+
+    source_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.SOURCE,
+        name="raw_orders",
+    )
+    rolling_key: CompiledObjectKey = model_key("rolling_orders")
+    mart_key: CompiledObjectKey = model_key("orders_mart")
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        rolling_key: (source_key,),
+        mart_key: (rolling_key,),
+        source_key: (),
+    }
+    return PlannerScope(
+        upstream_deps=upstream_deps,
+        downstream_deps=build_downstream_deps(upstream_deps),
+        all_keys={
+            "raw_orders": source_key,
+            "rolling_orders": rolling_key,
+            "orders_mart": mart_key,
+        },
+        models_by_name={
+            "rolling_orders": build_run_despite_unchanged_model(
+                key=rolling_key,
+                name="rolling_orders",
+                materialized=materialized,
+                run_despite_unchanged=run_despite_unchanged,
+            ),
+            "orders_mart": build_run_despite_unchanged_model(
+                key=mart_key,
+                name="orders_mart",
+                materialized="table",
+                run_despite_unchanged=None,
+            ),
+        },
+        selected_keys=frozenset({rolling_key, mart_key}),
+        execution_order=(source_key, rolling_key, mart_key),
+    )
+
+
+def build_run_despite_unchanged_model(
+    *,
+    key: CompiledObjectKey,
+    name: str,
+    materialized: str,
+    run_despite_unchanged: object | None,
+) -> CompiledModel:
+    """Build a minimal model for run_despite_unchanged helper tests."""
+
+    values: dict[str, object] = {"materialized": materialized}
+    if run_despite_unchanged is not None:
+        values["run_despite_unchanged"] = run_despite_unchanged
+    return CompiledModel(
+        key=key,
+        deps=(),
+        name=name,
+        relative_path=Path(f"models/{name}.sql"),
+        query_sql="SELECT 1",
+        config=CompileModelConfig(values=values),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name=name,
+            qualified_name=f"main.{name}",
+        ),
+    )
+
+
+def build_run_despite_unchanged_source_freshness(
+    *, data_version: str | None, value_kind: str, observed_at: datetime
+) -> StandardSourceFreshnessPlanningResult:
+    """Build source freshness state for run_despite_unchanged helper tests."""
+
+    if data_version is None:
+        return StandardSourceFreshnessPlanningResult()
+    record: SourceFreshnessRecord = SourceFreshnessRecord(
+        source_name="raw_orders",
+        target_database=None,
+        target_schema=None,
+        target_name=None,
+        run_id="run-1",
+        strategy=SourceFreshnessStrategy.SQL.value,
+        value_kind=value_kind,
+        data_version=data_version,
+        data_version_hash="hash",
+        observed_at=observed_at,
+    )
+    return StandardSourceFreshnessPlanningResult(
+        observed_records=(record,),
+        unchanged_identities=frozenset(
+            {
+                SourceFreshnessIdentity(
+                    source_name="raw_orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                )
+            }
+        ),
+    )
+
+
+def build_standard_reuse_from_target_project() -> CompiledProject:
+    """Build a minimal compiled project with two selected models."""
+
+    return CompiledProject(
+        run_id="test_run",
+        effective_target_name="dev",
+        effective_connection={},
+        effective_vars={},
+        effective_target_database=None,
+        effective_target_schema="dev_schema",
+        models=(
+            CompiledModel(
+                key=model_key("orders"),
+                deps=(),
+                name="orders",
+                relative_path=Path("models/orders.sql"),
+                query_sql="SELECT 1",
+                config=CompileModelConfig(logical_schema="analytics"),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="dev_schema",
+                    name="orders",
+                    qualified_name="dev_schema.orders",
+                    logical_schema="analytics",
+                ),
+            ),
+            CompiledModel(
+                key=model_key("customers"),
+                deps=(),
+                name="customers",
+                relative_path=Path("models/customers.sql"),
+                query_sql="SELECT 1",
+                config=CompileModelConfig(logical_schema="analytics"),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="dev_schema",
+                    name="customers",
+                    qualified_name="dev_schema.customers",
+                    logical_schema="analytics",
+                ),
+            ),
+            CompiledModel(
+                key=model_key("line_items"),
+                deps=(),
+                name="line_items",
+                relative_path=Path("models/line_items.sql"),
+                query_sql="SELECT 1",
+                config=CompileModelConfig(
+                    logical_schema="analytics",
+                    values={"materialized": "incremental", "incremental_strategy": "append"},
+                ),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="dev_schema",
+                    name="line_items",
+                    qualified_name="dev_schema.line_items",
+                    logical_schema="analytics",
+                ),
+            ),
+            CompiledModel(
+                key=model_key("account_snapshot"),
+                deps=(),
+                name="account_snapshot",
+                relative_path=Path("models/account_snapshot.sql"),
+                query_sql="SELECT 1 AS account_id, CURRENT_TIMESTAMP AS updated_at",
+                config=CompileModelConfig(
+                    logical_schema="analytics",
+                    values={
+                        "materialized": "snapshot",
+                        "unique_key": ["account_id"],
+                        "snapshot_strategy": "timestamp",
+                        "updated_at": "updated_at",
+                    },
+                ),
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="dev_schema",
+                    name="account_snapshot",
+                    qualified_name="dev_schema.account_snapshot",
+                    logical_schema="analytics",
+                ),
+            ),
+        ),
+    )
+
+
+def build_standard_reuse_from_target_scope(
+    *, selected_model_names: frozenset[str] | None = None
+) -> PlannerScope:
+    """Build a minimal planner scope selecting two models."""
+
+    project: CompiledProject = build_standard_reuse_from_target_project()
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        model.key
+        for model in project.models
+        if selected_model_names is None or model.name in selected_model_names
+    )
+    return PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={model.name: model.key for model in project.models},
+        models_by_name=models_by_name,
+        selected_keys=selected_keys,
+        execution_order=tuple(model.key for model in project.models),
+    )
+
+
+def build_standard_reuse_from_target_fingerprint_row(
+    *, model_name: str, version_hash: str
+) -> tuple[object, ...]:
+    """Build one valid fingerprint row tuple for read_latest_fingerprints."""
+
+    encoded_sql: str = base64.b64encode(b"SELECT 1").decode("ascii")
+    encoded_metadata: str = base64.b64encode(b"{}").decode("ascii")
+    return (
+        "model",
+        model_name,
+        None,
+        "prod_schema",
+        model_name,
+        "run_1",
+        f"{model_name}_definition_hash",
+        version_hash,
+        f"{model_name}_schema_hash",
+        encoded_sql,
+        encoded_metadata,
+        datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def build_standard_reuse_decision_scope(
+    *, selected_model_names: frozenset[str] | None = None
+) -> PlannerScope:
+    """Build a planner scope for standard reuse decision matrix tests."""
+
+    model_configs: tuple[tuple[str, dict[str, object]], ...] = (
+        ("candidate", {}),
+        ("current", {}),
+        ("missing_fingerprint", {}),
+        ("missing_relation", {}),
+        ("version_mismatch", {}),
+        ("ineligible_view", {"materialized": "view"}),
+        (
+            "incremental_candidate",
+            {"materialized": "incremental", "cursor_type": "integer"},
+        ),
+        (
+            "snapshot_candidate",
+            {
+                "materialized": "snapshot",
+                "unique_key": ["id"],
+                "snapshot_strategy": "timestamp",
+                "updated_at": "updated_at",
+            },
+        ),
+        ("ineligible_custom", {"materialized": "custom_kind"}),
+        ("missing_expected", {}),
+        ("current_reuse_from_missing", {}),
+    )
+    models: tuple[CompiledModel, ...] = tuple(
+        CompiledModel(
+            key=model_key(model_name),
+            deps=(),
+            name=model_name,
+            relative_path=Path(f"models/{model_name}.sql"),
+            query_sql="SELECT 1",
+            config=CompileModelConfig(values=config_values),
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="dev_schema",
+                name=model_name,
+                qualified_name=f"dev_schema.{model_name}",
+            ),
+        )
+        for model_name, config_values in model_configs
+    )
+    return PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={model.name: model.key for model in models},
+        models_by_name={model.name: model for model in models},
+        selected_keys=frozenset(
+            model.key
+            for model in models
+            if selected_model_names is None or model.name in selected_model_names
+        ),
+        execution_order=tuple(model.key for model in models),
+    )
+
+
+def build_standard_reuse_fingerprint(*, model_name: str, version_hash: str) -> Fingerprint:
+    """Build a minimal fingerprint for standard reuse decision tests."""
+
+    return Fingerprint(
+        node_type="model",
+        node_name=model_name,
+        target_database=None,
+        target_schema="dev_schema",
+        target_name=model_name,
+        run_id="run_1",
+        definition_hash="definition_hash",
+        version_hash=version_hash,
+        schema_fingerprint="schema_hash",
+        definition="SELECT 1",
+        ts=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def build_standard_reuse_origin_snapshot(
+    *,
+    model_name: str,
+    schema: str = "prod_schema",
+    relation_exists: bool = True,
+    built_version_hash: str | None = "expected",
+    reuse_origin_cursor_max: str | None = None,
+) -> StandardReuseFromTargetModelSnapshot:
+    """Build one per-model reuse origin snapshot for decision tests."""
+
+    return StandardReuseFromTargetModelSnapshot(
+        model_name=model_name,
+        reuse_origin=CompiledRelationLocation(
+            database=None,
+            schema=schema,
+            name=model_name,
+            qualified_name=f"{schema}.{model_name}",
+        ),
+        reuse_origin_fingerprint_database=None,
+        reuse_origin_fingerprint_schema=schema,
+        relation_exists=relation_exists,
+        built_version_hash=built_version_hash,
+        reuse_origin_cursor_max=reuse_origin_cursor_max,
+    )
 
 
 def source_key(name: str) -> CompiledObjectKey:
@@ -217,7 +635,7 @@ def build_test_project(
                 relative_path=Path(rel_path),
                 query_sql=f"SELECT * FROM {model_name}",
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None, schema=None, name=model_name, qualified_name=None
                 ),
             )
@@ -258,7 +676,7 @@ def build_test_project(
                 ),
                 schema_entry=SchemaSeedEntry(name=seed_name, columns=()),
                 schema_file=_stub_schema_file(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None, schema=None, name=seed_name, qualified_name=None
                 ),
             )
@@ -276,10 +694,10 @@ def build_test_project(
                 arguments=(),
                 returns="BOOLEAN",
                 body_sql="SELECT TRUE",
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None, schema=None, name=function_name, qualified_name=None
                 ),
-                fingerprint_destination=CompiledRelationDestination(
+                fingerprint_destination=CompiledRelationLocation(
                     database=None, schema=None, name=function_name, qualified_name=None
                 ),
             )
@@ -509,6 +927,18 @@ def build_scenario_cli_identifier_limit_pipeline(
     return scenario, CompilePipelineResult(project=project, plan_output=PlanOutput())
 
 
+def quoting_render_qualified_name(
+    *, database: str | None, schema: str | None, name: str
+) -> str | None:
+    """Render qualified names with distinctive quoting to assert adapter pass-through."""
+
+    if database is not None and schema is not None:
+        return f'"{database}"."{schema}"."{name}"'
+    if schema is not None:
+        return f'"{schema}"."{name}"'
+    return None
+
+
 def build_scenario_relation_test_map() -> ScenarioRelationMap:
     """Build a relation map covering scenario relation planning tests."""
 
@@ -682,7 +1112,7 @@ def build_source_cursor_input_model(
             ),
         ),
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -709,7 +1139,7 @@ def build_cursor_input_contract_models(
             relative_path=Path(f"models/{test_case.reference_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(values={"contract": test_case.upstream_contract}),
-            destination=CompiledRelationDestination(
+            destination=CompiledRelationLocation(
                 database=None,
                 schema="staging",
                 name=test_case.reference_name,
@@ -780,7 +1210,7 @@ def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledM
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -819,7 +1249,7 @@ def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> C
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -838,7 +1268,7 @@ def build_strategy_error_change_result(
         change_kind=test_case.change_kind,
         query_changed=False,
         schema_findings=(),
-        backfill=BackfillResult(action=BackfillAction.WARN_ONLY),
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
     )
 
 
@@ -873,16 +1303,17 @@ def build_audit_from_test_case(
         ),
         audit_block=DiscoveredAuditBlock(audit_index=0, header_values={}, sql_body=""),
         sql_body=test_case.sql_body,
+        always_run=test_case.always_run,
     )
 
 
-def build_audit_model_targets(
+def build_audit_model_locations(
     targets: dict[str, str],
-) -> dict[str, CompiledRelationDestination]:
+) -> dict[str, CompiledRelationLocation]:
     """Build model target lookup from name -> qualified_name."""
 
     return {
-        name: CompiledRelationDestination(
+        name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=name,
@@ -933,7 +1364,7 @@ def build_cursor_model_map(
             relative_path=Path(f"models/{ref_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(),
-            destination=CompiledRelationDestination(
+            destination=CompiledRelationLocation(
                 database=None,
                 schema=None,
                 name=ref_name,
@@ -943,16 +1374,16 @@ def build_cursor_model_map(
     }
 
 
-def build_cursor_deferred_targets(
+def build_cursor_deferred_locations(
     ref_name: str,
     qualified_name: str | None,
-) -> dict[str, CompiledRelationDestination] | None:
-    """Build deferred targets dict with one entry, or None."""
+) -> dict[str, CompiledRelationLocation] | None:
+    """Build deferred locations dict with one entry, or None."""
 
     if qualified_name is None:
         return None
     return {
-        ref_name: CompiledRelationDestination(
+        ref_name: CompiledRelationLocation(
             database=None,
             schema=None,
             name=ref_name,
@@ -974,7 +1405,7 @@ def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -1006,7 +1437,7 @@ def build_microbatch_lookback_model(
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(values=config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="staging",
             name="test_model",
@@ -1047,7 +1478,7 @@ def build_cascade_upstream_state(
 
 
 def build_compiled_function(
-    *, body_sql: str, query_change_backfill: str | None = None, target_schema: str = "main"
+    *, body_sql: str, replay_on_change: str | None = None, target_schema: str = "main"
 ) -> CompiledFunction:
     """Build a minimal compiled function for planner tests."""
 
@@ -1062,19 +1493,19 @@ def build_compiled_function(
         arguments=(FunctionArgument(name="order_status", type="STRING"),),
         returns="BOOLEAN",
         body_sql=body_sql,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name="is_completed_order",
             qualified_name=f"{target_schema}.is_completed_order",
         ),
-        fingerprint_destination=CompiledRelationDestination(
+        fingerprint_destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name="is_completed_order",
             qualified_name=f"{target_schema}.is_completed_order",
         ),
-        query_change_backfill=query_change_backfill,
+        replay_on_change=replay_on_change,
     )
 
 
@@ -1082,14 +1513,15 @@ def build_fingerprint(*, query_sql: str) -> Fingerprint:
     """Build a fingerprint with a hash matching the supplied query SQL."""
 
     return Fingerprint(
-        model_name="is_completed_order",
+        node_type="function",
+        node_name="is_completed_order",
         target_database=None,
         target_schema="main",
         target_name="is_completed_order",
         run_id="run-1",
-        query_hash=compute_query_hash(query_sql),
+        definition_hash=compute_query_hash(query_sql),
         schema_fingerprint="",
-        query_sql=query_sql,
+        definition=query_sql,
         ts=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -1165,3 +1597,34 @@ def build_scheduling_graph(
         upstream
     )
     return upstream, downstream
+
+
+def build_seed_identity_compiled_seed(
+    file_path: Path,
+    *,
+    csv_settings: SeedCsvSettings | None = None,
+) -> CompiledSeed:
+    resolved_csv_settings: SeedCsvSettings = csv_settings or SeedCsvSettings()
+    schema_entry: SchemaSeedEntry = SchemaSeedEntry(
+        name="orders", csv_settings=resolved_csv_settings
+    )
+    return CompiledSeed(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="orders"),
+        deps=(),
+        name="orders",
+        seed_file=DiscoveredSeedFile(file_path=file_path, relative_path=Path("seeds/orders.csv")),
+        schema_entry=schema_entry,
+        schema_file=DiscoveredSchemaFile(
+            file_path=file_path.parent / "schema.yml",
+            relative_path=Path("seeds/schema.yml"),
+            contents="",
+            model_entries=(),
+            seed_entries=(schema_entry,),
+        ),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name="main.orders",
+        ),
+    )

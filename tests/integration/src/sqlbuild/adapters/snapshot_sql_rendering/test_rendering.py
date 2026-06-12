@@ -173,9 +173,9 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     test_case: SnapshotSqlRenderingAdapterTestCase,
 ) -> None:
     create_initial_sql: str = "\n".join(
-        test_case.adapter.render_create_initial_snapshot_target(
-            target="target_table",
-            source="source_table",
+        test_case.adapter.render_create_initial_snapshot_destination(
+            destination="target_table",
+            origin="source_table",
             snapshot_strategy="timestamp",
             updated_at_column="updated_at",
             observed_at_column=None,
@@ -186,8 +186,8 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     )
     timestamp_hard_delete_sql: str = "\n".join(
         test_case.adapter.render_apply_timestamp_snapshot_changes(
-            target="target_table",
-            source="source_table",
+            destination="target_table",
+            origin="source_table",
             unique_key=("customer_id", "region"),
             updated_at_column="updated_at",
             observed_at_column=None,
@@ -199,9 +199,9 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
         )
     )
     historical_check_initial_sql: str = "\n".join(
-        test_case.adapter.render_create_initial_historical_check_snapshot_target(
-            target="target_table",
-            source="source_table",
+        test_case.adapter.render_create_initial_historical_check_snapshot_destination(
+            destination="target_table",
+            origin="source_table",
             unique_key=("customer_id",),
             check_columns=("plan",),
             observed_at_column="observed_at",
@@ -212,9 +212,9 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
         )
     )
     historical_timestamp_initial_sql: str = "\n".join(
-        test_case.adapter.render_create_initial_historical_timestamp_snapshot_target(
-            target="target_table",
-            source="source_table",
+        test_case.adapter.render_create_initial_historical_timestamp_snapshot_destination(
+            destination="target_table",
+            origin="source_table",
             unique_key=("customer_id",),
             updated_at_column="updated_at",
             observed_at_column="observed_at",
@@ -226,8 +226,8 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     )
     historical_timestamp_apply_sql: str = "\n".join(
         test_case.adapter.render_apply_historical_timestamp_snapshot_changes(
-            target="target_table",
-            source="source_table",
+            destination="target_table",
+            origin="source_table",
             unique_key=("customer_id",),
             updated_at_column="updated_at",
             observed_at_column="observed_at",
@@ -239,8 +239,8 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     )
     historical_check_apply_sql: str = "\n".join(
         test_case.adapter.render_apply_historical_check_snapshot_changes(
-            target="target_table",
-            source="source_table",
+            destination="target_table",
+            origin="source_table",
             unique_key=("customer_id",),
             check_columns=("plan",),
             observed_at_column="observed_at",

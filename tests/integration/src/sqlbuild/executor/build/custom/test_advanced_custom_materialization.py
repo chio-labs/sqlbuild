@@ -12,7 +12,7 @@ import pytest
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
@@ -296,7 +296,7 @@ def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_bloc
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id, 'bad_data' AS status")
-    model_targets: dict[str, CompiledRelationDestination] = {"test_model": entry.destination}
+    model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
     audit: AuditPlanEntry = build_failing_audit(name="check_rows", target_name="test_model")
 
     result: ModelExecutionResult = run_custom_entry(
@@ -305,7 +305,7 @@ def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_bloc
         entry=entry,
         materialize_fn=build_user_audit_fn(expect_pass=False),
         model_audits=(audit,),
-        model_targets=model_targets,
+        model_locations=model_locations,
     )
 
     assert result.status == test_case.expected_status
@@ -389,7 +389,7 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
     (mat_dir / "test_custom.py").write_text(
         "def materialize(ctx):\n"
         "    ctx.adapter.create_table_as(\n"
-        "        ctx.connection, target=ctx.destination, sql=ctx.sql,\n"
+        "        ctx.connection, destination=ctx.destination, sql=ctx.sql,\n"
         "        statement_recorder=ctx.statement_recorder,\n"
         "    )\n"
         "    from sqlbuild.executor.custom.models import MaterializationResult\n"
@@ -401,7 +401,7 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
         augmented_sql: str = f"SELECT *, 'via_custom_fn' AS custom_marker FROM ({ctx.sql}) sub"
         ctx.adapter.create_table_as(
             ctx.connection,
-            target=ctx.destination,
+            destination=ctx.destination,
             sql=augmented_sql,
             statement_recorder=ctx.statement_recorder,
         )

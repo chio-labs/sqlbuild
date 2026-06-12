@@ -65,6 +65,18 @@ class PostgresStateBackendSourceFreshnessTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresStateBackendSeedRefTestCase:
+    description: str
+    sqlbuild_version: str
+    virtual_environment_name: str
+    seed_name: str
+    version_hash: str
+    identity_metadata_hash: str
+    identity_metadata_json_b64: str
+    expected_ref_count_after_replace: int
+
+
+@dataclass(frozen=True)
 class PostgresStateBackendIndexValidationTestCase:
     description: str
     sqlbuild_version: str

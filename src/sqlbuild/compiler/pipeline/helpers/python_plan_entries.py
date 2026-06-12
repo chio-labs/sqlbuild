@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput, PlanWarning
 from sqlbuild.compiler.planner.types import WarningSeverity
@@ -11,15 +12,25 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import (
+    PythonIdentityStatus,
+    PythonNodeKind,
+    PythonRunPhase,
+)
 
 
 def build_python_plan_entries(
-    *, lifecycle_plan: PythonSqlRunLifecyclePlan, python_graph: PythonNodeGraph
+    *,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    python_graph: PythonNodeGraph,
+    previous_identities: dict[tuple[str, str], Fingerprint] | None = None,
 ) -> tuple[PythonPlanEntry, ...]:
     """Return task/asset plan entries ordered by lifecycle dependency readiness."""
 
     entries: list[PythonPlanEntry] = []
+    resolved_previous_identities: dict[tuple[str, str], Fingerprint] = (
+        {} if previous_identities is None else previous_identities
+    )
     node_name: str
     for node_name in _ordered_python_names(
         selected_names=lifecycle_plan.ingress_python_node_names,
@@ -27,11 +38,31 @@ def build_python_plan_entries(
     ):
         node: DiscoveredPythonNode = python_graph.nodes_by_name[node_name]
         if node.kind in {PythonNodeKind.TASK, PythonNodeKind.ASSET}:
+            previous_identity: Fingerprint | None = _previous_identity(
+                node=node,
+                previous_identities=resolved_previous_identities,
+            )
             entries.append(
                 PythonPlanEntry(
                     name=node.name,
                     kind=node.kind,
                     phase=PythonRunPhase.PRE_SQL_INGRESS,
+                    identity_status=_identity_status(
+                        node=node,
+                        previous_identities=resolved_previous_identities,
+                    ),
+                    current_definition_json=(
+                        node.identity.definition_json if node.identity is not None else None
+                    ),
+                    previous_definition_json=(
+                        previous_identity.definition if previous_identity is not None else None
+                    ),
+                    current_metadata_json=(
+                        node.identity.metadata_json if node.identity is not None else None
+                    ),
+                    previous_metadata_json=(
+                        previous_identity.metadata_json if previous_identity is not None else None
+                    ),
                     provider_usages=node.provider_usages,
                 )
             )
@@ -41,11 +72,31 @@ def build_python_plan_entries(
     ):
         node = python_graph.nodes_by_name[node_name]
         if node.kind in {PythonNodeKind.TASK, PythonNodeKind.ASSET}:
+            previous_identity = _previous_identity(
+                node=node,
+                previous_identities=resolved_previous_identities,
+            )
             entries.append(
                 PythonPlanEntry(
                     name=node.name,
                     kind=node.kind,
                     phase=PythonRunPhase.READ_SIDE,
+                    identity_status=_identity_status(
+                        node=node,
+                        previous_identities=resolved_previous_identities,
+                    ),
+                    current_definition_json=(
+                        node.identity.definition_json if node.identity is not None else None
+                    ),
+                    previous_definition_json=(
+                        previous_identity.definition if previous_identity is not None else None
+                    ),
+                    current_metadata_json=(
+                        node.identity.metadata_json if node.identity is not None else None
+                    ),
+                    previous_metadata_json=(
+                        previous_identity.metadata_json if previous_identity is not None else None
+                    ),
                     provider_usages=node.provider_usages,
                 )
             )
@@ -81,6 +132,34 @@ def _ordered_python_names(
                 ready.append(downstream_name)
                 ready.sort()
     return tuple(ordered)
+
+
+def _identity_status(
+    *,
+    node: DiscoveredPythonNode,
+    previous_identities: dict[tuple[str, str], Fingerprint],
+) -> PythonIdentityStatus:
+    if node.identity is None:
+        return PythonIdentityStatus.UNKNOWN
+    previous: Fingerprint | None = _previous_identity(
+        node=node,
+        previous_identities=previous_identities,
+    )
+    if previous is None:
+        return PythonIdentityStatus.NEW
+    if previous.version_hash == node.identity.version_hash:
+        return PythonIdentityStatus.UNCHANGED
+    return PythonIdentityStatus.CHANGED
+
+
+def _previous_identity(
+    *,
+    node: DiscoveredPythonNode,
+    previous_identities: dict[tuple[str, str], Fingerprint],
+) -> Fingerprint | None:
+    if node.identity is None:
+        return None
+    return previous_identities.get((node.identity.node_type, node.identity.node_name))
 
 
 def python_upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
@@ -38,8 +38,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -50,8 +50,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         del (
-            target,
-            source,
+            destination,
+            origin,
             unique_key,
             updated_at_column,
             observed_at_column,
@@ -67,8 +67,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -78,8 +78,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         del (
-            target,
-            source,
+            destination,
+            origin,
             unique_key,
             updated_at_column,
             observed_at_column,
@@ -94,8 +94,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -103,8 +103,8 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         del (
-            target,
-            source,
+            destination,
+            origin,
             unique_key,
             updated_at_column,
             valid_from_column,
@@ -114,11 +114,11 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         self.rendered_historical_timestamp_change_records = True
         return (f"INSERT INTO main.rendered_snapshot_sql VALUES ('{self.marker}')",)
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -126,7 +126,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         del (
-            source,
+            origin,
             unique_key,
             updated_at_column,
             valid_from_column,
@@ -134,7 +134,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
             output_columns,
         )
         self.rendered_initial_historical_timestamp_change_records = True
-        return (f"CREATE TABLE {target} AS SELECT '{self.marker}' AS marker",)
+        return (f"CREATE TABLE {destination} AS SELECT '{self.marker}' AS marker",)
 
 
 @pytest.mark.parametrize(
@@ -172,7 +172,7 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -192,8 +192,8 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id="test_run",
@@ -255,7 +255,7 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -280,8 +280,8 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id="test_run",
@@ -336,7 +336,7 @@ def test_given_existing_historical_timestamp_changes_snapshot_when_executing_the
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -360,8 +360,8 @@ def test_given_existing_historical_timestamp_changes_snapshot_when_executing_the
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id="test_run",
@@ -406,7 +406,7 @@ def test_given_new_historical_timestamp_changes_when_executing_then_uses_adapter
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.NORMAL_INCREMENTAL,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name="customer_snapshot",
@@ -430,8 +430,8 @@ def test_given_new_historical_timestamp_changes_when_executing_then_uses_adapter
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets={},
-        seed_targets={},
+        model_locations={},
+        seed_locations={},
         source_map={},
         model_audits=(),
         run_id="test_run",

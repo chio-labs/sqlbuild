@@ -43,6 +43,20 @@ class ExecutionJsonTestCase:
 
 
 @dataclass(frozen=True)
+class ExecutionJsonRelationReuseTestCase:
+    description: str
+    expected_asset_name: str
+    expected_relation_reuse: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ExecutionJsonSeedReasonTestCase:
+    description: str
+    expected_asset_name: str
+    expected_reason: str
+
+
+@dataclass(frozen=True)
 class TruncateNameTestCase:
     description: str
     name: str
@@ -59,6 +73,7 @@ class AuditAggregationTestCase:
     expected_outcomes: tuple[AuditOutcome, ...]
     expected_batch_totals: tuple[int, ...]
     expected_batch_passes: tuple[int, ...]
+    expected_reused: tuple[bool, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

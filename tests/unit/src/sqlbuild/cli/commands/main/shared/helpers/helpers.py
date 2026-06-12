@@ -10,7 +10,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
@@ -25,6 +25,7 @@ def build_audit_result(
     row_count: int = 0,
     column_name: str | None = None,
     target_name: str | None = "test_model",
+    reused: bool = False,
 ) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=name,
@@ -36,6 +37,7 @@ def build_audit_result(
         run_scope_phase=run_scope_phase,
         attached_target_name=target_name,
         attached_column_name=column_name,
+        reused=reused,
     )
 
 
@@ -52,7 +54,7 @@ def build_snapshot_full_refresh_entry(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FULL_REFRESH,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name=name,
@@ -80,7 +82,7 @@ def build_progress_snapshot_plan_output(
         materialization_type=MaterializationType.SNAPSHOT,
         action=PlanAction.SNAPSHOT,
         reason=PlanReason.FIRST_RUN,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name=name,

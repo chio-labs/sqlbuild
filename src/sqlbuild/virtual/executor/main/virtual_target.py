@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_virtual_destination as _build_virtual_destination,
 )
@@ -12,10 +12,10 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
 def build_virtual_destination(
     *,
     adapter: BaseAdapter,
-    target: CompiledRelationDestination,
+    target: CompiledRelationLocation,
     virtual_environment_name: str,
     unsuffixed_virtual_environment_name: str | None = None,
-) -> CompiledRelationDestination:
+) -> CompiledRelationLocation:
     """Build the logical VDE view target for a model."""
 
     return _build_virtual_destination(

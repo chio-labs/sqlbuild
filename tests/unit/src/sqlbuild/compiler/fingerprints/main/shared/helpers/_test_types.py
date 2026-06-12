@@ -30,14 +30,16 @@ class BuildInsertSqlTestCase:
     description: str
     database: str | None
     schema: str
-    model_name: str
+    node_type: str
+    node_name: str
     target_database: str | None
     target_schema: str | None
     target_name: str | None
     run_id: str
-    query_hash: str
+    definition_hash: str
+    version_hash: str
     schema_fingerprint: str
-    query_sql: str
+    definition: str
     metadata_json: str
     ts: str
     expected_contains: tuple[str, ...]

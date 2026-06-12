@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationDestination
-from sqlbuild.virtual.executor.helpers.rewrite import rewrite_project_model_targets
+from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
+from sqlbuild.virtual.executor.helpers.rewrite import rewrite_project_model_locations
 
 
-def rewrite_virtual_project_model_targets(
-    *, project: CompiledProject, rewritten_targets: dict[str, CompiledRelationDestination]
+def rewrite_virtual_project_model_locations(
+    *, project: CompiledProject, rewritten_locations: dict[str, CompiledRelationLocation]
 ) -> CompiledProject:
-    """Rewrite model targets for a virtual execution consumer."""
+    """Rewrite model locations for a virtual execution consumer."""
 
-    return rewrite_project_model_targets(project=project, rewritten_targets=rewritten_targets)
+    return rewrite_project_model_locations(project=project, rewritten_locations=rewritten_locations)

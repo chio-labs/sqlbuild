@@ -159,6 +159,11 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
         == test_case.expected_dependency_edges
     )
 
+    loader_node: DiscoveredPythonNode = graph.nodes_by_name["load_events"]
+    assert loader_node.identity is not None
+    assert loader_node.identity.node_type == "loader"
+    assert loader_node.identity.node_name == "load_events"
+
     task_node: DiscoveredPythonNode = graph.nodes_by_name["prepare_orders"]
     assert task_node.tags == test_case.expected_task_tags
     assert task_node.group == "ingestion"
@@ -166,9 +171,15 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
     assert task_node.meta == {"owner": "data-eng"}
     assert task_node.task is not None
     assert task_node.task.retry is retry
+    assert task_node.identity is not None
+    assert task_node.identity.node_type == "task"
+    assert task_node.identity.node_name == "prepare_orders"
+    assert "Prepare order export inputs." in task_node.identity.definition_json
 
     asset_node: DiscoveredPythonNode = graph.nodes_by_typed_selector["asset:export_orders"]
     assert asset_node.asset is not None
+    assert asset_node.identity is not None
+    assert asset_node.identity.node_type == "asset"
     assert tuple(column.name for column in asset_node.asset.columns) == (
         test_case.expected_asset_column_names
     )
@@ -176,6 +187,8 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
 
     check_node: DiscoveredPythonNode = graph.nodes_by_typed_selector["check:check_orders_export"]
     assert check_node.check is not None
+    assert check_node.identity is not None
+    assert check_node.identity.node_type == "check"
     assert check_node.check.severity.value == test_case.expected_check_severity
 
     notify_node: DiscoveredPythonNode = graph.nodes_by_name["notify_orders"]

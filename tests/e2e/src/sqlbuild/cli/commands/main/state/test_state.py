@@ -392,7 +392,7 @@ database = "state.duckdb"
     assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
     execute_duckdb(
         db_path=state_db_path,
-        sql='DROP TABLE "sqlbuild_state"."virtual_environment_refs"',
+        sql='DROP TABLE "sqlbuild_state"."virtual_environment_model_refs"',
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -704,7 +704,7 @@ def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_n
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name FROM sqlbuild_state.virtual_environment_refs "
+            "SELECT model_name FROM sqlbuild_state.virtual_environment_model_refs "
             "WHERE virtual_environment_name = 'dev'"
         ),
     ) == [("orders",)]
@@ -914,9 +914,9 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
                 "        self,\n"
                 "        connection: Any,\n"
                 "        *,\n"
-                "        source: str,\n"
-                "        target: str,\n"
-                "        remove_source: bool,\n"
+                "        origin: str,\n"
+                "        destination: str,\n"
+                "        remove_origin: bool,\n"
                 "        allow_copy_fallback: bool,\n"
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"
@@ -1037,17 +1037,17 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
                 "        self,\n"
                 "        connection: Any,\n"
                 "        *,\n"
-                "        source: str,\n"
-                "        target: str,\n"
-                "        remove_source: bool,\n"
+                "        origin: str,\n"
+                "        destination: str,\n"
+                "        remove_origin: bool,\n"
                 "        allow_copy_fallback: bool,\n"
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"
                 "        super().move_or_copy_relation(\n"
                 "            connection,\n"
-                "            source=source,\n"
-                "            target=target,\n"
-                "            remove_source=remove_source,\n"
+                "            origin=origin,\n"
+                "            destination=destination,\n"
+                "            remove_origin=remove_origin,\n"
                 "            allow_copy_fallback=allow_copy_fallback,\n"
                 "            statement_recorder=statement_recorder,\n"
                 "        )\n"
@@ -1105,7 +1105,7 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
     ) == [(0,)]
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
-        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_refs",
+        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
     ) == [(0,)]
 
 

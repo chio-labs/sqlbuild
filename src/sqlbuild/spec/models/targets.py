@@ -46,8 +46,14 @@ def resolve_target_config(
     project_target: TargetConfig = project_config.targets.get(target_name, TargetConfig())
     local_target: LocalTargetConfig | None = local_config.targets.get(target_name)
     if local_target is None:
+        _validate_reuse_config(
+            target_name=target_name,
+            target_config=project_target,
+            project_config=project_config,
+            local_config=local_config,
+        )
         return project_target
-    return TargetConfig(
+    target_config: TargetConfig = TargetConfig(
         connection={**project_target.connection, **local_target.connection},
         vars={**project_target.vars, **local_target.vars},
         database=(
@@ -59,6 +65,16 @@ def resolve_target_config(
             if local_target.defer_sources_to is not None
             else project_target.defer_sources_to
         ),
+        reuse_from=(
+            local_target.reuse_from
+            if local_target.reuse_from is not None
+            else project_target.reuse_from
+        ),
+        reuse_hard_copy=(
+            local_target.reuse_hard_copy
+            if local_target.reuse_hard_copy is not None
+            else project_target.reuse_hard_copy
+        ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,
@@ -68,19 +84,49 @@ def resolve_target_config(
             local_state=local_target.state,
         ),
     )
+    _validate_reuse_config(
+        target_name=target_name,
+        target_config=target_config,
+        project_config=project_config,
+        local_config=local_config,
+    )
+    return target_config
+
+
+def _validate_reuse_config(
+    *,
+    target_name: str,
+    target_config: TargetConfig,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+) -> None:
+    reuse_from: str | None = target_config.reuse_from
+    if reuse_from is None:
+        return
+    if reuse_from == target_name:
+        raise SpecConfigError(f"Target '{target_name}' cannot reuse from itself")
+    known_targets: set[str] = set(project_config.targets) | set(local_config.targets)
+    if reuse_from not in known_targets:
+        raise SpecConfigError(
+            f"Target '{target_name}' reuse_from references unknown target '{reuse_from}'"
+        )
 
 
 def _merge_clone_policy(
     *, project_clone: ClonePolicy, local_clone: LocalClonePolicy
 ) -> ClonePolicy:
-    allow_as_source: bool | None = local_clone.allow_as_source
-    allow_as_target: bool | None = local_clone.allow_as_target
+    allow_as_clone_origin: bool | None = local_clone.allow_as_clone_origin
+    allow_as_clone_destination: bool | None = local_clone.allow_as_clone_destination
     return ClonePolicy(
-        allow_as_source=(
-            allow_as_source if allow_as_source is not None else project_clone.allow_as_source
+        allow_as_clone_origin=(
+            allow_as_clone_origin
+            if allow_as_clone_origin is not None
+            else project_clone.allow_as_clone_origin
         ),
-        allow_as_target=(
-            allow_as_target if allow_as_target is not None else project_clone.allow_as_target
+        allow_as_clone_destination=(
+            allow_as_clone_destination
+            if allow_as_clone_destination is not None
+            else project_clone.allow_as_clone_destination
         ),
     )
 

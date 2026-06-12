@@ -64,9 +64,9 @@ def build_sqlserver_virtual_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "sqlserver"\n'
+        'default_target = "dev"\n\n'
         "[settings]\n"
         "virtual_environments = true\n"
-        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
@@ -148,6 +148,7 @@ def execute_sqlserver_sql(*, sql: str, config: dict[str, object]) -> None:
 def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> None:
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
+    escaped_schema_name: str = schema_name.replace("'", "''")
     try:
         adapter.execute(
             connection,
@@ -155,7 +156,7 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "SELECT @sql += N'DROP FUNCTION ' + QUOTENAME(s.name) "
             "+ N'.' + QUOTENAME(o.name) + N';' "
             "FROM sys.objects o JOIN sys.schemas s ON o.schema_id = s.schema_id "
-            f"WHERE s.name = '{schema_name}' AND o.type IN ('FN', 'IF', 'TF'); "
+            f"WHERE s.name = '{escaped_schema_name}' AND o.type IN ('FN', 'IF', 'TF'); "
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
@@ -163,7 +164,7 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP VIEW ' + QUOTENAME(s.name) + N'.' + QUOTENAME(v.name) + N';' "
             "FROM sys.views v JOIN sys.schemas s ON v.schema_id = s.schema_id "
-            f"WHERE s.name = '{schema_name}'; "
+            f"WHERE s.name = '{escaped_schema_name}'; "
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
@@ -171,10 +172,14 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' "
             "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
-            f"WHERE s.name = '{schema_name}'; "
+            f"WHERE s.name = '{escaped_schema_name}'; "
             "EXEC sp_executesql @sql;",
         )
-        adapter.execute(connection, f"DROP SCHEMA {adapter.render_identifier(schema_name)}")
+        adapter.execute(
+            connection,
+            f"IF SCHEMA_ID(N'{escaped_schema_name}') IS NOT NULL "
+            f"DROP SCHEMA {adapter.render_identifier(schema_name)}",
+        )
     finally:
         adapter.close(connection)
 

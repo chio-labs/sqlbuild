@@ -11,7 +11,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
@@ -51,8 +51,8 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
 from sqlbuild.shared.helpers.naming import (
-    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
+    resolve_relation_location_qualified_name,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -68,8 +68,8 @@ def execute_microbatch_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
@@ -86,8 +86,8 @@ def execute_microbatch_entry(
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
-    target_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=entry.destination
+    target_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
     )
     delta_table: str = f"{target_table}__delta"
     delta_qualified: str = resolve_qualified_name_parts(
@@ -149,6 +149,9 @@ def execute_microbatch_entry(
                 adapter=adapter,
                 connection=connection,
                 target_relation=target_qualified,
+                target_database=target_database,
+                target_schema=target_schema,
+                target_name=target_table,
                 cursor_column=entry.cursor_column,
                 cursor_type=entry.cursor_type,
                 cursor_grain=entry.cursor_grain,
@@ -252,7 +255,7 @@ def execute_microbatch_entry(
             with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
                 adapter.drop(
                     connection,
-                    target=target_qualified,
+                    destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
@@ -294,13 +297,13 @@ def execute_microbatch_entry(
             ):
                 adapter.drop(
                     connection,
-                    target=delta_qualified,
+                    destination=delta_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
                 adapter.create_table_as(
                     connection,
-                    target=delta_qualified,
+                    destination=delta_qualified,
                     sql=batch_sql,
                     statement_recorder=statement_recorder,
                 )
@@ -393,8 +396,8 @@ def execute_microbatch_entry(
                     audit=audit,
                     adapter=adapter,
                     connection=connection,
-                    model_targets=model_targets,
-                    seed_targets=seed_targets,
+                    model_locations=model_locations,
+                    seed_locations=seed_locations,
                     source_map=source_map,
                     relation_overrides=delta_overrides,
                     run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
@@ -443,7 +446,7 @@ def execute_microbatch_entry(
                 if is_full_refresh and completed_batches == 0:
                     adapter.create_table_as(
                         connection,
-                        target=target_qualified,
+                        destination=target_qualified,
                         sql=f"SELECT * FROM {delta_qualified}",
                         statement_recorder=statement_recorder,
                     )
@@ -478,7 +481,7 @@ def execute_microbatch_entry(
         ):
             adapter.drop(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
@@ -500,8 +503,8 @@ def execute_microbatch_entry(
             audit=audit,
             adapter=adapter,
             connection=connection,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,
@@ -563,6 +566,8 @@ def execute_microbatch_entry(
         run_id=run_id,
         query_change_tracking=query_change_tracking,
         warnings=warnings,
+        model_audits=model_audits,
+        audit_results=tuple(audit_results),
     )
 
     return ModelExecutionResult(

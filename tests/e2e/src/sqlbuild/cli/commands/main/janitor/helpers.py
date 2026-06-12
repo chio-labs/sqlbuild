@@ -9,6 +9,8 @@ from textwrap import dedent
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
 
 
@@ -72,14 +74,15 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
             database=None,
             schema="main",
             fingerprint=Fingerprint(
-                model_name="janitor_tracked_extra",
+                node_type="model",
+                node_name="janitor_tracked_extra",
                 target_database=None,
                 target_schema="main",
                 target_name="janitor_tracked_extra",
                 run_id="run_janitor_e2e",
-                query_hash="query_hash",
+                definition_hash="definition_hash",
                 schema_fingerprint="schema_hash",
-                query_sql="SELECT 1 AS id",
+                definition="SELECT 1 AS id",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),
             render_qualified_name=DuckDbAdapter().render_qualified_name,
@@ -101,5 +104,64 @@ def create_janitor_scenario_relations(*, db_path: Path) -> None:
             "CREATE TABLE __sqb_a13f09c2e7b8__model__daily_revenue AS SELECT 1 AS id"
         )
         connection.execute("CREATE TABLE __sqb_a13f09c2e7b__model__daily_revenue AS SELECT 1 AS id")
+    finally:
+        connection.close()
+
+
+def create_direct_state_history(*, db_path: Path) -> None:
+    import duckdb
+
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    try:
+        run_id: str
+        observed_hour: int
+        for run_id, observed_hour in (
+            ("run_000", 10),
+            ("run_001", 12),
+            ("run_002", 12),
+            ("run_003", 13),
+        ):
+            write_fingerprint(
+                connection=connection,
+                execute=lambda active_connection, sql: active_connection.execute(sql),
+                database=None,
+                schema="main",
+                fingerprint=Fingerprint(
+                    node_type="model",
+                    node_name="janitor_state_probe",
+                    target_database=None,
+                    target_schema="main",
+                    target_name="janitor_state_probe",
+                    run_id=run_id,
+                    definition_hash=f"definition_{run_id}",
+                    version_hash=f"version_{run_id}",
+                    schema_fingerprint=f"schema_{run_id}",
+                    definition=f"SELECT '{run_id}'",
+                    ts=datetime(2026, 1, 15, observed_hour, 0, 0),
+                ),
+                render_qualified_name=adapter.render_qualified_name,
+                render_framework_type=adapter.render_framework_type,
+            )
+            write_source_freshness_record(
+                connection=connection,
+                execute=lambda active_connection, sql: active_connection.execute(sql),
+                database=None,
+                schema="main",
+                record=SourceFreshnessRecord(
+                    source_name="raw.janitor_state_probe",
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id=run_id,
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version=f"2026-01-15T{observed_hour:02d}:00:00",
+                    data_version_hash=f"source_{run_id}",
+                    observed_at=datetime(2026, 1, 15, observed_hour, 5, 0),
+                ),
+                render_qualified_name=adapter.render_qualified_name,
+                render_framework_type=adapter.render_framework_type,
+            )
     finally:
         connection.close()

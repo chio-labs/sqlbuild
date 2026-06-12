@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -64,9 +64,9 @@ class _IncrementalModelSpec:
 
 def build_project_with_targets(
     *,
-    model_targets: dict[str, str | None] | None = None,
+    model_locations: dict[str, str | None] | None = None,
     model_deps: dict[str, tuple[str, ...]] | None = None,
-    seed_targets: dict[str, str | None] | None = None,
+    seed_locations: dict[str, str | None] | None = None,
     incremental_models: tuple[_IncrementalModelSpec, ...] = (),
     source_names: tuple[tuple[str, str, str], ...] = (),
 ) -> CompiledProject:
@@ -75,7 +75,7 @@ def build_project_with_targets(
     models: list[CompiledModel] = []
     model_name: str
     target_schema: str | None
-    for model_name, target_schema in (model_targets or {}).items():
+    for model_name, target_schema in (model_locations or {}).items():
         deps: tuple[CompiledObjectKey, ...] = tuple(
             CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=dep_name)
             for dep_name in (model_deps or {}).get(model_name, ())
@@ -92,7 +92,7 @@ def build_project_with_targets(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=f"SELECT * FROM {model_name}",
                 config=CompileModelConfig(),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=model_name,
@@ -122,7 +122,7 @@ def build_project_with_targets(
                         "incremental_strategy": "delete_insert",
                     }
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=spec.schema,
                     name=spec.name,
@@ -134,7 +134,7 @@ def build_project_with_targets(
 
     seeds: list[CompiledSeed] = []
     seed_name: str
-    for seed_name, target_schema in (seed_targets or {}).items():
+    for seed_name, target_schema in (seed_locations or {}).items():
         seeds.append(
             CompiledSeed(
                 key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=seed_name),
@@ -152,7 +152,7 @@ def build_project_with_targets(
                     model_entries=(),
                     seed_entries=(),
                 ),
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
@@ -194,13 +194,13 @@ def build_project_with_targets(
     )
 
 
-def build_deferred_targets_from_map(
+def build_deferred_locations_from_map(
     targets: dict[str, str],
-) -> dict[str, CompiledRelationDestination]:
-    """Build deferred targets from a name -> qualified_name mapping."""
+) -> dict[str, CompiledRelationLocation]:
+    """Build deferred locations from a name -> qualified_name mapping."""
 
     return {
-        name: CompiledRelationDestination(
+        name: CompiledRelationLocation(
             database=None,
             schema=qualified.rsplit(".", 1)[0] if "." in qualified else None,
             name=name,

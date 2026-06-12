@@ -112,8 +112,8 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 (("abc", False), ("123", True)),
             ),
             (
-                "SELECT model_name FROM main._sqlbuild_fingerprints "
-                "WHERE model_name = 'is_positive_int'",
+                "SELECT node_name FROM main._sqlbuild_fingerprints "
+                "WHERE node_name = 'is_positive_int'",
                 (("is_positive_int",),),
             ),
         ),
@@ -186,8 +186,8 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
                 (("abc", False), ("123", True)),
             ),
             (
-                "SELECT model_name FROM dev._sqlbuild_fingerprints "
-                "WHERE model_name = 'is_positive_int'",
+                "SELECT node_name FROM dev._sqlbuild_fingerprints "
+                "WHERE node_name = 'is_positive_int'",
                 (("is_positive_int",),),
             ),
         ),
@@ -433,7 +433,7 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         ),
     ),
     BuildExecutionTestCase(
-        description="direct mode warn audit records warning and build succeeds",
+        description="standard mode warn audit records warning and build succeeds",
         project_files={
             "sqlbuild_project.toml": (
                 'name = "demo"\n'
@@ -464,13 +464,13 @@ SUCCESS_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_query_results=(
             ("SELECT id FROM main.orders", ((1,),)),
             (
-                "SELECT model_name FROM main._sqlbuild_fingerprints ORDER BY model_name",
+                "SELECT node_name FROM main._sqlbuild_fingerprints ORDER BY node_name",
                 (("orders",),),
             ),
         ),
     ),
     BuildExecutionTestCase(
-        description="direct mode with passing audit creates table",
+        description="standard mode with passing audit creates table",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 5 AS id",
@@ -827,7 +827,7 @@ FAILURE_TEST_CASES: list[BuildExecutionTestCase] = [
         expected_missing_relations=("main.stg_orders", "main.orders"),
     ),
     BuildExecutionTestCase(
-        description="direct mode failing audit leaves target updated but build fails",
+        description="standard mode failing audit leaves target updated but build fails",
         project_files={
             "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
             "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",

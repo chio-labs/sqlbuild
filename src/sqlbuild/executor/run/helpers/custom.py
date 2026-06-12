@@ -9,16 +9,21 @@ from typing import Any, cast
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, SchemaFinding
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.executor.custom.models import (
+    MaterializationContext,
+    MaterializationResult,
+    PrepareVersionContext,
+)
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks
 from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.reuse import validate_reuse_origin_fingerprint
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -28,7 +33,7 @@ from sqlbuild.provider.main.runtime import (
     invoke_with_providers,
 )
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
-from sqlbuild.shared.helpers.naming import resolve_destination_qualified_name
+from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -37,12 +42,13 @@ def execute_custom_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
     materialize_fn: Callable[[MaterializationContext], MaterializationResult],
+    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
     run_id: str,
     query_change_tracking: bool,
     target: str,
@@ -58,8 +64,8 @@ def execute_custom_entry(
     destination_database: str | None = entry.destination.database
     destination_schema: str | None = entry.destination.schema
     destination_name: str = entry.destination.name
-    destination_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=entry.destination
+    destination_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
@@ -105,12 +111,77 @@ def execute_custom_entry(
     placeholders_dict: dict[str, str] = dict(entry.custom_placeholders)
     context_providers: ProviderContainer = providers or _empty_provider_container()
 
+    if (
+        entry.relation_reuse is not None
+        and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+    ):
+        if prepare_version_fn is None:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+                error=(
+                    f"custom materialization '{entry.custom_materialization_name}' cannot use "
+                    "baseline reuse without prepare_version(ctx)"
+                ),
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+            )
+        try:
+            validate_reuse_origin_fingerprint(
+                adapter=adapter,
+                connection=connection,
+                model_name=entry.name,
+                expected_version_hash=entry.fingerprint_version_hash,
+                reuse_from_target_name=entry.relation_reuse.reuse_from_target_name,
+                reuse_origin_fingerprint_database=entry.relation_reuse.fingerprint_database,
+                reuse_origin_fingerprint_schema=entry.relation_reuse.fingerprint_schema,
+            )
+            with diagnostics_context(
+                sqlbuild_phase="prepare_version", sqlbuild_action_name="custom"
+            ):
+                invoke_with_providers(
+                    function=prepare_version_fn,
+                    context=PrepareVersionContext(
+                        adapter=adapter,
+                        connection=connection,
+                        origin_relation=resolve_relation_location_qualified_name(
+                            adapter=adapter,
+                            location=entry.relation_reuse.origin,
+                        ),
+                        destination=destination_qualified,
+                        destination_database=destination_database,
+                        destination_schema=destination_schema,
+                        destination_name=destination_name,
+                        config=config_dict,
+                        placeholders=placeholders_dict,
+                        run_id=run_id,
+                        environment=effective_target_name or target,
+                        vars=effective_vars,
+                        unique_key=entry.unique_key,
+                        declared_columns=declared_columns,
+                        statement_recorder=statement_recorder,
+                    ),
+                    providers=providers,
+                )
+        except Exception as exc:
+            return build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+                error=str(exc),
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+            )
+
     run_audits_fn: Callable[[str], tuple[AuditExecutionResult, ...]] = _build_run_audits(
         model_audits=model_audits,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets=seed_targets,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
         source_map=source_map,
         model_name=entry.name,
     )
@@ -190,8 +261,8 @@ def execute_custom_entry(
                 audit=audit,
                 adapter=adapter,
                 connection=connection,
-                model_targets=model_targets,
-                seed_targets=seed_targets,
+                model_locations=model_locations,
+                seed_locations=seed_locations,
                 source_map=source_map,
                 relation_overrides=None,
                 run_scope_phase=AuditRunScope.FINAL,
@@ -264,6 +335,8 @@ def execute_custom_entry(
         run_id=run_id,
         query_change_tracking=query_change_tracking,
         warnings=warnings,
+        model_audits=model_audits,
+        audit_results=tuple(audit_results),
     )
 
     _cleanup_relations(
@@ -290,8 +363,8 @@ def _build_run_audits(
     model_audits: tuple[AuditPlanEntry, ...],
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_name: str,
 ) -> Callable[[str], tuple[AuditExecutionResult, ...]]:
@@ -306,8 +379,8 @@ def _build_run_audits(
                 audit=audit,
                 adapter=adapter,
                 connection=connection,
-                model_targets=model_targets,
-                seed_targets=seed_targets,
+                model_locations=model_locations,
+                seed_locations=seed_locations,
                 source_map=source_map,
                 relation_overrides=overrides,
                 run_scope_phase=AuditRunScope.FINAL,
@@ -336,7 +409,7 @@ def _cleanup_relations(
         try:
             adapter.drop(
                 connection,
-                target=relation,
+                destination=relation,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )

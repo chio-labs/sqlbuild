@@ -20,6 +20,7 @@ def run_virtual_reconcile(
     virtual_environment_name: str | None,
     command: str | None,
     model_name: str | None,
+    seed_name: str | None,
     physical_relation_name: str | None,
 ) -> str:
     """Inspect or repair virtual reconcile state."""
@@ -32,5 +33,6 @@ def run_virtual_reconcile(
         virtual_environment_name=virtual_environment_name,
         command=command,
         model_name=model_name,
+        seed_name=seed_name,
         physical_relation_name=physical_relation_name,
     )

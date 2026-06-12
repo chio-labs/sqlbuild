@@ -12,7 +12,7 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
@@ -95,7 +95,7 @@ def build_microbatch_plan_entry(
         materialization_type=MaterializationType.INCREMENTAL,
         action=action,
         reason=reason,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=target_schema,
             name=target_name,
@@ -251,8 +251,8 @@ def _execute_test(
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name
     )
-    model_targets: dict[str, CompiledRelationDestination] = {
-        "orders": CompiledRelationDestination(
+    model_locations: dict[str, CompiledRelationLocation] = {
+        "orders": CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
             name=test_case.target_name,
@@ -264,8 +264,8 @@ def _execute_test(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        model_targets=model_targets,
-        seed_targets={},
+        model_locations=model_locations,
+        seed_locations={},
         source_map={},
         model_audits=model_audits,
         declared_columns=(),

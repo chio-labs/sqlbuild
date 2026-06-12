@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
 def build_single_model_project(
@@ -34,7 +36,7 @@ def build_single_model_project(
         relative_path=Path("models/test_model.sql"),
         query_sql="SELECT 1",
         config=CompileModelConfig(),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=physical_database,
             schema=physical_schema,
             name="test_model",
@@ -50,3 +52,33 @@ def build_single_model_project(
         effective_vars={},
         models=(model,),
     )
+
+
+def build_previous_python_identity_map(
+    *, previous_version_hash: str | None, current_version_hash: str
+) -> dict[tuple[str, str], Fingerprint]:
+    if previous_version_hash is None:
+        return {}
+    resolved_version_hash: str = (
+        current_version_hash if previous_version_hash == "current" else previous_version_hash
+    )
+    return {
+        ("task", "prepare_orders"): Fingerprint(
+            node_type="task",
+            node_name="prepare_orders",
+            target_database=None,
+            target_schema="analytics",
+            target_name=None,
+            run_id="run_001",
+            definition_hash="definition",
+            version_hash=resolved_version_hash,
+            schema_fingerprint="schema",
+            definition='{"source_text": "def prepare_orders(ctx):\\n    return old_helper()\\n"}',
+            metadata_json=(
+                '{"dependencies": [{"module": "tasks.helpers", '
+                '"qualname": "old_helper", "source_path": "tasks/helpers.py", '
+                '"source_text": "def old_helper():\\n    return 1\\n"}]}'
+            ),
+            ts=datetime(2026, 1, 15, 12, 0, 0),
+        )
+    }

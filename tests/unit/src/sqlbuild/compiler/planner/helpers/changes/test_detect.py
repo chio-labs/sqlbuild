@@ -14,12 +14,14 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,
     PlannerScope,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.shared.models import SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_helpers import (
+    build_metadata_json_with_audit_gate,
     build_model_from_metadata_test_case,
     build_model_from_test_case,
     build_project_for_function_metadata_detection,
@@ -65,13 +67,13 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectModelChangesTestCase(
         description="detects query change when hash differs",
         model_name="orders",
         query_sql=_QUERY_SQL,
-        config_values={"query_change_backfill": "bounded-30d"},
+        config_values={"replay_on_change": "bounded-30d"},
         schema_columns=(),
         relation_exists=True,
         fingerprint_query_hash=_DIFFERENT_HASH,
@@ -86,7 +88,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         description="detects schema change when expected column is missing from warehouse",
         model_name="orders",
         query_sql=_QUERY_SQL,
-        config_values={"schema_change_backfill": {"add_column": "full"}},
+        config_values={"replay_on_change": "full"},
         schema_columns=(("id", "INTEGER"), ("status", "VARCHAR")),
         relation_exists=True,
         fingerprint_query_hash=_MATCHING_HASH,
@@ -125,7 +127,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=False,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectModelChangesTestCase(
         description="detects config change when version identity config differs",
@@ -141,7 +143,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.CONFIG_CHANGED,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
     DetectModelChangesTestCase(
         description="ignores unknown config differences",
@@ -157,7 +159,7 @@ DETECT_MODEL_CHANGES_TEST_CASES: list[DetectModelChangesTestCase] = [
         query_change_tracking=True,
         full_refresh=False,
         expected_change_kind=ChangeKind.NO_CHANGE,
-        expected_backfill_action=BackfillAction.WARN_ONLY,
+        expected_backfill_action=BackfillAction.FORWARD_ONLY,
     ),
 ]
 
@@ -212,6 +214,21 @@ DETECT_MODEL_METADATA_TEST_CASES: list[DetectModelMetadataTestCase] = [
         ),
         expected_change_kind=ChangeKind.CONFIG_CHANGED,
         expected_metadata_fragments=('"post_hooks":["SqlHookEntry',),
+    ),
+    DetectModelMetadataTestCase(
+        description="ignores runtime audit gate proof when version identity matches",
+        config_values={"materialized": "table"},
+        schema_columns=(),
+        deps=(),
+        function_local_hashes={},
+        previous_metadata_json=build_metadata_json_with_audit_gate(
+            build_version_identity_metadata_json(
+                model_name="orders",
+                config_values={"materialized": "table"},
+                execution_signature={},
+            )
+        ),
+        expected_change_kind=ChangeKind.NO_CHANGE,
     ),
 ]
 
@@ -297,26 +314,29 @@ def test_given_direct_project_function_hash_change_when_detecting_changes_then_m
             )
         ).existing_relations,
         existing_columns={},
-        fingerprints={
-            "orders": Fingerprint(
-                model_name="orders",
-                target_database=None,
-                target_schema=None,
-                target_name="orders",
-                run_id="run_001",
-                query_hash=compute_query_hash(
-                    "SELECT is_large_order(amount) AS large_order FROM orders"
-                ),
-                schema_fingerprint="schema_a",
-                query_sql="SELECT is_large_order(amount) AS large_order FROM orders",
-                metadata_json=build_version_identity_metadata_json(
-                    model_name="orders",
-                    config_values={},
-                    local_function_hashes=test_case.function_local_hashes,
-                ),
-                ts=datetime(2026, 1, 15, 12, 0, 0),
-            )
-        },
+        fingerprints=WarehouseFingerprints(
+            models={
+                "orders": Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash=compute_query_hash(
+                        "SELECT is_large_order(amount) AS large_order FROM orders"
+                    ),
+                    schema_fingerprint="schema_a",
+                    definition="SELECT is_large_order(amount) AS large_order FROM orders",
+                    metadata_json=build_version_identity_metadata_json(
+                        model_name="orders",
+                        config_values={},
+                        local_function_hashes=test_case.function_local_hashes,
+                    ),
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                )
+            }
+        ),
     )
 
     result: PlannerChangeResults = detect_changes(

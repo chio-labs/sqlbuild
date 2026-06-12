@@ -4,6 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 from textwrap import dedent
+from typing import cast
 
 import pytest
 
@@ -16,12 +17,28 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_project_toml,
     build_virtual_plan_repo_files,
+    prepare_virtual_run_despite_unchanged_project,
     seed_matching_virtual_refs,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     run_sqb,
+)
+
+VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES: tuple[
+    VirtualSourceFreshnessPlanE2ETestCase, ...
+] = (
+    VirtualSourceFreshnessPlanE2ETestCase(
+        description="virtual duration mode fails without source freshness",
+        expected_unchanged_fragments=(),
+        expected_fragments=("cannot determine upstream source freshness age",),
+    ),
+    VirtualSourceFreshnessPlanE2ETestCase(
+        description="virtual duration mode fails with integer source freshness",
+        expected_unchanged_fragments=(),
+        expected_fragments=("requires timestamp source freshness",),
+    ),
 )
 
 
@@ -90,6 +107,85 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
         assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual seed change selects seed and downstream model",
+            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "fact_orders",
+                "order_amounts  (seed_changed)",
+            ),
+        )
+    ],
+    ids=["virtual seed change selects seed and downstream model"],
+)
+def test_given_virtual_seed_change_when_planning_changes_only_then_selects_dependent_model(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_seed_change_plan",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars "
+                'FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+
+    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
+    assert "order_amounts" not in unchanged_plan_result.stdout
+    assert "fact_orders" not in unchanged_plan_result.stdout
+
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        "order_id,amount_cents\n1,200\n",
+        encoding="utf-8",
+    )
+    changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert changed_plan_result.returncode == 0, changed_plan_result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in changed_plan_result.stdout, changed_plan_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -610,8 +706,272 @@ def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_con
     fragment: str
     for fragment in test_case.expected_fragments:
         assert fragment in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual changes-only runs configured table despite unchanged freshness",
+            expected_unchanged_fragments=(
+                "Plan ready (2 selected)",
+                "Runs despite unchanged (1)",
+            ),
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "run_despite_unchanged: 30d",
+                "Upstream changed (1)",
+                "orders_mart",
+                "cause: rolling_orders ran despite unchanged inputs",
+            ),
+        )
+    ],
+    ids=["virtual changes-only runs configured table despite unchanged freshness"],
+)
+def test_given_virtual_run_despite_unchanged_when_planning_changes_only_then_selects_downstream(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_run_despite_unchanged_project(
+        tmp_path=tmp_path,
+        project_name="virtual_run_despite_unchanged_plan",
+        run_despite_unchanged="30d",
+        data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"),
+        project_dir=project_dir,
+    )
+    assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
+    fragment: str
+    for fragment in test_case.expected_unchanged_fragments:
+        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
+
+    changes_only_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert changes_only_plan_result.returncode == 0, changes_only_plan_result.stderr
+    output: str = changes_only_plan_result.stdout
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual changes-only skips expired run_despite_unchanged duration",
+            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_fragments=("Plan ready (0 selected)",),
+            unexpected_fragments=("Runs despite unchanged", "rolling_orders", "orders_mart"),
+        )
+    ],
+    ids=["virtual changes-only skips expired run_despite_unchanged duration"],
+)
+def test_given_virtual_expired_run_despite_unchanged_when_planning_then_skips_table(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_run_despite_unchanged_project(
+        tmp_path=tmp_path,
+        project_name="virtual_run_despite_unchanged_expired_plan",
+        run_despite_unchanged="1d",
+        data_version_sql="TIMESTAMP '2026-01-01 00:00:00'",
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert result.returncode == 0, result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout, result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual changes-only always runs configured unchanged table",
+            expected_unchanged_fragments=(),
+            expected_fragments=(
+                "Plan ready (2 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "run_despite_unchanged: always",
+                "orders_mart",
+            ),
+        )
+    ],
+    ids=["virtual changes-only always runs configured unchanged table"],
+)
+def test_given_virtual_run_despite_unchanged_always_when_planning_then_selects_downstream(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_run_despite_unchanged_project(
+        tmp_path=tmp_path,
+        project_name="virtual_run_despite_unchanged_always_plan",
+        run_despite_unchanged="always",
+        data_version_sql="TIMESTAMP '2026-01-01 00:00:00'",
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert result.returncode == 0, result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual JSON exposes run_despite_unchanged metadata",
+            expected_unchanged_fragments=(),
+            expected_fragments=("rolling_orders", "30d", "raw_orders"),
+        )
+    ],
+    ids=["virtual JSON exposes run_despite_unchanged metadata"],
+)
+def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_metadata(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_run_despite_unchanged_project(
+        tmp_path=tmp_path,
+        project_name="virtual_run_despite_unchanged_json_plan",
+        run_despite_unchanged="30d",
+        data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--json"),
+        project_dir=project_dir,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload: dict[str, object] = cast(dict[str, object], json.loads(result.stdout))
+    models: list[dict[str, object]] = cast(list[dict[str, object]], payload["models"])
+    root_model: dict[str, object] = next(
+        model for model in models if model["name"] == "rolling_orders"
+    )
+    run_metadata: dict[str, object] = cast(dict[str, object], root_model["run_despite_unchanged"])
+
+    assert root_model["name"] == test_case.expected_fragments[0]
+    assert payload["selected_count"] == 2
+    assert root_model["reason"] == "run_despite_unchanged"
+    assert run_metadata["mode"] == "duration"
+    assert run_metadata["duration"] == test_case.expected_fragments[1]
+    assert run_metadata["newest_source_name"] == test_case.expected_fragments[2]
+    assert isinstance(run_metadata["newest_source_data_age_seconds"], int)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual scoped runtime stale root leaves downstream remaining stale",
+            expected_unchanged_fragments=(),
+            expected_fragments=(
+                "Plan ready (1 selected)",
+                "Runs despite unchanged (1)",
+                "rolling_orders",
+                "remaining stale after selection: orders_mart",
+            ),
+            unexpected_fragments=("Upstream changed (1)",),
+        )
+    ],
+    ids=["virtual scoped runtime stale root leaves downstream remaining stale"],
+)
+def test_given_virtual_scoped_run_despite_unchanged_when_planning_then_downstream_remains_stale(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_run_despite_unchanged_project(
+        tmp_path=tmp_path,
+        project_name="virtual_run_despite_unchanged_scoped_plan",
+        run_despite_unchanged="30d",
+        data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only", "--select", "rolling_orders"),
+        project_dir=project_dir,
+    )
+    assert result.returncode == 0, result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout, result.stdout
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES,
+    ids=[case.description for case in VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES],
+)
+def test_given_virtual_duration_without_timestamp_freshness_when_planning_then_fails(
+    test_case: VirtualSourceFreshnessPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    is_integer_case: bool = "integer" in test_case.description
+    project_suffix: str = "integer" if is_integer_case else "missing"
+    project_dir: Path = prepare_virtual_run_despite_unchanged_project(
+        tmp_path=tmp_path,
+        project_name=f"virtual_run_despite_unchanged_error_{project_suffix}",
+        run_despite_unchanged="30d",
+        data_version_sql="1" if is_integer_case else "TIMESTAMP '2026-06-01 00:00:00'",
+        include_freshness=is_integer_case,
+        source_freshness_type="integer" if is_integer_case else "timestamp",
+        warehouse_column_type="INTEGER" if is_integer_case else "TIMESTAMP",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout + result.stderr, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize(
@@ -651,11 +1011,11 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
         'MODEL ();\n\nSELECT COUNT(*) AS order_count FROM __ref("fact_orders")\n'
     )
     baseline_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 9\n"
     )
     current_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n"
     )
     baseline_project_dir: Path = prepare_inline_project(
@@ -720,7 +1080,7 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
             expected_fragments=(
                 "Changed functions (1)",
                 "is_large_order",
-                "policy: query_change_backfill=full",
+                "policy: replay_on_change=full",
                 "query diff:",
                 "--- previous",
                 "+++ current",
@@ -740,11 +1100,11 @@ def test_given_virtual_build_then_function_change_when_running_plan_then_it_show
     tmp_path: Path,
 ) -> None:
     initial_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 9\n"
     )
     changed_function_sql: str = (
-        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, query_change_backfill full);\n\n"
+        "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, replay_on_change full);\n\n"
         "amount > 5\n"
     )
     project_dir: Path = prepare_inline_project(

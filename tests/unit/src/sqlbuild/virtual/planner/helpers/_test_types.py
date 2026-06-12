@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,17 @@ class VirtualModelSelectionTestCase:
     default_selection: tuple[str, ...]
     stale_model_names: tuple[str, ...]
     include_stale_upstreams: bool
-    changes_only: bool
+    work_selection_policy: WorkSelectionPolicy
     expected_selection: tuple[str, ...]
     downstream_depends_on_dim_customers: bool = False
+
+
+@dataclass(frozen=True)
+class VirtualRunDespiteUnchangedSemanticsTestCase:
+    description: str
+    expected_stale_model_names: tuple[str, ...]
+    expected_default_selection: tuple[str, ...]
+    expected_root_reasons: dict[str, PlanReason]
 
 
 @dataclass(frozen=True)
@@ -51,6 +59,16 @@ class StaleModelNamesTestCase:
     expected_version_hashes: dict[str, str]
     bound_version_hashes: dict[str, str]
     expected_stale_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SeedRefPlanningTestCase:
+    description: str
+    seed_names: tuple[str, ...]
+    expected_seed_version_hashes: dict[str, str]
+    bound_seed_version_hashes: dict[str, str]
+    expected_stale_seed_names: tuple[str, ...]
+    expected_seed_plan_reasons: dict[str, PlanReason]
 
 
 @dataclass(frozen=True)

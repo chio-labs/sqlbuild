@@ -10,14 +10,18 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.models import (
+    CursorOverrides,
+    PlanOutput,
+    RunDespiteUnchangedPlanningResult,
+)
+from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_name
@@ -30,11 +34,14 @@ from sqlbuild.virtual.planner.helpers.output import (
 )
 from sqlbuild.virtual.planner.helpers.planning import (
     build_bound_local_hashes,
+    build_bound_seed_version_hashes,
     build_bound_version_hashes,
     build_default_virtual_selection,
     build_expected_local_hashes,
+    build_expected_seed_version_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
+    build_seed_plan_reasons,
     build_source_freshness_incomplete_model_names,
     build_source_freshness_unchanged_source_names,
     build_source_version_hashes,
@@ -43,7 +50,11 @@ from sqlbuild.virtual.planner.helpers.planning import (
     build_stale_root_causes,
     build_stale_root_reasons,
     build_stale_root_source_causes,
+    build_stale_seed_names,
     resolve_virtual_model_selection,
+)
+from sqlbuild.virtual.planner.helpers.run_despite_unchanged import (
+    build_virtual_run_despite_unchanged_planning_result,
 )
 from sqlbuild.virtual.planner.helpers.state_metadata import (
     decode_model_version_metadata_jsons,
@@ -113,9 +124,11 @@ def run_virtual_plan_pipeline(
         (
             bound_version_hashes,
             bound_local_hashes,
+            bound_seed_version_hashes,
             source_version_hashes,
+            source_freshness_records,
             source_freshness_unchanged_source_names,
-            deferred_targets,
+            deferred_locations,
             deferred_relations,
             previous_query_sqls,
             previous_metadata_jsons,
@@ -131,10 +144,24 @@ def run_virtual_plan_pipeline(
         expected_local_hashes: dict[str, str] = build_expected_local_hashes(
             graph=graph,
         )
+        expected_seed_version_hashes: dict[str, str] = build_expected_seed_version_hashes(
+            graph=graph,
+        )
+        stale_seed_names: tuple[str, ...] = build_stale_seed_names(
+            seed_names=tuple(seed.name for seed in graph.project.seeds),
+            expected_seed_version_hashes=expected_seed_version_hashes,
+            bound_seed_version_hashes=bound_seed_version_hashes,
+        )
+        seed_plan_reasons: dict[str, PlanReason] = build_seed_plan_reasons(
+            seed_names=tuple(seed.name for seed in graph.project.seeds),
+            expected_seed_version_hashes=expected_seed_version_hashes,
+            bound_seed_version_hashes=bound_seed_version_hashes,
+        )
         expected_version_hashes: dict[str, str] = build_expected_version_hashes(
             graph=graph,
             expected_local_hashes=expected_local_hashes,
             source_version_hashes=source_version_hashes,
+            seed_version_hashes=expected_seed_version_hashes,
         )
         expected_metadata_jsons: dict[str, str] = build_model_fingerprint_metadata_jsons(
             graph=graph
@@ -145,14 +172,24 @@ def run_virtual_plan_pipeline(
                 source_version_hashes=source_version_hashes,
             )
         )
-        stale_model_names: tuple[str, ...] = build_stale_model_names(
+        identity_stale_model_names: tuple[str, ...] = build_stale_model_names(
             model_names=tuple(model.name for model in graph.project.models),
             expected_version_hashes=expected_version_hashes,
             bound_version_hashes=bound_version_hashes,
             source_freshness_incomplete_model_names=source_freshness_incomplete_model_names,
         )
+        run_despite_unchanged: RunDespiteUnchangedPlanningResult = (
+            build_virtual_run_despite_unchanged_planning_result(
+                graph=graph,
+                source_freshness_records=source_freshness_records,
+                already_stale_model_names=frozenset(identity_stale_model_names),
+            )
+        )
+        stale_model_names: tuple[str, ...] = tuple(
+            sorted(set(identity_stale_model_names) | set(run_despite_unchanged.stale_model_names))
+        )
         stale_root_reasons: dict[str, PlanReason] = build_stale_root_reasons(
-            stale_model_names=stale_model_names,
+            stale_model_names=identity_stale_model_names,
             expected_local_hashes=expected_local_hashes,
             bound_version_hashes=bound_version_hashes,
             bound_local_hashes=bound_local_hashes,
@@ -161,6 +198,13 @@ def run_virtual_plan_pipeline(
             expected_metadata_jsons=expected_metadata_jsons,
             bound_metadata_jsons=previous_metadata_jsons,
         )
+        stale_root_reasons = {
+            **stale_root_reasons,
+            **{
+                model_name: PlanReason.RUN_DESPITE_UNCHANGED
+                for model_name in run_despite_unchanged.root_model_names
+            },
+        }
         stale_root_source_causes: dict[str, str] = build_stale_root_source_causes(
             stale_root_reasons=stale_root_reasons,
             expected_metadata_jsons=expected_metadata_jsons,
@@ -180,6 +224,9 @@ def run_virtual_plan_pipeline(
             stale_model_names=stale_model_names,
             graph=graph,
         )
+        work_selection_policy: WorkSelectionPolicy = (
+            WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
+        )
         effective_select: tuple[str, ...] = resolve_virtual_model_selection(
             graph=graph,
             select=select,
@@ -187,15 +234,21 @@ def run_virtual_plan_pipeline(
             default_selection=default_selection,
             stale_model_names=stale_model_names,
             include_stale_upstreams=include_stale_upstreams,
-            changes_only=changes_only,
+            work_selection_policy=work_selection_policy,
+        )
+        selected_seed_names: tuple[str, ...] = (
+            stale_seed_names if not select and not exclude else ()
+        )
+        effective_select_with_seeds: tuple[str, ...] = tuple(
+            sorted(set(effective_select) | set(selected_seed_names))
         )
 
-        if effective_select:
+        if effective_select_with_seeds:
             plan_output: PlanOutput = build_execution_plan(
                 project=graph.project,
                 adapter=adapter,
                 connection=connection,
-                select=effective_select,
+                select=effective_select_with_seeds,
                 exclude=(),
                 cursor_overrides=cursor_overrides,
                 full_refresh=full_refresh,
@@ -206,7 +259,7 @@ def run_virtual_plan_pipeline(
                 local_config=discovered_inputs.local_config,
                 defer_sources_to=defer_sources_to,
                 source_deferral_enabled=source_deferral_enabled,
-                deferred_targets=deferred_targets,
+                deferred_locations=deferred_locations,
                 deferred_relations=deferred_relations,
             )
         else:
@@ -214,11 +267,11 @@ def run_virtual_plan_pipeline(
                 execution_order=tuple(graph.upstream_deps),
                 upstream_deps=graph.upstream_deps,
                 downstream_deps=graph.downstream_deps,
-                model_targets={model.name: model.destination for model in graph.project.models},
-                function_targets={
+                model_locations={model.name: model.destination for model in graph.project.models},
+                function_locations={
                     function.name: function.destination for function in graph.project.functions
                 },
-                seed_targets={seed.name: seed.destination for seed in graph.project.seeds},
+                seed_locations={seed.name: seed.destination for seed in graph.project.seeds},
                 source_map={source.name: source.source_entry for source in graph.project.sources},
             )
         plan_output = rewrite_virtual_plan_entries(
@@ -230,6 +283,8 @@ def run_virtual_plan_pipeline(
             current_metadata_jsons=expected_metadata_jsons,
             previous_metadata_jsons=previous_metadata_jsons,
             previous_function_query_sqls=previous_function_query_sqls,
+            run_despite_unchanged=run_despite_unchanged,
+            seed_plan_reasons=seed_plan_reasons,
         )
         plan_output = with_virtual_metadata(
             plan_output=plan_output,
@@ -287,8 +342,10 @@ def _read_bound_state(
     dict[str, str],
     dict[str, str],
     dict[str, str],
+    dict[str, str],
+    tuple[SourceFreshnessRecord, ...],
     tuple[str, ...],
-    dict[str, CompiledRelationDestination],
+    dict[str, CompiledRelationLocation],
     dict[str, RelationInfo],
     dict[str, str],
     dict[str, str],
@@ -310,13 +367,19 @@ def _read_bound_state(
             virtual_environment_name=virtual_environment_name,
         )
         if target_name is None:
-            return {}, {}, {}, (), {}, {}, {}, {}, {}
-        refs: tuple[object, ...] = backend.get_virtual_environment_refs(
+            return {}, {}, {}, {}, (), (), {}, {}, {}, {}, {}
+        refs: tuple[object, ...] = backend.get_virtual_environment_model_refs(
             state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
+        seed_refs: tuple[object, ...] = backend.get_virtual_environment_seed_refs(
+            state_connection,
+            schema=config.schema,
+            virtual_environment_name=target_name,
+        )
+        bound_seed_version_hashes: dict[str, str] = build_bound_seed_version_hashes(seed_refs)
         previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
             backend.get_virtual_environment_source_freshness(
                 state_connection,
@@ -360,7 +423,7 @@ def _read_bound_state(
             graph=graph,
             virtual_environment_name=target_name,
         )
-        model_targets: dict[str, CompiledRelationDestination] = {
+        model_locations: dict[str, CompiledRelationLocation] = {
             model.name: model.destination for model in graph.project.models
         }
         physical_relations: dict[str, PhysicalRelationRecord] = {}
@@ -373,14 +436,14 @@ def _read_bound_state(
             )
             if relation is not None:
                 physical_relations[model_name] = relation
-        deferred_targets: dict[str, CompiledRelationDestination] = {
+        deferred_locations: dict[str, CompiledRelationLocation] = {
             model_name: build_destination_from_physical_relation(
                 adapter=adapter,
                 relation=relation,
-                fallback_target=model_targets[model_name],
+                fallback_target=model_locations[model_name],
             )
             for model_name, relation in physical_relations.items()
-            if model_name in model_targets
+            if model_name in model_locations
         }
         deferred_relations: dict[str, RelationInfo] = {
             model_name: RelationInfo(
@@ -394,9 +457,11 @@ def _read_bound_state(
         return (
             bound_version_hashes,
             build_bound_local_hashes(model_versions),
+            bound_seed_version_hashes,
             build_source_version_hashes(source_freshness_records),
+            source_freshness_records,
             source_freshness_unchanged_source_names,
-            deferred_targets,
+            deferred_locations,
             deferred_relations,
             previous_query_sqls,
             previous_metadata_jsons,

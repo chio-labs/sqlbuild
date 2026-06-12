@@ -11,8 +11,8 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.shared.helpers.naming import (
-    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
+    resolve_relation_location_qualified_name,
 )
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
 
@@ -44,7 +44,9 @@ def seed_virtual_physical_version(
         schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    target: str = resolve_destination_qualified_name(adapter=adapter, target=entry.destination)
+    target: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
+    )
     if adapter.relation_exists(
         connection,
         database=entry.destination.database,
@@ -53,7 +55,7 @@ def seed_virtual_physical_version(
     ):
         adapter.drop(
             connection,
-            target=target,
+            destination=target,
             if_exists=True,
             statement_recorder=recorder,
         )
@@ -66,8 +68,8 @@ def seed_virtual_physical_version(
     seed_strategy: str = _seed_physical_relation(
         adapter=adapter,
         connection=connection,
-        source=source,
-        target=target,
+        origin=source,
+        destination=target,
         entry=entry,
         statement_recorder=recorder,
     )
@@ -77,7 +79,7 @@ def seed_virtual_physical_version(
         record=PhysicalRelationAncestryRecord(
             model_name=entry.name,
             version_hash=version_hash,
-            parent_model_name=parent_relation.model_name,
+            parent_model_name=parent_relation.artifact_name,
             parent_version_hash=parent_relation.version_hash,
             seed_strategy=seed_strategy,
         ),
@@ -88,8 +90,8 @@ def _seed_physical_relation(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    source: str,
-    target: str,
+    origin: str,
+    destination: str,
     entry: ModelPlanEntry,
     statement_recorder: StatementRecorder,
 ) -> str:
@@ -97,9 +99,9 @@ def _seed_physical_relation(
         cursor_start: str = _cursor_start_for_append_seed(entry=entry)
         adapter.create_table_as(
             connection,
-            target=target,
+            destination=destination,
             sql=adapter.render_seed_select_before_cursor(
-                source=source,
+                origin=origin,
                 cursor_column=entry.cursor_column or "",
                 cursor_end_exclusive=cursor_start,
                 cursor_type=entry.cursor_type,
@@ -111,16 +113,16 @@ def _seed_physical_relation(
     if adapter.supports_durable_clone():
         adapter.durable_clone(
             connection,
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             statement_recorder=statement_recorder,
         )
         return "durable_clone"
 
     adapter.create_table_as(
         connection,
-        target=target,
-        sql=f"SELECT * FROM {source}",
+        destination=destination,
+        sql=f"SELECT * FROM {origin}",
         statement_recorder=statement_recorder,
     )
     return "copy"

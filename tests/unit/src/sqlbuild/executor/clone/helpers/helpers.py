@@ -6,7 +6,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
@@ -43,20 +43,20 @@ class FakeCloneAdapter(BaseAdapter):
         del connection, database, schema, name
         return True
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP TABLE{exists_clause} {target}",)
+        return (f"DROP TABLE{exists_clause} {destination}",)
 
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         if hard_copy:
-            return (f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {source}",)
-        return (f"CREATE TABLE {target} CLONE {source}",)
+            return (f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}",)
+        return (f"CREATE TABLE {destination} CLONE {origin}",)
 
 
 def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
@@ -67,7 +67,7 @@ def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.FIRST_RUN,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema=schema,
             name=name,

@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
@@ -45,6 +45,15 @@ class RecordingAdapter:
     def render_framework_type(self, framework_type: FrameworkType) -> str:
         return framework_type.value
 
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        del database, schema
+        return ()
+
 
 def model_entry(name: str) -> ModelPlanEntry:
     return ModelPlanEntry(
@@ -54,7 +63,7 @@ def model_entry(name: str) -> ModelPlanEntry:
         materialization_type=MaterializationType.TABLE,
         action=PlanAction.CREATE_TABLE,
         reason=PlanReason.NO_CHANGE,
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None,
             schema="main",
             name=name,
@@ -75,16 +84,21 @@ def source_freshness_identity() -> SourceFreshnessIdentity:
     )
 
 
-def source_freshness_record() -> SourceFreshnessRecord:
+def source_freshness_record(
+    *,
+    run_id: str = "planning",
+    data_version: str | None = "1",
+    data_version_hash: str = "hash",
+) -> SourceFreshnessRecord:
     return SourceFreshnessRecord(
         source_name="raw_orders",
         target_database=None,
         target_schema=None,
         target_name=None,
-        run_id="planning",
+        run_id=run_id,
         strategy="sql",
         value_kind="integer",
-        data_version="1",
-        data_version_hash="hash",
+        data_version=data_version,
+        data_version_hash=data_version_hash,
         observed_at=datetime(2026, 1, 1, 0, 0, 0),
     )

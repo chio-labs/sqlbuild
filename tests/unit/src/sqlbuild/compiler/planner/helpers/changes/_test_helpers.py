@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompileModelConfig,
     FunctionArgument,
 )
@@ -20,7 +21,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
-from sqlbuild.compiler.planner.models import PlannerScope, WarehouseSnapshot
+from sqlbuild.compiler.planner.models import PlannerScope, WarehouseFingerprints, WarehouseSnapshot
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import (
@@ -42,7 +43,7 @@ def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> Compile
         relative_path=Path(f"models/{test_case.model_name}.sql"),
         query_sql=test_case.query_sql,
         config=CompileModelConfig(values=test_case.config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="staging", name=test_case.model_name, qualified_name=None
         ),
         schema_entry=schema_entry,
@@ -62,7 +63,7 @@ def build_model_from_metadata_test_case(
         relative_path=Path("models/orders.sql"),
         query_sql="SELECT 1 AS order_id",
         config=CompileModelConfig(values=test_case.config_values),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="staging", name="orders", qualified_name=None
         ),
         schema_entry=SchemaModelEntry(
@@ -90,21 +91,37 @@ def build_snapshot_for_metadata_test_case(
             )
         },
         existing_columns={},
-        fingerprints={
-            "orders": Fingerprint(
-                model_name="orders",
-                target_database=None,
-                target_schema=None,
-                target_name="orders",
-                run_id="run_001",
-                query_hash=compute_query_hash("SELECT 1 AS order_id"),
-                schema_fingerprint="schema_a",
-                query_sql="SELECT 1 AS order_id",
-                metadata_json=test_case.previous_metadata_json,
-                ts=_STUB_TS,
-            )
-        },
+        fingerprints=WarehouseFingerprints(
+            models={
+                "orders": Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash=compute_query_hash("SELECT 1 AS order_id"),
+                    schema_fingerprint="schema_a",
+                    definition="SELECT 1 AS order_id",
+                    metadata_json=test_case.previous_metadata_json,
+                    ts=_STUB_TS,
+                )
+            }
+        ),
     )
+
+
+def build_metadata_json_with_audit_gate(metadata_json: str) -> str:
+    metadata: dict[str, object] = json.loads(metadata_json)
+    metadata["audit_gate"] = {
+        "status": "passed",
+        "binding_set_hash": "binding_hash",
+        "blocking_set_hash": "blocking_hash",
+        "mode": "executed",
+        "run_id": "run_001",
+        "results": [],
+    }
+    return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def build_project_for_function_metadata_detection() -> CompiledProject:
@@ -119,11 +136,11 @@ def build_project_for_function_metadata_detection() -> CompiledProject:
         relative_path=Path("models/orders.sql"),
         query_sql="SELECT is_large_order(amount) AS large_order FROM orders",
         config=CompileModelConfig(values={}),
-        destination=CompiledRelationDestination(
+        destination=CompiledRelationLocation(
             database=None, schema="staging", name="orders", qualified_name=None
         ),
     )
-    function_destination: CompiledRelationDestination = CompiledRelationDestination(
+    function_destination: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema="staging",
         name="is_large_order",
@@ -180,7 +197,7 @@ def build_snapshot_from_test_case(test_case: DetectModelChangesTestCase) -> Ware
     return WarehouseSnapshot(
         existing_relations=relations,
         existing_columns=columns,
-        fingerprints=fingerprints,
+        fingerprints=WarehouseFingerprints(models=fingerprints),
     )
 
 
@@ -229,14 +246,15 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
     )
     return {
         test_case.model_name: Fingerprint(
-            model_name=test_case.model_name,
+            node_type="model",
+            node_name=test_case.model_name,
             target_database=None,
             target_schema=None,
             target_name=test_case.model_name,
             run_id="run_001",
-            query_hash=test_case.fingerprint_query_hash,
+            definition_hash=test_case.fingerprint_query_hash,
             schema_fingerprint="schema_a",
-            query_sql="SELECT 1",
+            definition="SELECT 1",
             metadata_json=build_version_identity_metadata_json(
                 model_name=test_case.model_name,
                 config_values=fingerprint_config_values,

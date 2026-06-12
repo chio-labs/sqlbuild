@@ -10,7 +10,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
@@ -28,7 +28,7 @@ from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import 
 from tests.integration.src.sqlbuild.compiler.planner.helpers.helpers import (
     RecordingDuckDbAdapter,
     _IncrementalModelSpec,
-    build_deferred_targets_from_map,
+    build_deferred_locations_from_map,
     build_project_with_targets,
 )
 
@@ -58,20 +58,21 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
             "CREATE TABLE staging.orders (id INTEGER, name VARCHAR)",
             "CREATE TABLE marts.revenue (amount DECIMAL)",
         ),
-        model_targets={"orders": "staging", "revenue": "marts"},
-        seed_targets={},
+        model_locations={"orders": "staging", "revenue": "marts"},
+        seed_locations={},
         fingerprints_to_write=(
             (
                 "staging",
                 Fingerprint(
-                    model_name="orders",
+                    node_type="model",
+                    node_name="orders",
                     target_database=None,
                     target_schema=None,
                     target_name="orders",
                     run_id="run_001",
-                    query_hash="hash_a",
+                    definition_hash="definition_a",
                     schema_fingerprint="schema_a",
-                    query_sql="SELECT 1",
+                    definition="SELECT 1",
                     ts=datetime(2026, 1, 15, 12, 0, 0),
                 ),
             ),
@@ -81,16 +82,77 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
         expected_fingerprint_names=frozenset({"orders"}),
     ),
     GatherWarehouseSnapshotTestCase(
-        description="gathers snapshot with seed targets included",
+        description="gathers snapshot with seed locations included",
         setup_sql=(
             "CREATE TABLE staging.orders (id INTEGER)",
             "CREATE TABLE staging.country_codes (code VARCHAR)",
         ),
-        model_targets={"orders": "staging"},
-        seed_targets={"country_codes": "staging"},
+        model_locations={"orders": "staging"},
+        seed_locations={"country_codes": "staging"},
         expected_relation_names=frozenset({"orders", "country_codes"}),
         expected_column_table_names=frozenset({"orders", "country_codes"}),
         expected_fingerprint_names=frozenset(),
+    ),
+    GatherWarehouseSnapshotTestCase(
+        description="partitions mixed fingerprint node types into typed maps",
+        setup_sql=(
+            "CREATE TABLE staging.orders (id INTEGER)",
+            "CREATE TABLE staging.country_codes (code VARCHAR)",
+        ),
+        model_locations={"orders": "staging"},
+        seed_locations={"country_codes": "staging"},
+        fingerprints_to_write=(
+            (
+                "staging",
+                Fingerprint(
+                    node_type="model",
+                    node_name="orders",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="orders",
+                    run_id="run_001",
+                    definition_hash="model_definition",
+                    schema_fingerprint="model_schema",
+                    definition="SELECT 1",
+                    ts=datetime(2026, 1, 15, 12, 0, 0),
+                ),
+            ),
+            (
+                "staging",
+                Fingerprint(
+                    node_type="function",
+                    node_name="is_large_order",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="is_large_order",
+                    run_id="run_001",
+                    definition_hash="function_definition",
+                    schema_fingerprint="",
+                    definition="amount > 100",
+                    ts=datetime(2026, 1, 15, 12, 0, 1),
+                ),
+            ),
+            (
+                "staging",
+                Fingerprint(
+                    node_type="seed",
+                    node_name="country_codes",
+                    target_database=None,
+                    target_schema=None,
+                    target_name="country_codes",
+                    run_id="run_001",
+                    definition_hash="seed_definition",
+                    schema_fingerprint="",
+                    definition='{"columns": []}',
+                    ts=datetime(2026, 1, 15, 12, 0, 2),
+                ),
+            ),
+        ),
+        expected_relation_names=frozenset({"orders", "country_codes"}),
+        expected_column_table_names=frozenset({"orders", "country_codes"}),
+        expected_fingerprint_names=frozenset({"orders"}),
+        expected_function_fingerprint_names=frozenset({"is_large_order"}),
+        expected_seed_fingerprint_names=frozenset({"country_codes"}),
     ),
     GatherWarehouseSnapshotTestCase(
         description="filters metadata to selected model and unselected upstream names",
@@ -99,9 +161,9 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
             "CREATE TABLE staging.revenue (amount DECIMAL)",
             "CREATE TABLE staging.unrelated (value VARCHAR)",
         ),
-        model_targets={"raw_orders": "staging", "revenue": "staging"},
+        model_locations={"raw_orders": "staging", "revenue": "staging"},
         model_deps={"revenue": ("raw_orders",)},
-        seed_targets={},
+        seed_locations={},
         selected_keys=frozenset({_REVENUE_KEY}),
         expected_relation_names=frozenset({"raw_orders", "revenue"}),
         expected_column_table_names=frozenset({"raw_orders", "revenue"}),
@@ -113,10 +175,10 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
             *(f"CREATE TABLE staging.model_{index} (id INTEGER)" for index in range(251)),
             "CREATE TABLE staging.unrelated (value VARCHAR)",
         ),
-        model_targets={
+        model_locations={
             f"model_{index}": "staging" for index in range(METADATA_NAME_FILTER_LIMIT + 1)
         },
-        seed_targets={},
+        seed_locations={},
         selected_keys=frozenset(
             CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"model_{index}")
             for index in range(METADATA_NAME_FILTER_LIMIT + 1)
@@ -160,9 +222,9 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
         )
 
     project: CompiledProject = build_project_with_targets(
-        model_targets=test_case.model_targets,
+        model_locations=test_case.model_locations,
         model_deps=test_case.model_deps,
-        seed_targets=test_case.seed_targets,
+        seed_locations=test_case.seed_locations,
     )
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
         project=project,
@@ -174,7 +236,14 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
 
     assert frozenset(snapshot.existing_relations.keys()) == test_case.expected_relation_names
     assert frozenset(snapshot.existing_columns.keys()) == test_case.expected_column_table_names
-    assert frozenset(snapshot.fingerprints.keys()) == test_case.expected_fingerprint_names
+    assert frozenset(snapshot.fingerprints.models.keys()) == test_case.expected_fingerprint_names
+    assert (
+        frozenset(snapshot.fingerprints.functions.keys())
+        == test_case.expected_function_fingerprint_names
+    )
+    assert (
+        frozenset(snapshot.fingerprints.seeds.keys()) == test_case.expected_seed_fingerprint_names
+    )
 
 
 @pytest.mark.parametrize(
@@ -195,7 +264,7 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
     connection: Any,
     execute: Any,
 ) -> None:
-    project: CompiledProject = build_project_with_targets(model_targets={}, seed_targets={})
+    project: CompiledProject = build_project_with_targets(model_locations={}, seed_locations={})
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
         project=project,
         adapter=adapter,
@@ -205,7 +274,7 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
 
     assert len(snapshot.existing_relations) == test_case.expected_relation_count
     assert len(snapshot.existing_columns) == test_case.expected_column_count
-    assert len(snapshot.fingerprints) == test_case.expected_fingerprint_count
+    assert len(snapshot.fingerprints.models) == test_case.expected_fingerprint_count
 
 
 @pytest.mark.parametrize(
@@ -351,7 +420,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
         progress_calls.append(message)
 
     project: CompiledProject = build_project_with_targets(
-        model_targets={"raw_orders": "staging"},
+        model_locations={"raw_orders": "staging"},
         incremental_models=(_INCREMENTAL_MODEL,),
     )
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
@@ -388,7 +457,7 @@ DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
         full_refresh=False,
         start_cursor_override=None,
         end_cursor_override=None,
-        deferred_targets={"raw_orders": "prod.raw_orders"},
+        deferred_locations={"raw_orders": "prod.raw_orders"},
         expected_cursor_model_names=frozenset({"fact_orders"}),
         expected_cursor_snapshots={
             "fact_orders": ModelCursorSnapshot(
@@ -412,7 +481,7 @@ DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
         full_refresh=False,
         start_cursor_override=None,
         end_cursor_override=None,
-        deferred_targets={"raw_orders": "prod.raw_orders"},
+        deferred_locations={"raw_orders": "prod.raw_orders"},
         expected_cursor_model_names=frozenset({"fact_orders"}),
         expected_cursor_snapshots={
             "fact_orders": ModelCursorSnapshot(
@@ -431,7 +500,7 @@ DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
     DEFERRED_CURSOR_TEST_CASES,
     ids=[case.description for case in DEFERRED_CURSOR_TEST_CASES],
 )
-def test_given_deferred_targets_when_gathering_cursor_snapshots_then_resolves_correct_env(
+def test_given_deferred_locations_when_gathering_cursor_snapshots_then_resolves_correct_env(
     test_case: GatherCursorSnapshotTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
@@ -446,14 +515,14 @@ def test_given_deferred_targets_when_gathering_cursor_snapshots_then_resolves_co
     def _track_progress(message: str) -> None:
         progress_calls.append(message)
 
-    deferred: dict[str, CompiledRelationDestination] | None = (
-        build_deferred_targets_from_map(test_case.deferred_targets)
-        if test_case.deferred_targets is not None
+    deferred: dict[str, CompiledRelationLocation] | None = (
+        build_deferred_locations_from_map(test_case.deferred_locations)
+        if test_case.deferred_locations is not None
         else None
     )
 
     project: CompiledProject = build_project_with_targets(
-        model_targets={"raw_orders": "staging"},
+        model_locations={"raw_orders": "staging"},
         incremental_models=(_INCREMENTAL_MODEL,),
     )
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
@@ -466,7 +535,7 @@ def test_given_deferred_targets_when_gathering_cursor_snapshots_then_resolves_co
         start_cursor_override=test_case.start_cursor_override,
         end_cursor_override=test_case.end_cursor_override,
         on_progress=_track_progress,
-        deferred_targets=deferred,
+        deferred_locations=deferred,
     )
 
     assert frozenset(snapshot.cursor_snapshots.keys()) == test_case.expected_cursor_model_names

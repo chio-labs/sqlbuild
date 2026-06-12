@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationDestination,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -81,13 +81,13 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         file_path=Path("seeds/country_codes.csv"),
         relative_path=Path("seeds/country_codes.csv"),
     )
-    model_target: CompiledRelationDestination = CompiledRelationDestination(
+    model_target: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema="analytics",
         name="orders",
         qualified_name="analytics.orders",
     )
-    function_target: CompiledRelationDestination = CompiledRelationDestination(
+    function_target: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema="analytics",
         name="normalize_email",
@@ -135,7 +135,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                     columns=(SchemaColumn(name="country_code", type="TEXT"),),
                 ),
                 schema_file=schema_file,
-                destination=CompiledRelationDestination(
+                destination=CompiledRelationLocation(
                     database=None,
                     schema="analytics",
                     name="country_codes",

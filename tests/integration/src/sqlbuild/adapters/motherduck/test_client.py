@@ -59,7 +59,7 @@ def test_given_model_sql_when_building_then_motherduck_creates_table(
 
     adapter.create_table_as(
         connection,
-        target=target,
+        destination=target,
         sql=test_case.source_sql,
         statement_recorder=StatementRecorder(),
     )

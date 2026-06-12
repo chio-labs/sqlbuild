@@ -13,10 +13,11 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     BuildE2ETestCase,
     DirectChangesOnlyBuildE2ETestCase,
-    DirectPythonBuildHardeningE2ETestCase,
     PythonBuildE2ETestCase,
+    StandardPythonBuildHardeningE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,
@@ -24,8 +25,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     table_exists,
 )
 
-DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETestCase] = [
-    DirectPythonBuildHardeningE2ETestCase(
+STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES: list[StandardPythonBuildHardeningE2ETestCase] = [
+    StandardPythonBuildHardeningE2ETestCase(
         description="ingress Python failure blocks downstream source load and model",
         project_name="python_build_ingress_failure_project",
         command=("--no-color", "build", "--select", "+fact_orders"),
@@ -71,7 +72,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         ),
         expected_absent_tables=("raw_orders", "fact_orders"),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="ingress hard skip blocks downstream source load and model",
         project_name="python_build_ingress_skip_project",
         command=("--no-color", "build", "--select", "+fact_orders"),
@@ -118,7 +119,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         ),
         expected_absent_tables=("raw_orders", "fact_orders"),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="read-side Python failure fails build after SQL succeeds",
         project_name="python_build_read_side_failure_project",
         command=("--no-color", "build", "--select", "fact_orders fail_after_fact"),
@@ -157,7 +158,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         ),
         expected_present_tables=("fact_orders",),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="read-side hard skip is reported after SQL succeeds",
         project_name="python_build_read_side_hard_skip_project",
         command=("--no-color", "build", "--select", "fact_orders skip_after_fact"),
@@ -197,7 +198,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         ),
         expected_present_tables=("fact_orders",),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="read-side soft skip is reported after SQL succeeds",
         project_name="python_build_read_side_soft_skip_project",
         command=("--no-color", "build", "--select", "fact_orders soft_skip_after_fact"),
@@ -237,7 +238,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         ),
         expected_present_tables=("fact_orders",),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="no-python suppresses read-side Python but keeps ingress Python",
         project_name="python_build_no_python_project",
         command=("--no-color", "build", "--select", "+fact_orders", "--no-python"),
@@ -296,7 +297,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
         expected_markers=(("prepared.txt", "prepared"),),
         expected_absent_paths=("profile.txt",),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="source relation resolves in direct read-side Python task",
         project_name="python_build_source_relation_project",
         command=("--no-color", "build", "--select", "+raw_orders profile_raw_orders"),
@@ -350,7 +351,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="direct changes-only build prunes unchanged selected model",
+            description="standard changes-only build prunes unchanged selected model",
             expected_exit_code=0,
             expected_output_fragments=(
                 "Plan ready (0 selected)",
@@ -361,7 +362,7 @@ DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES: list[DirectPythonBuildHardeningE2ETest
             unexpected_output_fragments=("1/1", "orders"),
         )
     ],
-    ids=["direct changes-only build prunes unchanged selected model"],
+    ids=["standard changes-only build prunes unchanged selected model"],
 )
 def test_given_built_direct_project_when_building_changes_only_then_prunes_unchanged_model(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -408,7 +409,7 @@ def test_given_built_direct_project_when_building_changes_only_then_prunes_uncha
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="direct changes-only build executes changed selected model",
+            description="standard changes-only build executes changed selected model",
             expected_exit_code=0,
             expected_output_fragments=(
                 "Plan ready (1 selected)",
@@ -421,7 +422,7 @@ def test_given_built_direct_project_when_building_changes_only_then_prunes_uncha
             expected_query_results=((2,),),
         )
     ],
-    ids=["direct changes-only build executes changed selected model"],
+    ids=["standard changes-only build executes changed selected model"],
 )
 def test_given_direct_query_change_when_building_changes_only_then_executes_changed_model(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -500,7 +501,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
             ),
             "functions/sql/is_large_order.sql": (
                 "FUNCTION (arguments (amount INTEGER), returns BOOLEAN, "
-                "query_change_backfill full);\n\namount > 100\n"
+                "replay_on_change full);\n\namount > 100\n"
             ),
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT __udf("is_large_order")(150) AS is_large\n'
@@ -523,7 +524,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
         db_path=project_dir / "warehouse.duckdb",
         sql=(
             "SELECT metadata_json_b64 FROM main._sqlbuild_fingerprints "
-            "WHERE model_name = 'fact_orders' ORDER BY ts DESC LIMIT 1"
+            "WHERE node_name = 'fact_orders' ORDER BY ts DESC LIMIT 1"
         ),
     )
     metadata_json: str = base64.b64decode(str(rows[0][0])).decode("utf-8")
@@ -537,7 +538,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="direct changes-only build prunes read-side Python for unchanged SQL",
+            description="standard changes-only build prunes read-side Python for unchanged SQL",
             expected_exit_code=0,
             expected_output_fragments=(
                 "Plan ready (0 selected)",
@@ -547,7 +548,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
             unexpected_output_fragments=("profile_orders", "Python read-side"),
         )
     ],
-    ids=["direct changes-only build prunes read-side Python for unchanged SQL"],
+    ids=["standard changes-only build prunes read-side Python for unchanged SQL"],
 )
 def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_read_side_python(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -608,15 +609,15 @@ def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_rea
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="direct changes-only build appends source freshness after success",
+            description="standard normal build appends source freshness after success",
             expected_exit_code=0,
             expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
-            unexpected_output_fragments=("Plan ready (0 selected)",),
+            unexpected_output_fragments=(),
         )
     ],
-    ids=["direct changes-only build appends source freshness after success"],
+    ids=["standard normal build appends source freshness after success"],
 )
-def test_given_source_freshness_when_building_changes_only_then_writes_state_after_success(
+def test_given_source_freshness_when_building_normally_then_writes_state_after_success(
     test_case: DirectChangesOnlyBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -651,6 +652,95 @@ def test_given_source_freshness_when_building_changes_only_then_writes_state_aft
     assert initial_build_result.returncode == 0, (
         initial_build_result.stdout + initial_build_result.stderr
     )
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in initial_build_result.stdout, initial_build_result.stdout
+    assert table_exists(
+        db_path=project_dir / "warehouse.duckdb",
+        table_name="_sqlbuild_source_freshness",
+    )
+
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
+    )
+    assert rows == [("raw_orders", "1")]
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    assert "Plan ready (0 selected)" in build_result.stdout
+    assert "TOTAL=0" in build_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="standard changes-only persists plan-time source freshness observation",
+            expected_exit_code=0,
+            expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
+            unexpected_output_fragments=("Plan ready (0 selected)",),
+        )
+    ],
+    ids=["standard changes-only persists plan-time source freshness observation"],
+)
+def test_given_source_freshness_changes_during_build_when_appending_then_persists_plan_time_value(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="standard_source_freshness_plan_time_persistence",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "standard_source_freshness_plan_time_persistence"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    freshness:\n"
+                "      strategy: sql\n"
+                "      type: integer\n"
+                "      query: SELECT data_version FROM freshness_control\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="CREATE TABLE freshness_control AS SELECT 0 AS data_version",
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="UPDATE freshness_control SET data_version = 1",
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        (
+            "MODEL (materialized table, "
+            'post_hooks [sql("UPDATE freshness_control SET data_version = 2")]);\n\n'
+            'SELECT * FROM __source("raw_orders")\n'
+        ),
+        encoding="utf-8",
+    )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--changes-only"),
@@ -663,27 +753,19 @@ def test_given_source_freshness_when_building_changes_only_then_writes_state_aft
     fragment: str
     for fragment in test_case.expected_output_fragments:
         assert fragment in build_result.stdout, build_result.stdout
-    assert table_exists(
+    freshness_control_rows: list[tuple[Any, ...]] = query_duckdb(
         db_path=project_dir / "warehouse.duckdb",
-        table_name="_sqlbuild_source_freshness",
+        sql="SELECT data_version FROM freshness_control",
     )
-
-    rows: list[tuple[Any, ...]] = query_duckdb(
+    freshness_rows: list[tuple[Any, ...]] = query_duckdb(
         db_path=project_dir / "warehouse.duckdb",
-        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
+        sql=(
+            "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
+            "ORDER BY data_version"
+        ),
     )
-    assert rows == [("raw_orders", "1")]
-
-    steady_state_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
-        project_dir=project_dir,
-    )
-
-    assert steady_state_result.returncode == 0, (
-        steady_state_result.stdout + steady_state_result.stderr
-    )
-    assert "Plan ready (0 selected)" in steady_state_result.stdout
-    assert "TOTAL=0" in steady_state_result.stdout
+    assert freshness_control_rows == [(2,)]
+    assert freshness_rows == [("raw_orders", "0"), ("raw_orders", "1")]
 
 
 @pytest.mark.parametrize(
@@ -774,12 +856,12 @@ def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_wit
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="direct source freshness appends independent successful branch only",
+            description="standard source freshness appends independent successful branch only",
             expected_exit_code=1,
             expected_output_fragments=("orders", "payments", "FAIL"),
         )
     ],
-    ids=["direct source freshness appends independent successful branch only"],
+    ids=["standard source freshness appends independent successful branch only"],
 )
 def test_given_independent_source_branch_failure_when_building_then_appends_successful_source_only(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -787,10 +869,10 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="direct_source_freshness_independent_branch_build",
+        project_name="standard_source_freshness_independent_branch_build",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "direct_source_freshness_independent_branch_build"\n'
+                'name = "standard_source_freshness_independent_branch_build"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
@@ -878,12 +960,12 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="direct source freshness shared downstream failure blocks all sources",
+            description="standard source freshness shared downstream failure blocks all sources",
             expected_exit_code=1,
             expected_output_fragments=("fact_orders", "FAIL"),
         )
     ],
-    ids=["direct source freshness shared downstream failure blocks all sources"],
+    ids=["standard source freshness shared downstream failure blocks all sources"],
 )
 def test_given_shared_downstream_failure_when_building_then_blocks_all_source_appends(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -891,10 +973,10 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="direct_source_freshness_shared_failure_build",
+        project_name="standard_source_freshness_shared_failure_build",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "direct_source_freshness_shared_failure_build"\n'
+                'name = "standard_source_freshness_shared_failure_build"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
@@ -979,11 +1061,11 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
 
 @pytest.mark.parametrize(
     "test_case",
-    DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES,
-    ids=[case.description for case in DIRECT_PYTHON_BUILD_HARDENING_TEST_CASES],
+    STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES,
+    ids=[case.description for case in STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES],
 )
 def test_given_python_lifecycle_edge_case_when_building_then_direct_build_hardens_behavior(
-    test_case: DirectPythonBuildHardeningE2ETestCase,
+    test_case: StandardPythonBuildHardeningE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
@@ -1017,8 +1099,8 @@ def test_given_python_lifecycle_edge_case_when_building_then_direct_build_harden
         assert not (project_dir / absent_path).exists()
 
 
-DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[DirectPythonBuildHardeningE2ETestCase] = [
-    DirectPythonBuildHardeningE2ETestCase(
+STANDARD_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[StandardPythonBuildHardeningE2ETestCase] = [
+    StandardPythonBuildHardeningE2ETestCase(
         description="direct build fails when skipped intermediate target is missing",
         project_name="direct_build_missing_intermediate_project",
         command=("--no-color", "build", "--select", "raw_events"),
@@ -1047,7 +1129,7 @@ DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[DirectPythonBuildHardeningE2ETe
         expected_exit_code=1,
         expected_output_fragments=("requires intermediate loader 'fetch_events'",),
     ),
-    DirectPythonBuildHardeningE2ETestCase(
+    StandardPythonBuildHardeningE2ETestCase(
         description="direct build no-python source only warns and skips task ingress",
         project_name="direct_build_no_python_source_only_project",
         command=("--no-color", "build", "--select", "raw_events", "--no-python"),
@@ -1094,12 +1176,12 @@ DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[DirectPythonBuildHardeningE2ETe
 
 @pytest.mark.parametrize(
     "test_case",
-    DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES,
-    ids=[case.description for case in DIRECT_SOURCE_ONLY_BUILD_POLICY_TEST_CASES],
+    STANDARD_SOURCE_ONLY_BUILD_POLICY_TEST_CASES,
+    ids=[case.description for case in STANDARD_SOURCE_ONLY_BUILD_POLICY_TEST_CASES],
 )
 def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_source_policy(
     tmp_path: Path,
-    test_case: DirectPythonBuildHardeningE2ETestCase,
+    test_case: StandardPythonBuildHardeningE2ETestCase,
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
@@ -1129,7 +1211,7 @@ def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_so
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectPythonBuildHardeningE2ETestCase(
+        StandardPythonBuildHardeningE2ETestCase(
             description="direct build reuses existing intermediate target without rerunning loader",
             project_name="direct_build_existing_intermediate_project",
             command=("--no-color", "build", "--select", "raw_events"),
@@ -1164,7 +1246,7 @@ def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_so
 )
 def test_given_existing_intermediate_target_when_building_source_only_then_reuses_target(
     tmp_path: Path,
-    test_case: DirectPythonBuildHardeningE2ETestCase,
+    test_case: StandardPythonBuildHardeningE2ETestCase,
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
@@ -1196,7 +1278,7 @@ def test_given_existing_intermediate_target_when_building_source_only_then_reuse
 @pytest.mark.parametrize(
     "test_case",
     [
-        DirectPythonBuildHardeningE2ETestCase(
+        StandardPythonBuildHardeningE2ETestCase(
             description="build json includes Python node results",
             project_name="python_build_json_project",
             command=("--no-color", "build", "--select", "observed_orders"),
@@ -1223,7 +1305,7 @@ def test_given_existing_intermediate_target_when_building_source_only_then_reuse
     ids=["build json includes Python node results"],
 )
 def test_given_python_asset_with_json_output_when_building_then_json_includes_python_result(
-    test_case: DirectPythonBuildHardeningE2ETestCase,
+    test_case: StandardPythonBuildHardeningE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(

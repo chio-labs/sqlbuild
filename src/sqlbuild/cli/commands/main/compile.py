@@ -78,6 +78,7 @@ def run_compile(
         adapter=adapter,
         no_sql_validation=no_sql_validation,
         skip_column_inference=profile_skip_column_inference,
+        column_lineage_mode=_compile_analysis_lineage_mode(lineage_mode),
         cli_vars=cli_vars,
     )
     graph_ms: int = _elapsed_ms(graph_start)
@@ -222,3 +223,9 @@ def _build_compile_lineage(
                     dialect=dialect,
                     mode=ColumnLineageMode.RICH,
                 )
+
+
+def _compile_analysis_lineage_mode(mode: CompileLineageMode) -> ColumnLineageMode:
+    if mode == CompileLineageMode.RICH:
+        return ColumnLineageMode.RICH
+    return ColumnLineageMode.FAST

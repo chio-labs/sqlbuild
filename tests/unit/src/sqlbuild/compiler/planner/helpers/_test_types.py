@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.auditing.types import (
@@ -11,6 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner.models import (
+    CursorBounds,
     MissingUpstream,
     ParsedSelector,
     PathSelector,
@@ -58,6 +60,99 @@ class SourceColumnsTestCase:
     adapter_column_names: tuple[str, ...]
     expected_queried_sql: tuple[str, ...]
     expected_source_column_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SeedIdentityTestCase:
+    description: str
+    seed_contents: str
+    comparison_contents: str
+    expected_same_identity: bool
+    seed_relative_path: Path = Path("seeds/orders.csv")
+
+
+@dataclass(frozen=True)
+class SeedIdentityCsvConfigTestCase:
+    description: str
+    seed_contents: str
+    expected_same_identity: bool
+
+
+@dataclass(frozen=True)
+class MarkVersionIdentityStaleActionsTestCase:
+    description: str
+    model_key: CompiledObjectKey
+    change_kind: ChangeKind
+    previous_version_hash: str
+    expected_version_hash: str
+    expected_cascade_present: bool
+
+
+@dataclass(frozen=True)
+class DirectIdentityStaleModelNamesTestCase:
+    description: str
+    expected_version_hashes: dict[str, str]
+    built_version_hashes: dict[str, str | None]
+    expected_stale_model_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetSnapshotTestCase:
+    description: str
+    fingerprint_rows: tuple[tuple[object, ...], ...]
+    existing_relations: frozenset[tuple[str | None, str | None, str]]
+    expected_target_name: str
+    expected_model_relation_exists: dict[str, bool]
+    expected_model_built_version_hashes: dict[str, str | None]
+    expected_model_fingerprint_schemas: dict[str, str] = field(default_factory=dict)
+    expected_model_fingerprint_databases: dict[str, str | None] = field(default_factory=dict)
+    expected_model_names: tuple[str, ...] = ()
+    selected_model_names: frozenset[str] | None = None
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetSnapshotErrorTestCase:
+    description: str
+    fingerprint_table_exists: bool
+    expected_error_fragment: str
+    fingerprint_read_fails: bool = False
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetMultiSchemaTestCase:
+    description: str
+    expected_origin_schemas: dict[str, str]
+    expected_origin_fingerprint_schemas: dict[str, str]
+    expected_origin_fingerprint_databases: dict[str, str | None]
+
+
+@dataclass(frozen=True)
+class StandardReuseFromTargetNoConfigTestCase:
+    description: str
+    expected_snapshot: object
+
+
+@dataclass(frozen=True)
+class StandardReuseDecisionTestCase:
+    description: str
+    expected_decisions: dict[str, str]
+
+
+@dataclass(frozen=True)
+class VersionStalenessTestCase:
+    description: str
+    model_names: tuple[str, ...]
+    expected_version_hashes: dict[str, str]
+    built_version_hashes: dict[str, str | None]
+    forced_stale_model_names: tuple[str, ...]
+    expected_stale_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelClosureTestCase:
+    description: str
+    expected_downstream_model_names: frozenset[str]
+    expected_upstream_model_names: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -425,10 +520,12 @@ class ScenarioUnmockedSeedExecutionPlanTestCase:
 class PlanAuditTestCase:
     description: str
     sql_body: str
-    model_targets: dict[str, str]
+    model_locations: dict[str, str]
     source_map_entries: dict[str, tuple[str | None, str, str | None]]
     expected_sql_fragment: str
     expected_error_fragment: str = ""
+    always_run: bool = False
+    expected_always_run: bool = False
 
 
 @dataclass(frozen=True)
@@ -503,6 +600,14 @@ class CursorStartBoundsTestCase:
 
 
 @dataclass(frozen=True)
+class PlanEntryCursorOverrideTestCase:
+    description: str
+    start_cursor_override: str
+    end_cursor_override: str
+    expected_bounds: CursorBounds
+
+
+@dataclass(frozen=True)
 class CursorTypeCheckTestCase:
     description: str
     cursor_column: str | None
@@ -543,7 +648,7 @@ class DetectFunctionChangeTestCase:
     description: str
     body_sql: str
     previous_query_sql: str
-    query_change_backfill: str | None
+    replay_on_change: str | None
     expected_reason: PlanReason
     expected_action: BackfillAction
     expected_duration: str | None = None
@@ -578,3 +683,15 @@ class ResolveEffectiveRunScopeTestCase:
     requested_run_scope: AuditRunScope
     attached_model_materialization: str | None
     expected_effective_run_scope: AuditRunScope
+
+
+@dataclass(frozen=True)
+class RunDespiteUnchangedPlanningTestCase:
+    description: str
+    run_despite_unchanged: object
+    materialized: str
+    data_version: str | None
+    value_kind: str
+    expected_root_model_names: frozenset[str]
+    expected_stale_model_names: frozenset[str]
+    expected_error_fragment: str | None = None

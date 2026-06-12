@@ -246,6 +246,16 @@ ERROR_TEST_CASES: list[IncrementalConfigErrorTestCase] = [
         expected_error_fragment="unknown incremental_strategy",
     ),
     IncrementalConfigErrorTestCase(
+        description="mapping replay_on_change raises",
+        config_values={
+            "materialized": "incremental",
+            "incremental_strategy": "append",
+            "replay_on_change": {"add_column": "bounded-30d"},
+        },
+        ref_count=1,
+        expected_error_fragment="replay_on_change must be a string",
+    ),
+    IncrementalConfigErrorTestCase(
         description="cursor without cursor_type raises",
         config_values={
             "materialized": "incremental",
@@ -440,10 +450,10 @@ NON_INCREMENTAL_VALID_TEST_CASES: list[NonIncrementalConfigValidTestCase] = [
         config_values={"materialized": "incremental", "on_schema_change": "append_new_columns"},
     ),
     NonIncrementalConfigValidTestCase(
-        description="incremental model with schema_change_backfill passes",
+        description="incremental model with replay_on_change passes",
         config_values={
             "materialized": "incremental",
-            "schema_change_backfill": {"add_column": "bounded-30d"},
+            "replay_on_change": "bounded-30d",
         },
     ),
     NonIncrementalConfigValidTestCase(
@@ -490,20 +500,20 @@ NON_INCREMENTAL_ERROR_TEST_CASES: list[NonIncrementalConfigErrorTestCase] = [
         expected_error_fragment="on_schema_change is only valid for incremental",
     ),
     NonIncrementalConfigErrorTestCase(
-        description="table model with schema_change_backfill raises",
+        description="table model with replay_on_change raises",
         config_values={
             "materialized": "table",
-            "schema_change_backfill": {"add_column": "full"},
+            "replay_on_change": "full",
         },
-        expected_error_fragment="schema_change_backfill is only valid for incremental",
+        expected_error_fragment="replay_on_change is only valid for incremental",
     ),
     NonIncrementalConfigErrorTestCase(
-        description="view model with schema_change_backfill raises",
+        description="view model with replay_on_change raises",
         config_values={
             "materialized": "view",
-            "schema_change_backfill": {"type_change": "full"},
+            "replay_on_change": "full",
         },
-        expected_error_fragment="schema_change_backfill is only valid for incremental",
+        expected_error_fragment="replay_on_change is only valid for incremental",
     ),
     NonIncrementalConfigErrorTestCase(
         description="table model with append_cursor_inclusive raises",

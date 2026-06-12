@@ -8,10 +8,10 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationDestination
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
-from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
+from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.contracts import validate_runtime_contract
@@ -22,7 +22,11 @@ from sqlbuild.executor.run.helpers.cursor_bounds import (
 )
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.reuse import (
+    create_relation_from_reuse_plan,
+)
 from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
@@ -31,8 +35,8 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
 from sqlbuild.shared.helpers.naming import (
-    resolve_destination_qualified_name,
     resolve_qualified_name_parts,
+    resolve_relation_location_qualified_name,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -44,8 +48,8 @@ def execute_incremental_entry(
     entry: ModelPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
-    model_targets: dict[str, CompiledRelationDestination],
-    seed_targets: dict[str, CompiledRelationDestination],
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     model_audits: tuple[AuditPlanEntry, ...],
     declared_columns: tuple[ColumnInfo, ...],
@@ -61,8 +65,8 @@ def execute_incremental_entry(
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
-    target_qualified: str = resolve_destination_qualified_name(
-        adapter=adapter, target=entry.destination
+    target_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
     )
     delta_table: str = f"{target_table}__delta"
     delta_qualified: str = resolve_qualified_name_parts(
@@ -70,6 +74,13 @@ def execute_incremental_entry(
         database=target_database,
         schema=target_schema,
         name=delta_table,
+    )
+    seed_table: str = f"{target_table}__reuse_seed"
+    seed_qualified: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=target_database,
+        schema=target_schema,
+        name=seed_table,
     )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
@@ -111,6 +122,41 @@ def execute_incremental_entry(
         )
 
     try:
+        adapter.ensure_schema(
+            connection,
+            database=target_database,
+            schema=target_schema,
+            statement_recorder=statement_recorder,
+        )
+        if (
+            entry.relation_reuse is not None
+            and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+        ):
+            adapter.drop(
+                connection,
+                destination=seed_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            create_relation_from_reuse_plan(
+                adapter=adapter,
+                connection=connection,
+                model_name=entry.name,
+                expected_version_hash=entry.fingerprint_version_hash,
+                relation_reuse=entry.relation_reuse,
+                destination_relation=seed_qualified,
+                statement_recorder=statement_recorder,
+            )
+            promote_relation_to_destination(
+                adapter=adapter,
+                connection=connection,
+                origin_relation=seed_qualified,
+                destination_relation=target_qualified,
+                destination_database=target_database,
+                destination_schema=target_schema,
+                destination_name=target_table,
+                statement_recorder=statement_recorder,
+            )
         if runtime_owned_cursor_bounds:
             if entry.cursor_column is None:
                 raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
@@ -118,6 +164,9 @@ def execute_incremental_entry(
                 adapter=adapter,
                 connection=connection,
                 target_relation=target_qualified,
+                target_database=target_database,
+                target_schema=target_schema,
+                target_name=target_table,
                 cursor_column=entry.cursor_column,
                 cursor_type=entry.cursor_type,
                 cursor_grain=entry.cursor_grain,
@@ -134,13 +183,13 @@ def execute_incremental_entry(
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
             adapter.drop(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
             adapter.create_table_as(
                 connection,
-                target=delta_qualified,
+                destination=delta_qualified,
                 sql=resolved_sql,
                 statement_recorder=statement_recorder,
             )
@@ -256,8 +305,8 @@ def execute_incremental_entry(
                 audit=audit,
                 adapter=adapter,
                 connection=connection,
-                model_targets=model_targets,
-                seed_targets=seed_targets,
+                model_locations=model_locations,
+                seed_locations=seed_locations,
                 source_map=source_map,
                 relation_overrides=delta_overrides,
                 run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
@@ -315,8 +364,8 @@ def execute_incremental_entry(
             audit=audit,
             adapter=adapter,
             connection=connection,
-            model_targets=model_targets,
-            seed_targets=seed_targets,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
             source_map=source_map,
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,
@@ -380,12 +429,14 @@ def execute_incremental_entry(
         run_id=run_id,
         query_change_tracking=query_change_tracking,
         warnings=warnings,
+        model_audits=model_audits,
+        audit_results=tuple(audit_results),
     )
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
         adapter.drop(
             connection,
-            target=delta_qualified,
+            destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
         )
@@ -472,7 +523,7 @@ def _apply_schema_change(
         if added:
             adapter.add_columns(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
             )
@@ -487,21 +538,21 @@ def _apply_schema_change(
         if added:
             adapter.add_columns(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
             )
         if removed:
             adapter.drop_columns(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 column_names=tuple(removed),
                 statement_recorder=statement_recorder,
             )
         if type_changed:
             adapter.alter_column_types(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 columns=tuple(type_changed),
                 statement_recorder=statement_recorder,
             )
@@ -541,7 +592,7 @@ def _execute_dml(
     if strategy == IncrementalStrategy.APPEND:
         adapter.append(
             connection,
-            target=target_qualified,
+            destination=target_qualified,
             sql=dml_sql,
             columns=dml_columns,
             statement_recorder=statement_recorder,
@@ -559,7 +610,7 @@ def _execute_dml(
                 )
             adapter.delete_insert_cursor(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 sql=dml_sql,
                 cursor_column=cursor_column,
                 cursor_start=cursor_start,
@@ -570,7 +621,7 @@ def _execute_dml(
         else:
             adapter.delete_insert(
                 connection,
-                target=target_qualified,
+                destination=target_qualified,
                 sql=dml_sql,
                 unique_key=unique_key,
                 columns=dml_columns,
@@ -583,7 +634,7 @@ def _execute_dml(
         merge_sql: str = f"SELECT {merge_projection} FROM {delta_qualified}"
         adapter.merge(
             connection,
-            target=target_qualified,
+            destination=target_qualified,
             sql=merge_sql,
             unique_key=unique_key,
             statement_recorder=statement_recorder,

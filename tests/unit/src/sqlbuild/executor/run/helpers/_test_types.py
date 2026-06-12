@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus
 from sqlbuild.executor.shared.types import ExecutionPhase
 
 
@@ -36,6 +37,23 @@ class RuntimeCursorStartTestCase:
     cursor_start: str | None
     expected_start: str
     expected_end: str
+
+
+@dataclass(frozen=True)
+class RuntimeTargetMaxTestCase:
+    description: str
+    target_rows: tuple[object, ...]
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class RuntimeTargetProbeFailureTestCase:
+    description: str
+    expected_error_type: type[BaseException]
 
 
 @dataclass(frozen=True)
@@ -139,6 +157,88 @@ class SnapshotSchemaChangeTestCase:
     delta_columns: tuple[ColumnInfo, ...]
     expected_valid: bool
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class FingerprintAuditGateMetadataTestCase:
+    description: str
+    audit_outcome: str
+    expected_status: AuditGateStatus
+    expected_result_count: int
+    expected_existing_field: str
+
+
+@dataclass(frozen=True)
+class FingerprintAuditGateNoAuditsTestCase:
+    description: str
+    expected_existing_field: str
+
+
+@dataclass(frozen=True)
+class FingerprintAuditGateEdgeTestCase:
+    description: str
+    plan_severity: str
+    result_outcome: str
+    result_audit_name: str
+    result_column_name: str | None
+    expected_status: AuditGateStatus
+    expected_result_count: int
+
+
+@dataclass(frozen=True)
+class TryWriteFingerprintAuditGateTestCase:
+    description: str
+    expected_status: AuditGateStatus
+    expected_result_count: int
+
+
+@dataclass(frozen=True)
+class AuditGateReuseDecisionTestCase:
+    description: str
+    metadata_mode: str
+    status: AuditGateStatus
+    planned_attached_column_name: str | None
+    planned_resolved_sql: str
+    expected_reusable: bool
+    expected_reason: AuditGateReuseReason
+    expected_reusable_count: int
+    expected_missing_count: int
+    planned_always_run: bool = False
+
+
+@dataclass(frozen=True)
+class AuditGatePartialReuseDecisionTestCase:
+    description: str
+    changed_resolved_sql: str
+    expected_reusable: bool
+    expected_reason: AuditGateReuseReason
+    expected_reusable_count: int
+    expected_missing_count: int
+
+
+@dataclass(frozen=True)
+class ReuseFromAuditGateDecisionTestCase:
+    description: str
+    origin_unresolved_sql: str
+    origin_resolved_sql: str
+    planned_unresolved_sql: str
+    planned_resolved_sql: str
+    severity: str
+    expected_reusable: bool
+    expected_reason: AuditGateReuseReason
+    expected_reusable_count: int
+    expected_missing_count: int
+    planned_always_run: bool = False
+
+
+@dataclass(frozen=True)
+class RelationReuseOriginExecutionTestCase:
+    description: str
+    hard_copy: bool
+    supports_zero_copy_clone: bool
+    expected_calls: tuple[str, ...]
+    expected_sql: str | None = None
+    expected_error_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

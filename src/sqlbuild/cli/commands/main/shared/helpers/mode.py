@@ -6,7 +6,7 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 
-def enforce_direct_mode_command_support(
+def enforce_standard_mode_command_support(
     *, discovered_inputs: DiscoveredProjectInputs, command_name: str
 ) -> None:
     """Block commands that are not yet supported in virtual mode."""

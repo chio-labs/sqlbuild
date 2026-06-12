@@ -63,9 +63,7 @@ class BuildCompileInputsTestCase:
     expected_sql_function_runtime_versions: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_entry_points: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_packages: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
-    expected_sql_function_query_change_backfills: tuple[str | None, ...] = field(
-        default_factory=tuple
-    )
+    expected_sql_function_replay_on_changes: tuple[str | None, ...] = field(default_factory=tuple)
     expected_model_references: tuple[tuple[tuple[str, str], ...], ...] = field(
         default_factory=tuple
     )
@@ -104,6 +102,21 @@ class BuildEffectiveRuntimeConfigTestCase:
 
 
 @dataclass(frozen=True)
+class BuildEffectiveTargetConfigTestCase:
+    description: str
+    selected_target: str | None
+    expected_reuse_from: str | None
+    expected_reuse_hard_copy: bool
+
+
+@dataclass(frozen=True)
+class RunIdGenerationTestCase:
+    description: str
+    sample_count: int
+    expected_pattern: str
+
+
+@dataclass(frozen=True)
 class BuildModelConfigHooksTestCase:
     description: str
     default_hook: object
@@ -126,8 +139,10 @@ class ResolveTargetConfigTestCase:
     expected_vars: dict[str, object]
     expected_database: str
     expected_schema: str
-    expected_allow_as_source: bool
-    expected_allow_as_target: bool
+    expected_reuse_from: str | None
+    expected_reuse_hard_copy: bool
+    expected_allow_as_clone_origin: bool
+    expected_allow_as_clone_destination: bool
 
 
 @dataclass(frozen=True)

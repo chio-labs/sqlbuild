@@ -14,14 +14,11 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.changes.config import (
-    get_config_dict,
-    get_config_str,
-)
+from sqlbuild.compiler.planner.helpers.changes.config import get_config_str
+from sqlbuild.compiler.planner.helpers.changes.metadata import version_identity_metadata_payload
 from sqlbuild.compiler.planner.helpers.changes.policy import (
     pick_more_aggressive,
-    resolve_query_change_backfill,
-    resolve_schema_change_backfill,
+    resolve_replay_on_change,
 )
 from sqlbuild.compiler.planner.helpers.changes.query import detect_query_change
 from sqlbuild.compiler.planner.helpers.changes.schema import detect_schema_changes
@@ -55,6 +52,8 @@ def detect_changes(
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     full_refresh: bool,
+    expected_version_hashes: dict[str, str] | None = None,
+    expected_metadata_jsons: dict[str, str] | None = None,
 ) -> PlannerChangeResults:
     """Detect selected model and function changes."""
 
@@ -76,6 +75,8 @@ def detect_changes(
             query_change_tracking=project.settings.query_change_tracking,
             full_refresh=full_refresh,
             function_local_hashes=function_local_hashes,
+            expected_version_hash=(expected_version_hashes or {}).get(model.name),
+            expected_metadata_json=(expected_metadata_jsons or {}).get(model.name),
         )
 
     function_changes: dict[str, FunctionChangeResult] = {}
@@ -113,11 +114,13 @@ def detect_model_changes(
     query_change_tracking: bool,
     full_refresh: bool,
     function_local_hashes: dict[str, str] | None = None,
+    expected_version_hash: str | None = None,
+    expected_metadata_json: str | None = None,
 ) -> ChangeDetectionResult:
     """Detect changes for one model and resolve backfill policy."""
 
     model_name: str = model.name
-    metadata_json: str = build_model_version_identity_metadata_json(
+    metadata_json: str = expected_metadata_json or build_model_version_identity_metadata_json(
         model=model,
         function_local_hashes=function_local_hashes,
     )
@@ -128,10 +131,11 @@ def detect_model_changes(
             change_kind=ChangeKind.NO_CHANGE,
             backfill=BackfillResult(action=BackfillAction.FULL),
             fingerprint_metadata_json=metadata_json,
+            fingerprint_version_hash=expected_version_hash,
         )
 
     relation_exists: bool = model_name in snapshot.existing_relations
-    fingerprint: Fingerprint | None = snapshot.fingerprints.get(model_name)
+    fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model_name)
 
     if not relation_exists and fingerprint is None:
         return ChangeDetectionResult(
@@ -139,15 +143,17 @@ def detect_model_changes(
             change_kind=ChangeKind.FIRST_RUN,
             backfill=BackfillResult(action=BackfillAction.FULL),
             fingerprint_metadata_json=metadata_json,
+            fingerprint_version_hash=expected_version_hash,
         )
 
     query_changed: bool = False
     config_changed: bool = (
         fingerprint is not None
         and fingerprint.metadata_json != "{}"
-        and metadata_json != fingerprint.metadata_json
+        and version_identity_metadata_payload(metadata_json)
+        != version_identity_metadata_payload(fingerprint.metadata_json)
     )
-    query_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
+    replay_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     if query_change_tracking and fingerprint is not None:
         debug_logger: logging.Logger = logging.getLogger("sqlbuild.planner.changes")
         compiled_query_hash: str = compute_query_hash(model.query_sql)
@@ -160,7 +166,7 @@ def detect_model_changes(
             (
                 "fingerprint comparison"
                 f" compiled_query_hash={compiled_query_hash}"
-                f" fingerprint_query_hash={fingerprint.query_hash}"
+                f" fingerprint_definition_hash={fingerprint.definition_hash}"
                 f" query_changed={query_changed}"
             ),
             sqlbuild_subject="model",
@@ -170,13 +176,13 @@ def detect_model_changes(
             sqlbuild_status="changed" if query_changed else "unchanged",
         )
         log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
-        log_sql(logger=debug_logger, sql=fingerprint.query_sql, action="fingerprint_query")
+        log_sql(logger=debug_logger, sql=fingerprint.definition, action="fingerprint_definition")
         if query_changed:
-            raw_policy: str | None = get_config_str(model, "query_change_backfill")
-            query_backfill = resolve_query_change_backfill(query_change_backfill=raw_policy)
+            raw_policy: str | None = get_config_str(model, "replay_on_change")
+            replay_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
 
     schema_findings: tuple[SchemaFinding, ...] = ()
-    schema_backfill: BackfillResult = BackfillResult(action=BackfillAction.WARN_ONLY)
+    schema_backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
     warehouse_columns: tuple[ColumnInfo, ...] | None = snapshot.existing_columns.get(model_name)
     yml_columns: tuple[ColumnInfo, ...] = _build_yml_columns(model)
     inferred_columns: tuple[InferredColumn, ...] | None = model.inferred_columns
@@ -192,13 +198,10 @@ def detect_model_changes(
             type_enforcement=type_enforcement,
         )
         if schema_findings:
-            raw_schema_policy: dict[str, str] = get_config_dict(model, "schema_change_backfill")
-            schema_backfill = resolve_schema_change_backfill(
-                schema_change_backfill=raw_schema_policy,
-                findings=schema_findings,
-            )
+            raw_policy = get_config_str(model, "replay_on_change")
+            schema_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
 
-    backfill: BackfillResult = pick_more_aggressive(query_backfill, schema_backfill)
+    backfill: BackfillResult = pick_more_aggressive(replay_backfill, schema_backfill)
 
     change_kind: ChangeKind
     if query_changed:
@@ -217,6 +220,8 @@ def detect_model_changes(
         config_changed=config_changed,
         fingerprint_metadata_json=metadata_json,
         previous_metadata_json=fingerprint.metadata_json if fingerprint is not None else None,
+        fingerprint_version_hash=expected_version_hash,
+        previous_version_hash=fingerprint.version_hash if fingerprint is not None else None,
         schema_findings=schema_findings,
         backfill=backfill,
     )

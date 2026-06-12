@@ -1,4 +1,4 @@
-"""Direct source freshness state exceptions."""
+"""Standard source freshness state exceptions."""
 
 from __future__ import annotations
 

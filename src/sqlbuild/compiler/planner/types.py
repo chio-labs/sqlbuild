@@ -17,18 +17,29 @@ class SelectorKind(StrEnum):
     PATH = "path"
 
 
+class WorkSelectionPolicy(StrEnum):
+    ALL_SELECTED = "all_selected"
+    STALE_ONLY = "stale_only"
+
+
+class StandardScopePruning(StrEnum):
+    NONE = "none"
+    PRUNE_UNCHANGED = "prune_unchanged"
+
+
 class ChangeKind(StrEnum):
     FIRST_RUN = "first_run"
     QUERY_CHANGED = "query_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
+    RUN_DESPITE_UNCHANGED = "run_despite_unchanged"
     NO_CHANGE = "no_change"
 
 
 class BackfillAction(StrEnum):
     FULL = "full"
     BOUNDED = "bounded"
-    WARN_ONLY = "warn_only"
+    FORWARD_ONLY = "forward"
 
 
 class OnSchemaChange(StrEnum):
@@ -78,10 +89,31 @@ class PlanReason(StrEnum):
     FUNCTION_CHANGED = "function_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
+    RUN_DESPITE_UNCHANGED = "run_despite_unchanged"
     UPSTREAM_CHANGED = "upstream_changed"
     NORMAL_INCREMENTAL = "normal_incremental"
     NO_CHANGE = "no_change"
     DISABLED = "disabled"
+
+
+class RunDespiteUnchangedMode(StrEnum):
+    ALWAYS = "always"
+    DURATION = "duration"
+
+
+class StandardReuseDecisionKind(StrEnum):
+    REUSE_ELIGIBLE = "reuse_eligible"
+    CURRENT = "current"
+    REUSE_ORIGIN_FINGERPRINT_MISSING = "reuse_origin_fingerprint_missing"
+    REUSE_ORIGIN_RELATION_MISSING = "reuse_origin_relation_missing"
+    REUSE_ORIGIN_VERSION_MISMATCH = "reuse_origin_version_mismatch"
+    REUSE_FROM_SOURCE_FRESHNESS_STALE = "reuse_from_source_freshness_stale"
+    INELIGIBLE_MATERIALIZATION = "ineligible_materialization"
+
+
+class RelationReuseKind(StrEnum):
+    COMPLETE_RELATION_REUSE = "complete_relation_reuse"
+    SEEDED_RELATION_REUSE = "seeded_relation_reuse"
 
 
 class IncrementalStrategy(StrEnum):

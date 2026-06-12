@@ -19,6 +19,7 @@ from sqlbuild.adapter.base.base_adapter import (
     _historical_snapshot_combined_close_sql,
     _historical_timestamp_changes_select_sql,
     _historical_timestamp_snapshot_select_sql,
+    _quote_sql_string,
     _snapshot_hard_delete_close_sql,
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
@@ -170,9 +171,12 @@ class PostgresAdapter(BaseAdapter):
     ) -> bool:
         """Return whether the named schema exists in the warehouse."""
 
-        query: str = f"SELECT 1 FROM information_schema.schemata WHERE schema_name = '{schema}'"
+        query: str = (
+            "SELECT 1 FROM information_schema.schemata "
+            f"WHERE schema_name = {_quote_sql_string(schema)}"
+        )
         if database is not None:
-            query += f" AND catalog_name = '{database}'"
+            query += f" AND catalog_name = {_quote_sql_string(database)}"
         cursor: Any = self.execute(connection, query)
         return cursor.fetchone() is not None
 
@@ -206,9 +210,9 @@ class PostgresAdapter(BaseAdapter):
     ) -> bool:
         cursor: Any = connection.execute(
             "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_name = '{name}'"
-            + (f" AND table_schema = '{schema}'" if schema else "")
-            + (f" AND table_catalog = '{database}'" if database else "")
+            f"WHERE table_name = {_quote_sql_string(name)}"
+            + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
         )
         return cursor.fetchone() is not None
 
@@ -225,7 +229,7 @@ class PostgresAdapter(BaseAdapter):
             "FROM information_schema.tables WHERE 1=1"
             + _build_schemas_filter(schemas)
             + _build_names_filter(names)
-            + (f" AND table_catalog = '{database}'" if database else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
         )
         cursor: Any = connection.execute(query)
         return tuple(
@@ -251,7 +255,7 @@ class PostgresAdapter(BaseAdapter):
             "FROM information_schema.routines WHERE 1=1"
             + _build_schemas_filter(schemas, column_name="routine_schema")
             + _build_names_filter(names, column_name="routine_name")
-            + (f" AND routine_catalog = '{database}'" if database else "")
+            + (f" AND routine_catalog = {_quote_sql_string(database)}" if database else "")
         )
         cursor: Any = connection.execute(query)
         return tuple(
@@ -274,9 +278,9 @@ class PostgresAdapter(BaseAdapter):
     ) -> tuple[ColumnInfo, ...]:
         query: str = (
             "SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name = '{name}'"
-            + (f" AND table_schema = '{schema}'" if schema else "")
-            + (f" AND table_catalog = '{database}'" if database else "")
+            f"WHERE table_name = {_quote_sql_string(name)}"
+            + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
             + " ORDER BY ordinal_position"
         )
         cursor: Any = connection.execute(query)
@@ -295,7 +299,7 @@ class PostgresAdapter(BaseAdapter):
             "FROM information_schema.columns WHERE 1=1"
             + _build_schemas_filter(schemas)
             + _build_names_filter(names)
-            + (f" AND table_catalog = '{database}'" if database else "")
+            + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
             + " ORDER BY table_name, ordinal_position"
         )
         cursor: Any = connection.execute(query)
@@ -336,8 +340,8 @@ class PostgresAdapter(BaseAdapter):
         for stmt in statements:
             self.execute(connection, stmt)
 
-    def render_create_view_as(self, *, target: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE VIEW {target} AS {sql}",)
+    def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"
@@ -348,7 +352,7 @@ class PostgresAdapter(BaseAdapter):
     def render_create_function(
         self,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -371,48 +375,48 @@ class PostgresAdapter(BaseAdapter):
         else:
             returns_clause = f"RETURNS {returns}"
         return (
-            f"CREATE OR REPLACE FUNCTION {target}({arg_sql})\n"
+            f"CREATE OR REPLACE FUNCTION {destination}({arg_sql})\n"
             f"{returns_clause}\n"
             f"LANGUAGE SQL AS $$\n{body_sql}\n$$",
         )
 
     def render_append(
-        self, *, target: str, sql: str, columns: tuple[str, ...] | None = None
+        self, *, destination: str, sql: str, columns: tuple[str, ...] | None = None
     ) -> tuple[str, ...]:
         column_sql: str = ""
         if columns is not None:
             column_sql = (
                 " (" + ", ".join(self.render_identifier(column) for column in columns) + ")"
             )
-        return (f"INSERT INTO {target}{column_sql} {sql}",)
+        return (f"INSERT INTO {destination}{column_sql} {sql}",)
 
     def render_delete_insert(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         columns: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        staged: str = f"{target}__delete_insert"
+        staged: str = f"{destination}__delete_insert"
         key_condition: str = " AND ".join(
-            f"{target}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
+            f"{destination}.{self.render_identifier(k)} = {staged}.{self.render_identifier(k)}"
             for k in unique_key
         )
-        create_staged: tuple[str, ...] = self.render_create_table_as(target=staged, sql=sql)
-        delete_sql: str = f"DELETE FROM {target} USING {staged} WHERE {key_condition}"
+        create_staged: tuple[str, ...] = self.render_create_table_as(destination=staged, sql=sql)
+        delete_sql: str = f"DELETE FROM {destination} USING {staged} WHERE {key_condition}"
         insert_stmts: tuple[str, ...] = self.render_append(
-            target=target,
+            destination=destination,
             sql=f"SELECT * FROM {staged}",
             columns=columns,
         )
-        drop_staged: tuple[str, ...] = self.render_drop(target=staged, if_exists=True)
+        drop_staged: tuple[str, ...] = self.render_drop(destination=staged, if_exists=True)
         return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
 
     def render_delete_insert_cursor(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -421,40 +425,42 @@ class PostgresAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         quoted_cursor_column: str = self.render_identifier(cursor_column)
         delete_sql: str = (
-            f"DELETE FROM {target} WHERE {quoted_cursor_column} >= '{cursor_start}' "
+            f"DELETE FROM {destination} WHERE {quoted_cursor_column} >= '{cursor_start}' "
             f"AND {quoted_cursor_column} < '{cursor_end}'"
         )
-        insert_stmts: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        insert_stmts: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         return (delete_sql, *insert_stmts)
 
-    def render_drop(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP TABLE{exists_clause} {target}",)
+        return (f"DROP TABLE{exists_clause} {destination}",)
 
-    def render_drop_view(self, *, target: str, if_exists: bool = True) -> tuple[str, ...]:
+    def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
-        return (f"DROP VIEW{exists_clause} {target}",)
+        return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         staging: str = f"{left}__swap_staging"
         return (
-            *self.render_rename(source=left, target=staging),
-            *self.render_rename(source=right, target=left),
-            *self.render_rename(source=staging, target=right),
+            *self.render_rename(origin=left, destination=staging),
+            *self.render_rename(origin=right, destination=left),
+            *self.render_rename(origin=staging, destination=right),
         )
 
     def render_clone(
         self,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
     ) -> tuple[str, ...]:
         del hard_copy
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, source: str, target: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
         self,
@@ -476,13 +482,13 @@ class PostgresAdapter(BaseAdapter):
     def render_seed_select_before_cursor(
         self,
         *,
-        source: str,
+        origin: str,
         cursor_column: str,
         cursor_end_exclusive: str,
         cursor_type: str | None,
     ) -> str:
         return self._render_seed_select_before_cursor_impl(
-            source=source,
+            origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
             cursor_type=cursor_type,
@@ -491,35 +497,40 @@ class PostgresAdapter(BaseAdapter):
     def relation_names_match(self, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left, right)
 
-    def render_replace_table_from_relation(self, *, target: str, source: str) -> tuple[str, ...]:
-        return self.render_create_table_as(target=target, sql=f"SELECT * FROM {source}")
+    def render_replace_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_add_columns(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
             for col in columns
         )
 
-    def render_drop_columns(self, *, target: str, column_names: tuple[str, ...]) -> tuple[str, ...]:
+    def render_drop_columns(
+        self, *, destination: str, column_names: tuple[str, ...]
+    ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} DROP COLUMN {self.render_identifier(col_name)}"
+            f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
 
     def render_alter_column_types(
-        self, *, target: str, columns: tuple[ColumnInfo, ...]
+        self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {target} ALTER COLUMN {self.render_identifier(col.name)} TYPE {col.type}"
+            f"ALTER TABLE {destination} ALTER COLUMN "
+            f"{self.render_identifier(col.name)} TYPE {col.type}"
             for col in columns
         )
 
     def render_merge(
         self,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
@@ -538,7 +549,7 @@ class PostgresAdapter(BaseAdapter):
             f"__source.{self.render_identifier(col)}" for col in source_columns
         )
         merge_sql: str = (
-            f"MERGE INTO {target} AS __target USING ({sql}) AS __source ON {join_condition} "
+            f"MERGE INTO {destination} AS __target USING ({sql}) AS __source ON {join_condition} "
         )
         if update_assignments:
             merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_assignments} "
@@ -552,12 +563,12 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -567,11 +578,11 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_view_as(target=target, sql=sql)
+        statements: tuple[str, ...] = self.render_create_view_as(destination=destination, sql=sql)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -581,7 +592,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         arguments: tuple[Any, ...],
         returns: str,
         body_sql: str,
@@ -595,7 +606,7 @@ class PostgresAdapter(BaseAdapter):
     ) -> None:
         del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            target=target,
+            destination=destination,
             arguments=arguments,
             returns=returns,
             body_sql=body_sql,
@@ -614,11 +625,11 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop(destination=destination, if_exists=if_exists)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -628,11 +639,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_drop_view(target=target, if_exists=if_exists)
+        statements: tuple[str, ...] = self.render_drop_view(
+            destination=destination, if_exists=if_exists
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -642,11 +655,11 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_rename(source=source, target=target)
+        statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -671,14 +684,14 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         hard_copy: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
-            source=source,
-            target=target,
+            origin=origin,
+            destination=destination,
             hard_copy=hard_copy,
         )
         statement_recorder.record_many(statements)
@@ -690,11 +703,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
+        origin: str,
+        destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_durable_clone(source=source, target=target)
+        statements: tuple[str, ...] = self.render_durable_clone(
+            origin=origin, destination=destination
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -704,13 +719,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -721,39 +736,45 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        source: str,
-        target: str,
-        remove_source: bool,
+        origin: str,
+        destination: str,
+        remove_origin: bool,
         allow_copy_fallback: bool,
         statement_recorder: StatementRecorder,
     ) -> None:
-        source_parent: str = source.rsplit(".", 1)[0] if "." in source else ""
-        target_parent: str = target.rsplit(".", 1)[0] if "." in target else ""
-        if remove_source and source_parent == target_parent:
+        origin_parent: str = origin.rsplit(".", 1)[0] if "." in origin else ""
+        destination_parent: str = destination.rsplit(".", 1)[0] if "." in destination else ""
+        if remove_origin and origin_parent == destination_parent:
             self.rename(
                 connection,
-                source=source,
-                target=target,
+                origin=origin,
+                destination=destination,
                 statement_recorder=statement_recorder,
             )
             return
-        source_parts: list[str] = source.split(".")
-        target_parts: list[str] = target.split(".")
+        origin_parts: list[str] = origin.split(".")
+        destination_parts: list[str] = destination.split(".")
         if (
-            remove_source
-            and len(source_parts) >= 2
-            and len(target_parts) >= 2
-            and source_parts[:-2] == target_parts[:-2]
+            remove_origin
+            and len(origin_parts) >= 2
+            and len(destination_parts) >= 2
+            and origin_parts[:-2] == destination_parts[:-2]
         ):
-            source_name: str = source_parts[-1]
-            target_schema: str = target_parts[-2]
-            target_name: str = target_parts[-1]
+            origin_name: str = origin_parts[-1]
+            destination_schema: str = destination_parts[-2]
+            destination_name: str = destination_parts[-1]
             statements: tuple[str, ...] = ()
-            moved_source: str = source
-            if source_name != target_name:
-                statements = (*statements, *self.render_rename(source=source, target=target))
-                moved_source = ".".join((*source_parts[:-1], target_name))
-            statements = (*statements, f"ALTER TABLE {moved_source} SET SCHEMA {target_schema}")
+            moved_origin: str = origin
+            if origin_name != destination_name:
+                statements = (
+                    *statements,
+                    *self.render_rename(origin=origin, destination=destination),
+                )
+                moved_origin = ".".join((*origin_parts[:-1], destination_name))
+            statements = (
+                *statements,
+                f"ALTER TABLE {moved_origin} SET SCHEMA {destination_schema}",
+            )
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
@@ -762,11 +783,11 @@ class PostgresAdapter(BaseAdapter):
         if not allow_copy_fallback:
             raise AdapterUserError("Postgres relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
         )
-        if remove_source:
-            statements = (*statements, *self.render_drop(target=source))
+        if remove_origin:
+            statements = (*statements, *self.render_drop(destination=origin))
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -776,12 +797,14 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_append(target=target, sql=sql, columns=columns)
+        statements: tuple[str, ...] = self.render_append(
+            destination=destination, sql=sql, columns=columns
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -791,7 +814,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
@@ -799,7 +822,7 @@ class PostgresAdapter(BaseAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
-            target=target, sql=sql, unique_key=keys, columns=columns
+            destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
@@ -811,7 +834,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         cursor_column: str,
         cursor_start: str,
@@ -820,7 +843,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
-            target=target,
+            destination=destination,
             sql=sql,
             cursor_column=cursor_column,
             cursor_start=cursor_start,
@@ -957,11 +980,11 @@ class PostgresAdapter(BaseAdapter):
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
 
-    def render_create_initial_snapshot_target(
+    def render_create_initial_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         snapshot_strategy: str | None,
         updated_at_column: str | None,
         observed_at_column: str | None,
@@ -978,18 +1001,18 @@ class PostgresAdapter(BaseAdapter):
             current_timestamp=self.render_current_timestamp(),
         )
         return self.render_create_table_as(
-            target=target,
+            destination=destination,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {source}"
+                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {origin}"
             ),
         )
 
     def render_apply_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str | None,
@@ -1012,9 +1035,9 @@ class PostgresAdapter(BaseAdapter):
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = __source.{updated_at_column} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND __source.{updated_at_column} > __target.{updated_at_column}"
@@ -1030,10 +1053,10 @@ class PostgresAdapter(BaseAdapter):
             f"ELSE __source.{updated_at_column} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __active.{updated_at_column}"
@@ -1043,8 +1066,8 @@ class PostgresAdapter(BaseAdapter):
             statements = (
                 *statements,
                 _snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -1055,8 +1078,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
@@ -1083,9 +1106,9 @@ class PostgresAdapter(BaseAdapter):
             f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
         )
         close_sql: str = (
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = {current_timestamp} "
-            f"FROM {source} AS __source "
+            f"FROM {origin} AS __source "
             f"WHERE {key_condition} "
             f"AND __target.{valid_to_column} IS NULL "
             f"AND ({change_condition})"
@@ -1104,10 +1127,10 @@ class PostgresAdapter(BaseAdapter):
             f"ELSE {current_timestamp} END"
         )
         insert_sql: str = (
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {source} AS __source "
-            f"LEFT JOIN {target} AS __active "
+            f"FROM {origin} AS __source "
+            f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
             f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
         )
@@ -1116,8 +1139,8 @@ class PostgresAdapter(BaseAdapter):
             statements = (
                 *statements,
                 _snapshot_hard_delete_close_sql(
-                    target=target,
-                    source=source,
+                    destination=destination,
+                    origin=origin,
                     unique_key=unique_key,
                     valid_to_column=valid_to_column,
                     current_timestamp=current_timestamp,
@@ -1125,11 +1148,11 @@ class PostgresAdapter(BaseAdapter):
             )
         return statements
 
-    def render_create_initial_historical_timestamp_snapshot_target(
+    def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -1139,7 +1162,7 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = _historical_timestamp_snapshot_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1148,13 +1171,13 @@ class PostgresAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
-    def render_create_initial_historical_timestamp_changes_target(
+    def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -1162,20 +1185,20 @@ class PostgresAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         historical_sql: str = _historical_timestamp_changes_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
-    def render_create_initial_historical_check_snapshot_target(
+    def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -1185,7 +1208,7 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         historical_sql: str = _historical_check_snapshot_select_sql(
-            source=source,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -1194,7 +1217,7 @@ class PostgresAdapter(BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(target=target, sql=historical_sql)
+        return self.render_create_table_as(destination=destination, sql=historical_sql)
 
     def star_exclude_keyword(self) -> str:
         """Return the SQL keyword for SELECT * EXCLUDE/EXCEPT syntax."""
@@ -1243,6 +1266,142 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_fingerprint_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        index_name: str | None = self.render_qualified_name(
+            database=None,
+            schema=schema,
+            name="_sqlbuild_fingerprints_latest_idx",
+        )
+        if table_name is None or index_name is None:
+            return ()
+        return (
+            "CREATE INDEX IF NOT EXISTS "
+            f"{index_name} ON {table_name} (node_type, node_name, ts DESC, run_id DESC)",
+        )
+
+    def render_read_latest_fingerprints_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+
+        return build_read_latest_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_prune_fingerprint_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        return (
+            f"DELETE FROM {table_name} WHERE ctid IN ("
+            "SELECT ctid FROM ("
+            "SELECT ctid, ROW_NUMBER() OVER ("
+            "PARTITION BY node_type, node_name "
+            "ORDER BY ts DESC, run_id DESC"
+            f") AS __sqlbuild_history_rank FROM {table_name}"
+            ") AS __sqlbuild_ranked "
+            f"WHERE __sqlbuild_history_rank > {retain_versions}"
+            ")"
+        )
+
+    def render_create_source_freshness_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        )
+        index_name: str | None = self.render_qualified_name(
+            database=None,
+            schema=schema,
+            name="_sqlbuild_source_freshness_latest_idx",
+        )
+        if table_name is None or index_name is None:
+            return ()
+        return (
+            "CREATE INDEX IF NOT EXISTS "
+            f"{index_name} ON {table_name} ("
+            "source_name, target_database, target_schema, target_name, "
+            "observed_at DESC, run_id DESC)",
+        )
+
+    def render_read_latest_source_freshness_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+
+        return build_read_latest_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_prune_source_freshness_history_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        retain_versions: int,
+    ) -> str:
+        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        return (
+            f"DELETE FROM {table_name} WHERE ctid IN ("
+            "SELECT ctid FROM ("
+            "SELECT ctid, ROW_NUMBER() OVER ("
+            "PARTITION BY source_name, target_database, target_schema, target_name "
+            "ORDER BY observed_at DESC, run_id DESC"
+            f") AS __sqlbuild_history_rank FROM {table_name}"
+            ") AS __sqlbuild_ranked "
+            f"WHERE __sqlbuild_history_rank > {retain_versions}"
+            ")"
         )
 
     def sql_analysis_dialect(self) -> str | None:
@@ -1452,27 +1611,27 @@ class PostgresAdapter(BaseAdapter):
         schema: str | None = parts[-2] if len(parts) >= 2 else None
         cursor: Any = connection.execute(
             "SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name = '{name}'"
-            + (f" AND table_schema = '{schema}'" if schema else "")
+            f"WHERE table_name = {_quote_sql_string(name)}"
+            + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
             + " ORDER BY ordinal_position"
         )
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
-    def render_create_table_as(self, *, target: str, sql: str) -> tuple[str, ...]:
+    def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (
-            f"DROP TABLE IF EXISTS {target}",
-            f"CREATE TABLE {target} AS {sql}",
+            f"DROP TABLE IF EXISTS {destination}",
+            f"CREATE TABLE {destination} AS {sql}",
         )
 
-    def render_rename(self, *, source: str, target: str) -> tuple[str, ...]:
-        target_name: str = target.split(".")[-1]
-        return (f"ALTER TABLE {source} RENAME TO {target_name}",)
+    def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        destination_name: str = destination.split(".")[-1]
+        return (f"ALTER TABLE {origin} RENAME TO {destination_name}",)
 
     def load_seed(
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
         csv_settings: SeedCsvSettings = default_seed_csv_settings,
@@ -1483,17 +1642,20 @@ class PostgresAdapter(BaseAdapter):
         del infer_types
         if replace:
             self.drop(
-                connection, target=target, if_exists=True, statement_recorder=statement_recorder
+                connection,
+                destination=destination,
+                if_exists=True,
+                statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
-        create_sql: str = f"CREATE TABLE {target} ({column_defs})"
+        create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
         self.execute(connection, create_sql)
 
         column_names: tuple[str, ...] = tuple(col.name for col in columns)
         placeholders: str = ", ".join(["%s"] * len(column_names))
         insert_sql: str = (
-            f"INSERT INTO {target} ({', '.join(column_names)}) VALUES ({placeholders})"
+            f"INSERT INTO {destination} ({', '.join(column_names)}) VALUES ({placeholders})"
         )
         rows: list[tuple[object, ...]] = []
         with file_path.open(
@@ -1535,7 +1697,7 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -1555,15 +1717,15 @@ class PostgresAdapter(BaseAdapter):
                 for col in non_key_columns
             )
             update_sql: str = (
-                f"UPDATE {target} AS __target SET {update_set} "
+                f"UPDATE {destination} AS __target SET {update_set} "
                 f"FROM {source_select_sql} WHERE {key_match_sql}"
             )
             statement_recorder.record(update_sql)
             self.execute(connection, update_sql)
         insert_sql: str = (
-            f"INSERT INTO {target} ({col_list}) "
+            f"INSERT INTO {destination} ({col_list}) "
             f"SELECT {col_list} FROM {source_select_sql} "
-            f"WHERE NOT EXISTS (SELECT 1 FROM {target} AS __target WHERE {key_match_sql})"
+            f"WHERE NOT EXISTS (SELECT 1 FROM {destination} AS __target WHERE {key_match_sql})"
         )
         statement_recorder.record(insert_sql)
         self.execute(connection, insert_sql)
@@ -1572,11 +1734,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_add_columns(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_add_columns(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         for stmt in statements:
             self.execute(connection, stmt)
@@ -1585,12 +1749,12 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_drop_columns(
-            target=target, column_names=column_names
+            destination=destination, column_names=column_names
         )
         statement_recorder.record_many(statements)
         for stmt in statements:
@@ -1600,11 +1764,13 @@ class PostgresAdapter(BaseAdapter):
         self,
         connection: Any,
         *,
-        target: str,
+        destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_alter_column_types(target=target, columns=columns)
+        statements: tuple[str, ...] = self.render_alter_column_types(
+            destination=destination, columns=columns
+        )
         statement_recorder.record_many(statements)
         for stmt in statements:
             self.execute(connection, stmt)
@@ -1910,8 +2076,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_historical_timestamp_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -1921,8 +2087,8 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._pg_historical_timestamp_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1935,7 +2101,7 @@ class PostgresAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = _historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -1945,7 +2111,7 @@ class PostgresAdapter(BaseAdapter):
         else:
             close_sql = (
                 f"WITH {new_changes_sql} "
-                f"UPDATE {target} AS __target "
+                f"UPDATE {destination} AS __target "
                 f"SET {valid_to_column} = ("
                 f"SELECT MIN(__new_changes.{updated_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
@@ -1962,7 +2128,7 @@ class PostgresAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -1974,8 +2140,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_historical_timestamp_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_from_column: str,
@@ -1983,8 +2149,8 @@ class PostgresAdapter(BaseAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._pg_historical_timestamp_changes_new_records_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
@@ -1994,7 +2160,7 @@ class PostgresAdapter(BaseAdapter):
         )
         close_sql: str = (
             f"WITH {new_changes_sql} "
-            f"UPDATE {target} AS __target "
+            f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = ("
             f"SELECT MIN(__new_changes.{updated_at_column}) "
             f"FROM __new_changes WHERE {key_condition}"
@@ -2011,7 +2177,7 @@ class PostgresAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
             f"LEAD(__new_changes.{updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
@@ -2023,8 +2189,8 @@ class PostgresAdapter(BaseAdapter):
     def render_apply_historical_check_snapshot_changes(
         self,
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2034,8 +2200,8 @@ class PostgresAdapter(BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         new_changes_sql: str = self._pg_historical_check_new_changes_cte_sql(
-            target=target,
-            source=source,
+            destination=destination,
+            origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
             observed_at_column=observed_at_column,
@@ -2048,7 +2214,7 @@ class PostgresAdapter(BaseAdapter):
         )
         if invalidate_hard_deletes:
             close_sql: str = _historical_snapshot_combined_close_sql(
-                target=target,
+                destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
@@ -2058,7 +2224,7 @@ class PostgresAdapter(BaseAdapter):
         else:
             close_sql = (
                 f"WITH {new_changes_sql} "
-                f"UPDATE {target} AS __target "
+                f"UPDATE {destination} AS __target "
                 f"SET {valid_to_column} = ("
                 f"SELECT MIN(__new_changes.{observed_at_column}) "
                 f"FROM __new_changes WHERE {key_condition}"
@@ -2075,7 +2241,7 @@ class PostgresAdapter(BaseAdapter):
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
         insert_sql: str = (
             f"WITH {new_changes_sql} "
-            f"INSERT INTO {target} ({insert_column_sql}) "
+            f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
             f"LEAD(__new_changes.{observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
@@ -2087,8 +2253,8 @@ class PostgresAdapter(BaseAdapter):
     @staticmethod
     def _pg_historical_timestamp_new_changes_cte_sql(
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         observed_at_column: str,
@@ -2102,14 +2268,14 @@ class PostgresAdapter(BaseAdapter):
             "__latest AS (SELECT * FROM ("
             f"SELECT *, ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-            f") AS __rn FROM {target}) AS __q WHERE __rn = 1)"
+            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1)"
         )
         if invalidate_hard_deletes:
             latest_join_condition: str = _snapshot_key_condition(
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -2118,7 +2284,7 @@ class PostgresAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({updated_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {source}"
+                f") AS __prev_updated_at FROM {origin}"
                 "), __delta_changes AS ("
                 f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
                 f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2129,7 +2295,7 @@ class PostgresAdapter(BaseAdapter):
                 f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{col}' for col in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
                 ")"
             )
@@ -2140,7 +2306,7 @@ class PostgresAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {source}"
+            f") AS __prev_updated_at FROM {origin}"
             "), __delta_changes AS ("
             f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
             f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
@@ -2155,8 +2321,8 @@ class PostgresAdapter(BaseAdapter):
     @staticmethod
     def _pg_historical_timestamp_changes_new_records_cte_sql(
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         updated_at_column: str,
         valid_to_column: str,
@@ -2171,9 +2337,9 @@ class PostgresAdapter(BaseAdapter):
             "__latest AS (SELECT * FROM ("
             f"SELECT *, ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {updated_at_column} DESC"
-            f") AS __rn FROM {target}) AS __q WHERE __rn = 1"
+            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1"
             "), __new_changes AS ("
-            f"SELECT __source.* FROM {source} AS __source "
+            f"SELECT __source.* FROM {origin} AS __source "
             f"LEFT JOIN __latest ON {latest_join_condition} "
             f"WHERE __latest.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
@@ -2183,8 +2349,8 @@ class PostgresAdapter(BaseAdapter):
     @staticmethod
     def _pg_historical_check_new_changes_cte_sql(
         *,
-        target: str,
-        source: str,
+        destination: str,
+        origin: str,
         unique_key: tuple[str, ...],
         check_columns: tuple[str, ...],
         observed_at_column: str,
@@ -2219,11 +2385,11 @@ class PostgresAdapter(BaseAdapter):
             "__latest AS (SELECT * FROM ("
             f"SELECT *, ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-            f") AS __rn FROM {target}) AS __q WHERE __rn = 1)"
+            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1)"
         )
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                source=source,
+                origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 row_alias="__target",
@@ -2232,7 +2398,7 @@ class PostgresAdapter(BaseAdapter):
                 "__ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
                 "), __delta_changes AS ("
                 f"{changed_or_first_sql}"
                 f"), {latest_sql}, __new_changes AS ("
@@ -2243,7 +2409,7 @@ class PostgresAdapter(BaseAdapter):
                 f"AND ({latest_change_condition}))"
                 "), __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {target} AS __target "
+                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
                 ")"
             )
@@ -2251,7 +2417,7 @@ class PostgresAdapter(BaseAdapter):
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {source}"
+            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
             "), __delta_changes AS ("
             f"{changed_or_first_sql}"
             f"), {latest_sql}, __new_changes AS ("

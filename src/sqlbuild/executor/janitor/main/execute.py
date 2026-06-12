@@ -11,6 +11,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
+    JanitorDirectStatePruneCandidate,
     JanitorExecutionResult,
     JanitorExpiredLockCandidate,
     JanitorExpiredVirtualEnvironmentCandidate,
@@ -41,7 +42,7 @@ def execute_janitor_plan(
     for candidate in plan.candidates:
         adapter.drop(
             connection,
-            target=candidate.key.display_name(),
+            destination=candidate.key.display_name(),
             if_exists=True,
             statement_recorder=recorder,
         )
@@ -81,6 +82,12 @@ def execute_janitor_plan(
             delete_expired_lock(expired_lock_candidate)
             deleted_expired_locks.append(expired_lock_candidate)
 
+    pruned_direct_state: list[JanitorDirectStatePruneCandidate] = []
+    direct_state_candidate: JanitorDirectStatePruneCandidate
+    for direct_state_candidate in plan.direct_state_prune_candidates:
+        adapter.execute(connection, direct_state_candidate.prune_sql)
+        pruned_direct_state.append(direct_state_candidate)
+
     return JanitorExecutionResult(
         deleted=plan.candidates,
         deleted_checkpoints=tuple(deleted_checkpoints),
@@ -88,4 +95,5 @@ def execute_janitor_plan(
         deleted_expired_virtual_environments=tuple(deleted_expired_virtual_environments),
         deleted_state_backups=tuple(deleted_state_backups),
         deleted_expired_locks=tuple(deleted_expired_locks),
+        pruned_direct_state=tuple(pruned_direct_state),
     )
