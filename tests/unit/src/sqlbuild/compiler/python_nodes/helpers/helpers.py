@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 from collections.abc import Callable
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -133,6 +137,57 @@ def build_orders_python_node_graph() -> PythonNodeGraph:
             ),
         )
     )
+
+
+def write_python_identity_repo(*, project_dir: Path, repo_files: dict[str, str]) -> None:
+    relative_path: str
+    contents: str
+    for relative_path, contents in repo_files.items():
+        file_path: Path = project_dir / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+    (project_dir / ".git").mkdir(exist_ok=True)
+
+
+def load_python_identity_module(
+    *, project_dir: Path, module_path: str, extra_sys_paths: tuple[str, ...] = ()
+) -> ModuleType:
+    file_path: Path = project_dir / module_path
+    module_name: str = f"python_identity_{abs(hash((str(project_dir), module_path)))}"
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+        module_name,
+        file_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load module from {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    original_path: list[str] = list(sys.path)
+    _clear_project_modules(project_dir=project_dir)
+    sys.path.insert(0, str(project_dir))
+    extra_path: str
+    for extra_path in reversed(extra_sys_paths):
+        sys.path.insert(0, str(project_dir / extra_path))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = original_path
+    return module
+
+
+def _clear_project_modules(*, project_dir: Path) -> None:
+    top_level_names: set[str] = {
+        path.stem if path.is_file() else path.name
+        for path in project_dir.iterdir()
+        if not path.name.startswith(".")
+    }
+    module_name: str
+    for module_name in tuple(sys.modules):
+        if any(
+            module_name == top_level_name or module_name.startswith(f"{top_level_name}.")
+            for top_level_name in top_level_names
+        ):
+            sys.modules.pop(module_name, None)
 
 
 def build_sql_ref_python_node_graph(*, dependency: SqlResourceRef) -> PythonNodeGraph:
