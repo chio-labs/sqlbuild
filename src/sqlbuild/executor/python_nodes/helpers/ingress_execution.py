@@ -21,7 +21,7 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
@@ -99,7 +99,7 @@ def execute_ingress_python_loader_nodes(
     )
     python_results_by_name: dict[str, PythonNodeExecutionResult] = {}
     load_results_by_name: dict[str, LoadExecutionResult] = {}
-    result_store: Any | None = build_direct_node_result_store(
+    result_store: Any | None = build_standard_node_result_store(
         adapter=adapter,
         connection=connection,
         database=default_database,

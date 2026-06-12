@@ -16,14 +16,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.check.helpers import (
     initialize_state_when_requested,
     prepare_check_project_by_kind,
     prepare_python_check_project,
-    prepare_read_side_python_check_project,
     resolve_check_command,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
 
 TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     CheckCommandTestCase(
-        description="runs all checks with implicit dependencies",
+        description="runs all checks without implicit dependency execution",
         command=("--no-color", "check"),
         expected_returncode=1,
         expected_stdout_fragments=(
@@ -37,12 +36,12 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
             "false_orders_export",
             "exception_orders_export",
             "orders exception check failed",
-            "PASS=3  WARN=1  FAIL=3  TOTAL=7",
+            "PASS=1  WARN=1  FAIL=5  TOTAL=7",
         ),
     ),
     CheckCommandTestCase(
-        description="runs expanded selected check",
-        command=("--no-color", "check", "--select", "+check:check_orders_export"),
+        description="runs directly selected check without dependency execution",
+        command=("--no-color", "check", "--select", "check:check_orders_export"),
         expected_returncode=0,
         expected_stdout_fragments=(
             "Python checks",
@@ -52,12 +51,10 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
         ),
     ),
     CheckCommandTestCase(
-        description="fails selected check with missing dependency",
-        command=("--no-color", "check", "--select", "check:check_orders_export"),
+        description="rejects graph operator check selector",
+        command=("--no-color", "check", "--select", "+check:check_orders_export"),
         expected_returncode=1,
-        expected_stdout_fragments=(
-            "Python check 'check_orders_export' depends on unselected Python node 'export_orders'",
-        ),
+        expected_stdout_fragments=("sqb check selectors do not support graph operators",),
     ),
     CheckCommandTestCase(
         description="build executes relevant checks",
@@ -85,7 +82,7 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     ),
     CheckCommandTestCase(
         description="selected false check fails check command",
-        command=("--no-color", "check", "--select", "+check:false_orders_export"),
+        command=("--no-color", "check", "--select", "check:false_orders_export"),
         expected_returncode=1,
         expected_stdout_fragments=(
             "false_orders_export",
@@ -95,7 +92,7 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     ),
     CheckCommandTestCase(
         description="selected exception check fails check command",
-        command=("--no-color", "check", "--select", "+check:exception_orders_export"),
+        command=("--no-color", "check", "--select", "check:exception_orders_export"),
         expected_returncode=1,
         expected_stdout_fragments=(
             "exception_orders_export",
@@ -126,20 +123,21 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     ),
     CheckCommandTestCase(
         description="tag selector runs multi-dependency check",
-        command=("--no-color", "check", "--select", "+tag:multi"),
-        expected_returncode=0,
+        command=("--no-color", "check", "--select", "tag:multi"),
+        expected_returncode=1,
         expected_stdout_fragments=(
             "check_order_customer_exports",
-            "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+            "No persisted result found for Python node 'export_orders'",
+            "PASS=0  WARN=0  FAIL=1  TOTAL=1",
         ),
     ),
     CheckCommandTestCase(
         description="json output includes selected Python check",
-        command=("--no-color", "check", "--json", "--select", "+tag:multi"),
+        command=("--no-color", "check", "--json", "--select", "check:check_orders_export"),
         expected_returncode=0,
         expected_stdout_fragments=(
             '"checks"',
-            '"name": "check_order_customer_exports"',
+            '"name": "check_orders_export"',
             '"status": "pass"',
             '"metadata": {',
         ),
@@ -152,7 +150,7 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
             "--json-output",
             "{project_dir}/target/check.json",
             "--select",
-            "+tag:multi",
+            "check:check_orders_export",
         ),
         expected_returncode=0,
         expected_stdout_fragments=("PASS=1  WARN=0  FAIL=0  TOTAL=1",),
@@ -161,8 +159,8 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
                 "target/check.json",
                 (
                     '"command": "check"',
-                    '"name": "check_order_customer_exports"',
-                    '"check_id": "python_check:check_order_customer_exports"',
+                    '"name": "check_orders_export"',
+                    '"check_id": "python_check:check_orders_export"',
                 ),
             ),
         ),
@@ -231,15 +229,15 @@ TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     ),
     CheckCommandTestCase(
         description="check command writes runtime target artifact",
-        command=("--no-color", "check", "--select", "+tag:multi"),
+        command=("--no-color", "check", "--select", "check:check_orders_export"),
         expected_returncode=0,
-        expected_stdout_fragments=("check_order_customer_exports",),
+        expected_stdout_fragments=("check_orders_export",),
         expected_file_fragments=(
             (
                 "target/run/checks/python_checks.json",
                 (
                     '"kind": "python_check"',
-                    '"display_name": "check_order_customer_exports"',
+                    '"display_name": "check_orders_export"',
                 ),
             ),
         ),
@@ -276,13 +274,13 @@ def test_given_python_checks_when_running_check_then_reports_expected_results(
     "test_case",
     [
         CheckCommandTestCase(
-            description="direct selected Python check persists check identity",
-            command=("--no-color", "check", "--select", "+check_orders_export"),
+            description="standard selected Python check persists check identity",
+            command=("--no-color", "check", "--select", "check_orders_export"),
             expected_returncode=0,
             expected_stdout_fragments=("check_orders_export",),
         )
     ],
-    ids=["direct selected Python check persists check identity"],
+    ids=["standard selected Python check persists check identity"],
 )
 def test_given_successful_python_check_when_running_check_then_persists_check_identity(
     tmp_path: Path,
@@ -320,13 +318,13 @@ def test_given_successful_python_check_when_running_check_then_persists_check_id
     "test_case",
     [
         CheckCommandTestCase(
-            description="direct Python checks persist warn and fail result rows",
-            command=("--no-color", "check", "--select", "+check:warn_orders_export"),
+            description="standard Python checks persist warn and fail result rows",
+            command=("--no-color", "check", "--select", "check:warn_orders_export"),
             expected_returncode=0,
             expected_stdout_fragments=("warn_orders_export", "WARN"),
         )
     ],
-    ids=["direct Python checks persist warn and fail result rows"],
+    ids=["standard Python checks persist warn and fail result rows"],
 )
 def test_given_warning_and_failing_python_checks_when_running_check_then_persists_status_rows(
     tmp_path: Path,
@@ -339,7 +337,7 @@ def test_given_warning_and_failing_python_checks_when_running_check_then_persist
         project_dir=project_dir,
     )
     fail_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "check", "--select", "+check:fail_orders_export"),
+        command=("--no-color", "check", "--select", "check:fail_orders_export"),
         project_dir=project_dir,
     )
 
@@ -369,30 +367,36 @@ def test_given_warning_and_failing_python_checks_when_running_check_then_persist
     "test_case",
     [
         ReadSidePythonCheckCommandTestCase(
-            description="read-side Python check runs after model exists",
-            missing_command=("--no-color", "check", "--select", "+check_orders_export"),
-            build_command=("--no-color", "build", "--select", "fact_orders"),
-            check_command=("--no-color", "check", "--select", "+check_orders_export"),
+            description="Python check reads persisted dependency result after producer build",
+            missing_command=("--no-color", "check", "--select", "tag:multi"),
+            build_command=(
+                "--no-color",
+                "build",
+                "--select",
+                "export_orders export_customers",
+                "--exclude",
+                "tag:failure",
+            ),
+            check_command=("--no-color", "check", "--select", "tag:multi"),
             expected_missing_returncode=1,
             expected_build_returncode=0,
             expected_check_returncode=0,
             expected_missing_fragments=(
-                "requires existing SQL relation",
-                "run sqb build first",
+                "No persisted result found for Python node 'export_orders'",
             ),
             expected_check_fragments=(
-                "check_orders_export",
+                "check_order_customer_exports",
                 "PASS=1  WARN=0  FAIL=0  TOTAL=1",
             ),
         )
     ],
-    ids=["read-side Python check runs after model exists"],
+    ids=["Python check reads persisted dependency result after producer build"],
 )
-def test_given_read_side_python_check_dependency_when_model_exists_then_check_runs(
+def test_given_python_check_dependency_result_when_persisted_then_check_reads_result(
     tmp_path: Path,
     test_case: ReadSidePythonCheckCommandTestCase,
 ) -> None:
-    project_dir: Path = prepare_read_side_python_check_project(tmp_path=tmp_path)
+    project_dir: Path = prepare_python_check_project(tmp_path=tmp_path)
 
     missing_result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.missing_command,

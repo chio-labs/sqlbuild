@@ -294,7 +294,7 @@ RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
             "Example: Python nodes demo",
             "sqb plan --select +fact_orders --select +orders_export",
             "sqb build --select +fact_orders --select +orders_export",
-            "sqb check --select +check_orders_export",
+            "sqb check --select check_orders_export",
         ),
     ),
 ]

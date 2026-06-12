@@ -66,7 +66,7 @@ def run_playground(
             [
                 "sqb plan --select +fact_orders --select +orders_export",
                 "sqb build --select +fact_orders --select +orders_export",
-                "sqb check --select +check_orders_export",
+                "sqb check --select check_orders_export",
             ]
         )
     else:

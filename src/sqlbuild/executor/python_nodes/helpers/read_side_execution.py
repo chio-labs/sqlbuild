@@ -10,7 +10,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -72,7 +72,7 @@ class ReadSidePythonExecutionTracker:
         self._identity_recorder: PythonIdentityRecorder | None = identity_recorder
         self._persist_node_results: bool = persist_node_results
         self._result_store: Any | None = (
-            build_direct_node_result_store(
+            build_standard_node_result_store(
                 adapter=adapter,
                 connection=connection,
                 database=default_database,

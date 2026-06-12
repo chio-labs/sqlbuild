@@ -10,8 +10,8 @@ import pytest
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
-from sqlbuild.executor.node_results.classes.direct_store import DirectNodeResultStore
-from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.python_nodes.helpers.execution import (
     execute_python_nodes,
     execute_ready_python_node,
@@ -414,7 +414,7 @@ def test_given_ready_python_node_when_executing_then_uses_existing_run_state(
     )
 
     adapter: PythonNodeContextTestAdapter = PythonNodeContextTestAdapter()
-    result_store: DirectNodeResultStore = build_direct_node_result_store(
+    result_store: StandardNodeResultStore = build_standard_node_result_store(
         adapter=adapter,
         connection=object(),
         database=None,

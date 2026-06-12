@@ -13,7 +13,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
@@ -66,6 +66,7 @@ def execute_python_check_nodes(
     identity_recorder: PythonIdentityRecorder | None = None,
     result_store: Any | None = None,
     persist_node_results: bool = True,
+    require_upstream_results: bool = True,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -88,7 +89,7 @@ def execute_python_check_nodes(
         result_store
         if result_store is not None
         else (
-            build_direct_node_result_store(
+            build_standard_node_result_store(
                 adapter=adapter,
                 connection=connection,
                 database=default_database,
@@ -101,14 +102,12 @@ def execute_python_check_nodes(
     results: list[PythonCheckExecutionResult] = []
     check_function: DiscoveredCheckFunction
     for check_function in check_functions:
-        upstream_results: tuple[PythonNodeExecutionResult, ...] = tuple(
-            _upstream_result(
-                upstream_name=upstream_name,
-                python_results_by_name=python_results_by_name,
-                loader_results_by_name=loader_results_by_name,
-            )
-            for upstream_name in python_graph.upstream_deps.get(check_function.name, ())
-            if upstream_name not in selected_check_names
+        upstream_results: tuple[PythonNodeExecutionResult, ...] = _check_upstream_results(
+            upstream_names=python_graph.upstream_deps.get(check_function.name, ()),
+            selected_check_names=selected_check_names,
+            python_results_by_name=python_results_by_name,
+            loader_results_by_name=loader_results_by_name,
+            require_upstream_results=require_upstream_results,
         )
         blocked: PythonCheckExecutionResult | None = _blocked_check_result(
             check=check_function,
@@ -243,6 +242,36 @@ def _upstream_result(
             f"Python check dependency '{upstream_name}' did not run before check execution"
         )
     return result
+
+
+def _check_upstream_results(
+    *,
+    upstream_names: tuple[str, ...],
+    selected_check_names: frozenset[str],
+    python_results_by_name: Mapping[str, PythonNodeExecutionResult],
+    loader_results_by_name: Mapping[str, PythonNodeExecutionResult],
+    require_upstream_results: bool,
+) -> tuple[PythonNodeExecutionResult, ...]:
+    results: list[PythonNodeExecutionResult] = []
+    upstream_name: str
+    for upstream_name in upstream_names:
+        if upstream_name in selected_check_names:
+            continue
+        if require_upstream_results:
+            results.append(
+                _upstream_result(
+                    upstream_name=upstream_name,
+                    python_results_by_name=python_results_by_name,
+                    loader_results_by_name=loader_results_by_name,
+                )
+            )
+            continue
+        result: PythonNodeExecutionResult | None = python_results_by_name.get(
+            upstream_name
+        ) or loader_results_by_name.get(upstream_name)
+        if result is not None:
+            results.append(result)
+    return tuple(results)
 
 
 def _blocked_check_result(

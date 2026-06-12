@@ -189,7 +189,7 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
         project_dir=project_dir,
     )
     check_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "check", "--select", "+check_orders_export"),
+        command=("--no-color", "check", "--select", "check_orders_export"),
         project_dir=project_dir,
     )
 

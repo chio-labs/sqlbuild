@@ -1,4 +1,4 @@
-"""Direct-mode runtime node result store."""
+"""Standard-mode runtime node result store."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
-class DirectNodeResultStore:
-    """Warehouse-backed node result store for direct-mode execution."""
+class StandardNodeResultStore:
+    """Warehouse-backed node result store for standard-mode execution."""
 
     def __init__(
         self,

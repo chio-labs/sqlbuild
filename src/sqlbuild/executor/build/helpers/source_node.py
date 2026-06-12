@@ -15,8 +15,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.classes.direct_store import DirectNodeResultStore
-from sqlbuild.executor.node_results.main.direct_store import build_direct_node_result_store
+from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -103,7 +103,7 @@ def _persist_loader_result(
     result: LoadExecutionResult,
     run_id: str,
 ) -> None:
-    result_store: DirectNodeResultStore = build_direct_node_result_store(
+    result_store: StandardNodeResultStore = build_standard_node_result_store(
         adapter=adapter,
         connection=connection,
         database=adapter.default_database(),
