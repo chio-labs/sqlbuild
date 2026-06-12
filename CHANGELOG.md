@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/chio-labs/sqlbuild/compare/v0.31.0...v0.32.0) (2026-06-12)
+
+
+### Features
+
+* replace run with build flags ([4f65879](https://github.com/chio-labs/sqlbuild/commit/4f65879e1cf0b8499ded9295b97e184216b3a16f))
+
 ## [0.31.0](https://github.com/chio-labs/sqlbuild/compare/v0.30.1...v0.31.0) (2026-06-12)
 
 
