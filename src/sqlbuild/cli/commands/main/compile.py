@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import time
 import sys
+import time
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -266,9 +266,7 @@ def _elapsed_ms(start: float) -> int:
     return int((time.monotonic() - start) * 1000)
 
 
-def _start_compile_status(
-    *, json_output: bool, no_color: bool
-) -> TransientStatusReporter | None:
+def _start_compile_status(*, json_output: bool, no_color: bool) -> TransientStatusReporter | None:
     """Create an interactive-only compile status reporter."""
 
     if json_output:
