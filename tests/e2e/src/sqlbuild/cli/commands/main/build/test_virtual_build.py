@@ -2071,6 +2071,69 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
         expected_state_rows=(("task", "prepare_orders", "skipped", "not needed"),),
     ),
     VirtualNodeResultFailureStateE2ETestCase(
+        description="skipped virtual loader persists skipped state row",
+        project_name="virtual_skipped_loader_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_skipped_loader_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+                defer_sources_to = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "tasks/prepare.py": (
+                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_events(ctx):\n"
+                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+            ),
+            "loaders/events.py": (
+                "from tasks.prepare import prepare_events\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(prepare_events,))\n"
+                "def raw_events(ctx):\n"
+                "    return [{'event_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/events.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+            ),
+        },
+        command=("--no-color", "build", "--select", "+events"),
+        expected_exit_code=0,
+        expected_state_rows=(
+            ("loader", "raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),
+            ("task", "prepare_events", "skipped", "no input"),
+        ),
+    ),
+    VirtualNodeResultFailureStateE2ETestCase(
         description="non JSON virtual payload persists failed state row",
         project_name="virtual_non_json_payload_result_state",
         repo_files={
