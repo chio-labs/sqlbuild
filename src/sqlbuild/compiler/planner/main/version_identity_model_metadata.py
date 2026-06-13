@@ -22,7 +22,10 @@ def build_model_version_identity_metadata_json(
     local_function_hashes: dict[str, str] = {}
     upstream_key: Any
     for upstream_key in model.deps:
-        if upstream_key.resource_type != CompiledResourceType.FUNCTION:
+        if upstream_key.resource_type not in {
+            CompiledResourceType.UDF,
+            CompiledResourceType.TABLE_FN,
+        }:
             continue
         upstream_hash: str | None = function_hashes.get(upstream_key.name)
         if upstream_hash is not None:

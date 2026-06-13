@@ -9,7 +9,7 @@ from sqlbuild.integrations.dagster.helpers.imports import load_dagster
 from sqlbuild.integrations.dagster.translator import SqlBuildDagsterTranslator
 
 _ASSET_KINDS: frozenset[str] = frozenset(
-    {"source", "loader", "seed", "model", "function", "task", "asset"}
+    {"source", "loader", "seed", "model", "udf", "table_fn", "task", "asset"}
 )
 
 
@@ -129,8 +129,6 @@ def _asset_spec_kinds(node: Mapping[str, Any]) -> set[str]:
         if materialization_type == "view":
             return {"sqlbuild", "view"}
         return {"sqlbuild", "table"}
-    if kind in {"source", "loader", "seed", "task", "asset"}:
+    if kind in {"source", "loader", "seed", "task", "asset", "udf", "table_fn"}:
         return {"sqlbuild", kind}
-    if kind == "function":
-        return {"sqlbuild", "function"}
     return {"sqlbuild"}

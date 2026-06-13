@@ -42,6 +42,7 @@ class FunctionExecutionResult:
 
     function_name: str
     status: ExecutionStatus
+    function_kind: str
     duration_ms: int | None = None
     error_code: str | None = None
     error_help: str | None = None

@@ -116,9 +116,14 @@ def _reference_dep(
                 else reference.ref_name
             ),
         )
-    if reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}:
+    if reference.ref_kind == SqlReferenceKind.UDF:
         return CompiledObjectKey(
-            resource_type=CompiledResourceType.FUNCTION,
+            resource_type=CompiledResourceType.UDF,
+            name=reference.ref_name,
+        )
+    if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        return CompiledObjectKey(
+            resource_type=CompiledResourceType.TABLE_FN,
             name=reference.ref_name,
         )
     return CompiledObjectKey(

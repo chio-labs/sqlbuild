@@ -462,7 +462,10 @@ def _resolve_selectors(
     scoped: set[CompiledObjectKey] = selected - excluded
     for key in tuple(scoped):
         for upstream_key in _walk_all(key, upstream):
-            if upstream_key.resource_type == CompiledResourceType.FUNCTION:
+            if upstream_key.resource_type in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 scoped.add(upstream_key)
     return frozenset(scoped)
 

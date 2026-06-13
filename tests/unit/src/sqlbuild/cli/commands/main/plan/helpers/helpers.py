@@ -237,7 +237,7 @@ def build_function_entry(
     """Build a minimal FunctionPlanEntry for formatter tests."""
 
     return FunctionPlanEntry(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name),
+        key=CompiledObjectKey(resource_type=CompiledResourceType.UDF, name=name),
         name=name,
         relative_path=Path(f"functions/{language.value}/{name}.sql"),
         destination=CompiledRelationLocation(

@@ -42,7 +42,8 @@ _ALLOWED_SQL_MODEL_DEP_RESOURCE_TYPES: frozenset[CompiledResourceType] = frozens
         CompiledResourceType.MODEL,
         CompiledResourceType.SOURCE,
         CompiledResourceType.SEED,
-        CompiledResourceType.FUNCTION,
+        CompiledResourceType.UDF,
+        CompiledResourceType.TABLE_FN,
         CompiledResourceType.DBT_REF,
     }
 )

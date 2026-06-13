@@ -36,7 +36,7 @@ def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns
     tmp_path: Path,
 ) -> None:
     function_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.FUNCTION,
+        resource_type=CompiledResourceType.UDF,
         name="missing_function",
     )
     plan: PlanOutput = PlanOutput(

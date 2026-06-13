@@ -168,7 +168,7 @@ def build_test_and_project(
         functions.append(
             CompiledFunction(
                 key=CompiledObjectKey(
-                    resource_type=CompiledResourceType.FUNCTION,
+                    resource_type=CompiledResourceType.UDF,
                     name=function_name,
                 ),
                 deps=(),

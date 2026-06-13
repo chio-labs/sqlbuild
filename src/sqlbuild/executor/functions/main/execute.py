@@ -8,8 +8,8 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_FUNCTION
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
@@ -37,10 +37,12 @@ def execute_function(
 ) -> FunctionExecutionResult:
     """Create or replace one SQL function."""
 
+    function_kind: str = function_node_type(return_columns=function_entry.return_columns)
     if function_entry.destination.qualified_name is None:
         return FunctionExecutionResult(
             function_name=function_entry.name,
             status=ExecutionStatus.FAILED,
+            function_kind=function_kind,
             error_code=FUNCTION_TARGET_INVALID_CODE,
             error_message="function target could not be qualified",
         )
@@ -91,6 +93,7 @@ def execute_function(
         return FunctionExecutionResult(
             function_name=function_entry.name,
             status=ExecutionStatus.SUCCESS,
+            function_kind=function_kind,
             warning_messages=tuple(warnings),
             lifecycle_events=statement_recorder.snapshot(),
         )
@@ -98,6 +101,7 @@ def execute_function(
         return FunctionExecutionResult(
             function_name=function_entry.name,
             status=ExecutionStatus.FAILED,
+            function_kind=function_kind,
             error_code=error_code(error, fallback_code=FUNCTION_EXECUTION_FAILED_CODE),
             error_help=error_help(error),
             error_message=error_message(error),
@@ -140,7 +144,7 @@ def _try_write_function_fingerprint(
         )
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
-            node_type=NODE_TYPE_FUNCTION,
+            node_type=function_node_type(return_columns=entry.return_columns),
             node_name=entry.name,
             target_database=entry.destination.database,
             target_schema=entry.destination.schema,

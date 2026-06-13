@@ -63,7 +63,7 @@ def prune_standard_unchanged_scope(
             ):
                 selected_keys.add(key)
             continue
-        if key.resource_type == CompiledResourceType.FUNCTION:
+        if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             function_change: FunctionChangeResult | None = changes.functions.get(key.name)
             if function_change is not None and _function_action_is_stale(function_change):
                 selected_keys.add(key)

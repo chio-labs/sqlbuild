@@ -131,11 +131,11 @@ def build_target_writer_plan_output() -> PlanOutput:
         name="orders_chain",
     )
     function_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.FUNCTION,
+        resource_type=CompiledResourceType.UDF,
         name="is_completed_order",
     )
     python_function_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.FUNCTION,
+        resource_type=CompiledResourceType.UDF,
         name="is_completed_order_py",
     )
     target: CompiledRelationLocation = CompiledRelationLocation(
@@ -273,7 +273,7 @@ def build_static_target_writer_project() -> CompiledProject:
         name="orders",
     )
     function_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.FUNCTION,
+        resource_type=CompiledResourceType.UDF,
         name="is_completed_order",
     )
     return CompiledProject(
@@ -440,6 +440,7 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
             FunctionExecutionResult(
                 function_name="is_completed_order",
                 status=ExecutionStatus.SUCCESS,
+                function_kind="udf",
                 lifecycle_events=(
                     LifeCycleEvent(
                         kind=LifeCycleEventKind.SQL,
@@ -453,6 +454,7 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
             FunctionExecutionResult(
                 function_name="is_completed_order_py",
                 status=ExecutionStatus.SUCCESS,
+                function_kind="udf",
                 lifecycle_events=(
                     LifeCycleEvent(
                         kind=LifeCycleEventKind.SQL,
