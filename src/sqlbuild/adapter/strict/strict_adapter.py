@@ -723,6 +723,16 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_node_result_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render DDL that creates the node result table when it is missing."""
+        ...
+
+    @abstractmethod
     def render_create_node_result_index_sqls(
         self,
         *,

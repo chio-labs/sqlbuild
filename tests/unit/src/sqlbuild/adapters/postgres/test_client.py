@@ -164,11 +164,11 @@ def test_given_source_freshness_table_when_rendering_indexes_then_postgres_uses_
             database=None,
             schema="analytics",
             expected_statements=(
-                "CREATE INDEX IF NOT EXISTS analytics._sqlbuild_node_results_latest_idx "
+                "CREATE INDEX IF NOT EXISTS _sqlbuild_node_results_latest_idx "
                 "ON analytics._sqlbuild_node_results ("
                 "node_type, node_name, target_database, target_schema, target_name, status, "
                 "ts DESC, run_id DESC)",
-                "CREATE INDEX IF NOT EXISTS analytics._sqlbuild_node_results_run_id_idx "
+                "CREATE INDEX IF NOT EXISTS _sqlbuild_node_results_run_id_idx "
                 "ON analytics._sqlbuild_node_results ("
                 "run_id, node_type, node_name, target_database, target_schema, target_name)",
             ),

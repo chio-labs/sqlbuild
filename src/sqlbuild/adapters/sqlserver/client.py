@@ -503,6 +503,44 @@ class SqlServerAdapter(BaseAdapter):
             "observed_at DESC, run_id DESC)",
         )
 
+    def render_create_node_result_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
+        from sqlbuild.executor.node_results.main.create_table_sql import (
+            build_node_results_create_table_sql,
+        )
+
+        create_sql: str = build_node_results_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+        for column in (
+            "node_type",
+            "node_name",
+            "target_database",
+            "target_schema",
+            "target_name",
+            "run_id",
+            "status",
+        ):
+            create_sql = create_sql.replace(f"{column} NVARCHAR(MAX)", f"{column} NVARCHAR(450)")
+        escaped_schema: str = schema.replace("'", "''")
+        escaped_table: str = NODE_RESULTS_TABLE_NAME.replace("'", "''")
+        exists_sql: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        )
+        if database is not None:
+            escaped_database: str = database.replace("'", "''")
+            exists_sql += f" AND table_catalog = '{escaped_database}'"
+        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
+
     def render_create_node_result_index_sqls(
         self,
         *,

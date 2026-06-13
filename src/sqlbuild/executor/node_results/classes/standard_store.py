@@ -48,6 +48,7 @@ class StandardNodeResultStore:
             record=record,
             render_qualified_name=self.adapter.render_qualified_name,
             render_framework_type=self.adapter.render_framework_type,
+            render_create_table_sql=self.adapter.render_create_node_result_table_sql,
             render_create_index_sqls=self.adapter.render_create_node_result_index_sqls,
         )
         self._cached_results.insert(0, self._record_to_envelope(record))

@@ -224,6 +224,39 @@ def test_given_source_freshness_table_when_rendering_indexes_then_sqlserver_uses
 @pytest.mark.parametrize(
     "test_case",
     [
+        SqlServerLatestReadSqlTestCase(
+            description="renders guarded node result table create",
+            database=None,
+            schema="analytics",
+            expected_fragments=(
+                "IF NOT EXISTS (SELECT 1 FROM information_schema.tables ",
+                "WHERE table_schema = 'analytics' AND table_name = '_sqlbuild_node_results')",
+                "CREATE TABLE analytics._sqlbuild_node_results (",
+                "node_type NVARCHAR(450) NOT NULL",
+                "ts DATETIME2 NOT NULL",
+            ),
+        )
+    ],
+    ids=["renders guarded node result table create"],
+)
+def test_given_node_result_table_when_rendering_create_then_sqlserver_guards_missing_table(
+    test_case: SqlServerLatestReadSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statement: str = adapter.render_create_node_result_table_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in statement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlServerIndexSqlTestCase(
             description="renders guarded lookup indexes for node result table",
             database=None,
