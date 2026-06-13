@@ -153,6 +153,13 @@ class PythonHookRuntimeErrorTestCase:
 
 
 @dataclass(frozen=True)
+class PythonHookInvalidReturnTestCase:
+    description: str
+    returned: object
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class SnapshotRuntimeContractErrorTestCase:
     description: str
     contract_columns: tuple[ColumnInfo, ...]

@@ -24,6 +24,7 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     PublicHookContextExportTestCase,
     PythonHookContextParameterTestCase,
     PythonHookExecutionTestCase,
+    PythonHookInvalidReturnTestCase,
     PythonHookInvocationTestCase,
     PythonHookRuntimeErrorTestCase,
     PythonHookSkipTestCase,
@@ -403,6 +404,53 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
         schema=entry.destination.schema,
         name=entry.destination.name,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookInvalidReturnTestCase(
+            description="fails when Python hook returns payload",
+            returned={"payload": 1},
+            expected_error_fragment=(
+                r"post_hooks\[0\] python\(\"invalid_return\"\) returned unsupported value; "
+                r"return None or ctx\.skip\(\.\.\.\)"
+            ),
+        )
+    ],
+    ids=["fails when Python hook returns payload"],
+)
+def test_given_python_hook_returns_payload_when_executing_then_it_fails_clearly(
+    test_case: PythonHookInvalidReturnTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+
+    def invalid_return(ctx: HookContext) -> object:
+        return test_case.returned
+
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        execute_hooks(
+            connection=connection,
+            adapter=adapter,
+            hooks=[PythonHookEntry(name="invalid_return", kwargs={})],
+            phase=HookPhase.POST_HOOKS,
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/invalid_return.py"),
+                    name="invalid_return",
+                    function=invalid_return,
+                ),
+            ),
+            model_name="orders",
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders",
+                qualified_name=None,
+            ),
+        )
 
 
 @pytest.mark.parametrize(
