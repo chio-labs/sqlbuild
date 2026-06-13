@@ -25,13 +25,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waff
             expected_node_ids=(
                 "source:raw_orders",
                 "seed:waffle_types",
-                "function:is_completed_order",
+                "udf:is_completed_order",
                 "model:fact_orders",
             ),
             expected_edge_pairs=(
                 ("source:raw_orders", "model:stg_orders"),
                 ("seed:waffle_types", "model:fact_orders"),
-                ("function:is_completed_order", "model:fact_orders"),
+                ("udf:is_completed_order", "model:fact_orders"),
             ),
             expected_check_ids=(
                 "sql_test:test_fact_orders",
@@ -76,7 +76,7 @@ def test_given_waffle_shop_when_running_dag_json_then_it_reports_static_graph(
     for check_id in test_case.expected_check_ids:
         assert check_id in check_ids
     assert nodes_by_id["model:fact_orders"]["asset_key"] == ["main", "fact_orders"]
-    assert nodes_by_id["function:is_completed_order"]["asset_key"] == [
+    assert nodes_by_id["udf:is_completed_order"]["asset_key"] == [
         "main",
         "is_completed_order",
     ]

@@ -45,11 +45,11 @@ MODEL_BACKFILL: CompiledObjectKey = CompiledObjectKey(
     name="backfill_model",
 )
 FUNCTION_UNCHANGED: CompiledObjectKey = CompiledObjectKey(
-    resource_type=CompiledResourceType.FUNCTION,
+    resource_type=CompiledResourceType.UDF,
     name="unchanged_function",
 )
 FUNCTION_CHANGED: CompiledObjectKey = CompiledObjectKey(
-    resource_type=CompiledResourceType.FUNCTION,
+    resource_type=CompiledResourceType.UDF,
     name="changed_function",
 )
 SEED_KEY: CompiledObjectKey = CompiledObjectKey(

@@ -425,7 +425,7 @@ def _format_function_assets(
     return tuple(
         _drop_none(
             {
-                "kind": CompiledResourceType.FUNCTION.value,
+                "kind": result.function_kind,
                 "name": result.function_name,
                 "status": result.status.value,
                 "duration_ms": result.duration_ms,

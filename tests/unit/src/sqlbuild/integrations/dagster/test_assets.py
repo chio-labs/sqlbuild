@@ -62,7 +62,7 @@ dg: Any = pytest.importorskip("dagster")
                 (("shared_order_feed",), frozenset({"sqlbuild", "loader"})),
                 (("raw_orders_loader",), frozenset({"sqlbuild", "loader"})),
                 (("analytics", "waffle_types"), frozenset({"sqlbuild", "seed"})),
-                (("analytics", "normalize_email"), frozenset({"sqlbuild", "function"})),
+                (("analytics", "normalize_email"), frozenset({"sqlbuild", "udf"})),
                 (("analytics", "customers"), frozenset({"sqlbuild", "view"})),
                 (("analytics", "orders"), frozenset({"sqlbuild", "table"})),
             ),

@@ -3019,7 +3019,7 @@ database = "state.duckdb"
     payload: dict[str, object] = json.loads(execution_json_path.read_text(encoding="utf-8"))
     assets: list[dict[str, object]] = list(payload["assets"])  # type: ignore[arg-type]
     function_assets: dict[str, dict[str, object]] = {
-        str(asset["name"]): asset for asset in assets if asset.get("kind") == "function"
+        str(asset["name"]): asset for asset in assets if asset.get("kind") in {"udf", "table_fn"}
     }
     function_name: str
     for function_name in test_case.expected_function_names:

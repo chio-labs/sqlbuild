@@ -68,7 +68,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "source    raw_orders",
                 "Connecting to duckdb...",
                 "Connected to duckdb. (<time>)",
-                "function  is_completed_order",
+                "udf       is_completed_order",
                 "Completed successfully.",
                 "PASS=<n>  WARN=<n>  FAIL=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
             ),

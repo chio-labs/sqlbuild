@@ -77,7 +77,7 @@ def _function_scope_deps_for_test(*, test: CompiledSqlTest) -> tuple[CompiledObj
     return tuple(
         scope_dep
         for scope_dep in test.scope_deps
-        if scope_dep.resource_type == CompiledResourceType.FUNCTION
+        if scope_dep.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}
     )
 
 
@@ -92,7 +92,10 @@ def _function_deps_for_test(
     for target_key in test.scope_deps:
         dep_key: CompiledObjectKey
         for dep_key in upstream.get(target_key, ()):
-            if dep_key.resource_type != CompiledResourceType.FUNCTION:
+            if dep_key.resource_type not in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 continue
             if dep_key in seen:
                 continue

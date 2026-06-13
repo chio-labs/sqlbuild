@@ -40,8 +40,8 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "path": "seeds/waffle_types.csv",
             },
             {
-                "id": "function:normalize_email",
-                "kind": "function",
+                "id": "udf:normalize_email",
+                "kind": "udf",
                 "name": "normalize_email",
                 "asset_key": ["analytics", "normalize_email"],
                 "path": "functions/normalize_email.sql",
@@ -70,7 +70,7 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
             {"from_id": "loader:shared_order_feed", "to_id": "loader:raw_orders_loader"},
             {"from_id": "loader:raw_orders_loader", "to_id": "source:raw_orders"},
             {"from_id": "source:raw_orders", "to_id": "model:orders"},
-            {"from_id": "function:normalize_email", "to_id": "model:orders"},
+            {"from_id": "udf:normalize_email", "to_id": "model:orders"},
         ],
         "checks": [
             {

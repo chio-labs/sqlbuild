@@ -607,7 +607,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
             functions=(
                 CompiledFunction(
                     key=CompiledObjectKey(
-                        resource_type=CompiledResourceType.FUNCTION,
+                        resource_type=CompiledResourceType.UDF,
                         name="format_cents",
                     ),
                     deps=(),
@@ -679,7 +679,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
             name="returns customer orders",
         ),
         scope_deps=(
-            CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="customer_orders"),
+            CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name="customer_orders"),
         ),
         name="returns customer orders",
         test_file=test_file,
@@ -712,7 +712,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
             functions=(
                 CompiledFunction(
                     key=CompiledObjectKey(
-                        resource_type=CompiledResourceType.FUNCTION,
+                        resource_type=CompiledResourceType.TABLE_FN,
                         name="customer_orders",
                     ),
                     deps=(),

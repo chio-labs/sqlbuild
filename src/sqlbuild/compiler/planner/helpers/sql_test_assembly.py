@@ -127,7 +127,9 @@ def plan_test(
             )
             continue
         function_deps.extend(
-            dep for dep in model.deps if dep.resource_type == CompiledResourceType.FUNCTION
+            dep
+            for dep in model.deps
+            if dep.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}
         )
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)

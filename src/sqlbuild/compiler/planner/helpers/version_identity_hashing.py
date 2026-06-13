@@ -40,7 +40,8 @@ def build_model_version_identity_hash(
             continue
         if upstream_key.resource_type not in (
             CompiledResourceType.MODEL,
-            CompiledResourceType.FUNCTION,
+            CompiledResourceType.UDF,
+            CompiledResourceType.TABLE_FN,
             CompiledResourceType.SEED,
         ):
             continue

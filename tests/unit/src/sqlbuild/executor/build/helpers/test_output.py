@@ -285,6 +285,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order",
                     status=ExecutionStatus.FAILED,
+                    function_kind="udf",
                     error_message="function target could not be qualified",
                 ),
             ),
@@ -293,7 +294,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
         expected_output_fragments=(
             "FAIL=1",
             "Failures:",
-            "is_completed_order  (function)",
+            "is_completed_order  (udf)",
             "function target could not be qualified",
         ),
     ),
@@ -305,6 +306,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order_py",
                     status=ExecutionStatus.SUCCESS,
+                    function_kind="udf",
                     warning_messages=("fingerprint write skipped",),
                 ),
             ),
@@ -316,7 +318,7 @@ TEST_CASES: list[BuildOutputTestCase] = [
             "PASS=1",
             "WARN=1",
             "Warnings:",
-            "is_completed_order_py  (function)",
+            "is_completed_order_py  (udf)",
             "fingerprint write skipped",
         ),
     ),

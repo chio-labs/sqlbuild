@@ -374,7 +374,7 @@ SELECT 1
         expected_model_names=("customers", "orders"),
         expected_model_deps=(
             (),
-            (CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="format_cents"),),
+            (CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),),
         ),
         expected_model_target_names=("customers", "orders"),
         expected_model_target_schemas=(None, None),
@@ -432,7 +432,7 @@ SELECT 1
         expected_test_scope_deps=(
             (
                 CompiledObjectKey(
-                    resource_type=CompiledResourceType.FUNCTION, name="customer_orders"
+                    resource_type=CompiledResourceType.TABLE_FN, name="customer_orders"
                 ),
             ),
         ),
