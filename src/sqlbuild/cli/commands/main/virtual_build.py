@@ -54,8 +54,10 @@ from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult, Py
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
 from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
+from sqlbuild.virtual.state.main.runtime import build_state_runtime
 
 
 def run_virtual_build(
@@ -225,35 +227,52 @@ def run_virtual_build(
         if check_functions:
             check_connection: object = adapter.connect(connection_config)
             try:
-                check_run_state: PythonNodeRunState = PythonNodeRunState()
-                record_python_run_state_results(
+                state_config, state_backend = build_state_runtime(
                     discovered_inputs=discovered_inputs,
-                    run_state=check_run_state,
-                    python_results=result.python_node_results,
-                    load_results=result.execution_result.load_results,
-                    source_map=plan_output.source_map,
+                    project_dir=project_dir,
                 )
-                check_results = execute_python_checks(
-                    check_functions=check_functions,
-                    python_graph=python_graph,
-                    upstream_python_results=result.python_node_results,
-                    upstream_load_results=result.execution_result.load_results,
-                    upstream_load_results_by_loader_name=load_results_by_loader_name(
-                        source_map=plan_output.source_map,
+                check_state_connection: object = state_backend.connect(state_config.connection)
+                try:
+                    check_result_store: VirtualNodeResultStore = VirtualNodeResultStore(
+                        backend=state_backend,
+                        state_connection=check_state_connection,
+                        state_schema=state_config.schema,
+                        virtual_environment_name=result.virtual_environment_name,
+                        target_database=adapter.default_database(),
+                        target_schema=adapter.default_schema(),
+                    )
+                    check_run_state: PythonNodeRunState = PythonNodeRunState()
+                    record_python_run_state_results(
+                        discovered_inputs=discovered_inputs,
+                        run_state=check_run_state,
+                        python_results=result.python_node_results,
                         load_results=result.execution_result.load_results,
-                    ),
-                    adapter=adapter,
-                    connection_config=connection_config,
-                    connection=check_connection,
-                    run_id=result.project.run_id,
-                    target=result.project.effective_target_name,
-                    vars=result.project.effective_vars,
-                    is_reload=reload_sources,
-                    run_state=check_run_state,
-                    default_database=adapter.default_database(),
-                    default_schema=adapter.default_schema(),
-                    providers=providers,
-                )
+                        source_map=plan_output.source_map,
+                    )
+                    check_results = execute_python_checks(
+                        check_functions=check_functions,
+                        python_graph=python_graph,
+                        upstream_python_results=result.python_node_results,
+                        upstream_load_results=result.execution_result.load_results,
+                        upstream_load_results_by_loader_name=load_results_by_loader_name(
+                            source_map=plan_output.source_map,
+                            load_results=result.execution_result.load_results,
+                        ),
+                        adapter=adapter,
+                        connection_config=connection_config,
+                        connection=check_connection,
+                        run_id=result.project.run_id,
+                        target=result.project.effective_target_name,
+                        vars=result.project.effective_vars,
+                        is_reload=reload_sources,
+                        run_state=check_run_state,
+                        default_database=adapter.default_database(),
+                        default_schema=adapter.default_schema(),
+                        providers=providers,
+                        result_store=check_result_store,
+                    )
+                finally:
+                    state_backend.close(check_state_connection)
             finally:
                 adapter.close(check_connection)
             write_check_results(

@@ -11,6 +11,7 @@ MODEL_VERSION_TABLE: str = "model_versions"
 FUNCTION_VERSION_TABLE: str = "function_versions"
 SEED_VERSION_TABLE: str = "seed_versions"
 PYTHON_NODE_VERSION_TABLE: str = "python_node_versions"
+NODE_RESULTS_TABLE: str = "node_results"
 PHYSICAL_RELATION_TABLE: str = "physical_relations"
 PHYSICAL_RELATION_ANCESTRY_TABLE: str = "physical_relation_ancestry"
 VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
@@ -40,6 +41,7 @@ STATE_TABLES: tuple[str, ...] = (
     FUNCTION_VERSION_TABLE,
     SEED_VERSION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
+    NODE_RESULTS_TABLE,
     PHYSICAL_RELATION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
@@ -127,6 +129,22 @@ PYTHON_NODE_VERSION_COLUMNS: dict[str, StateColumnType] = {
     "status": StateColumnType.TEXT,
     "created_at": StateColumnType.TIMESTAMP,
     "updated_at": StateColumnType.TIMESTAMP,
+}
+
+NODE_RESULTS_COLUMNS: dict[str, StateColumnType] = {
+    "virtual_environment_name": StateColumnType.TEXT,
+    "node_type": StateColumnType.TEXT,
+    "node_name": StateColumnType.TEXT,
+    "target_database": StateColumnType.TEXT,
+    "target_schema": StateColumnType.TEXT,
+    "target_name": StateColumnType.TEXT,
+    "run_id": StateColumnType.TEXT,
+    "status": StateColumnType.TEXT,
+    "payload_json_b64": StateColumnType.TEXT,
+    "metadata_json_b64": StateColumnType.TEXT,
+    "error_message": StateColumnType.TEXT,
+    "materialized": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
 }
 
 PHYSICAL_RELATION_COLUMNS: dict[str, StateColumnType] = {
@@ -282,6 +300,7 @@ STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
     FUNCTION_VERSION_TABLE: FUNCTION_VERSION_COLUMNS,
     SEED_VERSION_TABLE: SEED_VERSION_COLUMNS,
     PYTHON_NODE_VERSION_TABLE: PYTHON_NODE_VERSION_COLUMNS,
+    NODE_RESULTS_TABLE: NODE_RESULTS_COLUMNS,
     PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
     PHYSICAL_RELATION_ANCESTRY_TABLE: PHYSICAL_RELATION_ANCESTRY_COLUMNS,
     VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
@@ -324,6 +343,28 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
             "node_type",
             "node_name",
             "version_hash",
+        ),
+    },
+    NODE_RESULTS_TABLE: {
+        "idx_sqb_node_results_latest": (
+            "virtual_environment_name",
+            "node_type",
+            "node_name",
+            "target_database",
+            "target_schema",
+            "target_name",
+            "status",
+            "created_at",
+            "run_id",
+        ),
+        "idx_sqb_node_results_run_id": (
+            "virtual_environment_name",
+            "run_id",
+            "node_type",
+            "node_name",
+            "target_database",
+            "target_schema",
+            "target_name",
         ),
     },
     PHYSICAL_RELATION_TABLE: {

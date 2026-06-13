@@ -120,11 +120,35 @@ class DuckDbStateBackendPythonNodeIdentityTestCase:
 
 
 @dataclass(frozen=True)
+class DuckDbStateBackendNodeResultTestCase:
+    description: str
+    schema: str
+    sqlbuild_version: str
+    virtual_environment_name: str
+    isolated_virtual_environment_name: str
+    expected_latest_payload: dict[str, object]
+    expected_failed_status: str
+    expected_history_count: int
+    expected_target_isolated_payload: dict[str, object]
+    expected_rollback_row_count: int
+
+
+@dataclass(frozen=True)
 class DuckDbStateBackendIndexValidationTestCase:
     description: str
     schema: str
     sqlbuild_version: str
     dropped_index_name: str
+    expected_issue_kind: str
+
+
+@dataclass(frozen=True)
+class DuckDbStateBackendColumnValidationTestCase:
+    description: str
+    schema: str
+    sqlbuild_version: str
+    dropped_table_name: str
+    dropped_column_name: str
     expected_issue_kind: str
 
 

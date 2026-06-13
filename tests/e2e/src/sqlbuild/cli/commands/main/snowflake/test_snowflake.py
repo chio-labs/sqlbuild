@@ -36,6 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeDiffE2ETestCase,
     SnowflakeIntermediateDagStrategyE2ETestCase,
     SnowflakeJanitorDetachedVdeE2ETestCase,
+    SnowflakeNodeResultE2ETestCase,
     SnowflakeReconcileE2ETestCase,
     SnowflakeScenarioLocalReplayE2ETestCase,
     SnowflakeScenarioRemoteE2ETestCase,
@@ -73,6 +74,85 @@ from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
     build_unique_schema_name,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeNodeResultE2ETestCase(
+            description="standard node results persist and read on snowflake",
+            expected_rows=(
+                ("check", "check_produce_result", "success"),
+                ("task", "produce_result", "success"),
+            ),
+        )
+    ],
+    ids=["standard node results persist and read on snowflake"],
+)
+def test_given_python_result_when_running_check_on_snowflake_then_persists_node_results(
+    tmp_path: Path,
+    test_case: SnowflakeNodeResultE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_node_results")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snowflake_node_results",
+        repo_files={
+            "sqlbuild_project.toml": build_snowflake_project_toml(
+                project_name="snowflake_node_results",
+                schema_name=schema_name,
+            ),
+            "tasks/results.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'value': 42}, metadata={'source': 'snowflake'})\n"
+            ),
+            "checks/results.py": (
+                "from sqlbuild.checks import check\n"
+                "from tasks.results import produce_result\n\n"
+                "@check(depends_on=produce_result)\n"
+                "def check_produce_result(ctx):\n"
+                "    return ctx.result_of(produce_result).payload['value'] == 42\n"
+            ),
+        },
+    )
+    try:
+        ensure_query_schema_ready(schema_name=schema_name)
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--select",
+                "produce_result",
+                "--exclude",
+                "check:check_produce_result",
+            ),
+            project_dir=project_dir,
+        )
+        check_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "check", "--select", "check:check_produce_result"),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == test_case.expected_return_code, (
+            build_result.stdout + build_result.stderr
+        )
+        assert check_result.returncode == test_case.expected_return_code, (
+            check_result.stdout + check_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
+            schema_name=schema_name,
+            sql=(
+                "SELECT node_type, node_name, status "
+                f"FROM {relation_name(schema_name=schema_name, name='_sqlbuild_node_results')} "
+                "WHERE node_name IN ('produce_result', 'check_produce_result') "
+                "ORDER BY node_type, node_name"
+            ),
+        )
+        assert rows == test_case.expected_rows
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
 
 
 @pytest.mark.parametrize(

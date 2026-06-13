@@ -158,7 +158,11 @@ def run_virtual_reconcile(
                     "  action  recreate logical seed view from state\n"
                     "  result  repaired"
                 )
-            assert model_name is not None
+            if model_name is None:
+                raise PlannerInputError(
+                    "reconcile repair-view requires exactly one of --model or --seed",
+                    code="C248",
+                )
             repair_view(
                 graph=graph,
                 adapter=adapter,
@@ -406,7 +410,7 @@ def repair_seed_view(
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         seed_name=seed_name,
     )
-    relation = seed_physical_map.get(seed_name)
+    relation: PhysicalRelationRecord | None = seed_physical_map.get(seed_name)
     if relation is None:
         raise PlannerInputError(
             f"missing tracked physical relation for seed '{seed_name}'", code="C251"
@@ -466,7 +470,7 @@ def validate_seed_logical_target_repairable(
         virtual_environment_name=virtual_environment_name,
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
     )
-    relation_type = relation_types.get(seed_name)
+    relation_type: str | None = relation_types.get(seed_name)
     if relation_type is not None and normalize_relation_type(relation_type) == RelationType.TABLE:
         raise PlannerInputError(
             f"logical seed target for '{seed_name}' is a table; repair-view will not overwrite it",

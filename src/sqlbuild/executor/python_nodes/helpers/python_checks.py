@@ -10,9 +10,12 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.models import NodeResultRecord
+from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -61,6 +64,9 @@ def execute_python_check_nodes(
     logger: logging.Logger | None = None,
     providers: ProviderContainer | None = None,
     identity_recorder: PythonIdentityRecorder | None = None,
+    result_store: Any | None = None,
+    persist_node_results: bool = True,
+    require_upstream_results: bool = True,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
@@ -79,23 +85,40 @@ def execute_python_check_nodes(
             }
         )
     selected_check_names: frozenset[str] = frozenset(check.name for check in check_functions)
+    resolved_result_store: Any | None = (
+        result_store
+        if result_store is not None
+        else (
+            build_standard_node_result_store(
+                adapter=adapter,
+                connection=connection,
+                database=default_database,
+                schema=default_schema,
+            )
+            if persist_node_results
+            else None
+        )
+    )
     results: list[PythonCheckExecutionResult] = []
     check_function: DiscoveredCheckFunction
     for check_function in check_functions:
-        upstream_results: tuple[PythonNodeExecutionResult, ...] = tuple(
-            _upstream_result(
-                upstream_name=upstream_name,
-                python_results_by_name=python_results_by_name,
-                loader_results_by_name=loader_results_by_name,
-            )
-            for upstream_name in python_graph.upstream_deps.get(check_function.name, ())
-            if upstream_name not in selected_check_names
+        upstream_results: tuple[PythonNodeExecutionResult, ...] = _check_upstream_results(
+            upstream_names=python_graph.upstream_deps.get(check_function.name, ()),
+            selected_check_names=selected_check_names,
+            python_results_by_name=python_results_by_name,
+            loader_results_by_name=loader_results_by_name,
+            require_upstream_results=require_upstream_results,
         )
         blocked: PythonCheckExecutionResult | None = _blocked_check_result(
             check=check_function,
             upstream_results=upstream_results,
         )
         if blocked is not None:
+            _persist_check_result(
+                result_store=resolved_result_store,
+                result=blocked,
+                run_id=run_id,
+            )
             results.append(blocked)
             continue
         context: CheckContext = CheckContext(
@@ -109,6 +132,7 @@ def execute_python_check_nodes(
             logger=logger or logging.getLogger(f"sqlbuild.check.{check_function.name}"),
             statement_recorder=StatementRecorder(),
             run_state=run_state,
+            result_store=resolved_result_store,
             default_database=default_database,
             default_schema=default_schema,
             relation_targets={} if relation_targets is None else relation_targets,
@@ -130,14 +154,18 @@ def execute_python_check_nodes(
                 default_severity=check_function.severity,
             )
         except Exception as error:
-            results.append(
-                PythonCheckExecutionResult(
-                    node_name=check_function.name,
-                    passed=False,
-                    severity=PythonCheckSeverity.ERROR,
-                    error_message=str(error),
-                )
+            error_result: PythonCheckExecutionResult = PythonCheckExecutionResult(
+                node_name=check_function.name,
+                passed=False,
+                severity=PythonCheckSeverity.ERROR,
+                error_message=str(error),
             )
+            _persist_check_result(
+                result_store=resolved_result_store,
+                result=error_result,
+                run_id=run_id,
+            )
+            results.append(error_result)
             continue
         severity: PythonCheckSeverity = check_result.severity or check_function.severity
         result: PythonCheckExecutionResult = PythonCheckExecutionResult(
@@ -147,9 +175,16 @@ def execute_python_check_nodes(
             message=check_result.message,
             metadata=check_result.metadata,
         )
+        _persist_check_result(
+            result_store=resolved_result_store,
+            result=result,
+            run_id=run_id,
+        )
         results.append(result)
         if not result.failed:
-            identity = python_graph.nodes_by_name[check_function.name].identity
+            identity: PythonNodeIdentity | None = python_graph.nodes_by_name[
+                check_function.name
+            ].identity
             if identity_recorder is not None:
                 identity_recorder(identity, None)
             else:
@@ -162,6 +197,35 @@ def execute_python_check_nodes(
                     schema=default_schema,
                 )
     return tuple(results)
+
+
+def _persist_check_result(
+    *, result_store: Any | None, result: PythonCheckExecutionResult, run_id: str
+) -> None:
+    if result_store is None:
+        return
+    status: NodeResultStatus = (
+        NodeResultStatus.SUCCESS
+        if result.passed
+        else NodeResultStatus.WARN
+        if result.warned
+        else NodeResultStatus.FAILED
+    )
+    result_store.write(
+        NodeResultRecord(
+            node_type=PythonNodeKind.CHECK.value,
+            node_name=result.node_name,
+            target_database=result_store.database,
+            target_schema=result_store.schema,
+            target_name=None,
+            run_id=run_id,
+            status=status.value,
+            payload=None,
+            metadata=result.metadata,
+            error_message=result.error_message or result.message,
+            materialized=None,
+        )
+    )
 
 
 def _upstream_result(
@@ -178,6 +242,36 @@ def _upstream_result(
             f"Python check dependency '{upstream_name}' did not run before check execution"
         )
     return result
+
+
+def _check_upstream_results(
+    *,
+    upstream_names: tuple[str, ...],
+    selected_check_names: frozenset[str],
+    python_results_by_name: Mapping[str, PythonNodeExecutionResult],
+    loader_results_by_name: Mapping[str, PythonNodeExecutionResult],
+    require_upstream_results: bool,
+) -> tuple[PythonNodeExecutionResult, ...]:
+    results: list[PythonNodeExecutionResult] = []
+    upstream_name: str
+    for upstream_name in upstream_names:
+        if upstream_name in selected_check_names:
+            continue
+        if require_upstream_results:
+            results.append(
+                _upstream_result(
+                    upstream_name=upstream_name,
+                    python_results_by_name=python_results_by_name,
+                    loader_results_by_name=loader_results_by_name,
+                )
+            )
+            continue
+        result: PythonNodeExecutionResult | None = python_results_by_name.get(
+            upstream_name
+        ) or loader_results_by_name.get(upstream_name)
+        if result is not None:
+            results.append(result)
+    return tuple(results)
 
 
 def _blocked_check_result(

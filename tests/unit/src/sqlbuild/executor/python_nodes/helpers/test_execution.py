@@ -10,6 +10,8 @@ import pytest
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
+from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.python_nodes.helpers.execution import (
     execute_python_nodes,
     execute_ready_python_node,
@@ -140,6 +142,7 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
         vars={},
         is_reload=False,
         statement_recorder=StatementRecorder(),
+        default_schema="default_schema",
     )
 
     assert (
@@ -157,8 +160,6 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
     assert tuple(node_result.error_message for node_result in result.results) == (
         test_case.expected_error_fragments
     )
-    assert result.run_state.payload(fetch_orders) == test_case.expected_payloads[0]
-    assert result.run_state.payload(export_orders) == test_case.expected_payloads[1]
 
 
 @pytest.mark.parametrize(
@@ -412,32 +413,44 @@ def test_given_ready_python_node_when_executing_then_uses_existing_run_state(
         depends_on=(fetch_orders,),
     )
 
+    adapter: PythonNodeContextTestAdapter = PythonNodeContextTestAdapter()
+    result_store: StandardNodeResultStore = build_standard_node_result_store(
+        adapter=adapter,
+        connection=object(),
+        database=None,
+        schema="default_schema",
+    )
+
     task_result: PythonNodeExecutionResult = execute_ready_python_node(
         node=task_node,
         upstream_results=(),
-        adapter=PythonNodeContextTestAdapter(),
+        adapter=adapter,
         connection_config={},
-        connection=object(),
+        connection=result_store.connection,
         run_id="test_run",
         target="dev",
         vars={},
         is_reload=False,
         statement_recorder=StatementRecorder(),
         run_state=run_state,
+        default_schema="default_schema",
+        result_store=result_store,
     )
     run_state.record_result(node_function=task_node.function, result=task_result)
     asset_result: PythonNodeExecutionResult = execute_ready_python_node(
         node=asset_node,
         upstream_results=(task_result,),
-        adapter=PythonNodeContextTestAdapter(),
+        adapter=adapter,
         connection_config={},
-        connection=object(),
+        connection=result_store.connection,
         run_id="test_run",
         target="dev",
         vars={},
         is_reload=False,
         statement_recorder=StatementRecorder(),
         run_state=run_state,
+        default_schema="default_schema",
+        result_store=result_store,
     )
 
     assert (task_result.node_name, asset_result.node_name) == test_case.expected_names

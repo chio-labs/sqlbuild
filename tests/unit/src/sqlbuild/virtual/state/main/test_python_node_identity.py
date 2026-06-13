@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.virtual.state.main.python_node_identity_read import (
     read_virtual_python_identity_fingerprints,
@@ -35,8 +36,8 @@ from tests.unit.src.sqlbuild.virtual.state.main.helpers import (
 def test_given_virtual_python_identity_when_recording_then_reads_previous_fingerprint(
     test_case: VirtualPythonNodeIdentityTestCase,
 ) -> None:
-    backend = RecordingPythonIdentityStateBackend()
-    identity = PythonNodeIdentity(
+    backend: RecordingPythonIdentityStateBackend = RecordingPythonIdentityStateBackend()
+    identity: PythonNodeIdentity = PythonNodeIdentity(
         node_type=test_case.expected_node_type,
         node_name=test_case.expected_node_name,
         object_module="tasks.orders",
@@ -56,14 +57,16 @@ def test_given_virtual_python_identity_when_recording_then_reads_previous_finger
         virtual_environment_name=test_case.virtual_environment_name,
         identity=identity,
     )
-    fingerprints = read_virtual_python_identity_fingerprints(
+    fingerprints: dict[tuple[str, str], Fingerprint] = read_virtual_python_identity_fingerprints(
         backend=backend,
         state_connection=None,
         schema="sqlbuild_state",
         virtual_environment_name=test_case.virtual_environment_name,
     )
 
-    fingerprint = fingerprints[(test_case.expected_node_type, test_case.expected_node_name)]
+    fingerprint: Fingerprint = fingerprints[
+        (test_case.expected_node_type, test_case.expected_node_name)
+    ]
     assert fingerprint.node_type == test_case.expected_node_type
     assert fingerprint.node_name == test_case.expected_node_name
     assert fingerprint.version_hash == test_case.expected_version_hash

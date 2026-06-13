@@ -10,6 +10,13 @@ class DatabricksCliTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksNodeResultE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class DatabricksBuildE2ETestCase:
     description: str
     expected_table_name: str

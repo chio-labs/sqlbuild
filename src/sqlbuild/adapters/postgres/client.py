@@ -1362,6 +1362,50 @@ class PostgresAdapter(BaseAdapter):
             "observed_at DESC, run_id DESC)",
         )
 
+    def render_create_node_result_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.executor.node_results.main.create_table_sql import (
+            build_node_results_create_table_sql,
+        )
+
+        return build_node_results_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_node_result_index_sqls(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=NODE_RESULTS_TABLE_NAME,
+        )
+        latest_index_name: str = "_sqlbuild_node_results_latest_idx"
+        run_id_index_name: str = "_sqlbuild_node_results_run_id_idx"
+        if table_name is None:
+            return ()
+        return (
+            "CREATE INDEX IF NOT EXISTS "
+            f"{latest_index_name} ON {table_name} ("
+            "node_type, node_name, target_database, target_schema, target_name, status, "
+            "ts DESC, run_id DESC)",
+            "CREATE INDEX IF NOT EXISTS "
+            f"{run_id_index_name} ON {table_name} ("
+            "run_id, node_type, node_name, target_database, target_schema, target_name)",
+        )
+
     def render_read_latest_source_freshness_sql(
         self,
         *,
