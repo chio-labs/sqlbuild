@@ -5,11 +5,18 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.models import LoaderContext, LoaderSkipResult, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoaderContext,
+    LoaderResult,
+    LoaderSkipResult,
+    LoadExecutionResult,
+)
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import (
@@ -42,6 +49,7 @@ def execute_external_source_load(
     resource_kind: ExecutionResourceKind,
     start: float,
     providers: ProviderContainer | None = None,
+    result_store: Any | None = None,
 ) -> LoadExecutionResult:
     """Run one external writer while SQLBuild holds no destination connection."""
 
@@ -67,6 +75,7 @@ def execute_external_source_load(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             providers=providers if providers is not None else _empty_provider_container(),
+            result_store=result_store,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
@@ -86,6 +95,26 @@ def execute_external_source_load(
                 lifecycle_events=statement_recorder.snapshot(),
                 skip_mode=raw_rows.mode,
                 skip_reason=raw_rows.reason,
+            )
+        if isinstance(raw_rows, LoaderResult):
+            return LoadExecutionResult(
+                source_name=source_entry.name,
+                loader_name=loader_function.name,
+                status=ExecutionStatus.SUCCESS,
+                target=destination_relation,
+                resource_kind=resource_kind,
+                staging_relation=None,
+                rows_loaded=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                lifecycle_events=statement_recorder.snapshot(),
+                result_payload=raw_rows.payload,
+                result_metadata=raw_rows.metadata,
+                result_materialized=raw_rows.materialized,
+            )
+        if isinstance(raw_rows, NodeResultEnvelope):
+            raise ExecutorInputError(
+                f"Loader '{loader_function.name}' returned a node result envelope; "
+                "use ctx.result(...) to return this loader's own result"
             )
         if raw_rows is not None:
             raise ExecutorInputError(

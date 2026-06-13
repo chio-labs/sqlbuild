@@ -1770,8 +1770,8 @@ def test_given_prior_loader_result_when_later_task_reads_result_then_uses_loader
                 "    result = ctx.result_of(raw_events)\n"
                 "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
                 "    output.write_text(\n"
-                "        f\"{result.payload['loader_name']}:{result.payload['source_name']}:\"\n"
-                "        f\"{result.payload['rows_loaded']}\"\n"
+                "        f\"{result.metadata['loader_name']}:{result.metadata['source_name']}:\"\n"
+                "        f\"{result.metadata['rows_loaded']}\"\n"
                 "    )\n"
                 "    return ctx.result()\n"
             ),

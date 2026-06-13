@@ -36,6 +36,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
@@ -172,6 +173,7 @@ def run_load(
         use_color=use_color,
     )
     provider_session: Any = build_provider_session(discovered_inputs.providers)
+    result_store_connection: Any = adapter.connect(connection_config)
     try:
         results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
             sources=selected_sources,
@@ -194,6 +196,12 @@ def run_load(
             on_connection_error=connection_progress.on_connection_error,
             use_color=use_color,
             providers=provider_session.providers,
+            result_store=build_standard_node_result_store(
+                adapter=adapter,
+                connection=result_store_connection,
+                database=adapter.default_database(),
+                schema=adapter.default_schema(),
+            ),
         )
         elapsed: float = time.monotonic() - start
         success_count: int = sum(1 for result in results if result.status.value == "success")
@@ -215,6 +223,7 @@ def run_load(
         )
         return 0 if fail_count == 0 else 1
     finally:
+        adapter.close(result_store_connection)
         provider_session.close()
 
 
