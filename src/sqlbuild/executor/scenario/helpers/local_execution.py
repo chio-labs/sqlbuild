@@ -193,7 +193,7 @@ def _build_local_execution_plan(
                 sql=function_sql,
                 source_dialect=source_dialect,
                 scenario_name=scenario_plan.name,
-                resource_kind="function",
+                resource_kind=str(function_entry.key.resource_type),
                 resource_name=function_entry.name,
             )
         function_entries.append(replace(function_entry, body_sql=function_sql))

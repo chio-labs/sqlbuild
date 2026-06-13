@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
 )
 from sqlbuild.compiler.compile.helpers.sql_analysis_validation import validate_sql_syntax
 from sqlbuild.compiler.compile.helpers.templating import expand_template_data
+from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
     CompiledAudit,
@@ -439,7 +440,9 @@ def _assemble_compiled_function(
 ) -> CompiledFunction:
     return CompiledFunction(
         key=CompiledObjectKey(
-            resource_type=CompiledResourceType.FUNCTION,
+            resource_type=CompiledResourceType(
+                function_node_type(return_columns=function_input.return_columns)
+            ),
             name=function_input.name,
         ),
         deps=function_build_deps(references=function_input.references, seed_names=seed_names),
@@ -614,7 +617,7 @@ def _function_sql_test_scope_deps(
     *, tested_function_names: tuple[str, ...]
 ) -> tuple[CompiledObjectKey, ...]:
     return tuple(
-        CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=function_name)
+        CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name)
         for function_name in tested_function_names
     )
 

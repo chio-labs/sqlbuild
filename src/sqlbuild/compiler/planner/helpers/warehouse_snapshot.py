@@ -23,7 +23,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
-    NODE_TYPE_FUNCTION,
+    FUNCTION_NODE_TYPES,
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
@@ -387,7 +387,7 @@ def _gather_fingerprints(
         for node_name, fingerprint in fingerprint_set.fingerprints.items():
             if fingerprint.node_type == NODE_TYPE_MODEL:
                 model_fingerprints[node_name] = fingerprint
-            elif fingerprint.node_type == NODE_TYPE_FUNCTION:
+            elif fingerprint.node_type in FUNCTION_NODE_TYPES:
                 function_fingerprints[node_name] = fingerprint
             elif fingerprint.node_type == NODE_TYPE_SEED:
                 seed_fingerprints[node_name] = fingerprint
@@ -396,7 +396,7 @@ def _gather_fingerprints(
             for identity_key, fingerprint in fingerprint_set.fingerprints_by_identity.items():
                 if fingerprint.node_type not in {
                     NODE_TYPE_MODEL,
-                    NODE_TYPE_FUNCTION,
+                    *FUNCTION_NODE_TYPES,
                     NODE_TYPE_SEED,
                 }:
                     python_fingerprints[identity_key] = fingerprint

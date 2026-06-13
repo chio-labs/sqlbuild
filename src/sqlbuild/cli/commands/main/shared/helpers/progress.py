@@ -303,7 +303,7 @@ class BuildProgressCallbacks:
             function_name: str = _truncate_name(node_result.function_name, self._name_width)
             self._write_top_level_result_line(
                 ctr=ctr,
-                resource_type=ExecutionResourceKind.FUNCTION.value,
+                resource_type=node_result.function_kind,
                 name=function_name,
                 status=status,
                 duration=duration,
@@ -709,7 +709,7 @@ def _format_failure_details(result: BuildExecutionResult, *, style: CliStyle) ->
             lines.append(style.error_strong("Failures:"))
             lines.append("")
             has_failures = True
-        lines.append(f"  {function_result.function_name}  (function)")
+        lines.append(f"  {function_result.function_name}  ({function_result.function_kind})")
         if function_result.error_message is not None:
             lines.extend(
                 _format_failure_error_block(
@@ -784,7 +784,7 @@ def _format_warning_details(result: BuildExecutionResult, *, style: CliStyle) ->
             lines.append(style.warning_strong("Warnings:"))
             lines.append("")
             has_warnings = True
-        lines.append(f"  {function_result.function_name}  (function)")
+        lines.append(f"  {function_result.function_name}  ({function_result.function_kind})")
         warning_msg: str
         for warning_msg in function_result.warning_messages:
             lines.append(f"    {warning_msg}")

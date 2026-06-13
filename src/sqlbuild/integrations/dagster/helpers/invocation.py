@@ -443,14 +443,18 @@ def _build_results_for_selected_assets(
             metadata={"command": " ".join(command), "sqlbuild_id": node.get("id")},
         )
         for node in nodes
-        if str(node.get("kind")) in {"source", "loader", "seed", "model", "function"}
+        if _is_materializable_node_kind(str(node.get("kind")))
     )
 
 
 def _selectable_kinds_for_command(command: str) -> frozenset[str]:
     if command == "load":
         return frozenset({"source", "loader"})
-    return frozenset({"source", "seed", "model", "function"})
+    return frozenset({"source", "seed", "model", "udf", "table_fn"})
+
+
+def _is_materializable_node_kind(kind: str) -> bool:
+    return kind in {"source", "loader", "seed", "model", "udf", "table_fn"}
 
 
 def _load_execution_payload(stdout: str) -> Mapping[str, Any] | None:
@@ -671,7 +675,7 @@ def _asset_ids_for_execution_check(
     asset_name: object = check.get("asset_name")
     if asset_name is None:
         return ()
-    for kind in ("model", "source", "seed", "function"):
+    for kind in ("model", "source", "seed", "udf", "table_fn"):
         node: Mapping[str, Any] | None = nodes_by_name.get((kind, str(asset_name)))
         if node is not None:
             return (str(node.get("id")),)

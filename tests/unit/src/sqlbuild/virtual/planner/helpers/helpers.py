@@ -45,7 +45,7 @@ def build_virtual_planner_test_project(
     upstream_seed_name: str = "order_statuses",
 ) -> ProjectGraph:
     function: CompiledFunction = CompiledFunction(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name="normalize_order"),
+        key=CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="normalize_order"),
         deps=(),
         name="normalize_order",
         relative_path=Path("functions/sql/normalize_order.sql"),

@@ -15,7 +15,7 @@ SOURCE_ORDERS: CompiledObjectKey = CompiledObjectKey(
     name="raw_orders",
 )
 FUNCTION_NORMALIZE: CompiledObjectKey = CompiledObjectKey(
-    resource_type=CompiledResourceType.FUNCTION,
+    resource_type=CompiledResourceType.UDF,
     name="normalize_order",
 )
 STG_ORDERS: CompiledObjectKey = CompiledObjectKey(

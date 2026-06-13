@@ -339,7 +339,7 @@ def _walk_model_upstream(
         if dep_key.resource_type == CompiledResourceType.DBT_REF:
             required_dbt_ref_fixture_names.add(dep_key.name.replace(".", "__"))
             continue
-        if dep_key.resource_type == CompiledResourceType.FUNCTION:
+        if dep_key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             if dep_key in seen_function_deps:
                 continue
             seen_function_deps.add(dep_key)

@@ -183,10 +183,10 @@ def expand_required_build_resources(
     for key in tuple(selected_keys):
         upstream_key: CompiledObjectKey
         for upstream_key in expand_upstream(key, upstream):
-            if (
-                include_upstream_functions
-                and upstream_key.resource_type == CompiledResourceType.FUNCTION
-            ):
+            if include_upstream_functions and upstream_key.resource_type in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 expanded.add(upstream_key)
             if include_upstream_seeds and upstream_key.resource_type == CompiledResourceType.SEED:
                 expanded.add(upstream_key)
@@ -198,7 +198,10 @@ def expand_required_build_resources(
     for key in selected_model_keys:
         downstream_key: CompiledObjectKey
         for downstream_key in downstream.get(key, ()):
-            if downstream_key.resource_type == CompiledResourceType.FUNCTION:
+            if downstream_key.resource_type in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 expanded.add(downstream_key)
     return frozenset(expanded)
 

@@ -429,7 +429,7 @@ class BuildScheduler:
             return self._execute_seed_node(key, connection)
         if key.resource_type == CompiledResourceType.SOURCE:
             return self._execute_source_node(key, connection)
-        if key.resource_type == CompiledResourceType.FUNCTION:
+        if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             return self._execute_function_node(key, connection)
         if key.resource_type == CompiledResourceType.SQL_TEST:
             return self._execute_test_node(key, connection)
@@ -561,13 +561,14 @@ class BuildScheduler:
             return FunctionExecutionResult(
                 function_name=key.name,
                 status=ExecutionStatus.FAILED,
+                function_kind=str(key.resource_type),
                 error_code=FUNCTION_ENTRY_MISSING_CODE,
                 error_message="function entry not found",
             )
         if self._on_progress is not None:
-            self._on_progress(f"function: {function_entry.name}")
+            self._on_progress(f"{str(key.resource_type)}: {function_entry.name}")
         if self._on_node_start is not None:
-            self._on_node_start(function_entry.name, ExecutionResourceKind.FUNCTION)
+            self._on_node_start(function_entry.name, ExecutionResourceKind(str(key.resource_type)))
         start: float = time.monotonic()
         result: FunctionExecutionResult = execute_function(
             function_entry=function_entry,
@@ -756,14 +757,16 @@ class BuildScheduler:
                 self._seed_results.append(
                     SeedExecutionResult(seed_name=seed_entry.name, status=ExecutionStatus.SKIPPED)
                 )
-        elif key.resource_type == CompiledResourceType.FUNCTION:
+        elif key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(
                 key
             )
             if function_entry is not None:
                 self._function_results.append(
                     FunctionExecutionResult(
-                        function_name=function_entry.name, status=ExecutionStatus.SKIPPED
+                        function_name=function_entry.name,
+                        status=ExecutionStatus.SKIPPED,
+                        function_kind=str(key.resource_type),
                     )
                 )
         elif key.resource_type == CompiledResourceType.SOURCE:
