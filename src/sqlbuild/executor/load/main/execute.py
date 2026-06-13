@@ -24,7 +24,13 @@ from sqlbuild.executor.load.helpers.relation_refs import (
 )
 from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
-from sqlbuild.executor.load.models import LoaderContext, LoaderSkipResult, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoaderContext,
+    LoaderResult,
+    LoaderSkipResult,
+    LoadExecutionResult,
+)
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import (
     is_untargeted_self_managed_intermediate,
@@ -62,6 +68,7 @@ def execute_source_load(
     loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None,
     source_ref_entries: Mapping[str, SourceEntry] | None = None,
     providers: ProviderContainer | None = None,
+    result_store: Any | None = None,
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
 
@@ -105,6 +112,7 @@ def execute_source_load(
                 resource_kind=resource_kind,
                 start=start,
                 providers=providers,
+                result_store=result_store,
             )
         supported_write_strategies: frozenset[SourceWriteStrategy] = frozenset(
             {
@@ -170,6 +178,7 @@ def execute_source_load(
                 statement_recorder=statement_recorder,
             ),
             providers=providers if providers is not None else _empty_provider_container(),
+            result_store=result_store,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
@@ -189,6 +198,32 @@ def execute_source_load(
                 lifecycle_events=statement_recorder.snapshot(),
                 skip_mode=raw_rows.mode,
                 skip_reason=raw_rows.reason,
+            )
+        if isinstance(raw_rows, LoaderResult):
+            if source_entry.write_strategy is not None:
+                raise ExecutorInputError(
+                    f"Managed source '{source_entry.name}' loader '{loader_function.name}' "
+                    "returned ctx.result(...); managed loaders must return dict rows "
+                    "or ctx.skip(...)"
+                )
+            return LoadExecutionResult(
+                source_name=source_entry.name,
+                loader_name=loader_function.name,
+                status=ExecutionStatus.SUCCESS,
+                target=destination_relation,
+                resource_kind=resource_kind,
+                staging_relation=None,
+                rows_loaded=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                lifecycle_events=statement_recorder.snapshot(),
+                result_payload=raw_rows.payload,
+                result_metadata=raw_rows.metadata,
+                result_materialized=raw_rows.materialized,
+            )
+        if isinstance(raw_rows, NodeResultEnvelope):
+            raise ExecutorInputError(
+                f"Loader '{loader_function.name}' returned a node result envelope; "
+                "use ctx.result(...) to return this loader's own result"
             )
         if raw_rows is None:
             if is_untargeted_self_managed_intermediate(

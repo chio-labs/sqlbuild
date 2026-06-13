@@ -53,6 +53,7 @@ def run_load_pipeline(
     on_connection_error: Callable[[int, float], None] | None = None,
     use_color: bool = False,
     providers: ProviderContainer | None = None,
+    result_store: Any | None = None,
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
@@ -101,6 +102,7 @@ def run_load_pipeline(
             end_cursor_int=end_cursor_int,
             use_color=use_color,
             providers=providers,
+            result_store=result_store,
         )
         preloaded_results.append(result)
         if result.status.value == "failed" or (
@@ -181,6 +183,7 @@ def run_load_pipeline(
                         end_cursor_int=end_cursor_int,
                         use_color=use_color,
                         providers=providers,
+                        result_store=result_store,
                     ),
                     state=state,
                     on_load_complete=on_load_complete,
@@ -215,6 +218,7 @@ def run_load_pipeline(
                         use_color,
                         state.completion_queue,
                         providers,
+                        result_store,
                     )
                 if not state.in_flight:
                     break

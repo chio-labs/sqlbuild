@@ -108,6 +108,7 @@ def execute_ready_dag_source(
     end_cursor_int: int | None,
     use_color: bool = False,
     providers: ProviderContainer | None = None,
+    result_store: Any | None = None,
 ) -> LoadExecutionResult:
     """Execute one ready DAG node or return a skipped result."""
 
@@ -147,6 +148,7 @@ def execute_ready_dag_source(
         loader_ref_entries=indexes.loader_ref_entries,
         source_ref_entries=indexes.source_by_name,
         providers=providers,
+        result_store=result_store,
     )
 
 
@@ -170,6 +172,7 @@ def load_dag_worker(
     use_color: bool,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
     providers: ProviderContainer | None = None,
+    result_store: Any | None = None,
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
 
@@ -193,6 +196,7 @@ def load_dag_worker(
             end_cursor_int=end_cursor_int,
             use_color=use_color,
             providers=providers,
+            result_store=result_store,
         )
 
     run_worker_with_completion(
