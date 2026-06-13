@@ -376,6 +376,7 @@ def _execute_ingress_loader(
         ),
         source_ref_entries=source_map,
         providers=providers,
+        result_store=result_store,
     )
     load_results_by_name[node.name] = result
     _persist_loader_result(
@@ -420,15 +421,16 @@ def _persist_loader_result(
             target_name=None,
             run_id=run_id,
             status=result.status.value,
-            payload={
+            payload=result.result_payload,
+            metadata={
                 "source_name": result.source_name,
                 "loader_name": result.loader_name,
                 "rows_loaded": result.rows_loaded,
                 "target": result.target,
+                **result.result_metadata,
             },
-            metadata={},
             error_message=result.error_message or result.skip_reason,
-            materialized=None,
+            materialized=result.result_materialized,
         )
     )
 

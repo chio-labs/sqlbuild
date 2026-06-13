@@ -4049,7 +4049,9 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         ),
     ),
     SnapshotFullRefreshSuccessBuildE2ETestCase(
-        description="historical check snapshot full refresh rebuilds through run command",
+        description=(
+            "historical check snapshot full refresh rebuilds through build without tests or audits"
+        ),
         repo_files={
             "sqlbuild_project.toml": dedent(
                 """
@@ -4105,9 +4107,11 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         initial_command=("--no-color", "build"),
         full_refresh_command=(
             "--no-color",
-            "run",
+            "build",
             "--full-refresh",
             "--allow-snapshot-full-refresh",
+            "--no-tests",
+            "--no-audits",
         ),
         expected_exit_code=0,
         expected_query=(
@@ -4206,7 +4210,10 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         ),
     ),
     SnapshotFullRefreshSuccessBuildE2ETestCase(
-        description="historical timestamp snapshot full refresh rebuilds through run command",
+        description=(
+            "historical timestamp snapshot full refresh rebuilds through build "
+            "without tests or audits"
+        ),
         repo_files={
             "sqlbuild_project.toml": dedent(
                 """
@@ -4267,9 +4274,11 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         initial_command=("--no-color", "build"),
         full_refresh_command=(
             "--no-color",
-            "run",
+            "build",
             "--full-refresh",
             "--allow-snapshot-full-refresh",
+            "--no-tests",
+            "--no-audits",
         ),
         expected_exit_code=0,
         expected_query=(
@@ -4368,7 +4377,10 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         ),
     ),
     SnapshotFullRefreshSuccessBuildE2ETestCase(
-        description="historical timestamp changes full refresh rebuilds through run command",
+        description=(
+            "historical timestamp changes full refresh rebuilds through build "
+            "without tests or audits"
+        ),
         repo_files={
             "sqlbuild_project.toml": dedent(
                 """
@@ -4429,9 +4441,11 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         initial_command=("--no-color", "build"),
         full_refresh_command=(
             "--no-color",
-            "run",
+            "build",
             "--full-refresh",
             "--allow-snapshot-full-refresh",
+            "--no-tests",
+            "--no-audits",
         ),
         expected_exit_code=0,
         expected_query=(
@@ -4530,7 +4544,10 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         ),
     ),
     SnapshotFullRefreshSuccessBuildE2ETestCase(
-        description="historical hard-delete snapshot full refresh rebuilds through run command",
+        description=(
+            "historical hard-delete snapshot full refresh rebuilds through build "
+            "without tests or audits"
+        ),
         repo_files={
             "sqlbuild_project.toml": dedent(
                 """
@@ -4594,9 +4611,11 @@ SNAPSHOT_FULL_REFRESH_SUCCESS_TEST_CASES: list[SnapshotFullRefreshSuccessBuildE2
         initial_command=("--no-color", "build"),
         full_refresh_command=(
             "--no-color",
-            "run",
+            "build",
             "--full-refresh",
             "--allow-snapshot-full-refresh",
+            "--no-tests",
+            "--no-audits",
         ),
         expected_exit_code=0,
         expected_query=(

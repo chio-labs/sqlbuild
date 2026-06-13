@@ -63,6 +63,12 @@ def execute_build_source_node(
     if on_node_start is not None:
         on_node_start(source_entry.name, resource_kind)
     start: float = time.monotonic()
+    result_store: StandardNodeResultStore = build_standard_node_result_store(
+        adapter=adapter,
+        connection=connection,
+        database=adapter.default_database(),
+        schema=adapter.default_schema(),
+    )
     result: LoadExecutionResult = execute_source_load(
         source_entry=source_entry,
         loader_function=loader_function,
@@ -82,6 +88,7 @@ def execute_build_source_node(
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
         providers=providers,
+        result_store=result_store,
     )
     duration: int = int((time.monotonic() - start) * 1000)
     timed_result: LoadExecutionResult = dataclasses.replace(result, duration_ms=duration)
@@ -91,6 +98,7 @@ def execute_build_source_node(
         loader_name=loader_name,
         result=timed_result,
         run_id=run_id,
+        result_store=result_store,
     )
     return timed_result
 
@@ -102,30 +110,35 @@ def _persist_loader_result(
     loader_name: str,
     result: LoadExecutionResult,
     run_id: str,
+    result_store: StandardNodeResultStore | None = None,
 ) -> None:
-    result_store: StandardNodeResultStore = build_standard_node_result_store(
-        adapter=adapter,
-        connection=connection,
-        database=adapter.default_database(),
-        schema=adapter.default_schema(),
+    resolved_result_store: StandardNodeResultStore = (
+        result_store
+        or build_standard_node_result_store(
+            adapter=adapter,
+            connection=connection,
+            database=adapter.default_database(),
+            schema=adapter.default_schema(),
+        )
     )
-    result_store.write(
+    resolved_result_store.write(
         NodeResultRecord(
             node_type="loader",
             node_name=loader_name,
-            target_database=result_store.database,
-            target_schema=result_store.schema,
+            target_database=resolved_result_store.database,
+            target_schema=resolved_result_store.schema,
             target_name=None,
             run_id=run_id,
             status=result.status.value,
-            payload={
+            payload=result.result_payload,
+            metadata={
                 "source_name": result.source_name,
                 "loader_name": result.loader_name,
                 "rows_loaded": result.rows_loaded,
                 "target": result.target,
+                **result.result_metadata,
             },
-            metadata={},
             error_message=result.error_message or result.skip_reason,
-            materialized=None,
+            materialized=result.result_materialized,
         )
     )
