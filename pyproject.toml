@@ -17,6 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dbt = [
+  "jinja2>=3.1",
+]
 snowflake = [
   "snowflake-connector-python>=3.17.3",
 ]

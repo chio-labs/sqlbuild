@@ -196,6 +196,7 @@ def execute_dbt_interop_from_project(
         raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
         project_dir=project_dir,
         adapter_name=adapter_name,
+        discovered_inputs=discovered_inputs,
     )
     connection_progress: Any = build_connection_progress_reporter(
         adapter_name=adapter_name,
