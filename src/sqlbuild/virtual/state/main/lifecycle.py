@@ -163,8 +163,8 @@ def _format_state_lifecycle_summary(
             label="current state",
             value=(
                 "model_versions, function_versions, physical_relations, "
-                "physical_relation_ancestry, virtual_environments, virtual_environment_model_refs, "
-                "virtual_environment_function_refs, locks"
+                "physical_relation_ancestry, virtual_environments, "
+                "virtual_environment_node_refs, locks"
             ),
             use_color=use_color,
             emphasize_value=False,

@@ -15,10 +15,7 @@ NODE_RESULTS_TABLE: str = "node_results"
 PHYSICAL_RELATION_TABLE: str = "physical_relations"
 PHYSICAL_RELATION_ANCESTRY_TABLE: str = "physical_relation_ancestry"
 VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
-VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE: str = "virtual_environment_model_refs"
-VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: str = "virtual_environment_function_refs"
-VIRTUAL_ENVIRONMENT_SEED_REF_TABLE: str = "virtual_environment_seed_refs"
-VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE: str = "virtual_environment_python_node_refs"
+VIRTUAL_ENVIRONMENT_NODE_REF_TABLE: str = "virtual_environment_node_refs"
 SOURCE_FRESHNESS_OBSERVATION_TABLE: str = "source_freshness_observations"
 VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: str = "virtual_environment_checkpoints"
 VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE: str = "virtual_environment_checkpoint_model_refs"
@@ -45,10 +42,7 @@ STATE_TABLES: tuple[str, ...] = (
     PHYSICAL_RELATION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
-    VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_SEED_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
@@ -178,28 +172,7 @@ VIRTUAL_ENVIRONMENT_COLUMNS: dict[str, StateColumnType] = {
     "finalized_at": StateColumnType.TIMESTAMP,
 }
 
-VIRTUAL_ENVIRONMENT_MODEL_REF_COLUMNS: dict[str, StateColumnType] = {
-    "virtual_environment_name": StateColumnType.TEXT,
-    "model_name": StateColumnType.TEXT,
-    "version_hash": StateColumnType.TEXT,
-    "updated_at": StateColumnType.TIMESTAMP,
-}
-
-VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS: dict[str, StateColumnType] = {
-    "virtual_environment_name": StateColumnType.TEXT,
-    "function_name": StateColumnType.TEXT,
-    "version_hash": StateColumnType.TEXT,
-    "updated_at": StateColumnType.TIMESTAMP,
-}
-
-VIRTUAL_ENVIRONMENT_SEED_REF_COLUMNS: dict[str, StateColumnType] = {
-    "virtual_environment_name": StateColumnType.TEXT,
-    "seed_name": StateColumnType.TEXT,
-    "version_hash": StateColumnType.TEXT,
-    "updated_at": StateColumnType.TIMESTAMP,
-}
-
-VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_COLUMNS: dict[str, StateColumnType] = {
+VIRTUAL_ENVIRONMENT_NODE_REF_COLUMNS: dict[str, StateColumnType] = {
     "virtual_environment_name": StateColumnType.TEXT,
     "node_type": StateColumnType.TEXT,
     "node_name": StateColumnType.TEXT,
@@ -304,10 +277,7 @@ STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
     PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
     PHYSICAL_RELATION_ANCESTRY_TABLE: PHYSICAL_RELATION_ANCESTRY_COLUMNS,
     VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
-    VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE: VIRTUAL_ENVIRONMENT_MODEL_REF_COLUMNS,
-    VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: VIRTUAL_ENVIRONMENT_FUNCTION_REF_COLUMNS,
-    VIRTUAL_ENVIRONMENT_SEED_REF_TABLE: VIRTUAL_ENVIRONMENT_SEED_REF_COLUMNS,
-    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE: VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_COLUMNS,
+    VIRTUAL_ENVIRONMENT_NODE_REF_TABLE: VIRTUAL_ENVIRONMENT_NODE_REF_COLUMNS,
     SOURCE_FRESHNESS_OBSERVATION_TABLE: SOURCE_FRESHNESS_OBSERVATION_COLUMNS,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE: VIRTUAL_ENVIRONMENT_CHECKPOINT_COLUMNS,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE: (
@@ -380,26 +350,8 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
     VIRTUAL_ENVIRONMENT_TABLE: {
         "idx_sqb_virtual_environments_identity": ("virtual_environment_name",),
     },
-    VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE: {
-        "idx_sqb_virtual_environment_model_refs_identity": (
-            "virtual_environment_name",
-            "model_name",
-        ),
-    },
-    VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE: {
-        "idx_sqb_virtual_environment_function_refs_identity": (
-            "virtual_environment_name",
-            "function_name",
-        ),
-    },
-    VIRTUAL_ENVIRONMENT_SEED_REF_TABLE: {
-        "idx_sqb_virtual_environment_seed_refs_identity": (
-            "virtual_environment_name",
-            "seed_name",
-        ),
-    },
-    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE: {
-        "idx_sqb_virtual_environment_python_node_refs_identity": (
+    VIRTUAL_ENVIRONMENT_NODE_REF_TABLE: {
+        "idx_sqb_virtual_environment_node_refs_identity": (
             "virtual_environment_name",
             "node_type",
             "node_name",

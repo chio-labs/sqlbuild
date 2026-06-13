@@ -114,7 +114,7 @@ database = "state.duckdb"
             expected_init_fragments=(
                 "physical_relation_ancestry",
                 "function_versions",
-                "virtual_environment_function_refs",
+                "virtual_environment_node_refs",
                 "virtual_environment_checkpoint_function_refs",
             ),
         )
@@ -392,7 +392,7 @@ database = "state.duckdb"
     assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
     execute_duckdb(
         db_path=state_db_path,
-        sql='DROP TABLE "sqlbuild_state"."virtual_environment_model_refs"',
+        sql='DROP TABLE "sqlbuild_state"."virtual_environment_node_refs"',
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -704,8 +704,8 @@ def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_n
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name FROM sqlbuild_state.virtual_environment_model_refs "
-            "WHERE virtual_environment_name = 'dev'"
+            "SELECT node_name FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'model'"
         ),
     ) == [("orders",)]
     assert query_duckdb(
@@ -1105,7 +1105,10 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
     ) == [(0,)]
     assert query_duckdb(
         db_path=project_dir / "state.duckdb",
-        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE node_type = 'model'"
+        ),
     ) == [(0,)]
 
 

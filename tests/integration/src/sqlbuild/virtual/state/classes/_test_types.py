@@ -80,6 +80,21 @@ class DuckDbStateBackendCoreRecordsTestCase:
 
 
 @dataclass(frozen=True)
+class DuckDbStateBackendAtomicRefUpdateTestCase:
+    description: str
+    schema: str
+    sqlbuild_version: str
+    virtual_environment_name: str
+    model_name: str
+    seed_name: str
+    expected_original_model_hash: str
+    expected_original_seed_hash: str
+    expected_updated_model_hash: str
+    expected_updated_seed_hash: str
+    expected_duplicate_seed_hash: str
+
+
+@dataclass(frozen=True)
 class DuckDbStateBackendSourceFreshnessTestCase:
     description: str
     schema: str

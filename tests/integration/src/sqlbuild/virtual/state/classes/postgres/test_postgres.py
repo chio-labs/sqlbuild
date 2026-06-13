@@ -4,13 +4,13 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Any
 
-import psycopg
 import pytest
 
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
+from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
@@ -161,7 +161,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     [
         PostgresStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
-            expected_issue_count=24,
+            expected_issue_count=23,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -1501,7 +1501,7 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
         ),
     )
 
-    with pytest.raises(psycopg.errors.UniqueViolation):
+    with pytest.raises(StateBackendConfigError):
         postgres_state_backend.replace_virtual_environment_model_refs(
             postgres_state_connection,
             schema=postgres_state_schema,
