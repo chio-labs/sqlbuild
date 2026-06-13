@@ -62,6 +62,44 @@ def build_failed_result(
     )
 
 
+def build_skipped_result(
+    *,
+    entry: ModelPlanEntry,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    statement_recorder: StatementRecorder,
+    hook_results: list[HookExecutionResult],
+    staging_relation: str | None = None,
+    promoted_relation: str | None = None,
+) -> ModelExecutionResult:
+    """Build a skipped ModelExecutionResult after a lifecycle skip signal."""
+
+    skipped_hook: HookExecutionResult | None = _last_skipped_hook(hook_results)
+    statement_recorder.log(f"model {entry.name} skipped by hook")
+    return ModelExecutionResult(
+        model_name=entry.name,
+        status=ExecutionStatus.SKIPPED,
+        staging_relation=staging_relation,
+        promoted_relation=promoted_relation,
+        audit_results=tuple(audit_results),
+        warning_messages=tuple(warnings),
+        lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
+        skip_mode=skipped_hook.skip_mode if skipped_hook is not None else None,
+        skip_reason=skipped_hook.skip_reason if skipped_hook is not None else None,
+    )
+
+
+def _last_skipped_hook(
+    hook_results: list[HookExecutionResult],
+) -> HookExecutionResult | None:
+    hook_result: HookExecutionResult
+    for hook_result in reversed(hook_results):
+        if hook_result.status == ExecutionStatus.SKIPPED:
+            return hook_result
+    return None
+
+
 def _render_failure_error(
     error: str | BaseException, *, fallback_code: str
 ) -> tuple[str, str | None, str | None]:

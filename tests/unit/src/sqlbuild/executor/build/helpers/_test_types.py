@@ -42,6 +42,13 @@ class BuildSchedulerModelHookTestCase:
 
 
 @dataclass(frozen=True)
+class BuildSchedulerPreHookSkipTestCase:
+    description: str
+    expected_model_statuses: tuple[ExecutionStatus, ...]
+    expected_execution_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BuildSourceNodeExecutionTestCase:
     description: str
     source_name: str

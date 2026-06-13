@@ -716,7 +716,7 @@ class BuildScheduler:
             self._model_results.append(result)
             if self._on_node_complete is not None:
                 self._on_node_complete(result)
-            failed = result.status == ExecutionStatus.FAILED
+            failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
             block_downstream(

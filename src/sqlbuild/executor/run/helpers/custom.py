@@ -23,7 +23,7 @@ from sqlbuild.executor.custom.models import (
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks
-from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.results import build_failed_result, build_skipped_result
 from sqlbuild.executor.run.helpers.reuse import validate_reuse_origin_fingerprint
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
@@ -83,7 +83,7 @@ def execute_custom_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            pre_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.pre_hooks,
@@ -98,6 +98,14 @@ def execute_custom_entry(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if pre_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -297,7 +305,7 @@ def execute_custom_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            post_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.post_hooks,
@@ -312,6 +320,22 @@ def execute_custom_entry(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if post_hook_skipped:
+            _cleanup_relations(
+                adapter=adapter,
+                connection=connection,
+                relations=materialization_result.cleanup_relations,
+                keep=False,
+                statement_recorder=statement_recorder,
+            )
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+                promoted_relation=materialization_result.relation,
             )
     except Exception as exc:
         _cleanup_relations(

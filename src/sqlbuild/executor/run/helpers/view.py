@@ -16,7 +16,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
-from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.results import build_failed_result, build_skipped_result
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -60,7 +60,7 @@ def execute_view_entry(
             render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
         )
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            pre_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.pre_hooks,
@@ -75,6 +75,14 @@ def execute_view_entry(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if pre_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -149,7 +157,7 @@ def execute_view_entry(
             render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
         )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            post_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.post_hooks,
@@ -164,6 +172,15 @@ def execute_view_entry(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if post_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+                promoted_relation=target_qualified,
             )
     except Exception as exc:
         return build_failed_result(

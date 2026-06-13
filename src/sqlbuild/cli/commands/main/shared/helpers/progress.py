@@ -364,6 +364,7 @@ class BuildProgressCallbacks:
             detail = f"  {model_result.failed_phase}"
         elif model_result.status == ExecutionStatus.SKIPPED:
             duration = ""
+            detail = _model_skip_detail(model_result)
 
         self._write_top_level_result_line(
             ctr=ctr,
@@ -474,10 +475,11 @@ class BuildProgressCallbacks:
             hook_status: str = self._style.status(_execution_status_display(hook_result.status))
             hook_name: str = _truncate_name(hook_result.label, label_width)
             label: str = "pre_hook" if phase == HookPhase.PRE_HOOKS else "post_hook"
+            detail: str = _hook_skip_detail(hook_result)
             self._stream.write(
                 f"{sub_pad}{label:<{_HOOK_PHASE_WIDTH}}"
                 f"{hook_result.hook_type:<{_HOOK_TYPE_WIDTH}}"
-                f"{hook_name:<{label_width}} {hook_status}\n"
+                f"{hook_name:<{label_width}} {hook_status}{detail}\n"
             )
 
     def _write_top_level_result_line(
@@ -872,6 +874,26 @@ def _execution_status_display(status: ExecutionStatus) -> str:
 def _load_result_detail(result: LoadExecutionResult) -> str:
     if result.status != ExecutionStatus.SKIPPED:
         return f"  rows={result.rows_loaded:,}"
+    skip_label: str = "skip"
+    if result.skip_mode is not None:
+        skip_label = f"{result.skip_mode.value} skip"
+    if result.skip_reason:
+        return f"  {skip_label}: {result.skip_reason}"
+    return f"  {skip_label}"
+
+
+def _model_skip_detail(result: ModelExecutionResult) -> str:
+    skip_label: str = "skip"
+    if result.skip_mode is not None:
+        skip_label = f"{result.skip_mode.value} skip"
+    if result.skip_reason:
+        return f"  {skip_label}: {result.skip_reason}"
+    return f"  {skip_label}"
+
+
+def _hook_skip_detail(result: HookExecutionResult) -> str:
+    if result.status != ExecutionStatus.SKIPPED:
+        return ""
     skip_label: str = "skip"
     if result.skip_mode is not None:
         skip_label = f"{result.skip_mode.value} skip"

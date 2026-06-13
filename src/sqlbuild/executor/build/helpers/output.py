@@ -223,6 +223,7 @@ def _format_model_line(
         detail = f"  {model_result.failed_phase}"
     elif model_result.status == ExecutionStatus.SKIPPED:
         duration = ""
+        detail = _model_skip_detail(model_result)
     line: str = format_aligned_name_value(
         plain_name=name_and_annotation,
         styled_name=name_and_annotation,
@@ -655,6 +656,15 @@ def _execution_status_to_display(status: ExecutionStatus) -> str:
     if status == ExecutionStatus.SKIPPED:
         return "SKIP"
     return str(status)
+
+
+def _model_skip_detail(result: ModelExecutionResult) -> str:
+    skip_label: str = "skip"
+    if result.skip_mode is not None:
+        skip_label = f"{result.skip_mode.value} skip"
+    if result.skip_reason:
+        return f"  {skip_label}: {result.skip_reason}"
+    return f"  {skip_label}"
 
 
 def _aggregate_audit_results(

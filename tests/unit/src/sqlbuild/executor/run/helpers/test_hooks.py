@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +10,13 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
-from sqlbuild.executor.run.models import HookContext
+from sqlbuild.executor.run.helpers.view import execute_view_entry
+from sqlbuild.executor.run.models import HookContext, HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.hooks import HookContext as PublicHookContext
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
@@ -22,7 +26,26 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     PythonHookExecutionTestCase,
     PythonHookInvocationTestCase,
     PythonHookRuntimeErrorTestCase,
+    PythonHookSkipTestCase,
     RenderHooksTestCase,
+)
+from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_result_model_plan_entry
+
+HOOK_SKIP_STOP_TEST_CASES: tuple[PythonHookSkipTestCase, ...] = (
+    PythonHookSkipTestCase(
+        description="skipped pre hook stops remaining hooks",
+        expected_skipped=True,
+        expected_status="skipped",
+        expected_skip_reason="stop pre hooks",
+        hook_phase="pre_hooks",
+    ),
+    PythonHookSkipTestCase(
+        description="skipped post hook stops remaining hooks",
+        expected_skipped=True,
+        expected_status="skipped",
+        expected_skip_reason="stop post hooks",
+        hook_phase="post_hooks",
+    ),
 )
 
 
@@ -212,6 +235,173 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
     assert ctx.adapter_name == test_case.expected_adapter_name
     assert tuple(event.content for event in statement_recorder.snapshot()) == (
         test_case.expected_recorded_events
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookSkipTestCase(
+            description="records skipped Python hook result",
+            expected_skipped=True,
+            expected_status="skipped",
+            expected_skip_reason="external dependency disabled",
+            expected_skip_mode="hard",
+        )
+    ],
+    ids=["records skipped Python hook result"],
+)
+def test_given_python_hook_returns_skip_when_executing_then_records_skipped_hook_result(
+    test_case: PythonHookSkipTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    hook_results: list[HookExecutionResult] = []
+
+    def maybe_skip(ctx: HookContext) -> object:
+        return ctx.skip(test_case.expected_skip_reason, mode=test_case.expected_skip_mode)
+
+    skipped: bool = execute_hooks(
+        connection=connection,
+        adapter=adapter,
+        hooks=[PythonHookEntry(name="maybe_skip", kwargs={})],
+        phase=HookPhase.PRE_HOOKS,
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/maybe_skip.py"),
+                name="maybe_skip",
+                function=maybe_skip,
+            ),
+        ),
+        model_name="orders",
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name=None,
+        ),
+        hook_results=hook_results,
+    )
+
+    assert skipped is test_case.expected_skipped
+    assert hook_results[0].status.value == test_case.expected_status
+    assert hook_results[0].skip_mode is not None
+    assert hook_results[0].skip_mode.value == test_case.expected_skip_mode
+    assert hook_results[0].skip_reason == test_case.expected_skip_reason
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    HOOK_SKIP_STOP_TEST_CASES,
+    ids=[case.description for case in HOOK_SKIP_STOP_TEST_CASES],
+)
+def test_given_python_hook_returns_skip_when_executing_phase_then_later_hooks_do_not_run(
+    test_case: PythonHookSkipTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    events: list[str] = []
+    phase: HookPhase = HookPhase(test_case.hook_phase)
+
+    def maybe_skip(ctx: HookContext) -> object:
+        events.append("skip")
+        return ctx.skip(test_case.expected_skip_reason)
+
+    def should_not_run(ctx: HookContext) -> None:
+        events.append("later")
+
+    skipped: bool = execute_hooks(
+        connection=connection,
+        adapter=adapter,
+        hooks=[
+            PythonHookEntry(name="maybe_skip", kwargs={}),
+            PythonHookEntry(name="should_not_run", kwargs={}),
+        ],
+        phase=phase,
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/maybe_skip.py"),
+                name="maybe_skip",
+                function=maybe_skip,
+            ),
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/should_not_run.py"),
+                name="should_not_run",
+                function=should_not_run,
+            ),
+        ),
+        model_name="orders",
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name=None,
+        ),
+    )
+
+    assert skipped is test_case.expected_skipped
+    assert tuple(events) == ("skip",)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookSkipTestCase(
+            description="pre-hook skip skips view materialization",
+            expected_skipped=True,
+            expected_status="skipped",
+            expected_skip_reason="source is disabled",
+        )
+    ],
+    ids=["pre-hook skip skips view materialization"],
+)
+def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_skipped(
+    test_case: PythonHookSkipTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+
+    def maybe_skip(ctx: HookContext) -> object:
+        return ctx.skip(test_case.expected_skip_reason)
+
+    entry: ModelPlanEntry = replace(
+        build_result_model_plan_entry(),
+        pre_hooks=(PythonHookEntry(name="maybe_skip", kwargs={}),),
+    )
+    result: ModelExecutionResult = execute_view_entry(
+        entry=entry,
+        adapter=adapter,
+        connection=connection,
+        model_locations={},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        run_id="run-1",
+        query_change_tracking=False,
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/maybe_skip.py"),
+                name="maybe_skip",
+                function=maybe_skip,
+            ),
+        ),
+    )
+
+    assert result.status == ExecutionStatus.SKIPPED
+    assert result.hook_results[0].status.value == test_case.expected_status
+    assert result.skip_mode is not None
+    assert result.skip_mode.value == test_case.expected_skip_mode
+    assert result.hook_results[0].skip_reason == test_case.expected_skip_reason
+    assert result.skip_reason == test_case.expected_skip_reason
+    assert not adapter.relation_exists(
+        connection,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
     )
 
 
