@@ -59,9 +59,9 @@ def build_postgres_virtual_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
+        'default_target = "dev"\n\n'
         "[settings]\n"
         "virtual_environments = true\n"
-        'default_target = "dev"\n\n'
         "[connection]\n"
         f'host = "{config["host"]}"\n'
         f"port = {config['port']}\n"
@@ -126,9 +126,9 @@ def build_postgres_virtual_clone_project_toml(
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'
+        'default_target = "dev"\n\n'
         "[settings]\n"
         "virtual_environments = true\n"
-        'default_target = "dev"\n\n'
         "[connection]\n"
         f"{connection_toml}\n"
         "[targets.prod]\n"

@@ -32,10 +32,7 @@ from sqlbuild.virtual.state.constants import (
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
-    VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_SEED_REF_TABLE,
+    VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
 from sqlbuild.virtual.state.exceptions import (
@@ -65,6 +62,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRetentionRecord,
@@ -799,31 +797,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
             try:
-                existing_created_at: datetime | None = self._created_at_for_key(
-                    cursor,
-                    schema=schema,
-                    table_name=VIRTUAL_ENVIRONMENT_TABLE,
-                    where_sql="virtual_environment_name = %s",
-                    params=[record.virtual_environment_name],
-                )
-                cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [record.virtual_environment_name],
-                )
-                cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
-                    "(virtual_environment_name, status, baseline_virtual_environment_name, "
-                    "created_at, updated_at, finalized_at) "
-                    "VALUES (%s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, %s)",
-                    [
-                        record.virtual_environment_name,
-                        record.status.value,
-                        record.baseline_virtual_environment_name,
-                        existing_created_at,
-                        record.finalized_at,
-                    ],
-                )
+                self._upsert_virtual_environment_record(cursor, schema=schema, record=record)
                 cursor.execute("COMMIT")
             except BaseException:
                 cursor.execute("ROLLBACK")
@@ -877,25 +851,7 @@ class PostgresStateBackend(StateBackend):
             try:
                 cursor.execute(
                     "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_SEED_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                     "WHERE virtual_environment_name = %s",
                     [virtual_environment_name],
                 )
@@ -916,6 +872,112 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
+    def replace_virtual_environment_node_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
+    ) -> None:
+        self.replace_virtual_environment_node_ref_groups(
+            connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            refs_by_node_type={node_type: refs},
+        )
+
+    def replace_virtual_environment_node_ref_groups(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                self._replace_virtual_environment_node_ref_groups(
+                    cursor,
+                    schema=schema,
+                    virtual_environment_name=virtual_environment_name,
+                    refs_by_node_type=refs_by_node_type,
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def upsert_virtual_environment_and_replace_node_ref_groups(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                self._upsert_virtual_environment_record(cursor, schema=schema, record=record)
+                self._replace_virtual_environment_node_ref_groups(
+                    cursor,
+                    schema=schema,
+                    virtual_environment_name=record.virtual_environment_name,
+                    refs_by_node_type=refs_by_node_type,
+                )
+                cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_virtual_environment_node_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+    ) -> tuple[VirtualEnvironmentNodeRefRecord, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT virtual_environment_name, node_type, node_name, version_hash "
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "WHERE virtual_environment_name = %s AND node_type = %s ORDER BY node_name",
+                [virtual_environment_name, node_type],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(
+            VirtualEnvironmentNodeRefRecord(
+                virtual_environment_name=row[0],
+                node_type=row[1],
+                node_name=row[2],
+                version_hash=row[3],
+            )
+            for row in rows
+        )
+
+    def upsert_virtual_environment_node_ref(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        ref: VirtualEnvironmentNodeRefRecord,
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
+                "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP) "
+                "ON CONFLICT (virtual_environment_name, node_type, node_name) "
+                "DO UPDATE SET version_hash = excluded.version_hash, "
+                "updated_at = CURRENT_TIMESTAMP",
+                [ref.virtual_environment_name, ref.node_type, ref.node_name, ref.version_hash],
+            )
+
     def replace_virtual_environment_model_refs(
         self,
         connection: Any,
@@ -924,48 +986,38 @@ class PostgresStateBackend(StateBackend):
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentModelRefRecord, ...],
     ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                model_ref_table: str = self._qualified_name(
-                    schema,
-                    VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE,
+        self.replace_virtual_environment_node_refs(
+            connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            node_type="model",
+            refs=tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type="model",
+                    node_name=ref.model_name,
+                    version_hash=ref.version_hash,
                 )
-                cursor.execute(
-                    f"DELETE FROM {model_ref_table} WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                for ref in refs:
-                    cursor.execute(
-                        "INSERT INTO "
-                        f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE)} "
-                        "(virtual_environment_name, model_name, version_hash, updated_at) "
-                        "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
-                        [ref.virtual_environment_name, ref.model_name, ref.version_hash],
-                    )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
+                for ref in refs
+            ),
+        )
 
     def get_virtual_environment_model_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"SELECT virtual_environment_name, model_name, version_hash "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_MODEL_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY model_name",
-                [virtual_environment_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = self.get_virtual_environment_node_refs(
+            connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            node_type="model",
+        )
         return tuple(
             VirtualEnvironmentModelRefRecord(
-                virtual_environment_name=row[0],
-                model_name=row[1],
-                version_hash=row[2],
+                virtual_environment_name=ref.virtual_environment_name,
+                model_name=ref.node_name,
+                version_hash=ref.version_hash,
             )
-            for row in rows
+            for ref in refs
         )
 
     def replace_virtual_environment_function_refs(
@@ -976,46 +1028,54 @@ class PostgresStateBackend(StateBackend):
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                for ref in refs:
-                    cursor.execute(
-                        "INSERT INTO "
-                        f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                        "(virtual_environment_name, function_name, version_hash, updated_at) "
-                        "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
-                        [ref.virtual_environment_name, ref.function_name, ref.version_hash],
+        ref: VirtualEnvironmentFunctionRefRecord
+        for ref in refs:
+            if ref.node_type not in {"udf", "table_fn"}:
+                raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
+        self.replace_virtual_environment_node_ref_groups(
+            connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            refs_by_node_type={
+                node_type: tuple(
+                    VirtualEnvironmentNodeRefRecord(
+                        virtual_environment_name=ref.virtual_environment_name,
+                        node_type=ref.node_type,
+                        node_name=ref.function_name,
+                        version_hash=ref.version_hash,
                     )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
+                    for ref in refs
+                    if ref.node_type == node_type
+                )
+                for node_type in ("udf", "table_fn")
+            },
+        )
 
     def get_virtual_environment_function_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, function_name, version_hash "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_FUNCTION_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY function_name",
-                [virtual_environment_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+            *self.get_virtual_environment_node_refs(
+                connection,
+                schema=schema,
+                virtual_environment_name=virtual_environment_name,
+                node_type="udf",
+            ),
+            *self.get_virtual_environment_node_refs(
+                connection,
+                schema=schema,
+                virtual_environment_name=virtual_environment_name,
+                node_type="table_fn",
+            ),
+        )
         return tuple(
             VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=row[0],
-                function_name=row[1],
-                version_hash=row[2],
+                virtual_environment_name=ref.virtual_environment_name,
+                node_type=ref.node_type,
+                function_name=ref.node_name,
+                version_hash=ref.version_hash,
             )
-            for row in rows
+            for ref in sorted(refs, key=lambda item: (item.node_type, item.node_name))
         )
 
     def replace_virtual_environment_seed_refs(
@@ -1026,46 +1086,38 @@ class PostgresStateBackend(StateBackend):
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
     ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_SEED_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
+        self.replace_virtual_environment_node_refs(
+            connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            node_type="seed",
+            refs=tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type="seed",
+                    node_name=ref.seed_name,
+                    version_hash=ref.version_hash,
                 )
-                for ref in refs:
-                    cursor.execute(
-                        "INSERT INTO "
-                        f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_SEED_REF_TABLE)} "
-                        "(virtual_environment_name, seed_name, version_hash, updated_at) "
-                        "VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
-                        [ref.virtual_environment_name, ref.seed_name, ref.version_hash],
-                    )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
+                for ref in refs
+            ),
+        )
 
     def get_virtual_environment_seed_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentSeedRefRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, seed_name, version_hash "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_SEED_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY seed_name",
-                [virtual_environment_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = self.get_virtual_environment_node_refs(
+            connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            node_type="seed",
+        )
         return tuple(
             VirtualEnvironmentSeedRefRecord(
-                virtual_environment_name=row[0],
-                seed_name=row[1],
-                version_hash=row[2],
+                virtual_environment_name=ref.virtual_environment_name,
+                seed_name=ref.node_name,
+                version_hash=ref.version_hash,
             )
-            for row in rows
+            for ref in refs
         )
 
     def upsert_virtual_environment_python_node_ref(
@@ -1075,26 +1127,16 @@ class PostgresStateBackend(StateBackend):
         schema: str,
         ref: VirtualEnvironmentPythonNodeRefRecord,
     ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
-                    "WHERE virtual_environment_name = %s AND node_type = %s AND node_name = %s",
-                    [ref.virtual_environment_name, ref.node_type, ref.node_name],
-                )
-                cursor.execute(
-                    "INSERT INTO "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
-                    "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
-                    "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)",
-                    [ref.virtual_environment_name, ref.node_type, ref.node_name, ref.version_hash],
-                )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
+        self.upsert_virtual_environment_node_ref(
+            connection,
+            schema=schema,
+            ref=VirtualEnvironmentNodeRefRecord(
+                virtual_environment_name=ref.virtual_environment_name,
+                node_type=ref.node_type,
+                node_name=ref.node_name,
+                version_hash=ref.version_hash,
+            ),
+        )
 
     def get_virtual_environment_python_node_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
@@ -1102,8 +1144,10 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT virtual_environment_name, node_type, node_name, version_hash "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY node_type, node_name",
+                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "WHERE virtual_environment_name = %s "
+                "AND node_type IN ('task', 'loader', 'asset', 'check', 'hook') "
+                "ORDER BY node_type, node_name",
                 [virtual_environment_name],
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
@@ -1125,7 +1169,7 @@ class PostgresStateBackend(StateBackend):
                 "WHERE NOT EXISTS ("
                 "SELECT 1 "
                 "FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "refs "
                 "WHERE refs.node_type = versions.node_type "
                 "AND refs.node_name = versions.node_name "
@@ -1144,7 +1188,7 @@ class PostgresStateBackend(StateBackend):
                 "WHERE NOT EXISTS ("
                 "SELECT 1 "
                 "FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_PYTHON_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "refs "
                 "WHERE refs.node_type = versions.node_type "
                 "AND refs.node_name = versions.node_name "
@@ -1785,6 +1829,98 @@ class PostgresStateBackend(StateBackend):
                     f"Duplicate source freshness record for source '{record.source_name}'"
                 )
             seen_source_names.add(record.source_name)
+
+    def _validate_node_ref_replacement(
+        self,
+        *,
+        virtual_environment_name: str,
+        node_type: str,
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
+    ) -> None:
+        seen_node_names: set[str] = set()
+        ref: VirtualEnvironmentNodeRefRecord
+        for ref in refs:
+            if ref.virtual_environment_name != virtual_environment_name:
+                raise StateBackendConfigError(
+                    "Node ref virtual_environment_name must match replacement "
+                    "virtual_environment_name"
+                )
+            if ref.node_type != node_type:
+                raise StateBackendConfigError("Node ref node_type must match replacement node_type")
+            if ref.node_name in seen_node_names:
+                raise StateBackendConfigError(
+                    f"Duplicate node ref for node type '{node_type}' and name '{ref.node_name}'"
+                )
+            seen_node_names.add(ref.node_name)
+
+    def _upsert_virtual_environment_record(
+        self, cursor: Any, *, schema: str, record: VirtualEnvironmentRecord
+    ) -> None:
+        existing_created_at: datetime | None = self._created_at_for_key(
+            cursor,
+            schema=schema,
+            table_name=VIRTUAL_ENVIRONMENT_TABLE,
+            where_sql="virtual_environment_name = %s",
+            params=[record.virtual_environment_name],
+        )
+        cursor.execute(
+            f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            "WHERE virtual_environment_name = %s",
+            [record.virtual_environment_name],
+        )
+        cursor.execute(
+            f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            "(virtual_environment_name, status, baseline_virtual_environment_name, "
+            "created_at, updated_at, finalized_at) "
+            "VALUES (%s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, %s)",
+            [
+                record.virtual_environment_name,
+                record.status.value,
+                record.baseline_virtual_environment_name,
+                existing_created_at,
+                record.finalized_at,
+            ],
+        )
+
+    def _replace_virtual_environment_node_ref_groups(
+        self,
+        cursor: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        node_type: str
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+        for node_type, refs in refs_by_node_type.items():
+            self._validate_node_ref_replacement(
+                virtual_environment_name=virtual_environment_name,
+                node_type=node_type,
+                refs=refs,
+            )
+            cursor.execute(
+                "DELETE FROM "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "WHERE virtual_environment_name = %s AND node_type = %s",
+                [virtual_environment_name, node_type],
+            )
+            ref: VirtualEnvironmentNodeRefRecord
+            for ref in refs:
+                cursor.execute(
+                    "INSERT INTO "
+                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                    "(virtual_environment_name, node_type, node_name, version_hash, "
+                    "updated_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP) "
+                    "ON CONFLICT (virtual_environment_name, node_type, node_name) "
+                    "DO UPDATE SET version_hash = excluded.version_hash, "
+                    "updated_at = CURRENT_TIMESTAMP",
+                    [
+                        ref.virtual_environment_name,
+                        ref.node_type,
+                        ref.node_name,
+                        ref.version_hash,
+                    ],
+                )
 
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"

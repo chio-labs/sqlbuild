@@ -124,17 +124,19 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
     ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name FROM sqlbuild_state.virtual_environment_model_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            "SELECT node_name FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'model' "
+            "ORDER BY node_name"
         ),
     )
     assert ref_rows == list(test_case.expected_ref_rows)
     ref_hash_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_model_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'model' "
+            "ORDER BY node_name"
         ),
     )
 
@@ -164,9 +166,10 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
     repeat_ref_hash_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_model_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'model' "
+            "ORDER BY node_name"
         ),
     )
     assert repeat_ref_hash_rows == ref_hash_rows
@@ -233,9 +236,10 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
     initial_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+            "ORDER BY node_name"
         ),
     )
     assert len(initial_seed_ref_rows) == 1
@@ -268,9 +272,10 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
     changed_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+            "ORDER BY node_name"
         ),
     )
     assert len(changed_seed_ref_rows) == 1
@@ -535,8 +540,8 @@ def test_given_virtual_seed_load_failure_when_building_changes_only_then_seed_st
     initial_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' ORDER BY node_name"
         ),
     )
 
@@ -558,8 +563,9 @@ def test_given_virtual_seed_load_failure_when_building_changes_only_then_seed_st
         query_duckdb(
             db_path=project_dir / "state.duckdb",
             sql=(
-                "SELECT seed_name, version_hash FROM sqlbuild_state.virtual_environment_seed_refs "
-                "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+                "SELECT node_name, version_hash FROM sqlbuild_state.virtual_environment_node_refs "
+                "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+                "ORDER BY node_name"
             ),
         )
         == initial_seed_ref_rows
@@ -888,7 +894,8 @@ def test_given_virtual_build_with_python_hooks_when_building_then_hooks_execute(
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT node_type, node_name "
-            "FROM sqlbuild_state.virtual_environment_python_node_refs "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE node_type IN ('task', 'loader', 'asset', 'check', 'hook') "
             "ORDER BY node_type, node_name"
         ),
     ) == list(test_case.expected_identity_rows)
@@ -2369,7 +2376,8 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT node_type, node_name "
-            "FROM sqlbuild_state.virtual_environment_python_node_refs "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE node_type IN ('task', 'loader', 'asset', 'check', 'hook') "
             "ORDER BY node_type, node_name"
         ),
     ) == list(test_case.expected_state_identity_rows)
@@ -3195,14 +3203,15 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
     divergent_refs: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT dev.model_name "
-            "FROM sqlbuild_state.virtual_environment_model_refs dev "
-            "JOIN sqlbuild_state.virtual_environment_model_refs kevin "
-            "ON dev.model_name = kevin.model_name "
+            "SELECT dev.node_name "
+            "FROM sqlbuild_state.virtual_environment_node_refs dev "
+            "JOIN sqlbuild_state.virtual_environment_node_refs kevin "
+            "ON dev.node_name = kevin.node_name "
             "WHERE dev.virtual_environment_name = 'dev' "
             "AND kevin.virtual_environment_name = 'kevin' "
+            "AND dev.node_type = 'model' AND kevin.node_type = 'model' "
             "AND dev.version_hash <> kevin.version_hash "
-            "ORDER BY dev.model_name"
+            "ORDER BY dev.node_name"
         ),
     )
     assert divergent_refs == list(test_case.expected_ref_rows)
@@ -3703,9 +3712,10 @@ def test_given_seed_change_when_promoting_then_it_updates_destination_seed_refs_
     seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT virtual_environment_name, seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name IN ('dev', 'pr') ORDER BY virtual_environment_name"
+            "SELECT virtual_environment_name, node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name IN ('dev', 'pr') AND node_type = 'seed' "
+            "ORDER BY virtual_environment_name"
         ),
     )
     assert len(seed_ref_rows) == 2
@@ -3791,10 +3801,11 @@ def test_given_seed_change_when_partially_promoting_then_it_updates_upstream_see
         db_path=project_dir / "state.duckdb",
         sql=(
             "SELECT virtual_environment_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
             "WHERE virtual_environment_name IN ('dev', 'pr') "
-            "AND seed_name IN ('order_amounts', 'amount_multipliers') "
-            "ORDER BY seed_name, virtual_environment_name"
+            "AND node_type = 'seed' "
+            "AND node_name IN ('order_amounts', 'amount_multipliers') "
+            "ORDER BY node_name, virtual_environment_name"
         ),
     )
     assert len(seed_ref_rows) == 4
@@ -3879,9 +3890,9 @@ def test_given_function_change_when_promoting_then_it_publishes_target_function_
     function_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT function_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_function_refs "
-            "WHERE virtual_environment_name = 'dev'"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type IN ('udf', 'table_fn')"
         ),
     )
     assert len(function_ref_rows) == 1
@@ -3932,9 +3943,10 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
     initial_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_model_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'model' "
+            "ORDER BY node_name"
         ),
     )
     (project_dir / "models" / "stg_orders.sql").write_text(
@@ -3989,9 +4001,10 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
     rolled_back_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT model_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_model_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY model_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'model' "
+            "ORDER BY node_name"
         ),
     )
     assert rolled_back_ref_rows == initial_ref_rows
@@ -4044,9 +4057,10 @@ def test_given_seed_change_when_rolling_back_then_it_restores_checkpointed_seed_
     initial_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+            "ORDER BY node_name"
         ),
     )
     checkpoint_id: str = str(
@@ -4093,9 +4107,10 @@ def test_given_seed_change_when_rolling_back_then_it_restores_checkpointed_seed_
     rolled_back_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+            "ORDER BY node_name"
         ),
     )
     assert rolled_back_seed_ref_rows == initial_seed_ref_rows
@@ -4140,9 +4155,10 @@ def test_given_seed_change_when_partial_rollback_then_restores_upstream_seed_ref
     initial_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+            "ORDER BY node_name"
         ),
     )
     (project_dir / "seeds" / "order_amounts.csv").write_text(
@@ -4166,9 +4182,10 @@ def test_given_seed_change_when_partial_rollback_then_restores_upstream_seed_ref
     rolled_back_seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name, version_hash "
-            "FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name, version_hash "
+            "FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' "
+            "ORDER BY node_name"
         ),
     )
     assert rolled_back_seed_ref_rows == initial_seed_ref_rows

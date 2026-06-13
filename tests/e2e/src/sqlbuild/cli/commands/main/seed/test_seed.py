@@ -141,8 +141,8 @@ def test_given_virtual_project_when_running_seed_then_persists_seed_state(
     seed_ref_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "state.duckdb",
         sql=(
-            "SELECT seed_name FROM sqlbuild_state.virtual_environment_seed_refs "
-            "WHERE virtual_environment_name = 'dev' ORDER BY seed_name"
+            "SELECT node_name FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE virtual_environment_name = 'dev' AND node_type = 'seed' ORDER BY node_name"
         ),
     )
     assert seed_ref_rows == [("order_amounts",)]

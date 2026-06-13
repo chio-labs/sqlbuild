@@ -708,7 +708,10 @@ def test_given_detached_vde_when_running_janitor_on_bigquery_then_refs_are_prune
         ) == [(test_case.expected_virtual_environment_count_after,)]
         assert query_duckdb(
             db_path=project_dir / "state.duckdb",
-            sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
+            sql=(
+                "SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_node_refs "
+                "WHERE node_type = 'model'"
+            ),
         ) == [(test_case.expected_ref_count_after,)]
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
