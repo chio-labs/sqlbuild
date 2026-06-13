@@ -13,7 +13,9 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, StatementRecorder
 from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
+from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
@@ -77,6 +79,15 @@ class LoaderSkipResult:
 
 
 @dataclass(frozen=True)
+class LoaderResult:
+    """User-facing successful result returned by a self-managed source loader."""
+
+    payload: object | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+    materialized: bool | None = None
+
+
+@dataclass(frozen=True)
 class LoaderContext:
     """Runtime context passed to a source loader function."""
 
@@ -102,6 +113,7 @@ class LoaderContext:
     loader_refs: Mapping[Callable[..., object], LoaderRelationRef] = field(default_factory=dict)
     source_refs: Mapping[str, LoaderRelationRef] = field(default_factory=dict)
     providers: ProviderContainer = field(default_factory=_empty_provider_container)
+    result_store: Any | None = None
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
@@ -118,6 +130,59 @@ class LoaderContext:
         """Return a skip signal for the current source loader."""
 
         return LoaderSkipResult(reason=reason, mode=mode)
+
+    def result(
+        self,
+        *,
+        payload: object | None = None,
+        metadata: dict[str, object] | None = None,
+        materialized: bool | None = None,
+    ) -> LoaderResult:
+        """Return a successful result for a self-managed source loader."""
+
+        return LoaderResult(
+            payload=payload,
+            metadata={} if metadata is None else metadata,
+            materialized=materialized,
+        )
+
+    def result_of(
+        self,
+        node_function: Callable[..., object],
+        *,
+        run_id: str | None = None,
+        default: object = MISSING_DEFAULT,
+    ) -> NodeResultEnvelope | object:
+        """Return the latest persisted upstream result by Python node function reference."""
+
+        if self.result_store is None:
+            if default is not MISSING_DEFAULT:
+                return default
+            raise ExecutorInputError("No Python node result store is available")
+        node_type, node_name = self._result_dependency_identity(node_function)
+        return self.result_store.result_of(
+            node_type=node_type,
+            node_name=node_name,
+            run_id=run_id,
+            default=default,
+        )
+
+    def results_of(
+        self,
+        node_function: Callable[..., object],
+        *,
+        limit: int,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        """Return persisted successful upstream result history, newest first."""
+
+        if self.result_store is None:
+            return ()
+        node_type, node_name = self._result_dependency_identity(node_function)
+        return self.result_store.results_of(
+            node_type=node_type,
+            node_name=node_name,
+            limit=limit,
+        )
 
     def qualify_name(
         self,
@@ -160,6 +225,24 @@ class LoaderContext:
             )
         return relation_ref
 
+    def _result_dependency_identity(self, node_function: Callable[..., object]) -> tuple[str, str]:
+        task_definition: object = getattr(node_function, "__sqlbuild_task__", None)
+        if task_definition is not None:
+            return PythonNodeKind.TASK.value, self._definition_name(task_definition)
+        asset_definition: object = getattr(node_function, "__sqlbuild_asset__", None)
+        if asset_definition is not None:
+            return PythonNodeKind.ASSET.value, self._definition_name(asset_definition)
+        loader_definition: object = getattr(node_function, "__sqlbuild_loader__", None)
+        if loader_definition is not None:
+            return PythonNodeKind.LOADER.value, self._definition_name(loader_definition)
+        raise ExecutorInputError("Python node result dependency must be a task, asset, or loader")
+
+    def _definition_name(self, definition: object) -> str:
+        name: object = getattr(definition, "name", None)
+        if isinstance(name, str):
+            return name
+        raise ExecutorInputError("Python node result dependency has no resolved name")
+
 
 @dataclass(frozen=True)
 class LoadExecutionResult:
@@ -177,6 +260,9 @@ class LoadExecutionResult:
     skip_mode: SkipMode | None = None
     skip_reason: str | None = None
     error_message: str | None = None
+    result_payload: object | None = None
+    result_metadata: dict[str, object] = field(default_factory=dict)
+    result_materialized: bool | None = None
 
 
 @dataclass(frozen=True)

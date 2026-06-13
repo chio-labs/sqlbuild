@@ -690,13 +690,13 @@ SOURCE_ONLY_PAYLOAD_FAILURE_TEST_CASES: list[SourceOnlyComplexIngressE2ETestCase
         description="source-only load fails when loader reads unselected task payload",
         command=("--no-color", "load", "--select", "raw_events"),
         expected_return_code=1,
-        expected_error_fragment="payload",
+        expected_error_fragment="No persisted result found for Python node 'prepare_events'",
     ),
     SourceOnlyComplexIngressE2ETestCase(
         description="source-only load fails when loader reads unselected asset payload",
         command=("--no-color", "load", "--select", "raw_events"),
         expected_return_code=1,
-        expected_error_fragment="payload",
+        expected_error_fragment="No persisted result found for Python node 'prepare_events'",
     ),
 ]
 
