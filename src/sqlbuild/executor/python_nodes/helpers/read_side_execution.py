@@ -48,6 +48,7 @@ class ReadSidePythonExecutionTracker:
         end_cursor_int: int | None = None,
         providers: ProviderContainer | None = None,
         identity_recorder: PythonIdentityRecorder | None = None,
+        result_store: Any | None = None,
         persist_node_results: bool = True,
     ) -> None:
         self._python_graph: PythonNodeGraph = python_graph
@@ -72,14 +73,18 @@ class ReadSidePythonExecutionTracker:
         self._identity_recorder: PythonIdentityRecorder | None = identity_recorder
         self._persist_node_results: bool = persist_node_results
         self._result_store: Any | None = (
-            build_standard_node_result_store(
-                adapter=adapter,
-                connection=connection,
-                database=default_database,
-                schema=default_schema,
+            result_store
+            if result_store is not None
+            else (
+                build_standard_node_result_store(
+                    adapter=adapter,
+                    connection=connection,
+                    database=default_database,
+                    schema=default_schema,
+                )
+                if persist_node_results
+                else None
             )
-            if persist_node_results
-            else None
         )
         self._completed_sql_names: set[str] = set()
         self._failed_sql_names: set[str] = set()

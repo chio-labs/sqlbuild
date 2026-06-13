@@ -265,6 +265,31 @@ class VirtualPythonIdentityBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualNodeResultStateE2ETestCase:
+    """Test case for virtual node result state persistence behavior."""
+
+    description: str
+    expected_state_rows: tuple[tuple[object, ...], ...]
+    expected_asset_payload: dict[str, object]
+    expected_loader_text: str
+    expected_history_text: str
+    expected_warehouse_result_table_count: int
+    expected_build_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class VirtualNodeResultFailureStateE2ETestCase:
+    """Test case for virtual failed node result state persistence behavior."""
+
+    description: str
+    project_name: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_state_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class VirtualWaffleShopE2ETestCase:
     """Test case for full waffle shop virtual build behavior."""
 

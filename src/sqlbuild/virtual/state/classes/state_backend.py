@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -132,6 +133,37 @@ class StateBackend(ABC):
         version_hash: str,
     ) -> PythonNodeVersionRecord | None:
         """Return a Python node identity version row if it exists."""
+        ...
+
+    @abstractmethod
+    def insert_node_result(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        record: NodeResultRecord,
+    ) -> None:
+        """Append one runtime node result row for a virtual environment."""
+        ...
+
+    @abstractmethod
+    def read_node_results(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+        node_name: str,
+        target_database: str | None,
+        target_schema: str | None,
+        target_name: str | None,
+        statuses: tuple[str, ...] | None,
+        run_id: str | None,
+        limit: int,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        """Read runtime node result rows for one virtual environment identity."""
         ...
 
     @abstractmethod

@@ -31,6 +31,7 @@ class VirtualBuildPipelineResult:
     display_plan_output: PlanOutput
     execution_plan: PlanOutput
     execution_result: BuildExecutionResult
+    virtual_environment_name: str
     python_node_results: tuple[PythonNodeExecutionResult, ...] = field(default_factory=tuple)
 
 
