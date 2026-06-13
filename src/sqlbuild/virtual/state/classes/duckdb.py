@@ -1805,25 +1805,27 @@ class DuckDbStateBackend(StateBackend):
         node_type: str
         refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
         for node_type, refs in refs_by_node_type.items():
+            temp_table_name: str = "__sqlbuild_replace_virtual_environment_node_refs"
             self._validate_node_ref_replacement(
                 virtual_environment_name=virtual_environment_name,
                 node_type=node_type,
                 refs=refs,
             )
+            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-                "WHERE virtual_environment_name = ? AND node_type = ?",
-                [virtual_environment_name, node_type],
+                f"CREATE TEMP TABLE {temp_table_name} ("
+                "virtual_environment_name TEXT NOT NULL, "
+                "node_type TEXT NOT NULL, "
+                "node_name TEXT NOT NULL, "
+                "version_hash TEXT NOT NULL, "
+                "UNIQUE (virtual_environment_name, node_type, node_name))"
             )
             ref: VirtualEnvironmentNodeRefRecord
             for ref in refs:
                 connection.execute(
-                    "INSERT INTO "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-                    "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
-                    "VALUES (?, ?, ?, ?, now()) "
-                    "ON CONFLICT (virtual_environment_name, node_type, node_name) "
-                    "DO UPDATE SET version_hash = excluded.version_hash, updated_at = now()",
+                    f"INSERT INTO {temp_table_name} "
+                    "(virtual_environment_name, node_type, node_name, version_hash) "
+                    "VALUES (?, ?, ?, ?)",
                     [
                         ref.virtual_environment_name,
                         ref.node_type,
@@ -1831,6 +1833,25 @@ class DuckDbStateBackend(StateBackend):
                         ref.version_hash,
                     ],
                 )
+            connection.execute(
+                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "WHERE virtual_environment_name = ? AND node_type = ? "
+                "AND NOT EXISTS ("
+                f"SELECT 1 FROM {temp_table_name} incoming "
+                "WHERE incoming.node_name = "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)}.node_name)",
+                [virtual_environment_name, node_type],
+            )
+            connection.execute(
+                "INSERT INTO "
+                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
+                "SELECT virtual_environment_name, node_type, node_name, version_hash, now() "
+                f"FROM {temp_table_name} "
+                "ON CONFLICT (virtual_environment_name, node_type, node_name) "
+                "DO UPDATE SET version_hash = excluded.version_hash, updated_at = now()"
+            )
+            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
 
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"
