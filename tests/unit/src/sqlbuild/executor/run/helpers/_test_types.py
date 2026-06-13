@@ -129,6 +129,16 @@ class PythonHookInvocationTestCase:
 
 
 @dataclass(frozen=True)
+class PythonHookSkipTestCase:
+    description: str
+    expected_skipped: bool
+    expected_status: str
+    expected_skip_reason: str
+    expected_skip_mode: str = "soft"
+    hook_phase: str = "pre_hooks"
+
+
+@dataclass(frozen=True)
 class PythonHookContextParameterTestCase:
     description: str
     hook_name: str
@@ -139,6 +149,13 @@ class PythonHookContextParameterTestCase:
 @dataclass(frozen=True)
 class PythonHookRuntimeErrorTestCase:
     description: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonHookInvalidReturnTestCase:
+    description: str
+    returned: object
     expected_error_fragment: str
 
 
