@@ -177,7 +177,11 @@ def _gather_cascade_candidates(
     candidates: list[CascadeCause] = []
     key: CompiledObjectKey
     for key in upstream_keys:
-        if key.resource_type not in (CompiledResourceType.MODEL, CompiledResourceType.FUNCTION):
+        if key.resource_type not in (
+            CompiledResourceType.MODEL,
+            CompiledResourceType.UDF,
+            CompiledResourceType.TABLE_FN,
+        ):
             continue
         upstream_cascade: CascadeResult | None = effective_cascades.get(key.name)
         if upstream_cascade is None:
@@ -185,7 +189,7 @@ def _gather_cascade_candidates(
         if upstream_cascade.effective_action == BackfillAction.FORWARD_ONLY:
             continue
 
-        if key.resource_type == CompiledResourceType.FUNCTION:
+        if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             candidates.append(
                 CascadeCause(
                     model_name=key.name,

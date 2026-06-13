@@ -33,7 +33,7 @@ class SqlBuildRiversTranslator:
             if materialization_type == "view":
                 return ["sqlbuild", "view"]
             return ["sqlbuild", "table"]
-        if kind in {"source", "loader", "seed", "function", "task", "asset"}:
+        if kind in {"source", "loader", "seed", "udf", "table_fn", "task", "asset"}:
             return ["sqlbuild", kind]
         return ["sqlbuild"]
 

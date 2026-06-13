@@ -485,7 +485,7 @@ def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) ->
             lines.append("Failures:")
             lines.append("")
             has_failures = True
-        lines.append(f"  {function_result.function_name}  (function)")
+        lines.append(f"  {function_result.function_name}  ({function_result.function_kind})")
         if function_result.error_message is not None:
             lines.extend(
                 _format_result_error_lines(
@@ -596,7 +596,7 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
             lines.append("Warnings:")
             lines.append("")
             has_warnings = True
-        lines.append(f"  {function_result.function_name}  (function)")
+        lines.append(f"  {function_result.function_name}  ({function_result.function_kind})")
         warning_msg: str
         for warning_msg in function_result.warning_messages:
             lines.append(f"    {warning_msg}")

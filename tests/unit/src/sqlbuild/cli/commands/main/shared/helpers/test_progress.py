@@ -258,13 +258,14 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order",
                     status=ExecutionStatus.FAILED,
+                    function_kind="udf",
                     error_message="warehouse said no",
                 ),
             ),
         ),
         expected_fragments=(
             "FAIL=1",
-            "is_completed_order  (function)",
+            "is_completed_order  (udf)",
             "warehouse said no",
         ),
         unexpected_fragments=("\033[",),
@@ -296,6 +297,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order_py",
                     status=ExecutionStatus.SUCCESS,
+                    function_kind="udf",
                     warning_messages=("fingerprint write skipped",),
                 ),
             ),
@@ -307,7 +309,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
             "PASS=1",
             "WARN=1",
             "Warnings:",
-            "is_completed_order_py  (function)",
+            "is_completed_order_py  (udf)",
             "fingerprint write skipped",
         ),
         unexpected_fragments=("\033[",),
@@ -320,6 +322,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order_py",
                     status=ExecutionStatus.SUCCESS,
+                    function_kind="udf",
                     warning_messages=("fingerprint write skipped",),
                 ),
             ),
@@ -340,6 +343,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order",
                     status=ExecutionStatus.FAILED,
+                    function_kind="udf",
                     error_message="warehouse said no",
                 ),
             ),
@@ -359,6 +363,7 @@ BUILD_FOOTER_TEST_CASES: list[BuildFooterTestCase] = [
                 FunctionExecutionResult(
                     function_name="is_completed_order",
                     status=ExecutionStatus.FAILED,
+                    function_kind="udf",
                     error_message=(
                         "line one\nline two\nline three\nline four\nline five should not appear"
                     ),
@@ -418,6 +423,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
         node_result=FunctionExecutionResult(
             function_name="is_completed_order",
             status=ExecutionStatus.FAILED,
+            function_kind="udf",
             duration_ms=110,
             error_message=(
                 "003001 (42501): SQL access control error:\n"
@@ -425,7 +431,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
             ),
         ),
         expected_fragments=(
-            "function  is_completed_order",
+            "udf       is_completed_order",
             "FAIL",
             "0.11s",
             "error     003001 (42501): SQL access control error:",
@@ -438,6 +444,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
         node_result=FunctionExecutionResult(
             function_name="is_completed_order",
             status=ExecutionStatus.FAILED,
+            function_kind="udf",
             duration_ms=110,
             error_message="warehouse said no",
         ),
@@ -470,6 +477,7 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
         node_result=FunctionExecutionResult(
             function_name="is_completed_order",
             status=ExecutionStatus.FAILED,
+            function_kind="udf",
             duration_ms=110,
             error_message=(
                 "line one\nline two\nline three\nline four\nline five should not appear"
@@ -487,10 +495,10 @@ BUILD_PROGRESS_FAILURE_OUTPUT_TEST_CASES: list[BuildProgressFailureOutputTestCas
 
 BUILD_PROGRESS_ACTIVE_SPINNER_TEST_CASES: list[BuildProgressActiveSpinnerTestCase] = [
     BuildProgressActiveSpinnerTestCase(
-        description="active function row uses spinner glyph instead of ellipsis",
+        description="active UDF row uses spinner glyph instead of ellipsis",
         node_name="is_completed_order",
-        node_type=ExecutionResourceKind.FUNCTION,
-        expected_fragments=("function", "is_completed_order", "⠋"),
+        node_type=ExecutionResourceKind.UDF,
+        expected_fragments=("udf", "is_completed_order", "⠋"),
         unexpected_fragments=("...",),
     ),
     BuildProgressActiveSpinnerTestCase(

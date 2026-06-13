@@ -120,7 +120,7 @@ GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
             (
                 "staging",
                 Fingerprint(
-                    node_type="function",
+                    node_type="udf",
                     node_name="is_large_order",
                     target_database=None,
                     target_schema=None,

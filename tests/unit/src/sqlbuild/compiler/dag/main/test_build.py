@@ -22,14 +22,14 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
                 "source:raw_orders",
                 "loader:shared_order_feed",
                 "seed:country_codes",
-                "function:normalize_email",
+                "udf:normalize_email",
                 "model:orders",
             ),
             expected_edge_pairs=(
-                ("function:normalize_email", "model:orders"),
                 ("loader:shared_order_feed", "source:raw_orders"),
                 ("seed:country_codes", "model:orders"),
                 ("source:raw_orders", "model:orders"),
+                ("udf:normalize_email", "model:orders"),
             ),
             expected_check_ids=(
                 "audit:orders_audit:model:orders:order_id",
@@ -59,7 +59,7 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
         test_case.expected_edge_pairs
     )
     assert tuple(check["id"] for check in checks) == test_case.expected_check_ids
-    assert tuple(cast(list[str], nodes_by_id["function:normalize_email"]["asset_key"])) == (
+    assert tuple(cast(list[str], nodes_by_id["udf:normalize_email"]["asset_key"])) == (
         test_case.expected_function_asset_key
     )
     assert tuple(cast(list[str], nodes_by_id["source:raw_orders"]["asset_key"])) == (

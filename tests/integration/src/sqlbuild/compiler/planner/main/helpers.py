@@ -60,7 +60,7 @@ def build_project_from_test_case(
             CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=d) for d in dep_names
         )
         function_deps: tuple[CompiledObjectKey, ...] = tuple(
-            CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=d)
+            CompiledObjectKey(resource_type=CompiledResourceType.UDF, name=d)
             for d in test_case.function_deps.get(model_name, ())
         )
         models.append(
@@ -126,7 +126,7 @@ def build_project_from_test_case(
         functions.append(
             CompiledFunction(
                 key=CompiledObjectKey(
-                    resource_type=CompiledResourceType.FUNCTION,
+                    resource_type=CompiledResourceType.UDF,
                     name=function_name,
                 ),
                 deps=(),
@@ -271,7 +271,7 @@ def write_previous_function_fingerprints(
             database=function.destination.database,
             schema=function.destination.schema or "",
             fingerprint=Fingerprint(
-                node_type="function",
+                node_type="table_fn" if function.return_columns else "udf",
                 node_name=function.name,
                 target_database=function.destination.database,
                 target_schema=function.destination.schema,

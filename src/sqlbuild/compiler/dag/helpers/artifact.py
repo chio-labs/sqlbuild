@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
+from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledFunction,
@@ -168,9 +169,10 @@ def _build_seed_node(seed: CompiledSeed) -> DagNode:
 
 
 def _build_function_node(function: CompiledFunction) -> DagNode:
+    node_type: str = function_node_type(return_columns=function.return_columns)
     return DagNode(
-        id=_node_id(function.key),
-        kind=CompiledResourceType.FUNCTION.value,
+        id=f"{node_type}:{function.name}",
+        kind=node_type,
         name=function.name,
         asset_key=_target_asset_key(function.destination),
         target=_dag_target(function.destination),
@@ -213,7 +215,12 @@ def _build_edges(
     for key, dep_keys in graph.upstream_deps.items():
         dep_key: CompiledObjectKey
         for dep_key in dep_keys:
-            edges.append(DagEdge(from_id=_node_id(dep_key), to_id=_node_id(key)))
+            edges.append(
+                DagEdge(
+                    from_id=_node_id(dep_key),
+                    to_id=_node_id(key),
+                )
+            )
     edges.extend(_build_loader_edges(graph))
     if python_graph is not None:
         edges.extend(_build_python_edges(python_graph))

@@ -584,7 +584,7 @@ def seed_key(name: str) -> CompiledObjectKey:
 def function_key(name: str) -> CompiledObjectKey:
     """Build a function object key."""
 
-    return CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=name)
+    return CompiledObjectKey(resource_type=CompiledResourceType.UDF, name=name)
 
 
 def dbt_ref_key(name: str) -> CompiledObjectKey:
@@ -1484,7 +1484,7 @@ def build_compiled_function(
 
     return CompiledFunction(
         key=CompiledObjectKey(
-            resource_type=CompiledResourceType.FUNCTION,
+            resource_type=CompiledResourceType.UDF,
             name="is_completed_order",
         ),
         deps=(),
@@ -1513,7 +1513,7 @@ def build_fingerprint(*, query_sql: str) -> Fingerprint:
     """Build a fingerprint with a hash matching the supplied query SQL."""
 
     return Fingerprint(
-        node_type="function",
+        node_type="udf",
         node_name="is_completed_order",
         target_database=None,
         target_schema="main",

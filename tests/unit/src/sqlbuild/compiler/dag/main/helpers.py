@@ -46,9 +46,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
 
     source_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SOURCE, "raw_orders")
     seed_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SEED, "country_codes")
-    function_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.FUNCTION, "normalize_email"
-    )
+    function_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.UDF, "normalize_email")
     model_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "orders")
     test_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SQL_TEST, "orders_test")
     audit_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.AUDIT, "orders_audit")

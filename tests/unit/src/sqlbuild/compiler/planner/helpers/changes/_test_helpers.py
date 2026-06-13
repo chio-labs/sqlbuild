@@ -56,7 +56,7 @@ def build_model_from_metadata_test_case(
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=tuple(
-            CompiledObjectKey(resource_type=CompiledResourceType.FUNCTION, name=dep_name)
+            CompiledObjectKey(resource_type=CompiledResourceType.UDF, name=dep_name)
             for dep_name in test_case.deps
         ),
         name="orders",
@@ -126,7 +126,7 @@ def build_metadata_json_with_audit_gate(metadata_json: str) -> str:
 
 def build_project_for_function_metadata_detection() -> CompiledProject:
     function_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.FUNCTION,
+        resource_type=CompiledResourceType.UDF,
         name="is_large_order",
     )
     model: CompiledModel = CompiledModel(
@@ -174,7 +174,7 @@ def build_scope_for_function_metadata_detection() -> PlannerScope:
         name="orders",
     )
     function_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.FUNCTION,
+        resource_type=CompiledResourceType.UDF,
         name="is_large_order",
     )
     project: CompiledProject = build_project_for_function_metadata_detection()
