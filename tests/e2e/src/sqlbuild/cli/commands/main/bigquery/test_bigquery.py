@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryIntermediateDagStrategyE2ETestCase,
     BigQueryJanitorDetachedVdeE2ETestCase,
     BigQueryModelBuildE2ETestCase,
+    BigQueryNodeResultE2ETestCase,
     BigQueryReconcileE2ETestCase,
     BigQueryScenarioLocalReplayE2ETestCase,
     BigQueryScenarioRemoteE2ETestCase,
@@ -76,6 +77,85 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryNodeResultE2ETestCase(
+            description="standard node results persist and read on bigquery",
+            expected_rows=(
+                ("check", "check_produce_result", "success"),
+                ("task", "produce_result", "success"),
+            ),
+        )
+    ],
+    ids=["standard node results persist and read on bigquery"],
+)
+def test_given_python_result_when_running_check_on_bigquery_then_persists_node_results(
+    tmp_path: Path,
+    test_case: BigQueryNodeResultE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_node_results")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="bigquery_node_results",
+        repo_files={
+            "sqlbuild_project.toml": build_bigquery_project_toml(
+                project_name="bigquery_node_results",
+                dataset_name=dataset_name,
+            ),
+            "tasks/results.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'value': 42}, metadata={'source': 'bigquery'})\n"
+            ),
+            "checks/results.py": (
+                "from sqlbuild.checks import check\n"
+                "from tasks.results import produce_result\n\n"
+                "@check(depends_on=produce_result)\n"
+                "def check_produce_result(ctx):\n"
+                "    return ctx.result_of(produce_result).payload['value'] == 42\n"
+            ),
+        },
+    )
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--select",
+                "produce_result",
+                "--exclude",
+                "check:check_produce_result",
+            ),
+            project_dir=project_dir,
+        )
+        check_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "check", "--select", "check:check_produce_result"),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == test_case.expected_return_code, (
+            build_result.stdout + build_result.stderr
+        )
+        assert check_result.returncode == test_case.expected_return_code, (
+            check_result.stdout + check_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
+            dataset_name=dataset_name,
+            sql=(
+                "SELECT node_type, node_name, status "
+                f"FROM {relation_name(dataset_name=dataset_name, name='_sqlbuild_node_results')} "
+                "WHERE node_name IN ('produce_result', 'check_produce_result') "
+                "ORDER BY node_type, node_name"
+            ),
+        )
+        assert rows == test_case.expected_rows
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
 
 
 @pytest.mark.parametrize(

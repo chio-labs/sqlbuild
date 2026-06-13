@@ -10,6 +10,13 @@ class BigQueryCliTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryNodeResultE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class BigQueryBuildE2ETestCase:
     description: str
     expected_table_name: str

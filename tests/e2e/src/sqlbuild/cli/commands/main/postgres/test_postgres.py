@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresBuildE2ETestCase,
     PostgresIntermediateDagStrategyE2ETestCase,
     PostgresLoaderWaffleShopE2ETestCase,
+    PostgresNodeResultE2ETestCase,
     PostgresPartialSourceTypeEnforcementE2ETestCase,
     PostgresScenarioLocalReplayE2ETestCase,
     PostgresSnapshotApplyE2ETestCase,
@@ -53,6 +54,88 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresNodeResultE2ETestCase(
+            description="standard node results persist and read on postgres",
+            expected_rows=(
+                ("check", "check_produce_result", "success"),
+                ("task", "produce_result", "success"),
+            ),
+        )
+    ],
+    ids=["standard node results persist and read on postgres"],
+)
+def test_given_python_result_when_running_check_on_postgres_then_persists_node_results(
+    tmp_path: Path,
+    test_case: PostgresNodeResultE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_node_results")
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="postgres_node_results",
+        repo_files={
+            "sqlbuild_project.toml": build_postgres_project_toml(
+                project_name="postgres_node_results",
+                schema_name=schema_name,
+                config=postgres_e2e_config,
+            ),
+            "tasks/results.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'value': 42}, metadata={'source': 'postgres'})\n"
+            ),
+            "checks/results.py": (
+                "from sqlbuild.checks import check\n"
+                "from tasks.results import produce_result\n\n"
+                "@check(depends_on=produce_result)\n"
+                "def check_produce_result(ctx):\n"
+                "    return ctx.result_of(produce_result).payload['value'] == 42\n"
+            ),
+        },
+    )
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+
+    try:
+        build_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "build",
+                "--select",
+                "produce_result",
+                "--exclude",
+                "check:check_produce_result",
+            ),
+            project_dir=project_dir,
+        )
+        check_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "check", "--select", "check:check_produce_result"),
+            project_dir=project_dir,
+        )
+
+        assert build_result.returncode == test_case.expected_return_code, (
+            build_result.stdout + build_result.stderr
+        )
+        assert check_result.returncode == test_case.expected_return_code, (
+            check_result.stdout + check_result.stderr
+        )
+        rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                "SELECT node_type, node_name, status "
+                f"FROM {relation_name(schema_name=schema_name, name='_sqlbuild_node_results')} "
+                "WHERE node_name IN ('produce_result', 'check_produce_result') "
+                "ORDER BY node_type, node_name"
+            ),
+            config=postgres_e2e_config,
+        )
+        assert rows == test_case.expected_rows
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
 
 
 @pytest.mark.parametrize(

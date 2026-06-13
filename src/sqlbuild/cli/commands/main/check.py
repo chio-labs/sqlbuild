@@ -137,6 +137,12 @@ def run_check(
         adapter=adapter,
         pipeline_result=pipeline_result,
     )
+    default_database: str | None = pipeline_result.project.effective_target_database
+    if default_database is None:
+        default_database = adapter.default_database()
+    default_schema: str | None = pipeline_result.project.effective_target_schema
+    if default_schema is None:
+        default_schema = adapter.default_schema()
     provider_session: Any = build_provider_session(discovered_inputs.providers)
     try:
         connection: Any = adapter.connect(connection_config)
@@ -153,8 +159,8 @@ def run_check(
                 target=pipeline_result.project.effective_target_name,
                 vars=pipeline_result.project.effective_vars,
                 is_reload=False,
-                default_database=adapter.default_database(),
-                default_schema=adapter.default_schema(),
+                default_database=default_database,
+                default_schema=default_schema,
                 use_color=use_color,
                 relation_targets=relation_targets,
                 providers=provider_session.providers,
@@ -201,8 +207,8 @@ def run_check(
                 vars=pipeline_result.project.effective_vars,
                 is_reload=False,
                 run_state=ingress_result.run_state,
-                default_database=adapter.default_database(),
-                default_schema=adapter.default_schema(),
+                default_database=default_database,
+                default_schema=default_schema,
                 relation_targets=relation_targets,
                 providers=provider_session.providers,
                 require_upstream_results=False,
