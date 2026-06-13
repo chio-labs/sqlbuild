@@ -72,6 +72,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -630,6 +631,11 @@ def run_virtual_build(
                 for load_result in ingress_load_results
             ),
             initial_load_results=ingress_load_results,
+            initial_failed_keys=frozenset(
+                _load_result_key(plan=plan_output, result=load_result)
+                for load_result in ingress_load_results
+                if load_result.status != ExecutionStatus.SUCCESS
+            ),
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
@@ -667,6 +673,7 @@ def run_virtual_build(
             expected_seed_version_hashes=semantics.expected_seed_version_hashes,
             seed_identity_metadata_jsons=semantics.seed_identity_metadata_jsons,
             available_seed_physical_relations=available_seed_physical_relations,
+            model_results=result.model_results,
             seed_results=result.seed_results,
             load_results=result.load_results,
         )
@@ -1145,6 +1152,7 @@ def _persist_successful_virtual_build(
     expected_seed_version_hashes: dict[str, str],
     seed_identity_metadata_jsons: dict[str, str],
     available_seed_physical_relations: dict[str, PhysicalRelationRecord],
+    model_results: tuple[ModelExecutionResult, ...],
     seed_results: tuple[SeedExecutionResult, ...],
     load_results: tuple[LoadExecutionResult, ...],
 ) -> None:
@@ -1161,7 +1169,14 @@ def _persist_successful_virtual_build(
     model_entries_by_name: dict[str, Any] = {
         entry.name: entry for entry in plan_output.model_entries
     }
+    successful_model_names: frozenset[str] = frozenset(
+        model_result.model_name
+        for model_result in model_results
+        if model_result.status == ExecutionStatus.SUCCESS
+    )
     for entry in plan_output.model_entries:
+        if entry.name not in successful_model_names:
+            continue
         final_version_hashes[entry.name] = expected_version_hashes[entry.name]
 
     state_connection: Any = backend.connect(config.connection)
