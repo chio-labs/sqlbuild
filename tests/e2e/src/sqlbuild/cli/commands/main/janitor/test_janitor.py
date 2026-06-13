@@ -705,13 +705,13 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
         db_path=state_db_path,
         sql=(
             "SELECT physical_relations.relation_name "
-            "FROM sqlbuild_state.virtual_environment_model_refs AS refs "
+            "FROM sqlbuild_state.virtual_environment_node_refs AS refs "
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
             "ON physical_relations.artifact_type = 'model' "
-            "AND physical_relations.artifact_name = refs.model_name "
+            "AND physical_relations.artifact_name = refs.node_name "
             "AND physical_relations.version_hash = refs.version_hash "
             "WHERE refs.virtual_environment_name = 'dev' "
-            "AND refs.model_name = 'stg_orders'"
+            "AND refs.node_type = 'model' AND refs.node_name = 'stg_orders'"
         ),
     )
     first_relation_name: str = str(first_relation_rows[0][0])
@@ -730,13 +730,13 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
         db_path=state_db_path,
         sql=(
             "SELECT physical_relations.relation_name "
-            "FROM sqlbuild_state.virtual_environment_model_refs AS refs "
+            "FROM sqlbuild_state.virtual_environment_node_refs AS refs "
             "JOIN sqlbuild_state.physical_relations AS physical_relations "
             "ON physical_relations.artifact_type = 'model' "
-            "AND physical_relations.artifact_name = refs.model_name "
+            "AND physical_relations.artifact_name = refs.node_name "
             "AND physical_relations.version_hash = refs.version_hash "
             "WHERE refs.virtual_environment_name = 'dev' "
-            "AND refs.model_name = 'stg_orders'"
+            "AND refs.node_type = 'model' AND refs.node_name = 'stg_orders'"
         ),
     )
     latest_relation_name: str = str(latest_relation_rows[0][0])
@@ -871,7 +871,10 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
     ) == [(test_case.expected_virtual_environment_count_after,)]
     assert query_duckdb(
         db_path=state_db_path,
-        sql="SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_model_refs",
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.virtual_environment_node_refs "
+            "WHERE node_type = 'model'"
+        ),
     ) == [(test_case.expected_ref_count_after,)]
     assert not table_exists(
         db_path=warehouse_db_path,

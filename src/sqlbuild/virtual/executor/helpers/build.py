@@ -131,6 +131,7 @@ from sqlbuild.virtual.state.models import (
     StateBackendConfig,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
@@ -1376,15 +1377,11 @@ def _persist_successful_virtual_build(
             if not stale_model_after_build and not stale_seed_after_build
             else VirtualEnvironmentStatus.ACTIVE
         )
-        backend.upsert_virtual_environment(
-            state_connection,
-            schema=config.schema,
-            record=VirtualEnvironmentRecord(
-                virtual_environment_name=target_vde_name,
-                status=status,
-                baseline_virtual_environment_name=(
-                    baseline_vde_name if baseline_vde_name != target_vde_name else None
-                ),
+        virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+            virtual_environment_name=target_vde_name,
+            status=status,
+            baseline_virtual_environment_name=(
+                baseline_vde_name if baseline_vde_name != target_vde_name else None
             ),
         )
         refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
@@ -1395,25 +1392,20 @@ def _persist_successful_virtual_build(
             )
             for model_name, version_hash in sorted(final_version_hashes.items())
         )
-        backend.replace_virtual_environment_model_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=target_vde_name,
-            refs=refs,
-        )
+        function_ref_node_types: dict[str, str] = {
+            ref.function_name: ref.node_type for ref in bound_function_refs
+        }
+        for function_entry in plan_output.function_entries:
+            function_ref_node_types[function_entry.name] = str(function_entry.key.resource_type)
         function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
             VirtualEnvironmentFunctionRefRecord(
                 virtual_environment_name=target_vde_name,
+                node_type=function_ref_node_types[function_name],
                 function_name=function_name,
                 version_hash=version_hash,
             )
             for function_name, version_hash in sorted(final_function_hashes.items())
-        )
-        backend.replace_virtual_environment_function_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=target_vde_name,
-            refs=function_refs,
+            if function_name in function_ref_node_types
         )
         seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
             VirtualEnvironmentSeedRefRecord(
@@ -1423,11 +1415,50 @@ def _persist_successful_virtual_build(
             )
             for seed_name, version_hash in sorted(final_seed_hashes.items())
         )
-        backend.replace_virtual_environment_seed_refs(
+        backend.upsert_virtual_environment_and_replace_node_ref_groups(
             state_connection,
             schema=config.schema,
-            virtual_environment_name=target_vde_name,
-            refs=seed_refs,
+            record=virtual_environment_record,
+            refs_by_node_type={
+                "model": tuple(
+                    VirtualEnvironmentNodeRefRecord(
+                        virtual_environment_name=ref.virtual_environment_name,
+                        node_type="model",
+                        node_name=ref.model_name,
+                        version_hash=ref.version_hash,
+                    )
+                    for ref in refs
+                ),
+                "seed": tuple(
+                    VirtualEnvironmentNodeRefRecord(
+                        virtual_environment_name=ref.virtual_environment_name,
+                        node_type="seed",
+                        node_name=ref.seed_name,
+                        version_hash=ref.version_hash,
+                    )
+                    for ref in seed_refs
+                ),
+                "udf": tuple(
+                    VirtualEnvironmentNodeRefRecord(
+                        virtual_environment_name=ref.virtual_environment_name,
+                        node_type=ref.node_type,
+                        node_name=ref.function_name,
+                        version_hash=ref.version_hash,
+                    )
+                    for ref in function_refs
+                    if ref.node_type == "udf"
+                ),
+                "table_fn": tuple(
+                    VirtualEnvironmentNodeRefRecord(
+                        virtual_environment_name=ref.virtual_environment_name,
+                        node_type=ref.node_type,
+                        node_name=ref.function_name,
+                        version_hash=ref.version_hash,
+                    )
+                    for ref in function_refs
+                    if ref.node_type == "table_fn"
+                ),
+            },
         )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(

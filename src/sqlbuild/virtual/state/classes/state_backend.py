@@ -27,6 +27,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRetentionRecord,
@@ -261,6 +262,66 @@ class StateBackend(ABC):
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> None:
         """Delete a virtual environment and its current refs."""
+        ...
+
+    @abstractmethod
+    def replace_virtual_environment_node_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
+    ) -> None:
+        """Replace all refs for one virtual environment node type."""
+        ...
+
+    @abstractmethod
+    def replace_virtual_environment_node_ref_groups(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        """Replace refs for multiple virtual environment node types atomically."""
+        ...
+
+    @abstractmethod
+    def upsert_virtual_environment_and_replace_node_ref_groups(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        """Upsert a virtual environment and replace multiple ref groups atomically."""
+        ...
+
+    @abstractmethod
+    def get_virtual_environment_node_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+    ) -> tuple[VirtualEnvironmentNodeRefRecord, ...]:
+        """Return refs for one virtual environment node type."""
+        ...
+
+    @abstractmethod
+    def upsert_virtual_environment_node_ref(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        ref: VirtualEnvironmentNodeRefRecord,
+    ) -> None:
+        """Insert or replace one generic node ref for a virtual environment."""
         ...
 
     @abstractmethod
