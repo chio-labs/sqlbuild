@@ -325,6 +325,8 @@ def _format_model_assets(
                 "target": targets.get(result.model_name) or result.promoted_relation,
                 "staging_relation": result.staging_relation,
                 "failed_phase": result.failed_phase.value if result.failed_phase else None,
+                "skip_mode": result.skip_mode.value if result.skip_mode else None,
+                "skip_reason": result.skip_reason,
                 "error_code": result.error_code,
                 "error_help": result.error_help,
                 "error_message": result.error_message,

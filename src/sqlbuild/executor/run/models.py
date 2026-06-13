@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult, StatementRecorder
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.types import AuditGateReuseReason, HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -60,6 +61,19 @@ class HookContext:
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
 
+    def skip(self, reason: str, *, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
+        """Return a skip signal for the current hook."""
+
+        return HookSkipResult(reason=reason, mode=SkipMode(mode))
+
+
+@dataclass(frozen=True)
+class HookSkipResult:
+    """User-facing skip signal returned by a Python hook."""
+
+    reason: str
+    mode: SkipMode = SkipMode.SOFT
+
 
 @dataclass(frozen=True)
 class HookExecutionResult:
@@ -68,6 +82,8 @@ class HookExecutionResult:
     hook_type: str
     label: str
     status: ExecutionStatus
+    skip_mode: SkipMode | None = None
+    skip_reason: str | None = None
     error_message: str | None = None
 
 
@@ -85,6 +101,8 @@ class ModelExecutionResult:
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
     hook_results: tuple[HookExecutionResult, ...] = field(default_factory=tuple)
+    skip_mode: SkipMode | None = None
+    skip_reason: str | None = None
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None

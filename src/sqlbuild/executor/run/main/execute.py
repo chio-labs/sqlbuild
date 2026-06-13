@@ -39,7 +39,7 @@ from sqlbuild.executor.run.helpers.microbatch import (
     execute_microbatch_entry as execute_microbatch_entry,
 )
 from sqlbuild.executor.run.helpers.promotion import promote_relation_to_destination
-from sqlbuild.executor.run.helpers.results import build_failed_result
+from sqlbuild.executor.run.helpers.results import build_failed_result, build_skipped_result
 from sqlbuild.executor.run.helpers.reuse import (
     create_relation_from_reuse_plan,
 )
@@ -161,7 +161,7 @@ def execute_table_entry(
             render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
         )
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            pre_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.pre_hooks,
@@ -176,6 +176,14 @@ def execute_table_entry(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if pre_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -459,7 +467,7 @@ def _staged_lifecycle(
             render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
         )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            post_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.post_hooks,
@@ -474,6 +482,15 @@ def _staged_lifecycle(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if post_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+                promoted_relation=target_qualified,
             )
     except Exception as exc:
         return build_failed_result(
@@ -641,7 +658,7 @@ def _direct_lifecycle(
             render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
         )
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            execute_hooks(
+            post_hook_skipped: bool = execute_hooks(
                 connection=connection,
                 adapter=adapter,
                 hooks=entry.post_hooks,
@@ -656,6 +673,15 @@ def _direct_lifecycle(
                 hook_results=hook_results,
                 providers=providers,
                 python_identity_recorder=python_identity_recorder,
+            )
+        if post_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+                promoted_relation=target_qualified,
             )
     except Exception as exc:
         return build_failed_result(

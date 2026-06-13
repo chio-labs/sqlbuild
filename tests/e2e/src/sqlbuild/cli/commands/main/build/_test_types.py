@@ -139,6 +139,18 @@ class PythonHookFailureBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonHookSkipBuildE2ETestCase:
+    """Test case for build-time Python lifecycle hook skips."""
+
+    description: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_present_tables: tuple[str, ...]
+    expected_absent_tables: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...] = ()
+
+
+@dataclass(frozen=True)
 class LongPythonHookNameBuildE2ETestCase:
     """Test case for CLI display of long Python hook names."""
 

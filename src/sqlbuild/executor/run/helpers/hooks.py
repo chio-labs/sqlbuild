@@ -12,11 +12,17 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.python_nodes.main.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.models import HookContext, HookExecutionResult, HookRelation
+from sqlbuild.executor.run.models import (
+    HookContext,
+    HookExecutionResult,
+    HookRelation,
+    HookSkipResult,
+)
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -45,11 +51,11 @@ def execute_hooks(
     hook_results: list[HookExecutionResult] | None = None,
     providers: ProviderContainer | None = None,
     python_identity_recorder: PythonIdentityRecorder | None = None,
-) -> None:
+) -> bool:
     """Execute pre/post lifecycle hook entries."""
 
     if hooks is None:
-        return
+        return False
     if isinstance(hooks, str):
         _execute_sql_hook(
             connection=connection,
@@ -59,7 +65,7 @@ def execute_hooks(
             phase=phase,
             hook_results=hook_results,
         )
-        return
+        return False
     if isinstance(hooks, SqlHookEntry):
         _execute_sql_hook(
             connection=connection,
@@ -69,9 +75,9 @@ def execute_hooks(
             phase=phase,
             hook_results=hook_results,
         )
-        return
+        return False
     if isinstance(hooks, PythonHookEntry):
-        invoke_python_hook(
+        return invoke_python_hook(
             connection=connection,
             adapter=adapter,
             hook_entry=hooks,
@@ -88,8 +94,8 @@ def execute_hooks(
             providers=providers,
             python_identity_recorder=python_identity_recorder,
         )
-        return
     if isinstance(hooks, list | tuple):
+        skipped: bool = False
         hook_index: int
         hook: object
         for hook_index, hook in enumerate(hooks):
@@ -112,7 +118,7 @@ def execute_hooks(
                     hook_results=hook_results,
                 )
             elif isinstance(hook, PythonHookEntry):
-                invoke_python_hook(
+                skipped = invoke_python_hook(
                     connection=connection,
                     adapter=adapter,
                     hook_entry=hook,
@@ -129,12 +135,14 @@ def execute_hooks(
                     providers=providers,
                     python_identity_recorder=python_identity_recorder,
                 )
+                if skipped:
+                    return True
             else:
                 raise ExecutorInputError(
                     f'{phase.value}[{hook_index}] must be sql("...") or python("..."), '
                     f"got {type(hook).__name__}"
                 )
-        return
+        return skipped
     raise ExecutorInputError(
         f'{phase.value} must be a sql("...")/python("...") hook entry or list of hook entries, '
         f"got {type(hooks).__name__}"
@@ -158,7 +166,7 @@ def invoke_python_hook(
     hook_results: list[HookExecutionResult] | None = None,
     providers: ProviderContainer | None = None,
     python_identity_recorder: PythonIdentityRecorder | None = None,
-) -> None:
+) -> bool:
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
     hook_function: DiscoveredHookFunction | None = _find_hook_function(
         name=hook_entry.name,
@@ -204,7 +212,7 @@ def invoke_python_hook(
         providers=providers or _empty_provider_container(),
     )
     try:
-        invoke_with_providers(
+        returned: object = invoke_with_providers(
             function=hook_function.function,
             context=context,
             providers=providers,
@@ -222,6 +230,39 @@ def invoke_python_hook(
             error_message=error_message,
         )
         raise ExecutorInputError(error_message) from exc
+    if isinstance(returned, HookSkipResult):
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.SKIPPED,
+            skip_mode=returned.mode,
+            skip_reason=returned.reason,
+        )
+        _record_python_hook_identity(
+            hook_function=hook_function,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            destination=destination,
+            model_name=model_name,
+            python_identity_recorder=python_identity_recorder,
+        )
+        return True
+    if returned is not None:
+        error_message = f"{hook_label} returned unsupported value; return None or ctx.skip(...)"
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message=error_message,
+        )
+        raise ExecutorInputError(error_message)
     _record_hook_result(
         hook_results=hook_results,
         phase=phase,
@@ -230,6 +271,28 @@ def invoke_python_hook(
         label=hook_entry.name,
         status=ExecutionStatus.SUCCESS,
     )
+    _record_python_hook_identity(
+        hook_function=hook_function,
+        adapter=adapter,
+        connection=connection,
+        run_id=run_id,
+        destination=destination,
+        model_name=model_name,
+        python_identity_recorder=python_identity_recorder,
+    )
+    return False
+
+
+def _record_python_hook_identity(
+    *,
+    hook_function: DiscoveredHookFunction,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    destination: CompiledRelationLocation,
+    model_name: str,
+    python_identity_recorder: PythonIdentityRecorder | None,
+) -> None:
     identity: PythonNodeIdentity = build_python_node_identity(
         node_type=NODE_TYPE_HOOK,
         node_name=hook_function.name,
@@ -291,6 +354,8 @@ def _record_hook_result(
     hook_type: str,
     label: str,
     status: ExecutionStatus,
+    skip_mode: SkipMode | None = None,
+    skip_reason: str | None = None,
     error_message: str | None = None,
 ) -> None:
     if hook_results is None:
@@ -302,6 +367,8 @@ def _record_hook_result(
             hook_type=hook_type,
             label=label,
             status=status,
+            skip_mode=skip_mode,
+            skip_reason=skip_reason,
             error_message=error_message,
         )
     )
