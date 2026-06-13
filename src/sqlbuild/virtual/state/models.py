@@ -158,10 +158,21 @@ class VirtualEnvironmentModelRefRecord:
 
 
 @dataclass(frozen=True)
+class VirtualEnvironmentNodeRefRecord:
+    """Current state row mapping a VDE node ref to a version."""
+
+    virtual_environment_name: str
+    node_type: str
+    node_name: str
+    version_hash: str
+
+
+@dataclass(frozen=True)
 class VirtualEnvironmentFunctionRefRecord:
     """Current state row mapping a VDE function ref to a function version."""
 
     virtual_environment_name: str
+    node_type: str
     function_name: str
     version_hash: str
 

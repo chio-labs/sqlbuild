@@ -25,6 +25,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentRetentionRecord,
@@ -238,6 +239,56 @@ class FakeStateBackend(StateBackend):
 
     def delete_virtual_environment(
         self, connection: Any, *, schema: str, virtual_environment_name: str
+    ) -> None:
+        return None
+
+    def replace_virtual_environment_node_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
+    ) -> None:
+        return None
+
+    def get_virtual_environment_node_refs(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+    ) -> tuple[VirtualEnvironmentNodeRefRecord, ...]:
+        return ()
+
+    def replace_virtual_environment_node_ref_groups(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        return None
+
+    def upsert_virtual_environment_and_replace_node_ref_groups(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        return None
+
+    def upsert_virtual_environment_node_ref(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        ref: VirtualEnvironmentNodeRefRecord,
     ) -> None:
         return None
 

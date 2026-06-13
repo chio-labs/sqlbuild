@@ -4,12 +4,12 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import duckdb
 import pytest
 
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
+from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -28,6 +28,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
@@ -43,6 +44,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
+    DuckDbStateBackendAtomicRefUpdateTestCase,
     DuckDbStateBackendColumnValidationTestCase,
     DuckDbStateBackendConcurrentLockTestCase,
     DuckDbStateBackendCoreRecordsTestCase,
@@ -330,7 +332,7 @@ def test_given_duckdb_node_results_when_reading_then_scopes_by_environment_and_s
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=26,
+            expected_issue_count=23,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -760,6 +762,28 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
                 ),
             ),
         )
+        backend.replace_virtual_environment_seed_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.expected_virtual_environment_name,
+            refs=(
+                VirtualEnvironmentSeedRefRecord(
+                    virtual_environment_name=test_case.expected_virtual_environment_name,
+                    seed_name=test_case.expected_model_name,
+                    version_hash="seed123",
+                ),
+            ),
+        )
+        backend.upsert_virtual_environment_python_node_ref(
+            connection,
+            schema=test_case.schema,
+            ref=VirtualEnvironmentPythonNodeRefRecord(
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+                node_type="task",
+                node_name=test_case.expected_model_name,
+                version_hash="task123",
+            ),
+        )
 
         assert (
             backend.get_model_version(
@@ -812,6 +836,35 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             virtual_environment_name=test_case.expected_virtual_environment_name,
             refs=(),
         )
+        seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
+            backend.get_virtual_environment_seed_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+        )
+        assert seed_refs == (
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+                seed_name=test_case.expected_model_name,
+                version_hash="seed123",
+            ),
+        )
+        python_node_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
+            backend.get_virtual_environment_python_node_refs(
+                connection,
+                schema=test_case.schema,
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+            )
+        )
+        assert python_node_refs == (
+            VirtualEnvironmentPythonNodeRefRecord(
+                virtual_environment_name=test_case.expected_virtual_environment_name,
+                node_type="task",
+                node_name=test_case.expected_model_name,
+                version_hash="task123",
+            ),
+        )
         replaced_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
             backend.get_virtual_environment_model_refs(
                 connection,
@@ -820,6 +873,137 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             )
         )
         assert len(replaced_refs) == test_case.expected_ref_count_after_replace
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendAtomicRefUpdateTestCase(
+            description="rolls back VDE status and all ref groups when atomic replacement fails",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            model_name="orders",
+            seed_name="countries",
+            expected_original_model_hash="model-old",
+            expected_original_seed_hash="seed-old",
+            expected_updated_model_hash="model-new",
+            expected_updated_seed_hash="seed-new",
+            expected_duplicate_seed_hash="seed-duplicate",
+        )
+    ],
+    ids=["rolls back VDE status and all ref groups when atomic replacement fails"],
+)
+def test_given_duckdb_state_backend_when_atomic_vde_ref_update_fails_then_rolls_back_all_groups(
+    test_case: DuckDbStateBackendAtomicRefUpdateTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        backend.upsert_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            record=VirtualEnvironmentRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                status=VirtualEnvironmentStatus.FINALIZED,
+            ),
+        )
+        backend.replace_virtual_environment_model_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            refs=(
+                VirtualEnvironmentModelRefRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    model_name=test_case.model_name,
+                    version_hash=test_case.expected_original_model_hash,
+                ),
+            ),
+        )
+        backend.replace_virtual_environment_seed_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            refs=(
+                VirtualEnvironmentSeedRefRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    seed_name=test_case.seed_name,
+                    version_hash=test_case.expected_original_seed_hash,
+                ),
+            ),
+        )
+
+        with pytest.raises(StateBackendConfigError):
+            backend.upsert_virtual_environment_and_replace_node_ref_groups(
+                connection,
+                schema=test_case.schema,
+                record=VirtualEnvironmentRecord(
+                    virtual_environment_name=test_case.virtual_environment_name,
+                    status=VirtualEnvironmentStatus.ACTIVE,
+                ),
+                refs_by_node_type={
+                    "model": (
+                        VirtualEnvironmentNodeRefRecord(
+                            virtual_environment_name=test_case.virtual_environment_name,
+                            node_type="model",
+                            node_name=test_case.model_name,
+                            version_hash=test_case.expected_updated_model_hash,
+                        ),
+                    ),
+                    "seed": (
+                        VirtualEnvironmentNodeRefRecord(
+                            virtual_environment_name=test_case.virtual_environment_name,
+                            node_type="seed",
+                            node_name=test_case.seed_name,
+                            version_hash=test_case.expected_updated_seed_hash,
+                        ),
+                        VirtualEnvironmentNodeRefRecord(
+                            virtual_environment_name=test_case.virtual_environment_name,
+                            node_type="seed",
+                            node_name=test_case.seed_name,
+                            version_hash=test_case.expected_duplicate_seed_hash,
+                        ),
+                    ),
+                },
+            )
+
+        assert backend.get_virtual_environment(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        ) == VirtualEnvironmentRecord(
+            virtual_environment_name=test_case.virtual_environment_name,
+            status=VirtualEnvironmentStatus.FINALIZED,
+        )
+        assert backend.get_virtual_environment_model_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        ) == (
+            VirtualEnvironmentModelRefRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                model_name=test_case.model_name,
+                version_hash=test_case.expected_original_model_hash,
+            ),
+        )
+        assert backend.get_virtual_environment_seed_refs(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+        ) == (
+            VirtualEnvironmentSeedRefRecord(
+                virtual_environment_name=test_case.virtual_environment_name,
+                seed_name=test_case.seed_name,
+                version_hash=test_case.expected_original_seed_hash,
+            ),
+        )
     finally:
         backend.close(connection)
 
@@ -1422,6 +1606,7 @@ def test_given_duckdb_state_backend_when_upserting_function_records_then_round_t
             refs=(
                 VirtualEnvironmentFunctionRefRecord(
                     virtual_environment_name=test_case.expected_virtual_environment_name,
+                    node_type="udf",
                     function_name=test_case.expected_model_name,
                     version_hash=test_case.expected_version_hash,
                 ),
@@ -1690,7 +1875,7 @@ def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_roll
             ),
         )
 
-        with pytest.raises(duckdb.ConstraintException):
+        with pytest.raises(StateBackendConfigError):
             backend.replace_virtual_environment_model_refs(
                 connection,
                 schema=test_case.schema,

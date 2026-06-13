@@ -17,6 +17,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
+from sqlbuild.virtual.executor.helpers.functions import decode_function_return_columns
 from sqlbuild.virtual.executor.helpers.rollback import (
     guard_partial_rollback_scope,
     publish_function_versions,
@@ -43,6 +44,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
@@ -303,19 +305,9 @@ def run_virtual_rollback(
             if not is_partial_scope or not stale_after
             else VirtualEnvironmentStatus.ACTIVE
         )
-        backend.upsert_virtual_environment(
-            state_connection,
-            schema=config.schema,
-            record=VirtualEnvironmentRecord(
-                virtual_environment_name=virtual_environment_name,
-                status=status,
-            ),
-        )
-        backend.replace_virtual_environment_model_refs(
-            state_connection,
-            schema=config.schema,
+        virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
             virtual_environment_name=virtual_environment_name,
-            refs=target_refs,
+            status=status,
         )
         destination_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
             VirtualEnvironmentSeedRefRecord(
@@ -325,33 +317,71 @@ def run_virtual_rollback(
             )
             for seed_name, version_hash in sorted(final_seed_hashes.items())
         )
-        backend.replace_virtual_environment_seed_refs(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=virtual_environment_name,
-            refs=destination_seed_refs,
-        )
-        target_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
-            VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=virtual_environment_name,
-                function_name=ref.function_name,
-                version_hash=ref.version_hash,
-            )
-            for ref in target_checkpoint_function_refs
-        )
         function_versions: dict[str, FunctionVersionRecord] = read_function_versions(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             refs=target_checkpoint_function_refs,
         )
-        if not is_partial_scope:
-            backend.replace_virtual_environment_function_refs(
-                state_connection,
-                schema=config.schema,
+        target_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
+            VirtualEnvironmentFunctionRefRecord(
                 virtual_environment_name=virtual_environment_name,
-                refs=target_function_refs,
+                node_type=(
+                    "table_fn" if decode_function_return_columns(function_version) else "udf"
+                ),
+                function_name=ref.function_name,
+                version_hash=ref.version_hash,
             )
+            for ref in target_checkpoint_function_refs
+            if (function_version := function_versions.get(ref.function_name)) is not None
+        )
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {
+            "model": tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type="model",
+                    node_name=ref.model_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in target_refs
+            ),
+            "seed": tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type="seed",
+                    node_name=ref.seed_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in destination_seed_refs
+            ),
+        }
+        if not is_partial_scope:
+            refs_by_node_type["udf"] = tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type=ref.node_type,
+                    node_name=ref.function_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in target_function_refs
+                if ref.node_type == "udf"
+            )
+            refs_by_node_type["table_fn"] = tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type=ref.node_type,
+                    node_name=ref.function_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in target_function_refs
+                if ref.node_type == "table_fn"
+            )
+        backend.upsert_virtual_environment_and_replace_node_ref_groups(
+            state_connection,
+            schema=config.schema,
+            record=virtual_environment_record,
+            refs_by_node_type=refs_by_node_type,
+        )
         rolled_back_models: tuple[str, ...] = tuple(
             sorted(
                 model_name
