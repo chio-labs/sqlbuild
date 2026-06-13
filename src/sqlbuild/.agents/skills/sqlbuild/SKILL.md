@@ -70,7 +70,6 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/compile`
 - `cli/plan`
 - `cli/build`
-- `cli/run`
 - `cli/load`
 - `cli/seed`
 - `cli/test`
@@ -96,9 +95,9 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 
 Source: `index.mdx`
 
-A SQL-first data framework: transformation, ingestion, Python tasks and assets, and testing in one tool.
+A change-aware SQL framework: only rebuild what changed, with all state in the warehouse.
 
-SQLBuild keeps a low, dbt-like floor for SQL models and can run alongside an existing dbt project. It adds ingestion, Python nodes, and opt-in virtual environments for more advanced use cases, letting you expand scope as your project naturally grows.
+Every build fingerprints models, seeds, functions, and Python nodes, tracks source freshness, and skips anything that hasn't changed, including audits that already passed for the same version. It keeps a low, dbt-like floor for SQL models, can run alongside an existing dbt project, and adds ingestion, Python nodes, and opt-in virtual environments for more advanced use cases.
 
 ### Supported adapters
 
@@ -110,11 +109,28 @@ DuckDB runs entirely locally, so you can try SQLBuild and run full E2E tests wit
 
 1. **Define** your models as SQL files with `MODEL()` headers that declare configuration, schema, and audits inline
 2. **Compile** to resolve references, validate SQL, infer column types, check contracts, and compute column lineage - all offline
-3. **Plan** what needs to change based on fingerprints, schema diffs, and backfill policies
-4. **Build** by executing the plan: materializing models, validating data before promotion, and ensuring bad data never reaches production
+3. **Plan** what needs to change by comparing fingerprints, source freshness, seed content, and Python node identities against the warehouse state. Unchanged models, seeds, audits, and Python nodes are skipped. Production relations can optionally be reused when version identities match.
+4. **Build** by executing the plan: materializing only what changed, validating data before promotion, and ensuring bad data never reaches production
 5. **Test** with chained unit tests, E2E scenario tests, and local replay through DuckDB - no warehouse required
 
 ### Why SQLBuild?
+
+#### Change-aware builds
+
+Every node in the graph has a versioned identity. SQLBuild compares identities against warehouse state on every build and only runs what has actually changed.
+
+- **Models and functions:** Fingerprinted by query hash, config, and upstream function hashes. Unchanged models are skipped entirely.
+- **Seeds:** Content and load-affecting config are hashed. Unchanged seeds are not reloaded.
+- **Python nodes:** Loaders, tasks, assets, checks, and hooks are fingerprinted by source code hash and dependency hashes (scoped to the git root). The plan shows source and dependency diffs when a node's identity changes. Skip/run decisions are user-controlled via `ctx.skip()`, since only the node's own logic knows whether its external inputs have changed.
+- **Audits:** Audits that already passed for the same model version are not re-run. A version identity change triggers re-validation.
+- **Source freshness:** External source data versions are tracked automatically (via adapter metadata, column queries, or custom SQL). Models downstream of unchanged sources are skipped. Lag tolerance prevents jitter from triggering unnecessary rebuilds.
+- **Cascade propagation:** When a model does change, the signal propagates downstream through the DAG. Upstream changes cascade with configurable replay windows (`replay_on_change`).
+- **Reuse from production:** Dev targets can opt into `reuse_from` to clone or copy relations from another target (e.g. prod) when version identities match, instead of rebuilding from scratch.
+
+#### Warehouse-native state
+
+- **Standard mode:** all change-tracking state lives in the warehouse as append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`) in the same schemas as your data. No external state database, no manifest files, no state machine that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as history and can be pruned by the janitor.
+- **Virtual environments:** the same identity and freshness data is stored in the VDE state backend (PostgreSQL or DuckDB), scoped per environment.
 
 #### Familiar SQL models
 
@@ -137,6 +153,32 @@ SELECT
 FROM __ref("stg_orders") o
 JOIN __ref("stg_payments") p USING (order_id)
 ```
+
+#### Python macros, not Jinja
+
+- **Real Python functions:** Macros are plain Python, called with `@macro()` in SQL. Testable, debuggable, and composable with standard tooling - no Jinja, no string-templating language to wrangle.
+
+```python
+# macros/grant_target.py
+def grant_target(target):
+    return f"GRANT SELECT ON {target} TO analyst_role"
+```
+
+#### Audits that block bad data
+
+- **Full table builds:** SQLBuild materializes into a staging table and runs `error`-severity audits before promotion. If any fail, the swap is blocked and the production table is untouched.
+- **Incremental models:** Delta-phase audits validate each batch before DML is applied. Bad data is caught before it reaches the target.
+
+#### Incremental processing
+
+- **Cursor-based replay:** SQLBuild resumes by reading the highest timestamp or integer value already in the target table. If a model fails for several runs, the next successful build picks up from the last data it actually wrote, with no manual backfilling.
+- **Microbatch mode:** Split large replay windows into configurable batches, each with its own audit cycle. Or process the full range in one pass, the choice is per-model.
+- **Replay on change:** When a model's version identity changes, `replay_on_change` controls how much data to reprocess: `forward` (default, just run the next delta), `bounded-14d` (replay a window), or `full` (rebuild the table).
+
+#### Python you can read, Rust where it counts
+
+- **The framework is Python.** Adapters, macros, hooks, providers, custom materializations, and Python nodes are all plain Python you can read and extend.
+- **SQL analysis is Rust.** For SQL parsing, validation, column inference, lineage, and transpilation, SQLBuild uses [Polyglot](https://github.com/tobilg/polyglot), a Rust reimplementation of SQLGlot's SQL analysis capabilities (MIT, 32+ dialects). This keeps compile fast even on large projects while the code you actually work with stays Python.
 
 #### SQL unit tests that scale
 
@@ -190,48 +232,9 @@ __assert__all_orders_have_payments AS (
 SELECT 1
 ```
 
-#### Audits that block bad data
-
-- **Full table builds:** SQLBuild materializes into a staging table and runs `error`-severity audits before promotion. If any fail, the swap is blocked and the production table is untouched.
-- **Incremental models:** Delta-phase audits validate each batch before DML is applied. Bad data is caught before it reaches the target.
-
-#### Python macros, not Jinja
-
-- **Real Python functions:** Macros are plain Python, called with `@macro()` in SQL. Testable, debuggable, and composable with standard tooling - no Jinja, no string-templating language to wrangle.
-
-```python
-# macros/grant_target.py
-def grant_target(target):
-    return f"GRANT SELECT ON {target} TO analyst_role"
-```
-
-#### Change-aware incremental rebuilds
-
-- **Query-change detection:** Fingerprint-based tracking detects when model SQL has actually changed and triggers bounded or full rebuilds automatically.
-- **Backfill cascade:** Upstream query or schema changes propagate rebuild signals downstream through the DAG, with per-model control over rebuild windows.
-- **Schema diffs in the plan:** The plan shows column additions, removals, and type changes before anything executes, with configurable policies to block or adapt.
-- **Controlled rebuild windows:** `query_change_backfill` and `schema_change_backfill` policies let you choose between full rebuild and bounded replay (e.g. `bounded-14d`).
-
-#### Incremental processing
-
-- **Cursor-based replay:** SQLBuild resumes by reading the highest timestamp or integer value already in the target table, so there is no state store or checkpoint to maintain. If a model fails for several runs, the next successful build picks up from the last data it actually wrote, with no manual backfilling.
-- **Microbatch mode:** Split large replay windows into configurable batches, each with its own audit cycle. Or process the full range in one pass, the choice is per-model.
-
-#### Multi-target workflows
-
-- **Data diffs:** Compare schemas and row-level data between targets (or virtual environments) with `sqb diff prod:dev`.
-
-- **Zero-copy cloning:** Branch targets instantly with `sqb clone` without duplicating data.
-- **Deferred references:** Compile and plan against a production target with `--defer-to` while building in dev.
-- **No manifest required:** Clone, diff, and defer work directly against live targets. No `manifest.json` generation, no artifact management, no stale state.
-
-#### Virtual environments
-
-- **Opt-in, not forced:** Virtual environments give you instant low-copy branching, promotion, and rollback - but they are an opt-in mode, not a tax you pay upfront. Stateless direct mode stays the default, so the floor stays low and you reach for state only when a workflow actually needs it. See [Virtual Environments](/concepts/advanced/virtual-environments).
-
 #### Python nodes
 
-Grow beyond warehouse-only SQL without leaving the graph. Python nodes are ordinary functions, decorated to become first-class nodes in the same DAG as your SQL models, and they run as part of `sqb run` and `sqb build`. There are four kinds:
+Grow beyond warehouse-only SQL without leaving the graph. Python nodes are ordinary functions, decorated to become first-class nodes in the same DAG as your SQL models, and they run as part of `sqb build`. There are four kinds:
 
 - **Loaders** (`@loader`) load external data into managed sources, with incremental write strategies (table, append, delete_insert, merge), cursor-based loading, and concurrent execution.
 - **Tasks** (`@task`) run Python computation or side effects as graph nodes.
@@ -250,6 +253,18 @@ def raw_orders(ctx: LoaderContext):
 ```
 
 SQL models never depend on Python nodes - the only path from Python into SQL is a loader populating a source - so the SQL graph stays fully analyzable on its own. Nodes can also be generated programmatically with `@factory`. See [Python Nodes](/concepts/python-nodes/overview).
+
+#### Multi-target workflows
+
+- **Data diffs:** Compare schemas and row-level data between targets (or virtual environments) with `sqb diff prod:dev`.
+
+- **Zero-copy cloning:** Branch targets instantly with `sqb clone` without duplicating data.
+- **Deferred references:** Compile and plan against a production target with `--defer-to` while building in dev.
+- **No manifest required:** Clone, diff, and defer work directly against live targets. No `manifest.json` generation, no artifact management, no stale state.
+
+#### Virtual environments
+
+- **Opt-in, not forced:** Virtual environments give you instant low-copy branching, promotion, and rollback - but they are an opt-in mode, not a tax you pay upfront. Standard mode stays the default, so the floor stays low and you reach for virtual environments only when a workflow actually needs them. See [Virtual Environments](/concepts/advanced/virtual-environments).
 
 #### Extensibility
 
@@ -759,7 +774,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Blocking audits | Block promotion from staging table | Tests run after materialization | Block during plan (production untouched); during run, data already written |
 | Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
 | **Compilation** | | | |
-| SQL validation | Polyglot-backed, offline | dbt Fusion (proprietary license) | SQLGlot-based |
+| SQL validation | Offline, compile-time | dbt Fusion (proprietary license) | SQLGlot-based |
 | Column-level lineage | Compile-time, fast and rich modes | Post-hoc via docs | Compile-time |
 | Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
@@ -771,10 +786,11 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Stateful interval tracking | No - cursor-based (no external state) | No | Yes - tracks which intervals ran |
 | SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (limited) | Built-in |
 | **Planning and change detection** | | | |
-| Fingerprint-based change detection | Query, config, function, and schema change tracking | manifest.json comparison | Version hash comparison |
-| Source freshness | `sqb freshness` with adapter/column/sql strategies and lag tolerance | `dbt source freshness` | No |
-| Changes-only mode | `--changes-only` prunes unchanged models in both direct and virtual modes | `state:modified` selector (requires manifest) | VDE-based stale detection only |
-| Cascade propagation | Topological walk with backfill policy inheritance and override | No cascade control | Cascades through version hashes |
+| Change-aware by default | Fingerprints models, seeds, functions, Python nodes; skips unchanged work including audits | dbt State (paid add-on) or external orchestrator | Version hash comparison |
+| Warehouse-native state | Append-only tables in the warehouse; no external state database | manifest.json artifacts | Requires external state store (SQLite/PostgreSQL) |
+| Source freshness | `sqb freshness` with adapter/column/sql strategies, lag tolerance, and CI gating | `dbt source freshness` | Adapter-metadata signal for external sources (no standalone command, no per-source config) |
+| Reuse from production | `reuse_from` clones/copies unchanged relations from another target | dbt State clone (paid) | N/A |
+| Cascade propagation | Topological walk with `replay_on_change` policy inheritance and override | No cascade control | Cascades through version hashes |
 | **Environments** | | | |
 | Virtual environments | Pointer swaps with hash-based version reuse (opt-in) | No | Pointer swaps, no compute cost |
 | Data diffs | Full row-level data comparison across targets or virtual environments | No | Table diff |
@@ -808,7 +824,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Tool | Best for |
 |------|----------|
-| **SQLBuild** | Test-first SQL pipelines. Chained unit tests, local E2E scenario replay in DuckDB, pre-promotion audit gating, offline compile-time validation, source freshness tracking, Python nodes (tasks, assets, checks), and opt-in virtual environments. |
+| **SQLBuild** | Change-aware SQL pipelines with warehouse-native state. Skips unchanged work by default, tracks source freshness, and keeps all state as append-only tables in the warehouse. Adds ingestion, Python nodes, pre-promotion audit gating, chained unit tests, local E2E replay, and opt-in virtual environments. |
 | **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
 | **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
 
@@ -900,6 +916,8 @@ A target is a named build context - the schema, database, or connection you buil
 | `connection` | Override the base connection config |
 | `vars` | Target-specific project variables |
 | `defer_sources_to` | Target name to read managed source data from (see [Loaders](/concepts/python-nodes/loaders#source-deferral)) |
+| `reuse_from` | Target name to reuse relations from when version identities match (see [Planning: Reuse from production](/concepts/planning#reuse-from-production)) |
+| `reuse_hard_copy` | Force a full data copy instead of zero-copy clone when reusing (default: `false`) |
 | `clone` | Clone policy (see below) |
 
 ```toml
@@ -933,22 +951,22 @@ The active target is determined by (in order of precedence):
 
 #### Clone policies
 
-Targets can declare whether they allow cloning from an origin or into a destination:
+Targets can declare whether they allow cloning to or from:
 
 ```toml
 [targets.prod]
 schema = "prod"
 
 [targets.prod.clone]
-allow_as_clone_origin = true
-allow_as_clone_destination = false
+allow_as_source = true
+allow_as_target = false
 
 [targets.dev]
 schema = "dev"
 
 [targets.dev.clone]
-allow_as_clone_origin = false
-allow_as_clone_destination = true
+allow_as_source = false
+allow_as_target = true
 ```
 
 ### Defaults
@@ -959,7 +977,7 @@ Project-wide model defaults. Any field you can set in a `MODEL()` header can be 
 [defaults]
 materialized = "table"
 incremental_strategy = "delete_insert"
-query_change_backfill = "full"
+replay_on_change = "full"
 tags = ["managed"]
 ```
 
@@ -977,7 +995,7 @@ tags = ["staging"]
 [path_defaults."models/marts"]
 materialized = "table"
 tags = ["marts"]
-query_change_backfill = "full"
+replay_on_change = "full"
 ```
 
 Path matching uses the model's relative file path. A model at `models/staging/stg_orders.sql` matches the `models/staging` path default.
@@ -1011,11 +1029,11 @@ default_audit_run_scope = "final"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
-| `virtual_environments` | `false` | Enable [virtual environments](/concepts/advanced/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
+| `virtual_environments` | `false` | Enable [virtual environments](/concepts/advanced/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in standard mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
-| `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build` and `sqb run`. See [Loaders](/concepts/python-nodes/loaders). |
+| `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build`. See [Loaders](/concepts/python-nodes/loaders). |
 | `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `direct` (CTAS directly to target) |
 | `default_audit_severity` | `warn` | Default severity for audits: `warn` or `error` |
 | `default_audit_run_scope` | `final` | Default run scope for audits: `final` or `delta_and_final` |
@@ -1231,7 +1249,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 
 class MyDatabaseAdapter(BaseAdapter):
     adapter_name = "my_database"
-    sql_analysis_dialect_name = "postgres"  # SQL analysis dialect for SQL validation and lineage
+    sql_analysis_dialect_name = "postgres"  # SQL dialect for validation and lineage
 
     def connect(self, config):
         ...
@@ -1243,7 +1261,7 @@ class MyDatabaseAdapter(BaseAdapter):
         ...
 ```
 
-Set `sql_analysis_dialect_name` to the SQL dialect name that matches your engine's SQL syntax. This enables compile-time SQL validation, column inference, column lineage, and local scenario replay for your adapter. If omitted, SQLBuild uses generic SQL parsing.
+Set `sql_analysis_dialect_name` to the SQL dialect name that matches your engine's SQL syntax. This enables compile-time SQL validation, column inference, column lineage, and local scenario replay for your adapter. If omitted, SQLBuild uses generic SQL parsing. SQL analysis is powered by [Polyglot](https://github.com/tobilg/polyglot), a Rust reimplementation of SQLGlot supporting 32+ dialects.
 
 For full control with no inherited defaults, subclass `StrictAdapter` instead. Every method is abstract and must be implemented explicitly. SQLBuild raises a clear error listing any unimplemented methods.
 
@@ -1770,7 +1788,7 @@ See [Loaders](/concepts/python-nodes/loaders) for the full guide on writing load
 
 ### Source freshness
 
-Source freshness lets SQLBuild observe whether a source's data has changed between runs. This feeds into [planning and change detection](/concepts/planning) -- when combined with `--changes-only`, models downstream of unchanged sources can be skipped.
+Source freshness lets SQLBuild observe whether a source's data has changed between runs. This feeds into [planning and change detection](/concepts/planning): models downstream of unchanged sources are skipped automatically.
 
 Configure freshness per source with a `freshness:` block:
 
@@ -1812,7 +1830,7 @@ freshness:
   type: timestamp
 ```
 
-Queries `MAX(column)` from the source table. The column must be a plain column name (no expressions -- use `sql` strategy for those). Requires `type`.
+Queries `MAX(column)` from the source table. The column must be a plain column name (no expressions; use `sql` strategy for those). Requires `type`.
 
 ##### sql
 
@@ -1859,7 +1877,7 @@ Sources without an explicit `freshness:` block are auto-observed using the `adap
 
 This means most unmanaged table sources get freshness tracking automatically on adapters that support it, with no configuration needed.
 
-Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build. See [Planning and Change Detection](/concepts/planning#source-freshness) for how freshness feeds into `--changes-only`.
+Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build. See [Planning and Change Detection](/concepts/planning#source-freshness) for how freshness feeds into change-aware builds.
 
 #### Freshness config reference
 
@@ -2351,7 +2369,7 @@ MODEL (
 );
 ```
 
-SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time using SQL analysis.
+SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time when SQL analysis is enabled.
 
 Available context variables in hooks:
 
@@ -2503,8 +2521,8 @@ At compile time, SQLBuild validates every `python("hook_name")` reference:
 | `batch_size` | Batch window size (e.g. `1d`, `1h`, or an integer) |
 | `lookback` | Extend the replay window backwards to re-process recent data |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
-| `query_change_backfill` | `full` or `bounded-14d` (hyphenated duration) |
-| `schema_change_backfill` | Per-change-type backfill policies (e.g. `add_column bounded-7d`, `type_change full`) |
+| `replay_on_change` | `forward` (default), `full`, or `bounded-<duration>` (e.g. `bounded-14d`) |
+| `run_despite_unchanged` | Force periodic rebuilds: `always` or a duration (e.g. `24h`, `30d`). Table materializations only. |
 
 See [Incremental](/concepts/incremental) for detailed usage.
 
@@ -2781,7 +2799,7 @@ MODEL (
 SELECT 1 AS id
 ```
 
-Hook SQL is validated at compile time using SQL analysis, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
+Hook SQL is validated at compile time, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
 
 For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models#hooks) for the full Python hook API.
 
@@ -3062,7 +3080,7 @@ FROM __source("raw_events")
 
 When `append_cursor_inclusive` is `true` (the default), the lower bound uses `>=`, which may duplicate the boundary row but avoids missing late-arriving data with the same cursor value. Set to `false` for an exclusive (`>`) lower bound if your cursor values are guaranteed unique.
 
-Append without a cursor is also valid -- the model simply inserts all rows from the source query on every run.
+Append without a cursor is also valid. The model simply inserts all rows from the source query on every run.
 
 #### delete_insert
 
@@ -3120,7 +3138,7 @@ Cursors define the incremental replay boundary. SQLBuild queries `MAX(cursor)` f
 | `cursor` | Output column used to track incremental position |
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Time grain for timestamp cursors: `second`, `minute`, `hour`, `day`, `month`, `year` |
-| `cursor_start` | Lower bound floor -- the cursor will never replay before this value |
+| `cursor_start` | Lower bound floor; the cursor will never replay before this value |
 | `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
 
 #### cursor_inputs
@@ -3218,44 +3236,34 @@ MODEL (
 );
 ```
 
-### Backfill policies
+### Replay on change
 
-#### query_change_backfill
-
-Controls what happens when the model SQL changes between runs. SQLBuild detects query changes via fingerprint-based tracking.
+When a model's version identity changes (query, config, upstream cascade, or any other change reason), `replay_on_change` controls how much data to reprocess:
 
 | Value | Effect |
 |-------|--------|
-| `full` | Full table rebuild when query changes |
-| `bounded-14d` | Rebuild the last 14 days of data |
-| *(omitted)* | Warn only; no automatic rebuild |
+| `forward` | Run the normal incremental delta from the cursor (default) |
+| `full` | Full table rebuild |
+| `bounded-14d` | Replay the last 14 days of data |
 
 The bounded duration supports `d` (days), `h` (hours), `m` (minutes), and `s` (seconds). For example: `bounded-7d`, `bounded-24h`, `bounded-30m`.
 
 ```sql
 MODEL (
-  ...
-  query_change_backfill full,
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor activity_hour,
+  cursor_type timestamp,
+  cursor_grain hour,
+  replay_on_change full,
 );
 ```
 
-#### schema_change_backfill
-
-Controls response to schema differences between expected and warehouse columns, with per-change-type policies:
-
-```sql
-MODEL (
-  ...
-  schema_change_backfill (
-    add_column bounded-7d,
-    type_change full,
-  ),
-);
-```
+See [Planning and Change Detection: Cascade propagation](/concepts/planning#cascade-propagation) for how replay policies propagate through the DAG and how downstream models can override inherited replay behavior.
 
 #### on_schema_change
 
-Controls how schema differences are handled at execution time:
+Controls how schema differences are handled at execution time when the incremental delta has different columns than the target table:
 
 | Value | Effect |
 |-------|--------|
@@ -3264,37 +3272,51 @@ Controls how schema differences are handled at execution time:
 | `ignore` | Log and continue without schema changes |
 | `fail` | Reject the build with an error |
 
-### Cascade behavior
-
-When an upstream model has a backfill policy and its query or schema changes, the backfill signal cascades to all downstream incremental models. The plan shows these as `Upstream changed` with the root cause and effective rebuild window.
-
-Downstream models can override the cascaded behavior by setting their own `query_change_backfill` or `schema_change_backfill` policies. If a downstream model has its own policy, that takes precedence over the cascaded signal. If it has no policy, it inherits the upstream's rebuild scope.
-
 ## Planning and Change Detection
 
 Source: `concepts/planning.mdx`
 
-How SQLBuild decides what to build: fingerprints, source freshness, and changes-only mode.
+How SQLBuild decides what to build: fingerprints, source freshness, and warehouse-native state.
 
-When you run `sqb plan`, `sqb build`, or `sqb run`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. The plan determines which models need work and why.
+When you run `sqb plan` or `sqb build`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. By default, only stale work runs. Unchanged models, seeds, audits, and Python nodes are skipped automatically.
 
-### Change detection
+Use `--force` to override change detection and run everything selected, regardless of state.
 
-SQLBuild detects changes by comparing the compiled project against fingerprints stored in the warehouse from the last successful build.
+### What is tracked
 
-#### What is tracked
+Every node in the graph has a versioned identity stored in `_sqlbuild_fingerprints` in the target schema. The planner reads these on every run and compares them against the compiled project.
+
+#### Models and functions
 
 Each model and function has a **fingerprint** derived from:
 
-- **Query hash** -- the normalized SQL after macro expansion and reference resolution.
-- **Config hash** -- version-identity config values (materialization settings, contracts, hooks, custom config/placeholders).
-- **Function hashes** -- for models that depend on user-defined functions, the function's own fingerprint is included. A function change cascades to all dependent models.
+- **Query hash** - the normalized SQL after macro expansion and reference resolution.
+- **Config hash** - version-identity config values (materialization settings, contracts, hooks, custom config/placeholders).
+- **Function hashes** - for models that depend on user-defined functions, the function's own fingerprint is included. A function change cascades to all dependent models.
 
-After a successful build, SQLBuild writes these fingerprints to `_sqlbuild_fingerprints` in the target schema. On the next run, the planner reads them back and compares.
+#### Seeds
 
-#### Change reasons
+Seeds are fingerprinted by content hash and load-affecting config. Unchanged seeds are not reloaded.
 
-The plan assigns a reason to each model that needs work:
+#### Python nodes
+
+Loaders, tasks, assets, checks, and hooks are fingerprinted by:
+
+- **Source code hash** - the normalized source of the decorated function.
+- **Dependency hashes** - transitive hashes of imported project modules, scoped to the git root. Changes to third-party packages (in `.venv`, `site-packages`, etc.) do not affect the identity; changes to your project's own helper modules do.
+- **Decorator config hash** - the arguments passed to the decorator.
+
+Python identity tracking is primarily a **visual indicator** in the plan output. When a node's identity changes, the plan shows source and dependency diffs so you can see exactly what changed. However, unlike SQL models where SQLBuild can observe inputs (fingerprints, source freshness) and skip unchanged work automatically, Python nodes may depend on external inputs that the framework cannot observe: an API, a file on disk, a third-party service.
+
+For this reason, skip/run decisions for Python nodes are **user-controlled** via `ctx.skip()`. The node's own logic decides whether it needs to run based on whatever semantics are appropriate: checking an API timestamp, comparing a file hash, querying a metadata table. If the condition is met, `ctx.skip()` short-circuits the node (and optionally its downstream dependents via soft or hard skip mode). This keeps the mechanism flexible and powerful without requiring the framework to infer things it cannot know.
+
+#### Audits
+
+Audits that already passed for the same model version identity are not re-run. When a model's version changes, its audits are re-validated. This avoids redundant audit work on unchanged models while ensuring changed models are always fully validated.
+
+### Change reasons
+
+The plan assigns a reason to each node that needs work:
 
 | Reason | Meaning |
 |--------|---------|
@@ -3303,54 +3325,25 @@ The plan assigns a reason to each model that needs work:
 | Config changed | Version-identity config values differ |
 | Schema changed | Upstream schema changes detected (column additions, removals, type changes) |
 | Upstream changed | An upstream model's change cascades downstream |
+| Run despite unchanged | The model is configured to run periodically even without changes (see [Run despite unchanged](#run-despite-unchanged)) |
 
-Models with no changes show as `Normal` in the plan output and are executed in their standard mode (views are recreated, incrementals run their delta, etc.).
-
-#### Cascade propagation
-
-When a model or function changes, the change signal propagates downstream through the DAG. Every model downstream of a changed node is marked `Upstream changed` in the plan, even if its own SQL and config are identical.
-
-The cascade walk is topological -- it processes models in dependency order, so each model sees the resolved state of all its upstreams before deciding its own effective action.
-
-**What cascades:**
-
-- A query, config, or schema change on any model cascades to all its downstream dependents.
-- A function change cascades to every model that calls it (directly or transitively).
-- Source freshness changes propagate downstream the same way (see [Source freshness](#source-freshness)).
-
-**How materialization types respond:**
-
-- **Views** are recreated on every build regardless, so a cascade has no extra cost.
-- **Tables** are fully rebuilt, same as if they had changed themselves.
-- **Incremental models** receive a backfill window from the cascade. A `full` backfill always cascades. A `bounded` backfill only cascades when the upstream and downstream models share the same `cursor_type` (e.g. both use `timestamp`), so unrelated cursor types don't inherit bounded windows that don't apply. The downstream model's own `query_change_backfill` policy takes precedence over any cascaded signal.
-
-**Resolution when multiple upstreams are stale:**
-
-If a model has multiple stale upstreams with different backfill actions, the most aggressive action wins. `full` beats `bounded`, and among bounded actions, the longer duration wins. Ties are broken alphabetically by model name for determinism.
-
-**Overriding cascaded backfill:**
-
-Downstream incremental models can set their own `query_change_backfill` or `schema_change_backfill` policies to override the cascaded signal. If a downstream model declares its own policy, that policy applies instead of the upstream's. If it has no policy, it inherits the upstream's rebuild scope. See [Incremental Models -- Backfill policies](/concepts/incremental#backfill-policies) for configuration details.
-
-#### Backfill policies
-
-When a change is detected on an incremental model, the **backfill policy** determines how much data to reprocess. See [Incremental Models -- Backfill policies](/concepts/incremental#backfill-policies) for `query_change_backfill` and `schema_change_backfill` configuration.
+Unchanged nodes are skipped and show as `Normal` in the plan output.
 
 ### Source freshness
 
-Source freshness lets SQLBuild observe whether external source data has actually changed between runs. When combined with `--changes-only`, this allows the planner to skip models whose upstream sources haven't moved.
+Source freshness lets SQLBuild observe whether external source data has actually changed between runs. Models downstream of unchanged sources are skipped automatically.
 
 #### Configuration
 
-Source freshness is configured per source in `sources/*.yml` with a `freshness:` block. See [Sources -- Source freshness](/concepts/sources#source-freshness) for the full configuration reference.
+Source freshness is configured per source in `sources/*.yml` with a `freshness:` block. See [Sources: Source freshness](/concepts/sources#source-freshness) for the full configuration reference.
 
 #### How observations work
 
 During planning, SQLBuild observes the current data version of each source that has freshness configured (or that the adapter can observe automatically):
 
-1. **Observe** -- query the source's current data version using the configured strategy.
-2. **Compare** -- compare the observed version against the last recorded observation from `_sqlbuild_source_freshness` in the target schema.
-3. **Propagate** -- walk the DAG downstream from changed or unknown sources to identify which models are affected.
+1. **Observe** - query the source's current data version using the configured strategy.
+2. **Compare** - compare the observed version against the last recorded observation from `_sqlbuild_source_freshness` in the target schema.
+3. **Propagate** - walk the DAG downstream from changed or unknown sources to identify which models are affected.
 
 Sources without explicit `freshness:` config are auto-observed using the `adapter` strategy if the adapter supports table metadata and the source has a physical table (not an expression source, not a managed source).
 
@@ -3360,40 +3353,117 @@ For timestamp-based freshness, `lag_tolerance` controls how much the observed va
 
 #### State storage
 
-Source freshness observations are stored in `_sqlbuild_source_freshness` in each target schema. Records are appended only after the affected downstream models build successfully -- if a build fails, the previous observation is preserved so the next run still sees the source as changed.
+Source freshness observations are stored in `_sqlbuild_source_freshness` in each target schema. Records are appended only after the affected downstream models build successfully. If a build fails, the previous observation is preserved so the next run still sees the source as changed.
+
+Observations are resolved across all target schemas in the project, so a source referenced by models in different schemas is tracked consistently.
 
 Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build.
 
-### Changes-only mode
+### Cascade propagation
 
-By default, SQLBuild executes all selected models regardless of whether they have changed. `--changes-only` narrows the scope to only models that are actually stale.
+When a model or function changes, the change signal propagates downstream through the DAG. Every model downstream of a changed node is marked `Upstream changed` in the plan, even if its own SQL and config are identical.
 
-```bash
-sqb build --changes-only
-sqb build --select path:marts --changes-only
-sqb plan --changes-only
-sqb run --changes-only
+The cascade walk is topological: it processes models in dependency order, so each model sees the resolved state of all its upstreams before deciding its own effective action.
+
+**What cascades:**
+
+- A query, config, or schema change on any model cascades to all its downstream dependents.
+- A function change cascades to every model that calls it (directly or transitively).
+- Source freshness changes propagate downstream the same way.
+
+**How materialization types respond:**
+
+- **Views** are recreated on every build regardless, so a cascade has no extra cost.
+- **Tables** are fully rebuilt, same as if they had changed themselves.
+- **Incremental models** receive a replay window from the cascade. A `full` replay always cascades. A `bounded` replay only cascades when the upstream and downstream models share the same `cursor_type` (e.g. both use `timestamp`), so unrelated cursor types don't inherit bounded windows that don't apply. The downstream model's own `replay_on_change` policy takes precedence over any cascaded signal.
+
+**Resolution when multiple upstreams are stale:**
+
+If a model has multiple stale upstreams with different replay actions, the most aggressive action wins. `full` beats `bounded`, and among bounded actions, the longer duration wins. Ties are broken alphabetically by model name for determinism.
+
+**Overriding cascaded replay:**
+
+Downstream incremental models can set their own `replay_on_change` policy to override the cascaded signal. If a downstream model declares its own policy, that policy applies instead of the upstream's. If it has no policy, it inherits the upstream's replay scope. See [Incremental Models: Replay on change](/concepts/incremental#replay-on-change) for configuration details.
+
+### Replay on change
+
+When a change is detected on an incremental model, `replay_on_change` controls how much data to reprocess:
+
+- **`forward`** (default) - run the normal incremental delta from the cursor. No reprocessing.
+- **`bounded-<duration>`** (e.g. `bounded-14d`) - replay the specified window of data.
+- **`full`** - drop and rebuild the entire table.
+
+See [Incremental Models: Replay on change](/concepts/incremental#replay-on-change) for configuration details.
+
+### Reuse from production
+
+Dev targets can opt into reusing relations from another target (e.g. prod) instead of rebuilding from scratch. When a model's version identity in dev matches the version already built in prod, SQLBuild clones or copies the relation rather than re-executing the query.
+
+Configure this on the target:
+
+```toml
+[targets.dev]
+schema = "dev"
+reuse_from = "prod"
 ```
 
-#### What gets pruned
+The planner checks each model against the `reuse_from` target's fingerprints and relation state. Models are reused when:
 
-When `--changes-only` is active, the planner removes models and functions from the selected scope if they have no pending work:
+- The expected version identity matches the `reuse_from` target's built version.
+- The relation exists in the `reuse_from` target.
+- Source freshness in the `reuse_from` target is current.
 
-- **Models** are kept if they have any change reason (query changed, config changed, schema changed, first run, upstream cascade), a pending backfill, or are downstream of a source with changed freshness. Models with no changes and no stale sources are pruned.
-- **Functions** are kept if their fingerprint changed or they have a pending backfill. Unchanged functions are pruned.
-- **Sources, seeds, and other non-model resources** are always kept.
+For incremental models, reuse clones or copies the prod relation as a baseline, then runs the incremental delta on top.
 
-#### Python nodes
+Use `reuse_hard_copy = true` on the target to force a full data copy instead of a zero-copy clone (useful when the adapter doesn't support cloning or when you need an independent copy).
 
-When `--changes-only` prunes SQL models from the scope, read-side Python nodes (tasks, assets, checks) that depend on the pruned models are also dropped. Loaders always run regardless of pruning.
+`reuse_from` cannot be used together with `defer_sources_to` on the same target.
 
-#### Source freshness integration
+### Run despite unchanged
 
-Source freshness feeds directly into `--changes-only` decisions. Even if a model's own SQL and config haven't changed, it is kept in scope if any of its upstream sources have new data (or if freshness is unknown for a source). This means `--changes-only` respects both code changes and data changes.
+Some models depend on external data that isn't tracked by source freshness, for example a table model that reads from an API-populated staging area. `run_despite_unchanged` forces a model to run periodically even when its version identity hasn't changed.
 
-#### Virtual environments
+```sql
+MODEL (
+  materialized table,
+  run_despite_unchanged "always",
+);
+```
 
-Virtual environments have their own `--changes-only` behavior based on version hash comparison rather than fingerprints. See [Virtual Environments -- Changes only](/concepts/advanced/virtual-environments/building#changes-only) for details.
+```sql
+MODEL (
+  materialized table,
+  run_despite_unchanged "24h",
+);
+```
+
+- **`always`** - run on every build regardless of state.
+- **Duration** (e.g. `24h`, `30d`, `90m`) - run if at least the specified time has passed since the model's upstream source freshness was last observed. Requires at least one upstream source with timestamp freshness tracking.
+
+Only table materializations support `run_despite_unchanged`. When triggered, downstream models are also marked as stale.
+
+### Python node pruning
+
+When unchanged SQL models are skipped, read-side Python nodes (tasks, assets, checks) that depend on those models are also skipped. Loaders always run regardless of pruning, since they populate sources that the SQL graph depends on.
+
+Python nodes also have their own identity fingerprints. If a node's source code or dependencies change, it runs even if its SQL dependencies haven't changed.
+
+### Warehouse-native state (standard mode)
+
+In standard mode, all change-tracking state lives in the warehouse as append-only tables in the same schemas as your data:
+
+- **`_sqlbuild_fingerprints`** - stores version identities for models, functions, seeds, and Python nodes. One row per successful build per identity.
+- **`_sqlbuild_source_freshness`** - stores source freshness observations. One row per successful build per source identity.
+
+There is no external state database, no manifest files, and no state machine with transitions that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as immutable history.
+
+State tables are read across all target schemas in the project, so fingerprints and freshness observations are resolved consistently regardless of which schema a model targets.
+
+Use `sqb janitor` to prune old state history rows while retaining the latest per identity.
+
+### Virtual environments
+
+Virtual environments store identities and change-tracking state in the VDE state backend (PostgreSQL or DuckDB) rather than in warehouse fingerprint tables. Identities are scoped per virtual environment, so each environment tracks its own version hashes, source freshness observations, and Python node identities independently. Change detection uses version hash comparison and VDE state refs. See [Virtual Environments: Building](/concepts/advanced/virtual-environments/building) for details.
 
 ## Snapshots (SCD Type 2)
 
@@ -4571,7 +4641,7 @@ This:
 1. Checks snapshot freshness via the input fingerprint (missing/stale snapshots are skipped by default)
 2. Creates a temporary DuckDB database at `target/run/scenarios/<scenario_name>/local.duckdb`
 3. Loads JSONL snapshots into typed DuckDB tables using column metadata from `scenario.json`
-4. Transpiles model and check SQL from the project adapter dialect to DuckDB via SQL analysis
+4. Transpiles model and check SQL from the project adapter dialect to DuckDB
 5. Builds functions, models, and runs expected/assertion checks in DuckDB
 6. Keeps the local DuckDB file for inspection (it lives under `target/`, so it's always retained)
 
@@ -4599,7 +4669,7 @@ sqb scenario test --local --strict
 
 #### Local type overrides
 
-When automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
+When the automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
 
 ```toml
 [scenario.local_type_overrides.snowflake]
@@ -4630,7 +4700,7 @@ See the [CLI reference](/cli/scenario) for full command documentation.
 ### Limitations
 
 - Custom materializations are not supported in scenarios yet. Scenario models using custom materializations will fail with a clear error.
-- Local replay transpiles SQL from the project adapter dialect to DuckDB via SQL analysis. Adapter-specific SQL that SQL analysis cannot translate will produce a clear error with the failing resource name and reason.
+- Local replay transpiles SQL from the project adapter dialect to DuckDB. Adapter-specific SQL that cannot be translated will produce a clear error with the failing resource name and reason.
 
 ## Selectors
 
@@ -4638,7 +4708,7 @@ Source: `concepts/selectors.mdx`
 
 Target specific models, paths, tags, or DAG subsets with --select and --exclude.
 
-Selectors let you scope commands to specific subsets of your project. They work with `plan`, `build`, `run`, `test`, `audit`, `seed`, `clone`, and `diff`.
+Selectors let you scope commands to specific subsets of your project. They work with `plan`, `build`, `test`, `audit`, `seed`, `clone`, and `diff`.
 
 ### Basic usage
 
@@ -4796,7 +4866,7 @@ Trace individual columns through your SQL pipeline - understand where data comes
 
 ### How it works
 
-SQLBuild analyzes column lineage statically at compile time using SQL analysis. No warehouse connection is needed. The analyzer parses each model's SQL, resolves `ref()` and `source()` calls, and traces columns through `SELECT` lists, CTEs, JOINs, subqueries, and expressions.
+SQLBuild analyzes column lineage statically at compile time. No warehouse connection is needed. The analyzer parses each model's SQL, resolves `ref()` and `source()` calls, and traces columns through `SELECT` lists, CTEs, JOINs, subqueries, and expressions.
 
 Column lineage requires SQL analysis to be enabled in project settings (it is by default).
 
@@ -4829,7 +4899,7 @@ Each edge also carries a confidence level indicating how certain the analyzer is
 
 Column lineage supports two analysis modes that trade off speed against depth of analysis.
 
-**Rich mode** uses SQL analysis to resolve columns through CTEs, subqueries, and multi-level nesting with full transform classification. Thorough, but slower on large projects.
+**Rich mode** uses the SQL analysis optimizer to resolve columns through CTEs, subqueries, and multi-level nesting with full transform classification. Thorough, but slower because the optimizer runs per column per model.
 
 **Fast mode** parses the SQL AST directly to extract column mappings, resolve CTE references, and classify transforms. It handles the same SQL patterns that most column lineage tools support and is fast enough to run on every compile.
 
@@ -4912,7 +4982,7 @@ SQLBuild can compare schemas and row-level data between two build contexts. This
 
 `sqb diff FROM:TO` compares:
 
-- **two targets** (e.g. `prod:dev`) in direct mode, or
+- **two targets** (e.g. `prod:dev`) in standard mode, or
 - **two virtual environments** (VDEs) when [virtual environments](/concepts/advanced/virtual-environments) are enabled.
 
 The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
@@ -5046,7 +5116,7 @@ Source: `concepts/python-nodes/overview.mdx`
 
 Tasks, assets, loaders, and checks as first-class nodes in the SQLBuild graph.
 
-Python nodes let your project grow beyond warehouse-only SQL while keeping the SQL graph clean. They are ordinary Python functions, decorated to become nodes in the same DAG as your SQL models, and they run as part of `sqb run` and `sqb build`.
+Python nodes let your project grow beyond warehouse-only SQL while keeping the SQL graph clean. They are ordinary Python functions, decorated to become nodes in the same DAG as your SQL models, and they run as part of `sqb build`.
 
 There are four kinds, authored in dedicated top-level folders:
 
@@ -5105,6 +5175,12 @@ Every decorator accepts the same organizational metadata:
 | `meta` | Freeform JSON metadata for catalogs and integrations |
 
 `@task` and `@asset` also accept a `retry` policy. `@asset` additionally accepts `columns` and `column_lineage`. Node kind is inferred from the decorator - you never pass `kind=`.
+
+### Identity tracking
+
+Every Python node is fingerprinted by source code hash, decorator config hash, and transitive dependency hashes (scoped to the git root, so third-party package updates don't affect identities). The plan shows source and dependency diffs when a node's identity changes, giving you visibility into what changed in your Python code.
+
+Unlike SQL models, Python nodes may depend on external inputs the framework cannot observe (APIs, files, third-party services). Skip/run decisions are therefore user-controlled via `ctx.skip()`: the node's own logic decides whether it needs to run. See [Planning and Change Detection](/concepts/planning#python-nodes) for details.
 
 ### Runtime context
 
@@ -5171,14 +5247,14 @@ The commands differ in what they include by default:
 | Command | SQL | Loaders / tasks / assets | Checks | Audits |
 |---------|-----|--------------------------|--------|--------|
 | `sqb build` | Yes | Yes | Yes | Yes |
-| `sqb run` | Yes | Yes | No | No |
+| `sqb build --no-tests --no-audits` | Yes | Yes | No | No |
 | `sqb check` | No | No | Selected checks only | No |
 
 - `sqb build` is the complete build-and-validate command: it runs SQL, the required Python nodes, SQL audits, and Python checks.
-- `sqb run` executes the DAG without validation (no checks, no audits).
+- `sqb build --no-tests --no-audits` executes the DAG without validation, for fast iteration.
 - `sqb check` runs Python checks only. See [`sqb check`](/cli/check).
 
-Use `--no-python` on `plan`, `run`, and `build` to suppress read-side tasks/assets. Loader-side Python required to populate selected sources still runs (use `--no-load` to skip source loading). See the [`sqb build`](/cli/build) and [`sqb run`](/cli/run) references.
+Use `--no-python` on `plan` and `build` to suppress read-side tasks/assets. Loader-side Python required to populate selected sources still runs (use `--no-load` to skip source loading). See the [`sqb build`](/cli/build) reference.
 
 ### Try it
 
@@ -5468,7 +5544,7 @@ The `@loader` decorator accepts optional parameters that can also be set in the 
 
 ### Auto-load during builds
 
-By default, `sqb build` and `sqb run` automatically load managed sources before building dependent models. This is controlled by the `auto_load_sources` setting:
+By default, `sqb build` automatically loads managed sources before building dependent models. This is controlled by the `auto_load_sources` setting:
 
 ```toml
 [settings]
@@ -5672,13 +5748,13 @@ The default is no retry. Set `retry_on` explicitly rather than relying on the br
 
 ```bash
 # Run a task and its required graph
-sqb run --select export_orders
+sqb build --select export_orders --no-tests --no-audits
 
 # Include in a full build
 sqb build --select export_orders
 ```
 
-Tasks run during `sqb build` and `sqb run`. They are not validated by checks unless you also write a [check](/concepts/python-nodes/checks) that depends on them.
+Tasks run during `sqb build`. They are not validated by checks unless you also write a [check](/concepts/python-nodes/checks) that depends on them.
 
 ## Assets
 
@@ -5807,13 +5883,13 @@ See [Tasks](/concepts/python-nodes/tasks#retries) for the full retry policy fiel
 
 ```bash
 # Run an asset and its required graph
-sqb run --select orders_export
+sqb build --select orders_export --no-tests --no-audits
 
 # Include in a full build with its upstreams
 sqb build --select +orders_export
 ```
 
-Assets run during `sqb build` and `sqb run`. Use `--no-python` to suppress read-side assets while still loading sources.
+Assets run during `sqb build`. Use `--no-python` to suppress read-side assets while still loading sources.
 
 ## Checks
 
@@ -5906,7 +5982,7 @@ Checks do not support `columns`, `column_lineage`, or `retry`.
 
 ### Running checks
 
-Checks run automatically during `sqb build` when their Python dependencies run. They do **not** run during `sqb run`. To run checks on their own, use [`sqb check`](/cli/check):
+Checks run automatically during `sqb build` when their Python dependencies run. They are skipped when `--no-audits` is passed. To run checks on their own, use [`sqb check`](/cli/check):
 
 ```bash
 # Run all checks
@@ -5919,7 +5995,7 @@ sqb check --select +check_orders_exported
 sqb check --select tag:exports
 ```
 
-`sqb check` rejects selecting non-check nodes; use `sqb run`/`sqb build` to run tasks and assets. Check results are written to `target/run/checks/python_checks.json`, and `sqb check --json` prints them to stdout.
+`sqb check` rejects selecting non-check nodes; use `sqb build` to run tasks and assets. Check results are written to `target/run/checks/python_checks.json`, and `sqb check --json` prints them to stdout.
 
 ### Checks vs audits
 
@@ -6148,15 +6224,15 @@ def export_orders(ctx):
     client.session.upload(ctx.query("SELECT * FROM orders"))
 ```
 
-Both approaches -- parameter injection and `ctx.providers` -- are equivalent. Parameter injection is more explicit and enables type checking; `ctx.providers` is useful when provider access is conditional or dynamic.
+Both approaches (parameter injection and `ctx.providers`) are equivalent. Parameter injection is more explicit and enables type checking; `ctx.providers` is useful when provider access is conditional or dynamic.
 
 ### Lifecycle
 
 Providers follow a lazy setup, reverse-teardown lifecycle scoped to the command invocation:
 
-1. **Discovery** -- on compile, SQLBuild discovers all `Provider` subclasses under `providers/` and validates their settings (from environment variables or field defaults).
-2. **Lazy setup** -- `setup(ctx)` is called the first time a provider is accessed during a build, not at startup. Providers that are never used are never set up.
-3. **Teardown** -- after the command completes, `teardown()` is called on all providers that were set up, in reverse setup order. Teardown runs even if the build failed.
+1. **Discovery** - on compile, SQLBuild discovers all `Provider` subclasses under `providers/` and validates their settings (from environment variables or field defaults).
+2. **Lazy setup** - `setup(ctx)` is called the first time a provider is accessed during a build, not at startup. Providers that are never used are never set up.
+3. **Teardown** - after the command completes, `teardown()` is called on all providers that were set up, in reverse setup order. Teardown runs even if the build failed.
 
 ```python
 class WarehouseClient(Provider):
@@ -6171,7 +6247,7 @@ class WarehouseClient(Provider):
         self.connection.close()
 ```
 
-Both `setup` and `teardown` are optional. A provider with only field declarations and no lifecycle methods is valid -- it acts as a validated configuration object.
+Both `setup` and `teardown` are optional. A provider with only field declarations and no lifecycle methods is valid; it acts as a validated configuration object.
 
 ### Configuration from environment variables
 
@@ -6191,7 +6267,7 @@ See the [pydantic-settings documentation](https://docs.pydantic.dev/latest/conce
 - Files named `__init__.py` or starting with `_` are skipped
 - Each concrete (non-abstract) subclass of `Provider` is registered
 - Provider names must be unique across all provider files
-- Settings are validated at discovery time -- missing required fields (without environment variables set) raise a discovery error immediately, not at runtime
+- Settings are validated at discovery time. Missing required fields (without environment variables set) raise a discovery error immediately, not at runtime
 
 ### Plan output
 
@@ -6300,7 +6376,7 @@ Virtual environments (VDEs) let you build, preview, and promote SQL pipeline cha
 - **Multi-developer isolation** - each developer works in their own VDE without conflicting with others, sharing physical versions when code is identical
 - **Instant rollback** - revert production to a prior finalized state by restoring a checkpoint's pointer set
 
-Virtual environments are opt-in via `virtual_environments = true` (under `[settings]`) and require a state store. Projects that don't need environment isolation or promotion workflows should use the default direct mode.
+Virtual environments are opt-in via `virtual_environments = true` (under `[settings]`) and require a state store. Projects that don't need environment isolation or promotion workflows should use the default standard mode.
 
 ### How it works
 
@@ -6423,7 +6499,7 @@ schema = "sqlbuild_state"
 database = "state.duckdb"
 ```
 
-The `virtual_environments` setting switches the project from direct mode (default) to virtual mode. All state, plan, build, promote, rollback, and reconcile commands route through the virtual path when this is enabled.
+The `virtual_environments` setting switches the project from standard mode (default) to virtual mode. All state, plan, build, promote, rollback, and reconcile commands route through the virtual path when this is enabled.
 
 ### State configuration
 
@@ -6572,7 +6648,7 @@ Source: `concepts/advanced/virtual-environments/building.mdx`
 
 Virtual builds, VDE creation, partial builds, and seeded incrementals.
 
-Virtual builds create versioned physical relations and update VDE pointer sets. The build lifecycle is the same as direct mode (seeds, tests, models, audits), but model outputs are written to versioned physical tables and exposed through logical VDE views.
+Virtual builds create versioned physical relations and update VDE pointer sets. The build lifecycle is the same as standard mode (seeds, tests, models, audits), but model outputs are written to versioned physical tables and exposed through logical VDE views.
 
 ### Default VDE
 
@@ -6653,29 +6729,31 @@ Pass `--include-stale-upstreams` to expand the selection to the minimal set of s
 sqb build --virtual-env pr_123 --select fact_orders --include-stale-upstreams
 ```
 
-#### Changes only
+#### Stale-driven selection
 
-Use `--changes-only` to narrow the selection to only models that are both selected and stale:
+Virtual environment builds are change-aware by default. When combined with `--select`, only models that are both selected and stale are built:
 
 ```bash
-sqb build --virtual-env pr_123 --select path:marts --changes-only
+sqb build --virtual-env pr_123 --select path:marts
 ```
 
-This intersects the user selection with the default stale-driven selection, useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models.
+This intersects the user selection with the stale-driven selection, useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models. Use `--force` to override and build all selected models regardless of state.
 
-For `--changes-only` behavior in direct (non-virtual) mode, see [Planning and Change Detection](/concepts/planning#changes-only-mode).
+Standard mode is change-aware by default. See [Planning and Change Detection](/concepts/planning) for how fingerprints, source freshness, and identity tracking determine what gets built.
 
 ### Stale detection
 
-SQLBuild determines which models need rebuilding by comparing expected version hashes against bound version hashes in the VDE refs:
+SQLBuild determines which models and seeds need rebuilding by comparing expected version hashes against bound version hashes in the VDE refs:
 
-1. **Expected local hash** - derived from the model's query SQL, version-identity config, and source freshness hashes
+1. **Expected local hash** - derived from the node's query SQL (for models), content hash (for seeds), version-identity config, and source freshness hashes
 2. **Expected version hash** - local hash propagated through upstream dependencies (upstream hash changes cascade downstream)
 3. **Bound version hash** - the hash currently stored in the VDE refs from the last successful build
 
-A model is stale when `bound != expected`. Stale models whose own local hash changed are roots (`query changed`, `config changed`, `function changed`). Others are stale due to `upstream changed`.
+A node is stale when `bound != expected`. Stale nodes whose own local hash changed are roots (`query changed`, `config changed`, `function changed`). Others are stale due to `upstream changed`.
 
-Source freshness observations are persisted per virtual environment and included in version hash computation. When a source's observed data version changes, its downstream models become stale. See [Sources -- Source freshness](/concepts/sources#source-freshness) for configuration.
+Seeds participate in version identity the same way as models. They are loaded into versioned physical tables with logical VDE views on top, and their version hashes and refs are tracked per virtual environment in the state backend. Unchanged seeds are not reloaded.
+
+Source freshness observations and Python node identities are also persisted per virtual environment and included in version hash computation. When a source's observed data version changes, its downstream models become stale. See [Sources: Source freshness](/concepts/sources#source-freshness) for configuration.
 
 ### Seeded incremental builds
 
@@ -6688,7 +6766,7 @@ When an incremental model's version hash changes, SQLBuild seeds the new physica
 | Databricks | Deep clone |
 | DuckDB, Postgres, SQL Server | CTAS copy |
 
-For append models with bounded replay (`query_change_backfill bounded-7d`), the seed copies only rows before the replay window cutoff. The incremental delta then appends the bounded range without duplicating rows.
+For append models with bounded replay (`replay_on_change bounded-7d`), the seed copies only rows before the replay window cutoff. The incremental delta then appends the bounded range without duplicating rows.
 
 ### Custom materializations
 
@@ -7009,7 +7087,7 @@ A detached VDE is blocked from further virtual operations:
 - `sqb promote --from <detached>` or `--to <detached>` blocks
 - `sqb rollback` on a detached VDE blocks
 
-The project can continue operating in direct mode, or you can re-adopt to return to virtual mode.
+The project can continue operating in standard mode, or you can re-adopt to return to virtual mode.
 
 #### Detached VDE cleanup
 
@@ -7097,9 +7175,9 @@ sqb clone --from prod --to dev --skip-locked
 
 Clone is a physical-layer operation. VDE pointer management is handled by [build](/concepts/advanced/virtual-environments/building) and [promote](/concepts/advanced/virtual-environments/promotion).
 
-### Comparison with direct-mode clone
+### Comparison with standard-mode clone
 
-In direct mode, `sqb clone` copies model relations between targets using zero-copy cloning where supported. In virtual mode, clone hydrates versioned physical relations instead. The source and target are still physical targets, but the copied objects are physical version relations rather than normal model targets.
+In standard mode, `sqb clone` copies model relations between targets using zero-copy cloning where supported. In virtual mode, clone hydrates versioned physical relations instead. The source and target are still physical targets, but the copied objects are physical version relations rather than normal model targets.
 
 ## Diff
 
@@ -7155,9 +7233,9 @@ sqb diff dev:pr_123 --allow-partial-diff
 
 This guard prevents misleading diff output when one VDE has pending changes that haven't been materialized yet.
 
-### Comparison with direct-mode diff
+### Comparison with standard-mode diff
 
-In direct mode, `sqb diff prod:dev` compares physical target schemas and data directly in the warehouse. In virtual mode, `sqb diff dev:pr_123` compares VDE pointer sets within a single physical target, then inspects the physical versions those pointers reference.
+In standard mode, `sqb diff prod:dev` compares physical target schemas and data directly in the warehouse. In virtual mode, `sqb diff dev:pr_123` compares VDE pointer sets within a single physical target, then inspects the physical versions those pointers reference.
 
 The output format is the same - schema diffs, row counts, changed columns, and example rows. The difference is what is being compared: physical targets vs virtual pointer sets.
 
@@ -7437,7 +7515,7 @@ SQLBuild blocks operations that don't apply to the current mode:
 | Operation | Direct mode | Virtual mode |
 |-----------|-------------|--------------|
 | `sqb state` subcommands | Blocked | Allowed |
-| `sqb run` | Allowed | Blocked (use `sqb build`) |
+| `sqb build --no-tests --no-audits` | Allowed | Blocked (use `sqb build`) |
 | `sqb build --defer-to` | Allowed | Blocked (VDE refs handle upstream resolution) |
 | `sqb promote` | Blocked | Allowed |
 | `sqb rollback` | Blocked | Allowed |
@@ -7454,7 +7532,7 @@ After `sqb state detach`, the VDE is marked `detached` and blocked from further 
 | `sqb promote --to <detached>` | Blocks |
 | `sqb rollback` | Blocks |
 
-The project can continue in direct mode or re-adopt to return to virtual mode.
+The project can continue in standard mode or re-adopt to return to virtual mode.
 
 ### Adopt guards
 
@@ -8601,7 +8679,7 @@ sqb --project-dir <path> compile [flags]
 
 1. **Discovery** - finds `sqlbuild_project.toml`, scans for models, sources, seeds, functions, audits, tests, and macros
 2. **Graph resolution** - resolves `ref()` and `source()` calls, expands macros, orders models by dependency
-3. **SQL validation** - validates SQL syntax using SQL analysis (when enabled)
+3. **SQL validation** - validates SQL syntax (when SQL analysis is enabled)
 4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
 5. **Contract validation** - checks declared column contracts against inferred query output
 6. **Artifact write** - writes compiled SQL to `target/compiled/`
@@ -8732,7 +8810,7 @@ sqb --project-dir <path> plan [flags]
 | Flag | Description |
 |------|-------------|
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--changes-only` | Only plan models that have actually changed (see [Planning and Change Detection](/concepts/planning#changes-only-mode)) |
+| `--force` | Override change detection and plan all selected models regardless of state |
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--json` | Output the plan as JSON |
@@ -8792,11 +8870,11 @@ When query or schema changes are detected, the plan shows the affected models wi
 
 Source: `cli/build.mdx`
 
-Execute the full build lifecycle: seeds, tests, models, and audits.
+Execute the build lifecycle: compile, plan, and build what changed.
 
 ## sqb build
 
-Compiles, plans, and executes the full build lifecycle including seeds, SQL unit tests, model materialization, and audits.
+Compiles, plans, and executes the build lifecycle. By default, only stale work runs; unchanged models, seeds, audits, and Python nodes are skipped automatically. Use `--no-tests` and `--no-audits` to skip validation for fast iteration.
 
 ### Usage
 
@@ -8808,9 +8886,14 @@ sqb --project-dir <path> build [flags]
 
 | Flag | Description |
 |------|-------------|
+| `--force` | Override change detection and build all selected models regardless of state |
+| `--no-tests` | Skip SQL unit tests |
+| `--no-audits` | Skip audits |
+| `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--defer-to` | Resolve unselected model references against another target |
 | `--full-refresh` | Drop and rebuild all selected models from scratch |
+| `--defer-to` | Resolve unselected model references against another target |
+| `--defer-sources-to` | Read managed source data from another target |
 | `--fail-fast` | Stop on first failure and skip remaining nodes |
 | `--concurrency` | Number of worker connections (default: 1) |
 | `--verbose`, `-v` | Show lifecycle SQL inline after each model |
@@ -8820,21 +8903,29 @@ sqb --project-dir <path> build [flags]
 | `--end-cursor-int` | Override end cursor for integer incremental models |
 | `--load` | Explicitly load managed sources before building |
 | `--no-load` | Skip automatic source loading |
-| `--changes-only` | Only build models that have actually changed (see [Planning and Change Detection](/concepts/planning#changes-only-mode)) |
-| `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
 | `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
-| `--defer-sources-to` | Read managed source data from another target |
+| `--include-stale-upstreams` | Expand selection to include stale upstream models needed for coherence |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
+
+### Fast iteration
+
+Use `--no-tests` and `--no-audits` to skip validation when you only want to materialize models:
+
+```bash
+sqb build --no-tests --no-audits
+```
+
+This replaces the former `sqb run` command. The full lifecycle (tests + audits) is always the default; skip flags opt out of specific phases when you need speed.
 
 ### Execution order
 
 1. Managed sources are loaded (unless `--no-load`)
-2. Seeds are loaded
-3. Source audits run before their dependent models
-3. SQL unit tests run before their target model
-4. Models are materialized in DAG topological order
-5. Error-severity audits run against the staging table before promotion to the target
+2. Seeds are loaded (if changed)
+3. Source audits run before their dependent models (unless `--no-audits`)
+4. SQL unit tests run before their target model (unless `--no-tests`)
+5. Models are materialized in DAG topological order (unchanged models are skipped)
+6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)
 
 ### Output
 
@@ -8878,50 +8969,11 @@ When a model fails:
 
 ### Fingerprints
 
-After a successful build, SQLBuild writes query fingerprints to `_sqlbuild_fingerprints` in the target schema. These are used by `plan` to detect query changes on subsequent runs.
+After a successful build, SQLBuild writes version identities to `_sqlbuild_fingerprints` in the target schema. These are used on subsequent runs to detect changes and skip unchanged work. See [Planning and Change Detection](/concepts/planning) for details.
 
 ### Runtime artifacts
 
 Build writes executed lifecycle SQL to `target/run/models/`. These files contain the actual SQL that was executed, including resolved cursor bounds and runtime substitutions.
-
-## run
-
-Source: `cli/run.mdx`
-
-Execute models without tests or audits.
-
-## sqb run
-
-Same as `build` but skips SQL unit tests and audits. Useful for fast iteration when you only want to materialize models.
-
-### Usage
-
-```bash
-sqb --project-dir <path> run [flags]
-```
-
-### Flags
-
-| Flag | Description |
-|------|-------------|
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--defer-to` | Resolve unselected model references against another target |
-| `--full-refresh` | Drop and rebuild all selected models from scratch |
-| `--fail-fast` | Stop on first failure and skip remaining nodes |
-| `--concurrency` | Number of worker connections (default: 1) |
-| `--verbose`, `-v` | Show lifecycle SQL inline after each model |
-| `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |
-| `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
-| `--start-cursor-int` | Override start cursor for integer incremental models |
-| `--end-cursor-int` | Override end cursor for integer incremental models |
-| `--load` | Explicitly load managed sources before running |
-| `--no-load` | Skip automatic source loading |
-| `--changes-only` | Only run models that have actually changed (see [Planning and Change Detection](/concepts/planning#changes-only-mode)) |
-| `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
-| `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
-| `--defer-sources-to` | Read managed source data from another target |
-| `--select`, `-s` | Select specific models |
-| `--exclude` | Exclude specific models |
 
 ## load
 
@@ -9002,7 +9054,7 @@ PASS=3  WARN=0  FAIL=0  SKIP=0  TOTAL=3  (0.12s)
 
 ### Auto-load during builds
 
-`sqb build` and `sqb run` automatically load managed sources before building dependent models. This is controlled by the `auto_load_sources` setting (default: `true`) and the `--load` / `--no-load` / `--reload` flags:
+`sqb build` automatically loads managed sources before building dependent models. This is controlled by the `auto_load_sources` setting (default: `true`) and the `--load` / `--no-load` / `--reload` flags:
 
 ```bash
 # Default: auto-load is on
@@ -9312,7 +9364,7 @@ sqb --project-dir <path> freshness [flags]
 
 ### Source selection
 
-Without `--select`, all sources in the project are observed. When `--select` is provided, selectors work like other commands -- you can select sources by name, or select models and their upstream sources are automatically included:
+Without `--select`, all sources in the project are observed. When `--select` is provided, selectors work like other commands: you can select sources by name, or select models and their upstream sources are automatically included:
 
 ```bash
 # Observe all sources
@@ -9382,7 +9434,7 @@ Summary: observed=0 changed=1 unchanged=1 tolerated=1 unknown=0 errors=0
 
 #### Virtual environment state
 
-To compare against state stored in a virtual environment instead of direct mode state:
+To compare against state stored in a virtual environment instead of standard mode state:
 
 ```bash
 sqb freshness --state --virtual-env pr_123
@@ -9442,8 +9494,8 @@ sqb freshness --json
 
 ### See also
 
-- [Sources -- Source freshness](/concepts/sources#source-freshness) for freshness configuration
-- [Planning and Change Detection](/concepts/planning) for how freshness feeds into `--changes-only`
+- [Sources: Source freshness](/concepts/sources#source-freshness) for freshness configuration
+- [Planning and Change Detection](/concepts/planning) for how freshness feeds into change-aware builds
 
 ## check
 
@@ -9472,7 +9524,7 @@ sqb --project-dir <path> check [flags]
 | `--json-output` | Write check results JSON to a file path |
 | `--vars` | Override project variables |
 
-Selecting a non-check node is rejected; use [`sqb run`](/cli/run) or [`sqb build`](/cli/build) to run tasks and assets.
+Selecting a non-check node is rejected; use [`sqb build`](/cli/build) to run tasks and assets.
 
 ### Examples
 
@@ -9498,7 +9550,7 @@ Results are written to `target/run/checks/python_checks.json`.
 
 ### Relationship to build
 
-`sqb build` runs relevant Python checks by default after the tasks, assets, and loaders they depend on have run. `sqb run` does not run checks. `sqb check` runs only checks, on demand.
+`sqb build` runs relevant Python checks by default after the tasks, assets, and loaders they depend on have run. `sqb build --no-audits` skips checks alongside audits. `sqb check` runs only checks, on demand.
 
 ## clone
 
@@ -9552,7 +9604,7 @@ Source: `cli/diff.mdx`
 
 Compare schemas and data between targets or virtual environments.
 
-Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in direct mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diffs) for detailed usage.
+Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in standard mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diffs) for detailed usage.
 
 ### Usage
 
@@ -10218,6 +10270,10 @@ sqb janitor --auto-approve
 # Override retention to 7 days
 sqb janitor --retention-days 7
 ```
+
+### State history pruning
+
+In addition to cleaning up stale relations, the janitor prunes old rows from `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness` tables, retaining only the latest record per identity. This keeps state tables compact without affecting change detection.
 
 ### Safety
 
