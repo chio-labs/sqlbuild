@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.33.0](https://github.com/chio-labs/sqlbuild/compare/v0.32.0...v0.33.0) (2026-06-13)
+
+
+### Features
+
+* persist direct node runtime results ([7b1763e](https://github.com/chio-labs/sqlbuild/commit/7b1763e8fe3753a83042b61006081b2089629c10))
+* persist virtual node runtime results ([2d35a6e](https://github.com/chio-labs/sqlbuild/commit/2d35a6eabc781d9358e5713ff251e4397dc92137))
+
+
+### Bug Fixes
+
+* block VDE models after skipped loaders ([ba26393](https://github.com/chio-labs/sqlbuild/commit/ba2639393d85529a71ebd32e3da0cf724f54e8ad))
+* make check selectors check-only ([6e84e60](https://github.com/chio-labs/sqlbuild/commit/6e84e60b81b57d9f10b6517fe2c07c9ebb23a533))
+* serialize node result DDL ([3a2187a](https://github.com/chio-labs/sqlbuild/commit/3a2187af9e16f52f56565e5fd20decac45ca2a50))
+* validate node results across adapters ([068811f](https://github.com/chio-labs/sqlbuild/commit/068811fecf6869da4fa0c2324c135aca9904b652))
+
 ## [0.32.0](https://github.com/chio-labs/sqlbuild/compare/v0.31.0...v0.32.0) (2026-06-12)
 
 
