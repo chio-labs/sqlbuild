@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class DbtProfileRenderTestCase:
+    description: str
+    output: dict[str, object]
+    env: dict[str, str]
+    expected_output: dict[str, object]
+
+
+@dataclass(frozen=True)
+class DbtProfileRenderErrorTestCase:
+    description: str
+    output: dict[str, object]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtProfileInitTomlTestCase:
+    description: str
+    secret_value: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]

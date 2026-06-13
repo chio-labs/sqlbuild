@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,6 +55,113 @@ class ResolvedDbtConfig:
     profiles_dir: Path | None
     target: str | None
     target_path: Path | None
+
+
+@dataclass(frozen=True)
+class DbtProjectProfileMetadata:
+    """dbt project metadata needed for profile resolution."""
+
+    project_name: str
+    profile_name: str
+    target_path: str
+
+
+@dataclass(frozen=True)
+class RawDbtProfile:
+    """Raw dbt profile payload loaded from profiles.yml."""
+
+    name: str
+    default_target: str | None
+    outputs: dict[str, dict[str, object]]
+
+
+@dataclass(frozen=True)
+class SelectedDbtProfileOutput:
+    """Selected dbt profile target output before rendering."""
+
+    profile_name: str
+    target_name: str
+    output: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ResolvedDbtProfileOutput:
+    """Rendered dbt profile target output."""
+
+    project_dir: Path
+    profiles_dir: Path
+    profile_name: str
+    target_name: str
+    output: dict[str, object]
+
+    @property
+    def adapter_type(self) -> str:
+        """Return the dbt adapter type from the rendered output."""
+
+        value: object | None = self.output.get("type")
+        return value if isinstance(value, str) else ""
+
+
+@dataclass(frozen=True)
+class NormalizedDbtProfileConnection:
+    """Rendered dbt profile output normalized for SQLBuild."""
+
+    adapter: str
+    connection: dict[str, object]
+    target_schema: str | None = None
+    target_database: str | None = None
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtProfileConnectionRequest:
+    """Request to resolve one dbt-profile-backed SQLBuild connection."""
+
+    sqlbuild_project_dir: Path
+    dbt_project_dir: Path | None
+    profiles_dir: Path | None
+    profile_name: str | None
+    target_name: str | None
+    cli_vars: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DbtInitProgressCallbacks:
+    """Optional progress hooks for `sqb dbt init` phases."""
+
+    start: Callable[[str], None] | None = None
+    complete: Callable[[str], None] | None = None
+
+
+@dataclass(frozen=True)
+class DbtInitRequest:
+    """Request to initialize a SQLBuild project from a dbt project."""
+
+    cwd: Path
+    dbt_project_dir: Path
+    profiles_dir: Path | None
+    profile_name: str | None
+    target_name: str | None
+    sqb_output_dir: Path | None
+    dry_run: bool = False
+    overwrite: bool = False
+    skip_dbt_debug: bool = False
+    progress_callbacks: DbtInitProgressCallbacks = field(default_factory=DbtInitProgressCallbacks)
+
+
+@dataclass(frozen=True)
+class DbtInitResult:
+    """Result from `sqb dbt init`."""
+
+    output_dir: Path
+    project_file: Path
+    project_name: str
+    adapter: str
+    target_name: str
+    profile_name: str
+    toml: str
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    dry_run: bool = False
 
 
 @dataclass(frozen=True)

@@ -90,3 +90,13 @@ class DbtDebugCliTestCase:
     command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
     expected_returncode: int = 0
+
+
+@dataclass(frozen=True)
+class DbtInitDuckDbE2ETestCase:
+    description: str
+    expected_generated_files: tuple[str, ...]
+    unexpected_generated_paths: tuple[str, ...]
+    expected_toml_fragments: tuple[str, ...]
+    unexpected_toml_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]

@@ -27,3 +27,12 @@ class DbtDebugWrapperTestCase:
     expected_dbt_args: tuple[str, ...]
     expected_sqlbuild_no_connection: bool
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class DbtInitOutputTestCase:
+    description: str
+    dry_run: bool
+    expected_fragments: tuple[str, ...]
+    expected_color_fragments: tuple[str, ...] = ()
+    unexpected_fragments: tuple[str, ...] = ()
