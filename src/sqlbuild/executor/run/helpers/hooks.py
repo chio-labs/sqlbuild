@@ -251,6 +251,18 @@ def invoke_python_hook(
             python_identity_recorder=python_identity_recorder,
         )
         return True
+    if returned is not None:
+        error_message = f"{hook_label} returned unsupported value; return None or ctx.skip(...)"
+        _record_hook_result(
+            hook_results=hook_results,
+            phase=phase,
+            hook_index=hook_index,
+            hook_type="python",
+            label=hook_entry.name,
+            status=ExecutionStatus.FAILED,
+            error_message=error_message,
+        )
+        raise ExecutorInputError(error_message)
     _record_hook_result(
         hook_results=hook_results,
         phase=phase,
