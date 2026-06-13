@@ -11,6 +11,13 @@ class SnowflakeCliTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeNodeResultE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class SnowflakeBuildE2ETestCase:
     description: str
     expected_table_name: str

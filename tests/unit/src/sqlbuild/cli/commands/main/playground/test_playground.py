@@ -216,7 +216,7 @@ CREATE_PLAYGROUND_PROJECT_TEST_CASES: list[CreatePlaygroundProjectTestCase] = [
             ),
             (
                 Path("checks/orders_export.py"),
-                ("@check(depends_on=orders_export", "ctx.payload(orders_export)"),
+                ("@check(depends_on=orders_export", "ctx.result_of(orders_export)"),
             ),
         ),
     ),
@@ -294,7 +294,7 @@ RUN_PLAYGROUND_TEST_CASES: list[RunPlaygroundTestCase] = [
             "Example: Python nodes demo",
             "sqb plan --select +fact_orders --select +orders_export",
             "sqb build --select +fact_orders --select +orders_export",
-            "sqb check --select +check_orders_export",
+            "sqb check --select check_orders_export",
         ),
     ),
 ]

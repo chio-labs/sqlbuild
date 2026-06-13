@@ -159,6 +159,39 @@ def test_given_source_freshness_table_when_rendering_indexes_then_postgres_uses_
 @pytest.mark.parametrize(
     "test_case",
     [
+        PostgresIndexSqlTestCase(
+            description="renders lookup indexes for node result table",
+            database=None,
+            schema="analytics",
+            expected_statements=(
+                "CREATE INDEX IF NOT EXISTS _sqlbuild_node_results_latest_idx "
+                "ON analytics._sqlbuild_node_results ("
+                "node_type, node_name, target_database, target_schema, target_name, status, "
+                "ts DESC, run_id DESC)",
+                "CREATE INDEX IF NOT EXISTS _sqlbuild_node_results_run_id_idx "
+                "ON analytics._sqlbuild_node_results ("
+                "run_id, node_type, node_name, target_database, target_schema, target_name)",
+            ),
+        )
+    ],
+    ids=["renders lookup indexes for node result table"],
+)
+def test_given_node_result_table_when_rendering_indexes_then_postgres_uses_lookup_keys(
+    test_case: PostgresIndexSqlTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_node_result_index_sqls(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         PostgresLatestReadSqlTestCase(
             description="renders windowed fingerprint latest read",
             database=None,

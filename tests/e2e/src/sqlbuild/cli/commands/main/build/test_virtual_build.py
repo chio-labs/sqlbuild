@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 from pathlib import Path
@@ -12,6 +13,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildSelectionGuardE2ETestCase,
     VirtualCustomMaterializationE2ETestCase,
     VirtualExplicitCheckpointRollbackE2ETestCase,
+    VirtualNodeResultFailureStateE2ETestCase,
+    VirtualNodeResultStateE2ETestCase,
     VirtualPartialRollbackE2ETestCase,
     VirtualPromoteE2ETestCase,
     VirtualPythonBuildE2ETestCase,
@@ -1768,6 +1771,493 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
     assert (project_dir / "source_profile.txt").read_text(encoding="utf-8") == (
         test_case.expected_source_profile_text
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualNodeResultStateE2ETestCase(
+            description="persists loader task asset and check node results in virtual state",
+            expected_state_rows=(
+                ("dev", "asset", "publish_result", "success"),
+                ("dev", "check", "check_produce_result", "success"),
+                ("dev", "loader", "raw_orders", "success"),
+                ("dev", "task", "produce_result", "success"),
+                ("dev", "task", "summarize_loader", "success"),
+            ),
+            expected_asset_payload={"value": 42},
+            expected_loader_text="raw_orders:raw_orders:1",
+            expected_history_text="42:1",
+            expected_warehouse_result_table_count=0,
+            expected_build_fragments=("check_produce_result", "PASS"),
+        )
+    ],
+    ids=["persists loader task asset and check node results in virtual state"],
+)
+def test_given_virtual_python_result_when_building_then_persists_node_results_in_state(
+    test_case: VirtualNodeResultStateE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_node_results_state",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "virtual_node_results_state"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "virtual_environments = true\n\n"
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[targets.dev]\n"
+                'schema = "dev"\n\n'
+                'defer_sources_to = "dev"\n\n'
+                "[targets.dev.state]\n"
+                'backend = "duckdb"\n'
+                'schema = "sqlbuild_state"\n\n'
+                "[targets.dev.state.connection]\n"
+                'database = "state.duckdb"\n'
+            ),
+            "loaders/orders.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_orders(ctx):\n"
+                "    return [{'value': 42}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: value\n"
+                "        type: INTEGER\n"
+            ),
+            "tasks/results.py": (
+                "from pathlib import Path\n"
+                "from loaders.orders import raw_orders\n"
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'value': 42}, metadata={'source': 'vde'})\n"
+                "\n"
+                "@task(depends_on=model('orders'))\n"
+                "def summarize_loader(ctx):\n"
+                "    result = ctx.result_of(raw_orders)\n"
+                "    history = ctx.results_of(raw_orders, limit=1)\n"
+                "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
+                "    output.write_text(\n"
+                "        f\"{result.payload['loader_name']}:{result.payload['source_name']}:\"\n"
+                "        f\"{result.payload['rows_loaded']}\"\n"
+                "    )\n"
+                "    history_output = Path(__file__).parents[1].joinpath('history_result.txt')\n"
+                "    history_output.write_text(\n"
+                "        f\"{ctx.result_of(produce_result).payload['value']}:{len(history)}\"\n"
+                "    )\n"
+                "    return ctx.result(metadata={'summarized': True})\n"
+            ),
+            "assets/results.py": (
+                "from sqlbuild.assets import asset\n"
+                "from tasks.results import produce_result\n\n"
+                "@asset(depends_on=produce_result)\n"
+                "def publish_result(ctx):\n"
+                "    payload = ctx.result_of(produce_result).payload\n"
+                "    return ctx.result(payload=payload, materialized=True)\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (materialized table);\n\nSELECT value FROM __source("raw_orders")\n'
+            ),
+            "checks/results.py": (
+                "from sqlbuild.checks import check\n"
+                "from assets.results import publish_result\n"
+                "from tasks.results import produce_result, summarize_loader\n\n"
+                "@check(depends_on=(publish_result, summarize_loader))\n"
+                "def check_produce_result(ctx):\n"
+                "    return (\n"
+                "        ctx.result_of(produce_result).payload['value'] == 42\n"
+                "        and ctx.result_of(publish_result).payload['value'] == 42\n"
+                "    )\n"
+            ),
+        },
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "orders"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    for fragment in test_case.expected_build_fragments:
+        assert fragment in build_result.stdout
+    state_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT virtual_environment_name, node_type, node_name, status "
+            "FROM sqlbuild_state.node_results "
+            "WHERE node_name IN ("
+            "'raw_orders', 'produce_result', 'summarize_loader', "
+            "'publish_result', 'check_produce_result') "
+            "ORDER BY node_type, node_name"
+        ),
+    )
+    assert state_rows == list(test_case.expected_state_rows)
+    asset_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT payload_json_b64, materialized FROM sqlbuild_state.node_results "
+            "WHERE node_type = 'asset' AND node_name = 'publish_result'"
+        ),
+    )
+    assert len(asset_rows) == 1
+    assert json.loads(base64.b64decode(str(asset_rows[0][0])).decode("utf-8")) == (
+        test_case.expected_asset_payload
+    )
+    assert asset_rows[0][1] == "true"
+    assert (project_dir / "loader_result.txt").read_text(encoding="utf-8") == (
+        test_case.expected_loader_text
+    )
+    assert (project_dir / "history_result.txt").read_text(encoding="utf-8") == (
+        test_case.expected_history_text
+    )
+    warehouse_result_table_count: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_name = '_sqlbuild_node_results'"
+        ),
+    )
+    assert warehouse_result_table_count == [(test_case.expected_warehouse_result_table_count,)]
+
+
+VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETestCase, ...] = (
+    VirtualNodeResultFailureStateE2ETestCase(
+        description="failed virtual task persists failed state row",
+        project_name="virtual_failed_task_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_failed_task_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+            "tasks/results.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def produce_result(ctx):\n"
+                "    raise RuntimeError('producer failed')\n"
+            ),
+        },
+        command=("--no-color", "build", "--select", "orders"),
+        expected_exit_code=1,
+        expected_state_rows=(("task", "produce_result", "failed", "producer failed"),),
+    ),
+    VirtualNodeResultFailureStateE2ETestCase(
+        description="failed virtual check persists failed state row",
+        project_name="virtual_failed_check_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_failed_check_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+            "tasks/results.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'value': 1})\n"
+            ),
+            "checks/results.py": (
+                "from sqlbuild.checks import check\n"
+                "from tasks.results import produce_result\n\n"
+                "@check(depends_on=produce_result)\n"
+                "def check_produce_result(ctx):\n"
+                "    return False\n"
+            ),
+        },
+        command=("--no-color", "build", "--select", "orders"),
+        expected_exit_code=1,
+        expected_state_rows=(
+            ("check", "check_produce_result", "failed", ""),
+            ("task", "produce_result", "success", ""),
+        ),
+    ),
+    VirtualNodeResultFailureStateE2ETestCase(
+        description="skipped virtual task persists skipped state row",
+        project_name="virtual_skipped_task_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_skipped_task_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+            "tasks/results.py": (
+                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def prepare_orders(ctx):\n"
+                "    return ctx.skip('not needed', mode=SkipMode.SOFT)\n"
+            ),
+        },
+        command=("--no-color", "build", "--select", "orders"),
+        expected_exit_code=0,
+        expected_state_rows=(("task", "prepare_orders", "skipped", "not needed"),),
+    ),
+    VirtualNodeResultFailureStateE2ETestCase(
+        description="skipped virtual loader persists skipped state row",
+        project_name="virtual_skipped_loader_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_skipped_loader_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+                defer_sources_to = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "tasks/prepare.py": (
+                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_events(ctx):\n"
+                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+            ),
+            "loaders/events.py": (
+                "from tasks.prepare import prepare_events\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(prepare_events,))\n"
+                "def raw_events(ctx):\n"
+                "    return [{'event_id': 1}]\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_events\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: event_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/events.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+            ),
+        },
+        command=("--no-color", "build", "--select", "+events"),
+        expected_exit_code=0,
+        expected_state_rows=(
+            ("loader", "raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),
+            ("task", "prepare_events", "skipped", "no input"),
+        ),
+    ),
+    VirtualNodeResultFailureStateE2ETestCase(
+        description="non JSON virtual payload persists failed state row",
+        project_name="virtual_non_json_payload_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_non_json_payload_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+            "tasks/results.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'bad': {1, 2}})\n"
+            ),
+        },
+        command=("--no-color", "build", "--select", "orders"),
+        expected_exit_code=1,
+        expected_state_rows=(("task", "produce_result", "failed", "non-JSON-serializable"),),
+    ),
+    VirtualNodeResultFailureStateE2ETestCase(
+        description="non JSON virtual metadata persists failed state row",
+        project_name="virtual_non_json_metadata_result_state",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "virtual_non_json_metadata_result_state"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [settings]
+                virtual_environments = true
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.state]
+                backend = "duckdb"
+                schema = "sqlbuild_state"
+
+                [targets.dev.state.connection]
+                database = "state.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+            "tasks/results.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('orders'))\n"
+                "def produce_result(ctx):\n"
+                "    return ctx.result(payload={'ok': True}, metadata={'bad': {1, 2}})\n"
+            ),
+        },
+        command=("--no-color", "build", "--select", "orders"),
+        expected_exit_code=1,
+        expected_state_rows=(("task", "produce_result", "failed", "non-JSON-serializable"),),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES,
+    ids=[case.description for case in VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES],
+)
+def test_given_virtual_node_result_failure_when_building_then_persists_failed_state_row(
+    test_case: VirtualNodeResultFailureStateE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files=test_case.repo_files,
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    state_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT node_type, node_name, status, error_message "
+            "FROM sqlbuild_state.node_results ORDER BY node_type, node_name"
+        ),
+    )
+    assert len(state_rows) == len(test_case.expected_state_rows)
+    actual_row: tuple[object, ...]
+    expected_row: tuple[object, ...]
+    for actual_row, expected_row in zip(state_rows, test_case.expected_state_rows, strict=True):
+        assert actual_row[:3] == expected_row[:3]
+        assert str(expected_row[3]) in str(actual_row[3] or "")
 
 
 @pytest.mark.parametrize(

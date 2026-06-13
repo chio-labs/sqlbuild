@@ -13,6 +13,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, Discover
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
@@ -36,41 +38,58 @@ from sqlbuild.spec.models.source import SourceEntry
 def resolve_selected_check_names(
     *, graph: PythonNodeGraph, select: tuple[str, ...], exclude: tuple[str, ...]
 ) -> frozenset[str]:
-    """Resolve sqb check selectors into check/dependency Python node names."""
+    """Resolve sqb check selectors into check names only."""
 
+    _validate_check_selectors(select=(*select, *exclude))
     if select:
-        return resolve_python_nodes_from_selectors(select=select, exclude=exclude, graph=graph)
+        selected_names: frozenset[str] = resolve_python_nodes_from_selectors(
+            select=select, exclude=exclude, graph=graph
+        )
+        return _check_names_from_selection(graph=graph, selected_names=selected_names)
     check_names: frozenset[str] = frozenset(
         node.name for node in graph.nodes if node.kind == PythonNodeKind.CHECK
     )
-    selected: set[str] = set(check_names)
-    check_name: str
-    for check_name in check_names:
-        selected.update(_upstream_closure(name=check_name, graph=graph))
     excluded: frozenset[str] = (
         resolve_python_nodes_from_selectors(select=exclude, exclude=(), graph=graph)
         if exclude
         else frozenset()
     )
-    return frozenset(selected - excluded)
+    return frozenset(check_names - excluded)
 
 
-def validate_selected_check_dependencies(
-    *, graph: PythonNodeGraph, selected_names: frozenset[str], check_names: frozenset[str]
-) -> None:
-    """Validate selected checks have explicitly selected Python dependencies."""
+def _validate_check_selectors(*, select: tuple[str, ...]) -> None:
+    raw_selector: str
+    for raw_selector in select:
+        token: str
+        for token in raw_selector.split():
+            part: str
+            for part in token.split(","):
+                parsed: ParsedSelector | PathSelector = parse_project_selector(part)
+                if isinstance(parsed, PathSelector) or parsed.upstream or parsed.downstream:
+                    raise CliUserError(
+                        "sqb check selectors do not support graph operators; "
+                        "select checks directly without '+', '~', or path-between expansion",
+                        code="C681",
+                    )
 
-    check_name: str
-    for check_name in check_names:
-        upstream_name: str
-        for upstream_name in graph.upstream_deps.get(check_name, ()):
-            if upstream_name in selected_names:
-                continue
-            raise CliUserError(
-                f"Python check '{check_name}' depends on unselected Python node "
-                f"'{upstream_name}'; select it directly or use upstream expansion",
-                code="C681",
-            )
+
+def _check_names_from_selection(
+    *, graph: PythonNodeGraph, selected_names: frozenset[str]
+) -> frozenset[str]:
+    non_check_names: tuple[str, ...] = tuple(
+        sorted(
+            name
+            for name in selected_names
+            if graph.nodes_by_name[name].kind != PythonNodeKind.CHECK
+        )
+    )
+    if non_check_names:
+        raise CliUserError(
+            "sqb check selectors must resolve only to Python checks; non-check selections: "
+            + ", ".join(non_check_names),
+            code="C682",
+        )
+    return selected_names
 
 
 def record_python_run_state_results(
@@ -310,18 +329,6 @@ def _resolve_python_check_excludes(
                     continue
                 raise
     return frozenset(excluded)
-
-
-def _upstream_closure(*, name: str, graph: PythonNodeGraph) -> frozenset[str]:
-    visited: set[str] = set()
-    pending: list[str] = list(graph.upstream_deps.get(name, ()))
-    while pending:
-        current: str = pending.pop(0)
-        if current in visited:
-            continue
-        visited.add(current)
-        pending.extend(graph.upstream_deps.get(current, ()))
-    return frozenset(visited)
 
 
 def _load_result_to_python_result(

@@ -45,6 +45,8 @@ def run_ingress_python_loader_nodes(
     relation_targets: dict[SqlResourceRef, str] | None = None,
     providers: ProviderContainer | None = None,
     identity_recorder: PythonIdentityRecorder | None = None,
+    result_store: Any | None = None,
+    persist_node_results: bool = True,
 ) -> PythonIngressLoaderExecutorResult:
     """Execute Python ingress task/asset/loader nodes in lifecycle order."""
 
@@ -72,4 +74,6 @@ def run_ingress_python_loader_nodes(
         relation_targets=relation_targets,
         providers=providers,
         identity_recorder=identity_recorder,
+        result_store=result_store,
+        persist_node_results=persist_node_results,
     )

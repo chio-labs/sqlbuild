@@ -17,6 +17,7 @@ from sqlbuild.compiler.python_nodes.types import (
     SkipMode,
 )
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
@@ -116,57 +117,6 @@ class PythonNodeRunState:
         self.results_by_function[node_function] = result
         self.results_by_function[("name", result.node_name)] = result
 
-    def payload(
-        self,
-        node_function: Callable[..., object],
-        *,
-        default: object = MISSING_DEFAULT,
-    ) -> object:
-        result: PythonNodeExecutionResult | None = self.results_by_function.get(
-            node_function
-        ) or self.results_by_function.get(self._dependency_key(node_function))
-        if result is None:
-            if default is not MISSING_DEFAULT:
-                return default
-            raise ExecutorInputError("No same-run payload found for Python node")
-        if result.status != PythonNodeStatus.SUCCESS:
-            if default is not MISSING_DEFAULT:
-                return default
-            raise ExecutorInputError(
-                f"Python node '{result.node_name}' did not produce a successful payload"
-            )
-        return result.payload
-
-    def metadata(
-        self,
-        node_function: Callable[..., object],
-        *,
-        default: object = MISSING_DEFAULT,
-    ) -> dict[str, object] | object:
-        result: PythonNodeExecutionResult | None = self.results_by_function.get(
-            node_function
-        ) or self.results_by_function.get(self._dependency_key(node_function))
-        if result is None:
-            if default is not MISSING_DEFAULT:
-                return default
-            raise ExecutorInputError("No same-run metadata found for Python node")
-        if result.status != PythonNodeStatus.SUCCESS:
-            if default is not MISSING_DEFAULT:
-                return default
-            raise ExecutorInputError(
-                f"Python node '{result.node_name}' did not produce successful metadata"
-            )
-        return result.metadata
-
-    def _dependency_key(self, node_function: Callable[..., object]) -> object | tuple[str, str]:
-        definition: object = getattr(node_function, "__sqlbuild_task__", None) or getattr(
-            node_function, "__sqlbuild_asset__", None
-        )
-        name: object = getattr(definition, "name", None)
-        if isinstance(name, str):
-            return ("name", name)
-        return node_function
-
 
 @dataclass(frozen=True)
 class PythonNodeExecutorResult:
@@ -199,6 +149,7 @@ class BasePythonNodeContext:
     logger: logging.Logger
     statement_recorder: StatementRecorder
     run_state: PythonNodeRunState | None = None
+    result_store: Any | None = None
     default_database: str | None = None
     default_schema: str | None = None
     relation_targets: dict[SqlResourceRef, str] = field(default_factory=dict)
@@ -267,33 +218,61 @@ class BasePythonNodeContext:
             metadata={} if metadata is None else metadata,
         )
 
-    def payload(
+    def result_of(
         self,
         node_function: Callable[..., object],
         *,
+        run_id: str | None = None,
         default: object = MISSING_DEFAULT,
-    ) -> object:
-        """Return a same-run upstream payload by Python node function reference."""
+    ) -> NodeResultEnvelope | object:
+        """Return the latest persisted upstream result by Python node function reference."""
 
-        if self.run_state is None:
+        if self.result_store is None:
             if default is not MISSING_DEFAULT:
                 return default
-            raise ExecutorInputError("No Python node run state is available")
-        return self.run_state.payload(node_function, default=default)
+            raise ExecutorInputError("No Python node result store is available")
+        node_type, node_name = self._result_dependency_identity(node_function)
+        return self.result_store.result_of(
+            node_type=node_type,
+            node_name=node_name,
+            run_id=run_id,
+            default=default,
+        )
 
-    def metadata(
+    def results_of(
         self,
         node_function: Callable[..., object],
         *,
-        default: object = MISSING_DEFAULT,
-    ) -> dict[str, object] | object:
-        """Return same-run upstream metadata by Python node function reference."""
+        limit: int,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        """Return persisted successful upstream result history, newest first."""
 
-        if self.run_state is None:
-            if default is not MISSING_DEFAULT:
-                return default
-            raise ExecutorInputError("No Python node run state is available")
-        return self.run_state.metadata(node_function, default=default)
+        if self.result_store is None:
+            return ()
+        node_type, node_name = self._result_dependency_identity(node_function)
+        return self.result_store.results_of(
+            node_type=node_type,
+            node_name=node_name,
+            limit=limit,
+        )
+
+    def _result_dependency_identity(self, node_function: Callable[..., object]) -> tuple[str, str]:
+        task_definition: object = getattr(node_function, "__sqlbuild_task__", None)
+        if task_definition is not None:
+            return PythonNodeKind.TASK.value, self._definition_name(task_definition)
+        asset_definition: object = getattr(node_function, "__sqlbuild_asset__", None)
+        if asset_definition is not None:
+            return PythonNodeKind.ASSET.value, self._definition_name(asset_definition)
+        loader_definition: object = getattr(node_function, "__sqlbuild_loader__", None)
+        if loader_definition is not None:
+            return PythonNodeKind.LOADER.value, self._definition_name(loader_definition)
+        raise ExecutorInputError("Python node result dependency must be a task, asset, or loader")
+
+    def _definition_name(self, definition: object) -> str:
+        name: object = getattr(definition, "name", None)
+        if isinstance(name, str):
+            return name
+        raise ExecutorInputError("Python node result dependency must have a string name")
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,0 +1,16 @@
+"""Runtime node result storage constants."""
+
+NODE_RESULTS_TABLE_NAME: str = "_sqlbuild_node_results"
+
+COLUMN_NODE_TYPE: str = "node_type"
+COLUMN_NODE_NAME: str = "node_name"
+COLUMN_TARGET_DATABASE: str = "target_database"
+COLUMN_TARGET_SCHEMA: str = "target_schema"
+COLUMN_TARGET_NAME: str = "target_name"
+COLUMN_RUN_ID: str = "run_id"
+COLUMN_STATUS: str = "status"
+COLUMN_PAYLOAD_JSON_B64: str = "payload_json_b64"
+COLUMN_METADATA_JSON_B64: str = "metadata_json_b64"
+COLUMN_ERROR_MESSAGE: str = "error_message"
+COLUMN_MATERIALIZED: str = "materialized"
+COLUMN_TIMESTAMP: str = "ts"

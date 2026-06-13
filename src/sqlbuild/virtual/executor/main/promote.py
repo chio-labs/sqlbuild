@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -19,6 +17,10 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
+from sqlbuild.virtual.executor.helpers.promote import (
+    read_seed_physical_relations,
+    selected_upstream_seed_names,
+)
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
@@ -43,7 +45,6 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
-    PhysicalArtifactType,
     StateOperationStatus,
     StateOperationType,
     VirtualEnvironmentStatus,
@@ -243,7 +244,7 @@ def run_virtual_promote(
                     code="S018",
                     help="Use --select for a coherent partial promotion from a working source VDE.",
                 )
-        selected_seed_names: tuple[str, ...] = _selected_upstream_seed_names(
+        selected_seed_names: tuple[str, ...] = selected_upstream_seed_names(
             graph=graph,
             selected_model_names=selected_model_names,
             all_seed_names=tuple(seed.name for seed in graph.project.seeds),
@@ -303,7 +304,7 @@ def run_virtual_promote(
             )
         if stale_upstreams:
             selected_model_names = tuple(sorted({*selected_model_names, *stale_upstreams}))
-            selected_seed_names = _selected_upstream_seed_names(
+            selected_seed_names = selected_upstream_seed_names(
                 graph=graph,
                 selected_model_names=selected_model_names,
                 all_seed_names=tuple(seed.name for seed in graph.project.seeds),
@@ -415,7 +416,7 @@ def run_virtual_promote(
             schema=config.schema,
             refs=refs,
         )
-        seed_physical_relations: dict[str, PhysicalRelationRecord] = _read_seed_physical_relations(
+        seed_physical_relations: dict[str, PhysicalRelationRecord] = read_seed_physical_relations(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
@@ -520,51 +521,3 @@ def _read_physical_relations(
         if relation is not None:
             relations[ref.model_name] = relation
     return relations
-
-
-def _read_seed_physical_relations(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-) -> dict[str, PhysicalRelationRecord]:
-    relations: dict[str, PhysicalRelationRecord] = {}
-    for ref in refs:
-        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            state_connection,
-            schema=schema,
-            artifact_type=PhysicalArtifactType.SEED,
-            artifact_name=ref.seed_name,
-            version_hash=ref.version_hash,
-        )
-        if relation is not None:
-            relations[ref.seed_name] = relation
-    return relations
-
-
-def _selected_upstream_seed_names(
-    *,
-    graph: ProjectGraph,
-    selected_model_names: tuple[str, ...],
-    all_seed_names: tuple[str, ...],
-    include_all: bool,
-) -> tuple[str, ...]:
-    if include_all:
-        return all_seed_names
-    selected: set[str] = set()
-    pending: list[CompiledObjectKey] = [
-        model.key for model in graph.project.models if model.name in selected_model_names
-    ]
-    seen: set[CompiledObjectKey] = set()
-    while pending:
-        key: CompiledObjectKey = pending.pop()
-        if key in seen:
-            continue
-        seen.add(key)
-        for upstream_key in graph.upstream_deps.get(key, ()):
-            if upstream_key.resource_type == CompiledResourceType.SEED:
-                selected.add(upstream_key.name)
-                continue
-            pending.append(upstream_key)
-    return tuple(sorted(selected))

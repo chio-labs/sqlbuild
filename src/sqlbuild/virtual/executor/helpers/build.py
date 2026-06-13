@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
@@ -71,6 +72,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
@@ -80,6 +82,7 @@ from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
+from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_destination_from_physical_relation,
@@ -498,10 +501,12 @@ def run_virtual_build(
         selection=python_selection,
         python_graph=python_graph,
     )
-    previous_python_identities = read_bound_virtual_python_identities(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-        virtual_environment_name=virtual_environment_name,
+    previous_python_identities: dict[tuple[str, str], Fingerprint] = (
+        read_bound_virtual_python_identities(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            virtual_environment_name=virtual_environment_name,
+        )
     )
 
     def record_python_identity(identity: Any, _target_name: str | None) -> None:
@@ -537,30 +542,43 @@ def run_virtual_build(
     if lifecycle_plan.ingress_python_node_names:
         ingress_connection: Any = adapter.connect(connection_config)
         try:
-            ingress_result: PythonIngressLoaderExecutorResult = run_ingress_python_loader_nodes(
-                python_graph=python_graph,
-                selected_python_names=lifecycle_plan.ingress_python_node_names,
-                loader_functions=discovered_inputs.loader_functions,
-                source_map=plan_output.source_map,
-                adapter=adapter,
-                connection_config=connection_config,
-                connection=ingress_connection,
-                run_id=rewritten_project.run_id,
-                target=target_vde_name,
-                vars=rewritten_project.effective_vars,
-                is_reload=reload_sources,
-                default_database=adapter.default_database(),
-                default_schema=adapter.default_schema(),
-                start_cursor_ts=start_cursor_ts,
-                end_cursor_ts=end_cursor_ts,
-                start_cursor_int=start_cursor_int,
-                end_cursor_int=end_cursor_int,
-                on_node_start=hooks.on_node_start,
-                on_node_complete=hooks.on_node_complete,
-                relation_targets=relation_targets,
-                providers=providers,
-                identity_recorder=record_python_identity,
-            )
+            ingress_state_connection: Any = backend.connect(config.connection)
+            try:
+                ingress_result_store: VirtualNodeResultStore = VirtualNodeResultStore(
+                    backend=backend,
+                    state_connection=ingress_state_connection,
+                    state_schema=config.schema,
+                    virtual_environment_name=target_vde_name,
+                    target_database=adapter.default_database(),
+                    target_schema=adapter.default_schema(),
+                )
+                ingress_result: PythonIngressLoaderExecutorResult = run_ingress_python_loader_nodes(
+                    python_graph=python_graph,
+                    selected_python_names=lifecycle_plan.ingress_python_node_names,
+                    loader_functions=discovered_inputs.loader_functions,
+                    source_map=plan_output.source_map,
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=ingress_connection,
+                    run_id=rewritten_project.run_id,
+                    target=target_vde_name,
+                    vars=rewritten_project.effective_vars,
+                    is_reload=reload_sources,
+                    default_database=adapter.default_database(),
+                    default_schema=adapter.default_schema(),
+                    start_cursor_ts=start_cursor_ts,
+                    end_cursor_ts=end_cursor_ts,
+                    start_cursor_int=start_cursor_int,
+                    end_cursor_int=end_cursor_int,
+                    on_node_start=hooks.on_node_start,
+                    on_node_complete=hooks.on_node_complete,
+                    relation_targets=relation_targets,
+                    providers=providers,
+                    identity_recorder=record_python_identity,
+                    result_store=ingress_result_store,
+                )
+            finally:
+                backend.close(ingress_state_connection)
         finally:
             adapter.close(ingress_connection)
         ingress_python_results = ingress_result.python_results
@@ -613,6 +631,11 @@ def run_virtual_build(
                 for load_result in ingress_load_results
             ),
             initial_load_results=ingress_load_results,
+            initial_failed_keys=frozenset(
+                _load_result_key(plan=plan_output, result=load_result)
+                for load_result in ingress_load_results
+                if load_result.status != ExecutionStatus.SUCCESS
+            ),
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
@@ -650,6 +673,7 @@ def run_virtual_build(
             expected_seed_version_hashes=semantics.expected_seed_version_hashes,
             seed_identity_metadata_jsons=semantics.seed_identity_metadata_jsons,
             available_seed_physical_relations=available_seed_physical_relations,
+            model_results=result.model_results,
             seed_results=result.seed_results,
             load_results=result.load_results,
         )
@@ -672,6 +696,9 @@ def run_virtual_build(
             end_cursor_int=end_cursor_int,
             providers=providers,
             identity_recorder=record_python_identity,
+            backend=backend,
+            state_connection_config=config.connection,
+            state_schema=config.schema,
         )
         if any(
             python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results
@@ -691,6 +718,7 @@ def run_virtual_build(
         display_plan_output=plan_output,
         execution_plan=executor_plan_output,
         execution_result=result,
+        virtual_environment_name=target_vde_name,
         python_node_results=python_results,
     )
 
@@ -777,40 +805,56 @@ def _run_read_side_python_nodes(
     end_cursor_int: int | None,
     providers: ProviderContainer | None,
     identity_recorder: PythonIdentityRecorder | None,
+    backend: Any,
+    state_connection_config: dict[str, object],
+    state_schema: str,
 ) -> tuple[PythonNodeExecutionResult, ...]:
     if not lifecycle_plan.read_side_python_node_names:
         return ()
     connection: Any = adapter.connect(connection_config)
     try:
-        tracker: Any = create_read_side_python_execution_tracker(
-            python_graph=python_graph,
-            selected_python_names=lifecycle_plan.read_side_python_node_names,
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            run_id=run_id,
-            target=environment,
-            vars=vars,
-            is_reload=is_reload,
-            default_database=default_database,
-            default_schema=default_schema,
-            relation_targets=relation_targets,
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
-            providers=providers,
-            identity_recorder=identity_recorder,
-        )
-        load_result: LoadExecutionResult
-        for load_result in result.load_results:
-            tracker.record_sql_result(load_result)
-        model_result: Any
-        for model_result in result.model_results:
-            tracker.record_sql_result(model_result)
-        tracker.dispatch_ready_python_nodes()
-        tracker.finalize_unrun_python_nodes()
-        return tracker.results
+        state_connection: Any = backend.connect(state_connection_config)
+        try:
+            result_store: VirtualNodeResultStore = VirtualNodeResultStore(
+                backend=backend,
+                state_connection=state_connection,
+                state_schema=state_schema,
+                virtual_environment_name=environment or "default",
+                target_database=default_database,
+                target_schema=default_schema,
+            )
+            tracker: Any = create_read_side_python_execution_tracker(
+                python_graph=python_graph,
+                selected_python_names=lifecycle_plan.read_side_python_node_names,
+                adapter=adapter,
+                connection_config=connection_config,
+                connection=connection,
+                run_id=run_id,
+                target=environment,
+                vars=vars,
+                is_reload=is_reload,
+                default_database=default_database,
+                default_schema=default_schema,
+                relation_targets=relation_targets,
+                start_cursor_ts=start_cursor_ts,
+                end_cursor_ts=end_cursor_ts,
+                start_cursor_int=start_cursor_int,
+                end_cursor_int=end_cursor_int,
+                providers=providers,
+                identity_recorder=identity_recorder,
+                result_store=result_store,
+            )
+            load_result: LoadExecutionResult
+            for load_result in result.load_results:
+                tracker.record_sql_result(load_result)
+            model_result: Any
+            for model_result in result.model_results:
+                tracker.record_sql_result(model_result)
+            tracker.dispatch_ready_python_nodes()
+            tracker.finalize_unrun_python_nodes()
+            return tracker.results
+        finally:
+            backend.close(state_connection)
     finally:
         adapter.close(connection)
 
@@ -1108,6 +1152,7 @@ def _persist_successful_virtual_build(
     expected_seed_version_hashes: dict[str, str],
     seed_identity_metadata_jsons: dict[str, str],
     available_seed_physical_relations: dict[str, PhysicalRelationRecord],
+    model_results: tuple[ModelExecutionResult, ...],
     seed_results: tuple[SeedExecutionResult, ...],
     load_results: tuple[LoadExecutionResult, ...],
 ) -> None:
@@ -1124,7 +1169,14 @@ def _persist_successful_virtual_build(
     model_entries_by_name: dict[str, Any] = {
         entry.name: entry for entry in plan_output.model_entries
     }
+    successful_model_names: frozenset[str] = frozenset(
+        model_result.model_name
+        for model_result in model_results
+        if model_result.status == ExecutionStatus.SUCCESS
+    )
     for entry in plan_output.model_entries:
+        if entry.name not in successful_model_names:
+            continue
         final_version_hashes[entry.name] = expected_version_hashes[entry.name]
 
     state_connection: Any = backend.connect(config.connection)

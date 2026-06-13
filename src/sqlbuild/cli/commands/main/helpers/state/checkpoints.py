@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -312,7 +313,7 @@ def _read_checkpoint_refs(
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs, project_dir=project_dir
     )
-    connection = backend.connect(config.connection)
+    connection: Any = backend.connect(config.connection)
     try:
         return (
             backend.get_virtual_environment_checkpoint_model_refs(
@@ -338,7 +339,7 @@ def _read_current_refs(
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs, project_dir=project_dir
     )
-    connection = backend.connect(config.connection)
+    connection: Any = backend.connect(config.connection)
     try:
         return (
             backend.get_virtual_environment_model_refs(

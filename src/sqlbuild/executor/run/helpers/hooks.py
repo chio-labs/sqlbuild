@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
+from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.executor.python_nodes.main.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -229,7 +230,7 @@ def invoke_python_hook(
         label=hook_entry.name,
         status=ExecutionStatus.SUCCESS,
     )
-    identity = build_python_node_identity(
+    identity: PythonNodeIdentity = build_python_node_identity(
         node_type=NODE_TYPE_HOOK,
         node_name=hook_function.name,
         function=hook_function.function,

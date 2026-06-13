@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from datetime import datetime
 
 import pytest
 
@@ -11,10 +12,9 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
 from sqlbuild.assets import AssetContext
 from sqlbuild.assets import SkipMode as AssetSkipMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.models import (
-    PythonNodeExecutionResult,
     PythonNodeResult,
-    PythonNodeRunState,
     PythonNodeSkipResult,
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -30,6 +30,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     PythonNodeContextTestAdapter,
+    PythonNodeContextTestResultStore,
     assert_base_context_fields,
     build_asset_context,
     build_task_context,
@@ -311,72 +312,61 @@ def test_given_task_context_when_resolving_sql_relations_then_validates_declared
     "test_case",
     [
         PythonNodeRunStateTestCase(
-            description="reads same-run upstream payload and metadata",
+            description="reads persisted upstream result envelope",
             expected_payload={"file": "orders.json"},
             expected_metadata={"row_count": 3},
             expected_default={"fallback": True},
-            expected_error_fragment="did not produce a successful payload",
+            expected_error_fragment="No persisted result found for Python node",
         )
     ],
-    ids=["reads same-run upstream payload and metadata"],
+    ids=["reads persisted upstream result envelope"],
 )
-def test_given_context_with_run_state_when_reading_upstream_outputs_then_returns_values(
+def test_given_context_with_result_store_when_reading_upstream_outputs_then_returns_values(
     test_case: PythonNodeRunStateTestCase,
 ) -> None:
-    run_state: PythonNodeRunState = PythonNodeRunState()
-    run_state.record_result(
-        node_function=upstream_task,
-        result=PythonNodeExecutionResult(
-            node_name="upstream_task",
-            kind=PythonNodeKind.TASK,
-            status=PythonNodeStatus.SUCCESS,
-            payload=test_case.expected_payload,
-            metadata=test_case.expected_metadata,
-        ),
-    )
-    run_state.record_result(
-        node_function=skipped_upstream_task,
-        result=PythonNodeExecutionResult(
-            node_name="skipped_upstream_task",
-            kind=PythonNodeKind.TASK,
-            status=PythonNodeStatus.SKIPPED,
-            skip_mode=SkipMode.HARD,
-            skip_reason="No rows",
-        ),
+    expected_result: NodeResultEnvelope = NodeResultEnvelope(
+        node_type=PythonNodeKind.TASK.value,
+        node_name="upstream_task",
+        run_id="test_run",
+        status=PythonNodeStatus.SUCCESS.value,
+        payload=test_case.expected_payload,
+        metadata=test_case.expected_metadata,
+        error_message=None,
+        materialized=None,
+        ts=datetime(2026, 1, 1),
     )
     context: AssetContext = build_asset_context(
         adapter=PythonNodeContextTestAdapter(),
         statement_recorder=StatementRecorder(),
         logger_name="sqlbuild.asset.export_customers",
-        run_state=run_state,
+        result_store=PythonNodeContextTestResultStore(
+            {(PythonNodeKind.TASK.value, "upstream_task"): (expected_result,)}
+        ),
     )
 
-    assert context.payload(upstream_task) == test_case.expected_payload
-    assert context.metadata(upstream_task) == test_case.expected_metadata
-    assert context.payload(lambda _ctx: None, default=test_case.expected_default) == (
-        test_case.expected_default
-    )
-    assert context.metadata(lambda _ctx: None, default=test_case.expected_default) == (
+    result: object = context.result_of(upstream_task)
+    assert result == expected_result
+    assert context.result_of(skipped_upstream_task, default=test_case.expected_default) == (
         test_case.expected_default
     )
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        context.payload(skipped_upstream_task)
+        context.result_of(skipped_upstream_task)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         PythonNodeRunStateTestCase(
-            description="raises when no same-run state is available",
+            description="raises when no result store is available",
             expected_payload=None,
             expected_metadata={},
             expected_default="fallback",
-            expected_error_fragment="No Python node run state is available",
+            expected_error_fragment="No Python node result store is available",
         )
     ],
-    ids=["raises when no same-run state is available"],
+    ids=["raises when no result store is available"],
 )
-def test_given_context_without_run_state_when_reading_payload_then_raises_or_returns_default(
+def test_given_context_without_result_store_when_reading_result_then_raises_or_returns_default(
     test_case: PythonNodeRunStateTestCase,
 ) -> None:
     context: TaskContext = build_task_context(
@@ -385,8 +375,8 @@ def test_given_context_without_run_state_when_reading_payload_then_raises_or_ret
         logger_name="sqlbuild.task.fetch_orders",
     )
 
-    assert context.payload(upstream_task, default=test_case.expected_default) == (
+    assert context.result_of(upstream_task, default=test_case.expected_default) == (
         test_case.expected_default
     )
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        context.payload(upstream_task)
+        context.result_of(upstream_task)

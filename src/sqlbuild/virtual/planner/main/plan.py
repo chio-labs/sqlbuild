@@ -12,6 +12,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -318,10 +319,12 @@ def run_virtual_plan_pipeline(
             selected_model_names=effective_select,
             include_python=include_python,
         )
-        previous_python_identities = read_bound_virtual_python_identities(
-            discovered_inputs=discovered_inputs,
-            project_dir=project_dir,
-            virtual_environment_name=virtual_environment_name,
+        previous_python_identities: dict[tuple[str, str], Fingerprint] = (
+            read_bound_virtual_python_identities(
+                discovered_inputs=discovered_inputs,
+                project_dir=project_dir,
+                virtual_environment_name=virtual_environment_name,
+            )
         )
         return CompilePipelineResult(
             project=graph.project,

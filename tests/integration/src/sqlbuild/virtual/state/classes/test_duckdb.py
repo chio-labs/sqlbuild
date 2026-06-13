@@ -7,6 +7,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -41,6 +43,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
+    DuckDbStateBackendColumnValidationTestCase,
     DuckDbStateBackendConcurrentLockTestCase,
     DuckDbStateBackendCoreRecordsTestCase,
     DuckDbStateBackendErrorTestCase,
@@ -49,6 +52,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendIndexValidationTestCase,
     DuckDbStateBackendLifecycleTestCase,
     DuckDbStateBackendLockTestCase,
+    DuckDbStateBackendNodeResultTestCase,
     DuckDbStateBackendOperationEventTestCase,
     DuckDbStateBackendPythonNodeIdentityTestCase,
     DuckDbStateBackendRollbackTestCase,
@@ -127,10 +131,206 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
 @pytest.mark.parametrize(
     "test_case",
     [
+        DuckDbStateBackendNodeResultTestCase(
+            description="stores and reads VDE node result history by environment",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            isolated_virtual_environment_name="pr_1",
+            expected_latest_payload={"value": 2},
+            expected_failed_status="failed",
+            expected_history_count=2,
+            expected_target_isolated_payload={"value": 99},
+            expected_rollback_row_count=5,
+        )
+    ],
+    ids=["stores and reads VDE node result history by environment"],
+)
+def test_given_duckdb_node_results_when_reading_then_scopes_by_environment_and_status(
+    test_case: DuckDbStateBackendNodeResultTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        first_record: NodeResultRecord = NodeResultRecord(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            run_id="run_1",
+            status=NodeResultStatus.SUCCESS.value,
+            payload={"value": 1},
+            metadata={"source": "first"},
+            error_message=None,
+            materialized=None,
+            ts=datetime(2026, 1, 1, 12, 0, 0),
+        )
+        backend.insert_node_result(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            record=first_record,
+        )
+        backend.insert_node_result(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            record=NodeResultRecord(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="dev",
+                target_name=None,
+                run_id="run_2",
+                status=NodeResultStatus.SUCCESS.value,
+                payload=test_case.expected_latest_payload,
+                metadata={"source": "second"},
+                error_message=None,
+                materialized=None,
+                ts=datetime(2026, 1, 1, 12, 1, 0),
+            ),
+        )
+        backend.insert_node_result(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            record=NodeResultRecord(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="dev",
+                target_name=None,
+                run_id="run_3",
+                status=NodeResultStatus.FAILED.value,
+                payload=None,
+                metadata={},
+                error_message="boom",
+                materialized=None,
+                ts=datetime(2026, 1, 1, 12, 2, 0),
+            ),
+        )
+        backend.insert_node_result(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.isolated_virtual_environment_name,
+            record=first_record,
+        )
+        backend.insert_node_result(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            record=NodeResultRecord(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="prod",
+                target_name=None,
+                run_id="run_4",
+                status=NodeResultStatus.SUCCESS.value,
+                payload=test_case.expected_target_isolated_payload,
+                metadata={"source": "target"},
+                error_message=None,
+                materialized=None,
+                ts=datetime(2026, 1, 1, 12, 3, 0),
+            ),
+        )
+        backup_id: str = backend.create_backup(connection, schema=test_case.schema)
+        connection.execute(f"DELETE FROM {test_case.schema}.node_results")
+        backend.rollback(connection, schema=test_case.schema, backup_id=backup_id)
+
+        latest_success: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=1,
+        )
+        explicit_failed: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=None,
+            run_id="run_3",
+            limit=1,
+        )
+        isolated_results: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.isolated_virtual_environment_name,
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=5,
+        )
+        history_results: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=5,
+        )
+        target_isolated_results: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
+            connection,
+            schema=test_case.schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="prod",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=1,
+        )
+        rollback_rows: list[tuple[object, ...]] = fetch_all(
+            connection,
+            f"SELECT COUNT(*) FROM {test_case.schema}.node_results",
+        )
+
+        assert latest_success[0].payload == test_case.expected_latest_payload
+        assert explicit_failed[0].status == test_case.expected_failed_status
+        assert len(isolated_results) == 1
+        assert len(history_results) == test_case.expected_history_count
+        assert target_isolated_results[0].payload == test_case.expected_target_isolated_payload
+        assert rollback_rows == [(test_case.expected_rollback_row_count,)]
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=25,
+            expected_issue_count=26,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -1369,14 +1569,14 @@ def test_given_duckdb_state_backend_when_managing_locks_then_enforces_active_own
     "test_case",
     [
         DuckDbStateBackendIndexValidationTestCase(
-            description="reports missing unique state index",
+            description="reports missing node results latest index",
             schema="sqlbuild_state",
             sqlbuild_version="0.0.test",
-            dropped_index_name="idx_sqb_locks_identity",
+            dropped_index_name="idx_sqb_node_results_latest",
             expected_issue_kind=StateSchemaValidationIssueKind.MISSING_INDEX.value,
         )
     ],
-    ids=["reports missing unique state index"],
+    ids=["reports missing node results latest index"],
 )
 def test_given_duckdb_state_backend_when_required_index_is_missing_then_validation_reports_it(
     test_case: DuckDbStateBackendIndexValidationTestCase,
@@ -1391,6 +1591,52 @@ def test_given_duckdb_state_backend_when_required_index_is_missing_then_validati
         )
 
         connection.execute(f"DROP INDEX {test_case.schema}.{test_case.dropped_index_name}")
+
+        validation_result: StateSchemaValidationResult = backend.validate_schema(
+            connection,
+            schema=test_case.schema,
+        )
+
+        assert test_case.expected_issue_kind in tuple(
+            issue.kind.value for issue in validation_result.issues
+        )
+    finally:
+        backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendColumnValidationTestCase(
+            description="reports missing node results payload column",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            dropped_table_name="node_results",
+            dropped_column_name="payload_json_b64",
+            expected_issue_kind=StateSchemaValidationIssueKind.MISSING_COLUMN.value,
+        )
+    ],
+    ids=["reports missing node results payload column"],
+)
+def test_given_duckdb_state_backend_when_node_results_column_is_missing_then_validation_reports_it(
+    test_case: DuckDbStateBackendColumnValidationTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+
+        index_name: str
+        for index_name in STATE_TABLE_INDEXES[test_case.dropped_table_name]:
+            connection.execute(f"DROP INDEX {test_case.schema}.{index_name}")
+        connection.execute(
+            f"ALTER TABLE {test_case.schema}.{test_case.dropped_table_name} "
+            f"DROP COLUMN {test_case.dropped_column_name}"
+        )
 
         validation_result: StateSchemaValidationResult = backend.validate_schema(
             connection,
