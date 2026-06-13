@@ -7,6 +7,8 @@ from typing import Any
 import psycopg
 import pytest
 
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.models import (
@@ -39,6 +41,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
+    PostgresStateBackendColumnValidationTestCase,
     PostgresStateBackendConcurrentLockTestCase,
     PostgresStateBackendCoreRecordsTestCase,
     PostgresStateBackendErrorTestCase,
@@ -46,6 +49,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendIndexValidationTestCase,
     PostgresStateBackendLifecycleTestCase,
     PostgresStateBackendLockTestCase,
+    PostgresStateBackendNodeResultTestCase,
     PostgresStateBackendOperationEventTestCase,
     PostgresStateBackendPythonNodeIdentityTestCase,
     PostgresStateBackendSeedRefTestCase,
@@ -157,7 +161,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     [
         PostgresStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
-            expected_issue_count=23,
+            expected_issue_count=24,
         )
     ],
     ids=["reports invalid manually-created state schema"],
@@ -359,13 +363,13 @@ def test_given_postgres_state_backend_when_initializing_then_creates_all_state_t
     "test_case",
     [
         PostgresStateBackendIndexValidationTestCase(
-            description="reports missing unique state index",
+            description="reports missing node results latest index",
             sqlbuild_version="0.0.test",
-            dropped_index_name="idx_sqb_locks_identity",
+            dropped_index_name="idx_sqb_node_results_latest",
             expected_issue_kind=StateSchemaValidationIssueKind.MISSING_INDEX.value,
         )
     ],
-    ids=["reports missing unique state index"],
+    ids=["reports missing node results latest index"],
 )
 def test_given_postgres_state_backend_when_required_index_is_missing_then_validation_reports_it(
     test_case: PostgresStateBackendIndexValidationTestCase,
@@ -383,6 +387,48 @@ def test_given_postgres_state_backend_when_required_index_is_missing_then_valida
         cursor.execute(
             "DROP INDEX "
             f"{qualified_name(schema=postgres_state_schema, table=test_case.dropped_index_name)}"
+        )
+
+    validation_result: StateSchemaValidationResult = postgres_state_backend.validate_schema(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+    )
+
+    assert test_case.expected_issue_kind in tuple(
+        issue.kind.value for issue in validation_result.issues
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendColumnValidationTestCase(
+            description="reports missing node results payload column",
+            sqlbuild_version="0.0.test",
+            dropped_table_name="node_results",
+            dropped_column_name="payload_json_b64",
+            expected_issue_kind=StateSchemaValidationIssueKind.MISSING_COLUMN.value,
+        )
+    ],
+    ids=["reports missing node results payload column"],
+)
+def test_given_postgres_state_backend_when_node_results_column_missing_then_validation_reports_it(
+    test_case: PostgresStateBackendColumnValidationTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+
+    with postgres_state_connection.cursor() as cursor:
+        cursor.execute(
+            "ALTER TABLE "
+            f"{qualified_name(schema=postgres_state_schema, table=test_case.dropped_table_name)} "
+            f"DROP COLUMN {quote_identifier(test_case.dropped_column_name)}"
         )
 
     validation_result: StateSchemaValidationResult = postgres_state_backend.validate_schema(
@@ -1024,6 +1070,212 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
         )
         == second_record
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendNodeResultTestCase(
+            description="stores and reads VDE node result history by environment",
+            sqlbuild_version="0.0.test",
+            virtual_environment_name="dev",
+            isolated_virtual_environment_name="pr_1",
+            expected_latest_payload={"value": 2},
+            expected_failed_status="failed",
+            expected_history_count=2,
+            expected_target_isolated_payload={"value": 99},
+            expected_rollback_row_count=5,
+        )
+    ],
+    ids=["stores and reads VDE node result history by environment"],
+)
+def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and_status(
+    test_case: PostgresStateBackendNodeResultTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    first_record: NodeResultRecord = NodeResultRecord(
+        node_type="task",
+        node_name="produce_result",
+        target_database=None,
+        target_schema="dev",
+        target_name=None,
+        run_id="run_1",
+        status=NodeResultStatus.SUCCESS.value,
+        payload={"value": 1},
+        metadata={"source": "first"},
+        error_message=None,
+        materialized=None,
+        ts=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    postgres_state_backend.insert_node_result(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        record=first_record,
+    )
+    postgres_state_backend.insert_node_result(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        record=NodeResultRecord(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            run_id="run_2",
+            status=NodeResultStatus.SUCCESS.value,
+            payload=test_case.expected_latest_payload,
+            metadata={"source": "second"},
+            error_message=None,
+            materialized=None,
+            ts=datetime(2026, 1, 1, 12, 1, 0),
+        ),
+    )
+    postgres_state_backend.insert_node_result(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        record=NodeResultRecord(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            run_id="run_3",
+            status=NodeResultStatus.FAILED.value,
+            payload=None,
+            metadata={},
+            error_message="boom",
+            materialized=None,
+            ts=datetime(2026, 1, 1, 12, 2, 0),
+        ),
+    )
+    postgres_state_backend.insert_node_result(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.isolated_virtual_environment_name,
+        record=first_record,
+    )
+    postgres_state_backend.insert_node_result(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        record=NodeResultRecord(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="prod",
+            target_name=None,
+            run_id="run_4",
+            status=NodeResultStatus.SUCCESS.value,
+            payload=test_case.expected_target_isolated_payload,
+            metadata={"source": "target"},
+            error_message=None,
+            materialized=None,
+            ts=datetime(2026, 1, 1, 12, 3, 0),
+        ),
+    )
+    backup_id: str = postgres_state_backend.create_backup(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+    )
+    with postgres_state_connection.cursor() as cursor:
+        cursor.execute(
+            f"DELETE FROM {qualified_name(schema=postgres_state_schema, table='node_results')}"
+        )
+    postgres_state_backend.rollback(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        backup_id=backup_id,
+    )
+
+    latest_success: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        node_type="task",
+        node_name="produce_result",
+        target_database=None,
+        target_schema="dev",
+        target_name=None,
+        statuses=(NodeResultStatus.SUCCESS.value,),
+        run_id=None,
+        limit=1,
+    )
+    explicit_failed: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        node_type="task",
+        node_name="produce_result",
+        target_database=None,
+        target_schema="dev",
+        target_name=None,
+        statuses=None,
+        run_id="run_3",
+        limit=1,
+    )
+    isolated_results: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.isolated_virtual_environment_name,
+        node_type="task",
+        node_name="produce_result",
+        target_database=None,
+        target_schema="dev",
+        target_name=None,
+        statuses=(NodeResultStatus.SUCCESS.value,),
+        run_id=None,
+        limit=5,
+    )
+    history_results: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
+        postgres_state_connection,
+        schema=postgres_state_schema,
+        virtual_environment_name=test_case.virtual_environment_name,
+        node_type="task",
+        node_name="produce_result",
+        target_database=None,
+        target_schema="dev",
+        target_name=None,
+        statuses=(NodeResultStatus.SUCCESS.value,),
+        run_id=None,
+        limit=5,
+    )
+    target_isolated_results: tuple[NodeResultEnvelope, ...] = (
+        postgres_state_backend.read_node_results(
+            postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.virtual_environment_name,
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="prod",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=1,
+        )
+    )
+    rollback_rows: list[tuple[object, ...]] = fetch_all(
+        postgres_state_connection,
+        "SELECT COUNT(*) FROM "
+        f"{qualified_name(schema=postgres_state_schema, table='node_results')}",
+    )
+
+    assert latest_success[0].payload == test_case.expected_latest_payload
+    assert explicit_failed[0].status == test_case.expected_failed_status
+    assert len(isolated_results) == 1
+    assert len(history_results) == test_case.expected_history_count
+    assert target_isolated_results[0].payload == test_case.expected_target_isolated_payload
+    assert rollback_rows == [(test_case.expected_rollback_row_count,)]
 
 
 @pytest.mark.parametrize(

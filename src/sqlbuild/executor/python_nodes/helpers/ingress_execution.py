@@ -74,6 +74,8 @@ def execute_ingress_python_loader_nodes(
     relation_targets: dict[SqlResourceRef, str] | None = None,
     providers: ProviderContainer | None = None,
     identity_recorder: PythonIdentityRecorder | None = None,
+    result_store: Any | None = None,
+    persist_node_results: bool = True,
 ) -> PythonIngressLoaderExecutorResult:
     """Execute Python ingress task/asset/loader nodes in lifecycle topological order."""
 
@@ -99,11 +101,19 @@ def execute_ingress_python_loader_nodes(
     )
     python_results_by_name: dict[str, PythonNodeExecutionResult] = {}
     load_results_by_name: dict[str, LoadExecutionResult] = {}
-    result_store: Any | None = build_standard_node_result_store(
-        adapter=adapter,
-        connection=connection,
-        database=default_database,
-        schema=default_schema,
+    resolved_result_store: Any | None = (
+        result_store
+        if result_store is not None
+        else (
+            build_standard_node_result_store(
+                adapter=adapter,
+                connection=connection,
+                database=default_database,
+                schema=default_schema,
+            )
+            if persist_node_results
+            else None
+        )
     )
     resolved_relation_targets: dict[SqlResourceRef, str] = (
         {} if relation_targets is None else relation_targets
@@ -132,7 +142,7 @@ def execute_ingress_python_loader_nodes(
             end_cursor_int=end_cursor_int,
             use_color=use_color,
             run_state=run_state,
-            result_store=result_store,
+            result_store=resolved_result_store,
             python_results_by_name=python_results_by_name,
             load_results_by_name=load_results_by_name,
             on_node_start=on_node_start,
@@ -148,7 +158,7 @@ def execute_ingress_python_loader_nodes(
         source_by_loader_name=source_by_loader_name,
         python_results_by_name=python_results_by_name,
         load_results_by_name=load_results_by_name,
-        result_store=result_store,
+        result_store=resolved_result_store,
         run_id=run_id,
     )
     return PythonIngressLoaderExecutorResult(

@@ -5,12 +5,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
+from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
+    NODE_RESULTS_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
@@ -508,6 +512,87 @@ class DuckDbStateBackend(StateBackend):
             identity_metadata_json_b64=row[6],
             status=ModelVersionStatus(row[7]),
         )
+
+    def insert_node_result(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        record: NodeResultRecord,
+    ) -> None:
+        connection.execute(
+            f"INSERT INTO {self._qualified_name(schema, NODE_RESULTS_TABLE)} "
+            "(virtual_environment_name, node_type, node_name, target_database, target_schema, "
+            "target_name, run_id, status, payload_json_b64, metadata_json_b64, error_message, "
+            "materialized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                virtual_environment_name,
+                record.node_type,
+                record.node_name,
+                record.target_database,
+                record.target_schema,
+                record.target_name,
+                record.run_id,
+                record.status,
+                encode_node_result_json(
+                    record.payload, label="payload", node_name=record.node_name
+                ),
+                encode_node_result_json(
+                    record.metadata, label="metadata", node_name=record.node_name
+                ),
+                record.error_message,
+                self._materialized_storage(record.materialized),
+                record.ts,
+            ],
+        )
+
+    def read_node_results(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+        node_name: str,
+        target_database: str | None,
+        target_schema: str | None,
+        target_name: str | None,
+        statuses: tuple[str, ...] | None,
+        run_id: str | None,
+        limit: int,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        if limit < 1:
+            return ()
+        predicates: list[str] = [
+            "virtual_environment_name = ?",
+            "node_type = ?",
+            "node_name = ?",
+            self._optional_equality_sql("target_database", target_database, "?"),
+            self._optional_equality_sql("target_schema", target_schema, "?"),
+            self._optional_equality_sql("target_name", target_name, "?"),
+        ]
+        params: list[object] = [virtual_environment_name, node_type, node_name]
+        for value in (target_database, target_schema, target_name):
+            if value is not None:
+                params.append(value)
+        if statuses is not None:
+            placeholders: str = ", ".join("?" for _ in statuses)
+            predicates.append(f"status IN ({placeholders})")
+            params.extend(statuses)
+        if run_id is not None:
+            predicates.append("run_id = ?")
+            params.append(run_id)
+        params.append(limit)
+        rows: list[tuple[Any, ...]] = connection.execute(
+            "SELECT node_type, node_name, run_id, status, payload_json_b64, metadata_json_b64, "
+            "error_message, materialized, created_at "
+            f"FROM {self._qualified_name(schema, NODE_RESULTS_TABLE)} "
+            f"WHERE {' AND '.join(predicates)} "
+            "ORDER BY created_at DESC, run_id DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return tuple(self._node_result_row_to_envelope(row) for row in rows)
 
     def upsert_physical_relation(
         self, connection: Any, *, schema: str, record: PhysicalRelationRecord
@@ -1596,6 +1681,43 @@ class DuckDbStateBackend(StateBackend):
             case StateColumnType.TIMESTAMP:
                 return "TIMESTAMP"
         raise StateBackendConfigError(f"Unsupported state column type: {column_type}")
+
+    def _node_result_row_to_envelope(self, row: tuple[Any, ...]) -> NodeResultEnvelope:
+        node_name: str = str(row[1])
+        metadata: object = decode_node_result_json(
+            str(row[5]), label="metadata", node_name=node_name
+        )
+        normalized_metadata: dict[str, object] = (
+            {str(key): value for key, value in metadata.items()}
+            if isinstance(metadata, dict)
+            else {}
+        )
+        return NodeResultEnvelope(
+            node_type=str(row[0]),
+            node_name=node_name,
+            run_id=str(row[2]),
+            status=str(row[3]),
+            payload=decode_node_result_json(str(row[4]), label="payload", node_name=node_name),
+            metadata=normalized_metadata,
+            error_message=str(row[6]) if row[6] is not None else None,
+            materialized=self._parse_materialized(row[7]),
+            ts=row[8],
+        )
+
+    def _optional_equality_sql(self, column: str, value: object | None, placeholder: str) -> str:
+        if value is None:
+            return f"{column} IS NULL"
+        return f"{column} = {placeholder}"
+
+    def _materialized_storage(self, value: bool | None) -> str | None:
+        if value is None:
+            return None
+        return "true" if value else "false"
+
+    def _parse_materialized(self, value: object) -> bool | None:
+        if value is None:
+            return None
+        return str(value).lower() == "true"
 
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
