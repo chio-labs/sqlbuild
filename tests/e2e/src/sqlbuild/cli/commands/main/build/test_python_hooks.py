@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     LongPythonHookNameBuildE2ETestCase,
     PythonHookFailureBuildE2ETestCase,
     PythonHooksBuildE2ETestCase,
+    PythonHookSkipBuildE2ETestCase,
     PythonHooksLifecycleMatrixBuildE2ETestCase,
     SnapshotPythonHooksBuildE2ETestCase,
 )
@@ -67,6 +68,176 @@ PRE_HOOK_FAILURE_BUILD_TEST_CASES: tuple[PythonHookFailureBuildE2ETestCase, ...]
         expected_absent_tables=("orders",),
     ),
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookSkipBuildE2ETestCase(
+            description="pre hook skip skips model and downstream",
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "pre_hook  python  skip_model",
+                "soft skip: source disabled",
+                "SKIP=2",
+            ),
+            expected_present_tables=(),
+            expected_absent_tables=("upstream_orders", "downstream_orders"),
+        )
+    ],
+    ids=["pre hook skip skips model and downstream"],
+)
+def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstream_skip(
+    test_case: PythonHookSkipBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_pre_hook_skip_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "python_pre_hook_skip_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "python_pre_hook_skip_project.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "hooks/skips.py": dedent(
+                """
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def skip_model(ctx):
+                    return ctx.skip("source disabled")
+                """
+            ).strip()
+            + "\n",
+            "models/upstream_orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  pre_hooks [python("skip_model")]
+                );
+
+                SELECT 1 AS order_id
+                """
+            ).strip()
+            + "\n",
+            "models/downstream_orders.sql": dedent(
+                """
+                MODEL (materialized table);
+
+                SELECT order_id FROM __ref("upstream_orders")
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "upstream_orders+"),
+        project_dir=project_dir,
+    )
+    db_path: Path = project_dir / "python_pre_hook_skip_project.duckdb"
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in result.stdout
+    for table_name in test_case.expected_present_tables:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    for table_name in test_case.expected_absent_tables:
+        assert not table_exists(db_path=db_path, table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHookSkipBuildE2ETestCase(
+            description="post hook skip keeps model relation and skips downstream",
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "post_hook python  skip_downstream",
+                "soft skip: publish disabled",
+                "SKIP=2",
+            ),
+            expected_present_tables=("upstream_orders",),
+            expected_absent_tables=("downstream_orders",),
+            expected_rows=((1,),),
+        )
+    ],
+    ids=["post hook skip keeps model relation and skips downstream"],
+)
+def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips_downstream(
+    test_case: PythonHookSkipBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_post_hook_skip_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "python_post_hook_skip_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "python_post_hook_skip_project.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "hooks/skips.py": dedent(
+                """
+                from sqlbuild.hooks import hook
+
+
+                @hook
+                def skip_downstream(ctx):
+                    return ctx.skip("publish disabled")
+                """
+            ).strip()
+            + "\n",
+            "models/upstream_orders.sql": dedent(
+                """
+                MODEL (
+                  materialized table,
+                  post_hooks [python("skip_downstream")]
+                );
+
+                SELECT 1 AS order_id
+                """
+            ).strip()
+            + "\n",
+            "models/downstream_orders.sql": dedent(
+                """
+                MODEL (materialized table);
+
+                SELECT order_id FROM __ref("upstream_orders")
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "upstream_orders+"),
+        project_dir=project_dir,
+    )
+    db_path: Path = project_dir / "python_post_hook_skip_project.duckdb"
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in result.stdout
+    for table_name in test_case.expected_present_tables:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    for table_name in test_case.expected_absent_tables:
+        assert not table_exists(db_path=db_path, table_name=table_name)
+    assert tuple(query_duckdb(db_path=db_path, sql="SELECT order_id FROM upstream_orders")) == (
+        test_case.expected_rows
+    )
 
 
 @pytest.mark.parametrize(
