@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.34.0](https://github.com/chio-labs/sqlbuild/compare/v0.33.0...v0.34.0) (2026-06-13)
+
+
+### Features
+
+* expose loader node result context ([337f799](https://github.com/chio-labs/sqlbuild/commit/337f799a5362a1d4622eb34b3e58cc031423feab))
+* expose loader node result context ([72e4b25](https://github.com/chio-labs/sqlbuild/commit/72e4b25bd72c50940a0cbc0721402b2b377b67aa))
+* split SQL function resource types ([6739f49](https://github.com/chio-labs/sqlbuild/commit/6739f493beb580d3406917a3f8027c8262c3e1ea))
+* split SQL function resource types ([41c6572](https://github.com/chio-labs/sqlbuild/commit/41c657267224616e4cee4aa2bb1caa01dd9bde78))
+* support lifecycle hook skips ([19b7bee](https://github.com/chio-labs/sqlbuild/commit/19b7bee281184809d89b00309462351080d96d91))
+
+
+### Bug Fixes
+
+* atomically update VDE current refs ([362345a](https://github.com/chio-labs/sqlbuild/commit/362345a9059d36d0974fc3049c6ea6ccf2060520))
+* atomically update VDE current refs ([2648201](https://github.com/chio-labs/sqlbuild/commit/26482018b1908925eb6c5be86a07c6e243bb60f8))
+* avoid DuckDB duplicate VDE ref inserts ([a7b07a5](https://github.com/chio-labs/sqlbuild/commit/a7b07a5c321f42b22a868d7da84d5e6751136d64))
+* avoid DuckDB duplicate VDE ref inserts ([c28481a](https://github.com/chio-labs/sqlbuild/commit/c28481aff197e10b4d3b65a890063bd0982ce855))
+* validate Python hook returns ([aff8d57](https://github.com/chio-labs/sqlbuild/commit/aff8d5747af5e233f92a53e55b3c5e4dc3fb9354))
+
 ## [0.33.0](https://github.com/chio-labs/sqlbuild/compare/v0.32.0...v0.33.0) (2026-06-13)
 
 
