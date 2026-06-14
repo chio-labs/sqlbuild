@@ -64,6 +64,28 @@ class DbtRunnerCommandTestCase:
 
 
 @dataclass(frozen=True)
+class DbtEventParseTestCase:
+    description: str
+    event: dict[str, object]
+    expected_unique_id: str
+    expected_resource_type: str
+    expected_node_name: str
+    expected_status: str
+    expected_message_count: int = 0
+    expected_database: str | None = None
+    expected_schema: str | None = None
+    expected_node_checksum: str | None = None
+    expected_total: int | None = None
+
+
+@dataclass(frozen=True)
+class DbtEventStreamTestCase:
+    description: str
+    stdout_lines: tuple[str, ...]
+    expected_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtDebugPipelineTestCase:
     description: str
     args: tuple[str, ...]

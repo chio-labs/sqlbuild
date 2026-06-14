@@ -241,7 +241,7 @@ FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
         expected_absent_fragments=("analytics.model_2", "local_three          model"),
     ),
     DbtPlanHumanFormatterTestCase(
-        description="groups dbt resources and styles dbt names orange",
+        description="groups dbt resources with SQLBuild section styling and dbt names orange",
         dbt_ls_nodes=(
             DbtLsNode(
                 unique_id="test.analytics.unique_orders.abc123",
@@ -267,7 +267,11 @@ FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
             "analytics.orders",
             "analytics.unique_orders",
         ),
-        expected_human_regex_fragments=(r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",),
+        expected_human_regex_fragments=(
+            r"\x1b\[92mModels \(1\)\x1b\[0m",
+            r"\x1b\[92mTests \(1\)\x1b\[0m",
+            r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",
+        ),
         expected_absent_fragments=(),
     ),
     DbtPlanHumanFormatterTestCase(
@@ -350,6 +354,54 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
         assert fragment in human_output
     for fragment in test_case.expected_json_fragments:
         assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
+            description="places dbt anchors before SQLBuild selection",
+            command="build",
+            dbt_command_argv=("dbt", "build", "--select", "+fct_customer_revenue+"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(("sqb", "build", "--select", "customer_revenue_check"),),
+            selection_sqlbuild_model_names=("customer_revenue_check",),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=("+fct_customer_revenue+",),
+            selection_dbt_anchor_unique_ids_by_term={
+                "+fct_customer_revenue+": ("model.analytics.fct_customer_revenue",)
+            },
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=("dbt anchors", "SQLBuild"),
+            expected_json_fragments=(),
+        )
+    ],
+    ids=["places dbt anchors before SQLBuild selection"],
+)
+def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_precedes_sqlbuild(
+    test_case: DbtPlanTestCase,
+) -> None:
+    selection: DbtInteropSelectionResult = DbtInteropSelectionResult(
+        sqlbuild_model_names=test_case.selection_sqlbuild_model_names,
+        dbt_anchor_terms=test_case.selection_dbt_anchor_terms,
+        dbt_anchor_unique_ids_by_term=test_case.selection_dbt_anchor_unique_ids_by_term,
+    )
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=selection,
+    )
+
+    human_output: str = format_dbt_interop_plan(plan, use_color=False)
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    assert human_output.index("dbt anchors") < human_output.index("SQLBuild")
 
 
 @pytest.mark.parametrize(

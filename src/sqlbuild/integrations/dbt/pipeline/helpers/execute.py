@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TextIO
 
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.integrations.dbt.helpers.event_stream import execute_dbt_json_event_stream
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_command_argv
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCommandResult,
     DbtInteropPlan,
     DbtLsNode,
+    DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.shared.helpers.cli_style import CliStyle
@@ -26,6 +28,7 @@ def execute_dbt_commands(
     stdout_stream: TextIO,
     stderr_stream: TextIO,
     use_color: bool,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
 ) -> int:
     """Execute the merged dbt command, or skip when no dbt work exists."""
 
@@ -39,16 +42,18 @@ def execute_dbt_commands(
     dbt_execution_detail_text: str = " ".join(argv[:2]) if len(argv) >= 2 else argv[0]
     dbt_execution_detail: str = style.muted(dbt_execution_detail_text)
     progress_stream.write(f"{dbt_execution_label}  {dbt_execution_detail}\n\n")
-    progress_stream.write(f"Running dbt: {' '.join(argv)}\n")
     progress_stream.flush()
-    result: DbtCommandResult = runner.invoke(argv=argv, cwd=options.project_dir)
-    if result.stdout:
-        stdout_stream.write(result.stdout)
-        stdout_stream.flush()
-    if result.stderr:
-        stderr_stream.write(result.stderr)
-        stderr_stream.flush()
-    return result.returncode
+    returncode: int
+    returncode, _results = execute_dbt_json_event_stream(
+        argv=argv,
+        cwd=options.project_dir,
+        stream=stdout_stream,
+        use_color=use_color,
+        target_path=options.target_path,
+        on_node_result=on_node_result,
+    )
+    del runner, stderr_stream, _results
+    return returncode
 
 
 def build_merged_dbt_execution_argv(

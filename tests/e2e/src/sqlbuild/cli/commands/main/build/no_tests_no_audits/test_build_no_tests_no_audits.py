@@ -220,7 +220,9 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
         run_result.stdout + run_result.stderr
     )
     assert "Plan ready (0 selected)" in run_result.stdout
-    assert "TOTAL=0" in run_result.stdout
+    assert "Skipped current models (1 already up to date)" in run_result.stdout
+    assert "Execution  sqb build" not in run_result.stdout
+    assert "TOTAL=0" not in run_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -345,7 +347,9 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
         run_result.stdout + run_result.stderr
     )
     assert "Plan ready (0 selected)" in run_result.stdout
-    assert "TOTAL=0" in run_result.stdout
+    assert "Skipped current models (1 already up to date)" in run_result.stdout
+    assert "Execution  sqb build" not in run_result.stdout
+    assert "TOTAL=0" not in run_result.stdout
     assert table_exists(
         db_path=project_dir / "warehouse.duckdb",
         table_name="_sqlbuild_source_freshness",
@@ -365,7 +369,9 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
         steady_state_result.stdout + steady_state_result.stderr
     )
     assert "Plan ready (0 selected)" in steady_state_result.stdout
-    assert "TOTAL=0" in steady_state_result.stdout
+    assert "Skipped current models (1 already up to date)" in steady_state_result.stdout
+    assert "Execution  sqb build" not in steady_state_result.stdout
+    assert "TOTAL=0" not in steady_state_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -434,7 +440,9 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
         within_tolerance_result.stdout + within_tolerance_result.stderr
     )
     assert "Plan ready (0 selected)" in within_tolerance_result.stdout
-    assert "TOTAL=0" in within_tolerance_result.stdout
+    assert "Skipped current models (1 already up to date)" in within_tolerance_result.stdout
+    assert "Execution  sqb build" not in within_tolerance_result.stdout
+    assert "TOTAL=0" not in within_tolerance_result.stdout
 
     (project_dir / "sources" / "raw.yml").write_text(
         source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
@@ -597,7 +605,9 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_
         run_result.stdout + run_result.stderr
     )
     assert "Plan ready (0 selected)" in run_result.stdout
-    assert "TOTAL=0" in run_result.stdout
+    assert "Skipped current models (2 already up to date)" in run_result.stdout
+    assert "Execution  sqb build" not in run_result.stdout
+    assert "TOTAL=0" not in run_result.stdout
     assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name="stg_orders")
     assert table_exists(db_path=project_dir / "warehouse.duckdb", table_name="fact_orders")
 

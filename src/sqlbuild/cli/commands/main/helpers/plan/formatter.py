@@ -130,6 +130,12 @@ def format_plan(
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
+    _format_standard_pruned_metadata(
+        lines,
+        plan,
+        display_options=resolved_display_options,
+        section_header_style=resolved_section_header_style,
+    )
 
     _format_python_plan_entries(
         lines,
@@ -448,6 +454,39 @@ def _all_provider_usages(
             for provider_usage in python_entry.provider_usages
         )
     return tuple(usages)
+
+
+def _format_standard_pruned_metadata(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    raw_names: object = plan.metadata.get("standard_pruned_model_names")
+    if not isinstance(raw_names, tuple):
+        return
+    names: tuple[str, ...] = tuple(name for name in raw_names if isinstance(name, str))
+    if not names:
+        return
+    lines.append("")
+    lines.append(section_header_style(f"Skipped current models ({len(names)} already up to date)"))
+    if display_options.max_entries_per_section is not None:
+        return
+    visible_names: Sequence[str] = visible_entries(names, options=display_options)
+    name: str
+    name_column_width: int = resolve_name_column_width(names)
+    for name in visible_names:
+        lines.append(
+            _format_name_value_line(name, "up to date", name_column_width=name_column_width)
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(names),
+        visible_count=len(visible_names),
+        indent="  ",
+        options=display_options,
+    )
 
 
 def _format_python_plan_entries(

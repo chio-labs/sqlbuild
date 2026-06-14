@@ -30,6 +30,13 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             ),
             unexpected_toml_fragments=("DBT_DUCKDB_PATH",),
             expected_rows=((1,),),
+            expected_dbt_stdout_fragments=(
+                "dbt execution  dbt build",
+                "model",
+                "dbt_orders",
+                "OK",
+            ),
+            expected_dbt_fingerprint_rows=(("dbt", "model.analytics.dbt_orders"),),
         )
     ],
     ids=["dbt init creates minimal SQLBuild project and dbt_profile build works"],
@@ -135,7 +142,16 @@ def test_given_duckdb_dbt_project_when_running_dbt_init_then_generated_project_b
     )
 
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    for fragment in test_case.expected_dbt_stdout_fragments:
+        assert fragment in build_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
     ) == list(test_case.expected_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_type, node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'dbt' ORDER BY node_name"
+        ),
+    ) == list(test_case.expected_dbt_fingerprint_rows)
