@@ -114,6 +114,45 @@ class DbtManifestResolutionErrorTestCase:
 
 
 @dataclass(frozen=True)
+class DbtManifestSourceIndexTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    expected_unique_id: str
+    expected_source_name: str
+    expected_name: str
+    expected_relation_name: str
+
+
+@dataclass(frozen=True)
+class DbtManifestIndexErrorTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtSourceFreshnessTranslationTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    expected_source_name: str
+    expected_strategy: str | None
+    expected_column: str | None = None
+    expected_query: str | None = None
+    expected_filter: str | None = None
+    expected_warn_after: str | None = None
+    expected_error_after: str | None = None
+    expected_table: str | None = None
+    expected_source_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtSourceFreshnessTranslationErrorTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DbtCombinedGraphTestCase:
     description: str
     manifest_data: dict[str, object]

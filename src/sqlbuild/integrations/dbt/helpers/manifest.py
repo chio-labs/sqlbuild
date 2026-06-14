@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import (
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
+)
 from sqlbuild.shared.types import SqlReferenceKind
 
 
@@ -39,10 +43,16 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
     raw_nodes: object | None = manifest_data.get("nodes")
     if not isinstance(raw_nodes, dict):
         raise CompileInputError("Invalid dbt manifest: nodes must be an object", code="C211")
+    raw_sources: object | None = manifest_data.get("sources")
+    if raw_sources is None:
+        raw_sources = {}
+    if not isinstance(raw_sources, dict):
+        raise CompileInputError("Invalid dbt manifest: sources must be an object", code="C211")
 
     models_by_unique_id: dict[str, DbtManifestModel] = {}
     models_by_name_lists: dict[str, list[DbtManifestModel]] = {}
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel] = {}
+    sources_by_unique_id: dict[str, DbtManifestSource] = {}
     unique_id: object
     raw_node: object
     for unique_id, raw_node in raw_nodes.items():
@@ -56,10 +66,20 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         models_by_name_lists.setdefault(model.name, []).append(model)
         models_by_package_and_name[(model.package_name, model.name)] = model
 
+    for unique_id, raw_node in raw_sources.items():
+        if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
+            continue
+        node_data = cast(dict[object, object], raw_node)
+        if node_data.get("resource_type") != "source":
+            continue
+        source: DbtManifestSource = _parse_source(unique_id=unique_id, raw_node=node_data)
+        sources_by_unique_id[source.unique_id] = source
+
     return DbtManifestIndex(
         models_by_unique_id=models_by_unique_id,
         models_by_name={name: tuple(models) for name, models in models_by_name_lists.items()},
         models_by_package_and_name=models_by_package_and_name,
+        sources_by_unique_id=sources_by_unique_id,
     )
 
 
@@ -129,6 +149,37 @@ def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManife
     )
 
 
+def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifestSource:
+    package_name: str = _required_str(raw_node.get("package_name"), field_name="package_name")
+    source_name: str = _required_str(raw_node.get("source_name"), field_name="source_name")
+    name: str = _required_str(raw_node.get("name"), field_name="name")
+    database: str | None = _optional_str(raw_node.get("database"))
+    schema: str | None = _optional_str(raw_node.get("schema"))
+    identifier: str | None = _optional_str(raw_node.get("identifier"))
+    relation_name: str | None = _optional_str(raw_node.get("relation_name"))
+    if relation_name is None:
+        relation_name = _render_relation_name(
+            database=database,
+            schema=schema,
+            name=identifier or name,
+        )
+    return DbtManifestSource(
+        unique_id=unique_id,
+        package_name=package_name,
+        source_name=source_name,
+        name=name,
+        database=database,
+        schema=schema,
+        identifier=identifier,
+        relation_name=relation_name,
+        loaded_at_field=_optional_str(raw_node.get("loaded_at_field")),
+        loaded_at_query=_optional_str(raw_node.get("loaded_at_query")),
+        freshness=_optional_dict(raw_node.get("freshness")),
+        freshness_filter=_optional_str(raw_node.get("filter")),
+        payload={str(key): value for key, value in raw_node.items()},
+    )
+
+
 def _render_relation_name(*, database: str | None, schema: str | None, name: str) -> str:
     parts: tuple[str, ...] = tuple(part for part in (database, schema, name) if part)
     return ".".join(parts)
@@ -143,6 +194,12 @@ def _required_str(value: object, *, field_name: str) -> str:
 def _optional_str(value: object) -> str | None:
     if isinstance(value, str) and value:
         return value
+    return None
+
+
+def _optional_dict(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return {str(key): item for key, item in value.items()}
     return None
 
 

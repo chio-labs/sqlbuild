@@ -197,10 +197,15 @@ def extract_dbt_ls_excludes(argv: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def build_manifest_data(*, nodes: tuple[dict[str, object], ...]) -> dict[str, object]:
+def build_manifest_data(
+    *, nodes: tuple[dict[str, object], ...], sources: tuple[dict[str, object], ...] = ()
+) -> dict[str, object]:
     """Build a minimal dbt manifest payload for model lookup tests."""
 
-    return {"nodes": {str(node["unique_id"]): node for node in nodes}}
+    return {
+        "nodes": {str(node["unique_id"]): node for node in nodes},
+        "sources": {str(source["unique_id"]): source for source in sources},
+    }
 
 
 def build_manifest_model_node(
@@ -232,6 +237,49 @@ def build_manifest_model_node(
         node["alias"] = alias
     if depends_on_nodes:
         node["depends_on"] = {"nodes": list(depends_on_nodes)}
+    return node
+
+
+def build_manifest_source_node(
+    *,
+    unique_id: str,
+    package_name: str = "analytics",
+    source_name: str = "raw",
+    name: str = "orders",
+    relation_name: str | None = None,
+    database: str | None = None,
+    schema: str | None = None,
+    identifier: str | None = None,
+    loaded_at_field: str | None = None,
+    loaded_at_query: str | None = None,
+    freshness: dict[str, object] | None = None,
+    freshness_filter: str | None = None,
+) -> dict[str, object]:
+    """Build a minimal dbt manifest source node."""
+
+    node: dict[str, object] = {
+        "unique_id": unique_id,
+        "resource_type": "source",
+        "package_name": package_name,
+        "source_name": source_name,
+        "name": name,
+    }
+    if relation_name is not None:
+        node["relation_name"] = relation_name
+    if database is not None:
+        node["database"] = database
+    if schema is not None:
+        node["schema"] = schema
+    if identifier is not None:
+        node["identifier"] = identifier
+    if loaded_at_field is not None:
+        node["loaded_at_field"] = loaded_at_field
+    if loaded_at_query is not None:
+        node["loaded_at_query"] = loaded_at_query
+    if freshness is not None:
+        node["freshness"] = freshness
+    if freshness_filter is not None:
+        node["filter"] = freshness_filter
     return node
 
 
