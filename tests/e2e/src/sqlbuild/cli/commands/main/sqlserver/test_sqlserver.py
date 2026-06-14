@@ -198,7 +198,10 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
             description="direct changes only build prunes unchanged SQL Server model",
             expected_table_name="orders",
             expected_row_count=1,
-            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+            expected_stdout_fragments=(
+                "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
         )
     ],
     ids=["direct changes only build prunes unchanged SQL Server model"],

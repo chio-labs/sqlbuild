@@ -175,6 +175,33 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
+class DbtNodeMessage:
+    """One dbt log message attached to a dbt node."""
+
+    level: str
+    message: str
+
+
+@dataclass(frozen=True)
+class DbtNodeExecutionResult:
+    """One dbt node execution result parsed from JSON logs."""
+
+    unique_id: str
+    resource_type: str
+    node_name: str
+    status: str
+    index: int | None
+    total: int | None
+    execution_time: float | None
+    materialized: str | None = None
+    relation_name: str | None = None
+    database: str | None = None
+    schema: str | None = None
+    node_checksum: str | None = None
+    messages: tuple[DbtNodeMessage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DbtLsNode:
     """One node returned by `dbt ls --output json`."""
 

@@ -330,7 +330,10 @@ def test_given_virtual_incremental_change_when_building_on_snowflake_then_seeds_
             description="direct changes only build prunes unchanged snowflake model",
             expected_table_name="orders",
             expected_row_count=1,
-            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+            expected_stdout_fragments=(
+                "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
         )
     ],
     ids=["direct changes only build prunes unchanged snowflake model"],

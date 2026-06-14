@@ -12,15 +12,18 @@ from typing import Any, TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.connection_progress import build_connection_progress_reporter
 from sqlbuild.cli.commands.main.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
+from sqlbuild.cli.commands.main.plan_format import format_plan
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
+from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import (
@@ -40,6 +43,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropRoutedArgs,
+    DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_deferred_dbt_relations,
@@ -175,15 +179,74 @@ def execute_dbt_interop_from_project(
         output_stream.write(rendered_plan + "\n\n")
         output_stream.flush()
 
-    dbt_exit_code: int = execute_dbt_commands(
-        runner=runner,
-        options=dbt_options,
-        merged_argv=merged_dbt_argv,
-        progress_stream=output_stream,
-        stdout_stream=dbt_output_stream,
-        stderr_stream=output_stream,
-        use_color=use_color,
+    dbt_fingerprint_warnings: list[str] = []
+    buffered_dbt_results: list[DbtNodeExecutionResult] = []
+    dbt_state_connection: object | None = None
+    connection_config: dict[str, object] = resolve_connection_config(
+        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
+        project_dir=project_dir,
+        adapter_name=adapter_name,
+        discovered_inputs=discovered_inputs,
     )
+    if project.settings.query_change_tracking and adapter_name != "duckdb":
+        dbt_state_connection = adapter.connect(connection_config)
+
+    def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
+        if not project.settings.query_change_tracking:
+            return
+        if adapter_name == "duckdb":
+            buffered_dbt_results.append(result)
+            return
+        if dbt_state_connection is None:
+            return
+        try_write_dbt_node_fingerprint(
+            result=result,
+            adapter=adapter,
+            connection=dbt_state_connection,
+            run_id=project.run_id,
+            fingerprint_database=project.effective_target_database,
+            fingerprint_schema=project.effective_target_schema,
+            target_name=project.effective_target_name,
+            warnings=dbt_fingerprint_warnings,
+        )
+
+    try:
+        dbt_exit_code: int = execute_dbt_commands(
+            runner=runner,
+            options=dbt_options,
+            merged_argv=merged_dbt_argv,
+            progress_stream=output_stream,
+            stdout_stream=dbt_output_stream,
+            stderr_stream=output_stream,
+            use_color=use_color,
+            on_node_result=record_dbt_node_result,
+        )
+    finally:
+        if dbt_state_connection is not None:
+            adapter.close(dbt_state_connection)
+
+    if buffered_dbt_results and project.settings.query_change_tracking:
+        duckdb_connection: object = adapter.connect(connection_config)
+        try:
+            dbt_result: DbtNodeExecutionResult
+            for dbt_result in buffered_dbt_results:
+                try_write_dbt_node_fingerprint(
+                    result=dbt_result,
+                    adapter=adapter,
+                    connection=duckdb_connection,
+                    run_id=project.run_id,
+                    fingerprint_database=project.effective_target_database,
+                    fingerprint_schema=project.effective_target_schema,
+                    target_name=project.effective_target_name,
+                    warnings=dbt_fingerprint_warnings,
+                )
+        finally:
+            adapter.close(duckdb_connection)
+    warning: str
+    for warning in dbt_fingerprint_warnings:
+        output_stream.write(f"Warning: {warning}\n")
+    if dbt_fingerprint_warnings:
+        output_stream.flush()
     if dbt_exit_code != 0:
         return dbt_exit_code
     if plan.sqlbuild_skip_reason is not None:
@@ -192,12 +255,6 @@ def execute_dbt_interop_from_project(
     output_stream.write("\n")
     output_stream.flush()
 
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
-        project_dir=project_dir,
-        adapter_name=adapter_name,
-        discovered_inputs=discovered_inputs,
-    )
     connection_progress: Any = build_connection_progress_reporter(
         adapter_name=adapter_name,
         stream=output_stream,
@@ -220,6 +277,17 @@ def execute_dbt_interop_from_project(
         deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
     )
     if plan_output is None:
+        return 0
+    if not plan_has_executable_work(plan_output):
+        output_stream.write(
+            format_plan(
+                plan_output,
+                use_color=use_color,
+                display_options=DisplayOptions(max_entries_per_section=None if verbose else 50),
+            )
+            + "\n"
+        )
+        output_stream.flush()
         return 0
 
     actions: tuple[DbtInteropSqlbuildTestAction, ...] = ()

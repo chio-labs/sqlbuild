@@ -993,7 +993,9 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
         steady_state_result.stdout + steady_state_result.stderr
     )
     assert "Plan ready (0 selected)" in steady_state_result.stdout
-    assert "TOTAL=0" in steady_state_result.stdout
+    assert "Skipped current models (3 already up to date)" in steady_state_result.stdout
+    assert "Execution  sqb build" not in steady_state_result.stdout
+    assert "TOTAL=0" not in steady_state_result.stdout
 
 
 @pytest.mark.parametrize(

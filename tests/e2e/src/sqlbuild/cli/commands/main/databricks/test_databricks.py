@@ -1356,7 +1356,10 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
             expected_fact_order_rows=(),
             expected_udf_rows=(),
             expected_daily_revenue_rows=(),
-            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+            expected_stdout_fragments=(
+                "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
         )
     ],
     ids=["direct changes only build prunes unchanged databricks model"],

@@ -407,11 +407,15 @@ STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES: list[StandardPythonBuildHardeningE2E
             expected_exit_code=0,
             expected_output_fragments=(
                 "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
+            unexpected_output_fragments=(
                 "Execution  sqb build",
                 "Completed successfully.",
                 "TOTAL=0",
+                "1/1",
+                "orders up to date",
             ),
-            unexpected_output_fragments=("1/1", "orders"),
         )
     ],
     ids=["standard changes-only build prunes unchanged selected model"],
@@ -594,10 +598,15 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
             expected_exit_code=0,
             expected_output_fragments=(
                 "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
+            unexpected_output_fragments=(
+                "Execution  sqb build",
                 "Completed successfully.",
                 "TOTAL=0",
+                "profile_orders up to date",
+                "Python read-side",
             ),
-            unexpected_output_fragments=("profile_orders", "Python read-side"),
         )
     ],
     ids=["standard changes-only build prunes read-side Python for unchanged SQL"],
@@ -727,7 +736,9 @@ def test_given_source_freshness_when_building_normally_then_writes_state_after_s
         build_result.stdout + build_result.stderr
     )
     assert "Plan ready (0 selected)" in build_result.stdout
-    assert "TOTAL=0" in build_result.stdout
+    assert "Skipped current models (1 already up to date)" in build_result.stdout
+    assert "Execution  sqb build" not in build_result.stdout
+    assert "TOTAL=0" not in build_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -826,7 +837,11 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
         DirectChangesOnlyBuildE2ETestCase(
             description="direct timestamp source freshness respects lag tolerance",
             expected_exit_code=0,
-            expected_output_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+            expected_output_fragments=(
+                "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
+            unexpected_output_fragments=("Execution  sqb build", "TOTAL=0"),
         )
     ],
     ids=["direct timestamp source freshness respects lag tolerance"],

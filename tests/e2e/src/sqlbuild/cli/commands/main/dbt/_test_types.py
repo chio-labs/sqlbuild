@@ -100,3 +100,5 @@ class DbtInitDuckDbE2ETestCase:
     expected_toml_fragments: tuple[str, ...]
     unexpected_toml_fragments: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+    expected_dbt_stdout_fragments: tuple[str, ...]
+    expected_dbt_fingerprint_rows: tuple[tuple[object, ...], ...]

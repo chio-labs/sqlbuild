@@ -175,7 +175,13 @@ def build_execution_plan(
             relations=relations,
         )
     )
+    pruned_standard_model_names: tuple[str, ...] = ()
     if standard_scope_pruning == StandardScopePruning.PRUNE_UNCHANGED and not full_refresh:
+        original_selected_model_names: frozenset[str] = frozenset(
+            key.name
+            for key in scope.selected_keys
+            if key.resource_type == CompiledResourceType.MODEL
+        )
         standard_identity_stale_model_names: frozenset[str] = (
             build_standard_identity_stale_model_names(
                 scope=scope,
@@ -214,6 +220,16 @@ def build_execution_plan(
             expected_version_hashes=version_identities.model_version_hashes,
             expected_seed_version_hashes=version_identities.seed_version_hashes,
             built_seed_fingerprints=snapshot.fingerprints.seeds,
+        )
+        pruned_standard_model_names = tuple(
+            sorted(
+                original_selected_model_names
+                - frozenset(
+                    key.name
+                    for key in scope.selected_keys
+                    if key.resource_type == CompiledResourceType.MODEL
+                )
+            )
         )
         resolved_actions = mark_version_identity_stale_actions(
             scope=scope,
@@ -255,6 +271,14 @@ def build_execution_plan(
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,
     )
+    if pruned_standard_model_names:
+        plan_output = replace(
+            plan_output,
+            metadata={
+                **plan_output.metadata,
+                "standard_pruned_model_names": pruned_standard_model_names,
+            },
+        )
     if source_freshness is not None:
         standard_remaining_stale_model_names: tuple[str, ...] = tuple(
             sorted(

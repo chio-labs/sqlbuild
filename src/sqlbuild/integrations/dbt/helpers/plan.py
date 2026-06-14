@@ -76,11 +76,11 @@ def format_dbt_interop_plan(
     lines.append(style.success_strong(f"Plan ready ({selected_count} selected)"))
     lines.append("")
     _format_dbt_section(lines, plan, display_options=resolved_display_options)
+    _format_anchor_section(lines, plan, display_options=resolved_display_options)
     lines.append("")
     _format_sqlbuild_section(
         lines, plan, use_color=use_color, display_options=resolved_display_options
     )
-    _format_anchor_section(lines, plan, display_options=resolved_display_options)
     _format_path_translation_section(lines, plan)
     _format_warning_section(lines, plan)
     result: str = "\n".join(lines)
@@ -136,22 +136,25 @@ def _format_dbt_section(
     if plan.dbt_skip_reason is not None:
         lines.append("  skipped: no dbt work selected")
         return
-    lines.append(f"  command: {' '.join(plan.dbt_command_argv)}")
+    lines.append(f"  {style.label('command')}: {style.command(' '.join(plan.dbt_command_argv))}")
     argv: tuple[str, ...]
     for argv in plan.supplemental_dbt_command_argvs:
-        lines.append(f"  command: {' '.join(argv)}")
+        lines.append(f"  {style.label('command')}: {style.command(' '.join(argv))}")
     _format_dbt_selected_nodes(lines, plan, display_options=display_options)
     if plan.selection.dbt_required_unique_ids:
         lines.append("")
-        lines.append(f"  required: {len(plan.selection.dbt_required_unique_ids)}")
+        lines.append(style.dbt_label(f"  required: {len(plan.selection.dbt_required_unique_ids)}"))
         if plan.dbt_required_selector_terms:
-            lines.append(f"    selectors: {' '.join(plan.dbt_required_selector_terms)}")
+            lines.append(
+                f"    {style.label('selectors')}: "
+                f"{style.command(' '.join(plan.dbt_required_selector_terms))}"
+            )
         unique_id: str
         visible_required: Sequence[str] = visible_entries(
             plan.selection.dbt_required_unique_ids, options=display_options
         )
         for unique_id in visible_required:
-            lines.append(f"    {unique_id}")
+            lines.append(f"    {style.dbt_object_name(unique_id)}")
         append_overflow_line(
             lines,
             total_count=len(plan.selection.dbt_required_unique_ids),
@@ -175,7 +178,7 @@ def _format_dbt_selected_nodes(
     style: CliStyle = CliStyle(use_color=True)
     for section_label, nodes in sorted(nodes_by_type.items()):
         lines.append("")
-        lines.append(f"  {style.dbt_label(f'{section_label} ({len(nodes)})')}")
+        lines.append(f"  {style.plan_section(f'{section_label} ({len(nodes)})')}")
         labels: tuple[str, ...] = tuple(_dbt_node_display_name(node) for node in nodes)
         name_width: int = resolve_name_column_width(labels)
         visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
@@ -214,7 +217,7 @@ def _format_sqlbuild_section(
         return
     argv: tuple[str, ...]
     for argv in plan.sqlbuild_command_argvs:
-        lines.append(f"  command: {' '.join(argv)}")
+        lines.append(f"  {style.label('command')}: {style.command(' '.join(argv))}")
     if plan.sqlbuild_plan_output is None:
         _format_sqlbuild_model_fallback(lines, plan, display_options=display_options)
         return
@@ -223,7 +226,7 @@ def _format_sqlbuild_section(
         use_color=use_color,
         include_header=False,
         display_options=display_options,
-        section_header_style=style.accent,
+        section_header_style=style.plan_section,
     )
     if not sqlbuild_plan:
         return
@@ -271,15 +274,15 @@ def _format_anchor_section(
         return
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
-    lines.append(style.success_strong(f"dbt anchors ({len(plan.selection.dbt_anchor_terms)})"))
+    lines.append(style.plan_section(f"dbt anchors ({len(plan.selection.dbt_anchor_terms)})"))
     term: str
     for term in plan.selection.dbt_anchor_terms:
         unique_ids: tuple[str, ...] = plan.selection.dbt_anchor_unique_ids_by_term.get(term, ())
-        lines.append(f"  {term}: {len(unique_ids)}")
+        lines.append(f"  {style.command(term)}: {style.value(str(len(unique_ids)))}")
         unique_id: str
         visible_unique_ids: Sequence[str] = visible_entries(unique_ids, options=display_options)
         for unique_id in visible_unique_ids:
-            lines.append(f"    {unique_id}")
+            lines.append(f"    {style.dbt_object_name(unique_id)}")
         append_overflow_line(
             lines,
             total_count=len(unique_ids),

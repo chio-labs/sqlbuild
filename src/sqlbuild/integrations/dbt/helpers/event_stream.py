@@ -1,0 +1,234 @@
+"""dbt JSON event parsing and streaming helpers."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from collections.abc import Callable
+from pathlib import Path
+from typing import TextIO, cast
+
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
+from sqlbuild.shared.helpers.cli_style import CliStyle
+
+_RESULT_EVENT_NAMES: frozenset[str] = frozenset(
+    {
+        "LogModelResult",
+        "LogSeedResult",
+        "LogSnapshotResult",
+        "LogTestResult",
+        "LogBatchResult",
+        "LogFunctionResult",
+        "NodeFinished",
+    }
+)
+
+_NODE_MESSAGE_EVENT_NAMES: frozenset[str] = frozenset(
+    {
+        "RunResultError",
+        "RunResultFailure",
+        "RunResultWarning",
+        "GenericExceptionOnRun",
+    }
+)
+
+
+def execute_dbt_json_event_stream(
+    *,
+    argv: tuple[str, ...],
+    cwd: Path | None,
+    stream: TextIO,
+    use_color: bool,
+    target_path: Path | None,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
+    """Run dbt and render SQLBuild-styled rows from JSON events."""
+
+    style: CliStyle = CliStyle(use_color=use_color)
+    pending_messages: dict[str, list[DbtNodeMessage]] = {}
+    results: list[DbtNodeExecutionResult] = []
+    try:
+        process: subprocess.Popen[str] = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            env=_build_dbt_json_env(target_path=target_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as error:
+        raise DbtInteropRuntimeError(
+            "failed to execute dbt",
+            help=str(error),
+        ) from error
+
+    if process.stdout is not None:
+        with process.stdout:
+            for line in process.stdout:
+                event: dict[str, object] | None = parse_dbt_json_event(line=line)
+                if event is None:
+                    continue
+                message: DbtNodeMessage | None = parse_dbt_node_message(event=event)
+                if message is not None:
+                    unique_id: str | None = _event_unique_id(event)
+                    if unique_id is not None:
+                        pending_messages.setdefault(unique_id, []).append(message)
+                    continue
+                result: DbtNodeExecutionResult | None = parse_dbt_node_result(
+                    event=event,
+                    messages_by_unique_id=pending_messages,
+                )
+                if result is None:
+                    continue
+                results.append(result)
+                if on_node_result is not None:
+                    on_node_result(result)
+                _render_dbt_node_result(stream=stream, style=style, result=result)
+
+    returncode: int = process.wait()
+    return returncode, tuple(results)
+
+
+def parse_dbt_json_event(*, line: str) -> dict[str, object] | None:
+    """Parse one dbt JSON log line, ignoring non-JSON output."""
+
+    stripped: str = line.strip()
+    if not stripped or not stripped.startswith("{"):
+        return None
+    try:
+        payload: object = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def parse_dbt_node_message(*, event: dict[str, object]) -> DbtNodeMessage | None:
+    """Parse a node-scoped warning/error message from a dbt event."""
+
+    info: dict[str, object] = _dict_value(event.get("info"))
+    data: dict[str, object] = _dict_value(event.get("data"))
+    event_name: str | None = _str_value(info.get("name"))
+    level: str | None = _str_value(info.get("level"))
+    if event_name not in _NODE_MESSAGE_EVENT_NAMES and level not in {"warn", "error"}:
+        return None
+    if _event_unique_id(event) is None:
+        return None
+    message: str | None = _str_value(data.get("msg")) or _str_value(info.get("msg"))
+    if not message:
+        return None
+    return DbtNodeMessage(level=level or "info", message=message.strip())
+
+
+def parse_dbt_node_result(
+    *,
+    event: dict[str, object],
+    messages_by_unique_id: dict[str, list[DbtNodeMessage]] | None = None,
+) -> DbtNodeExecutionResult | None:
+    """Parse a dbt node final result event."""
+
+    info: dict[str, object] = _dict_value(event.get("info"))
+    data: dict[str, object] = _dict_value(event.get("data"))
+    event_name: str | None = _str_value(info.get("name"))
+    if event_name not in _RESULT_EVENT_NAMES:
+        return None
+    node_info: dict[str, object] = _dict_value(data.get("node_info"))
+    unique_id: str | None = _str_value(node_info.get("unique_id"))
+    if unique_id is None or unique_id.startswith("unit_test"):
+        return None
+    status: str | None = _str_value(data.get("status")) or _str_value(node_info.get("node_status"))
+    if status is None and event_name == "NodeFinished":
+        run_result: dict[str, object] = _dict_value(data.get("run_result"))
+        status = _str_value(run_result.get("status"))
+    relation: dict[str, object] = _dict_value(node_info.get("node_relation"))
+    messages: tuple[DbtNodeMessage, ...] = tuple((messages_by_unique_id or {}).pop(unique_id, []))
+    return DbtNodeExecutionResult(
+        unique_id=unique_id,
+        resource_type=_str_value(node_info.get("resource_type")) or "node",
+        node_name=_str_value(node_info.get("node_name")) or unique_id,
+        status=status or "unknown",
+        index=_int_value(data.get("index")),
+        total=_int_value(data.get("total")) or _int_value(data.get("num_models")),
+        execution_time=_float_value(data.get("execution_time")),
+        materialized=_str_value(node_info.get("materialized")),
+        relation_name=_str_value(relation.get("relation_name")),
+        database=_str_value(relation.get("database")),
+        schema=_str_value(relation.get("schema")),
+        node_checksum=_str_value(node_info.get("node_checksum")),
+        messages=messages,
+    )
+
+
+def _build_dbt_json_env(*, target_path: Path | None) -> dict[str, str]:
+    env: dict[str, str] = {
+        **os.environ.copy(),
+        "DBT_LOG_FORMAT": "json",
+        "PYTHONUNBUFFERED": "1",
+    }
+    if target_path is not None:
+        env["DBT_TARGET_PATH"] = str(target_path)
+        env["DBT_LOG_PATH"] = str(target_path)
+    return env
+
+
+def _event_unique_id(event: dict[str, object]) -> str | None:
+    data: dict[str, object] = _dict_value(event.get("data"))
+    node_info: dict[str, object] = _dict_value(data.get("node_info"))
+    return _str_value(node_info.get("unique_id"))
+
+
+def _render_dbt_node_result(
+    *, stream: TextIO, style: CliStyle, result: DbtNodeExecutionResult
+) -> None:
+    ctr: str = (
+        f"{result.index}/{result.total}"
+        if result.index is not None and result.total is not None
+        else "-"
+    )
+    resource_type: str = result.resource_type[:9]
+    name: str = result.node_name[:30]
+    status: str = _display_status(result.status)
+    duration: str = f"{result.execution_time:.2f}s" if result.execution_time is not None else ""
+    stream.write(
+        f"  {ctr:<5} {resource_type:<9} {style.dbt_object_name(name):<30} "
+        f"{style.status(status):<6} {duration}\n"
+    )
+    for message in result.messages:
+        message_status: str = "warn" if message.level == "warn" else "error"
+        stream.write(f"         {style.status(message_status):<9} {message.message}\n")
+    stream.flush()
+
+
+def _display_status(status: str) -> str:
+    normalized: str = status.lower()
+    if normalized in {"ok", "success"}:
+        return "OK"
+    if normalized in {"pass", "passed"}:
+        return "PASS"
+    if normalized in {"warn", "warning"}:
+        return "WARN"
+    if normalized in {"skip", "skipped"}:
+        return "SKIP"
+    if normalized in {"error", "fail", "failed"}:
+        return "FAIL"
+    return status.upper()
+
+
+def _dict_value(value: object | None) -> dict[str, object]:
+    return cast(dict[str, object], value) if isinstance(value, dict) else {}
+
+
+def _str_value(value: object | None) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _int_value(value: object | None) -> int | None:
+    return value if isinstance(value, int) else None
+
+
+def _float_value(value: object | None) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    return None

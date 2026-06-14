@@ -45,6 +45,30 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
 
 TEST_CASES: list[FormatPlanTestCase] = [
     FormatPlanTestCase(
+        description="changes-only pruned models are visible as current skips",
+        plan_output=build_plan_output(
+            metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
+        ),
+        expected_fragments=(
+            "Plan ready (0 selected)",
+            "Skipped current models (1 already up to date)",
+        ),
+        unexpected_fragments=("customer_revenue_check", "changes-only", "Execution"),
+    ),
+    FormatPlanTestCase(
+        description="verbose changes-only pruned models show current model names",
+        plan_output=build_plan_output(
+            metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        expected_fragments=(
+            "Skipped current models (1 already up to date)",
+            "customer_revenue_check",
+            "up to date",
+        ),
+        unexpected_fragments=("changes-only",),
+    ),
+    FormatPlanTestCase(
         description="routine models section shows names with strategy and cursor type",
         plan_output=build_plan_output(
             model_entries=(
