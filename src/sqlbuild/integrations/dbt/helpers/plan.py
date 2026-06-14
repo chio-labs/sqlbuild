@@ -105,6 +105,9 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
             "selected_unique_ids": list(plan.dbt_selected_unique_ids),
             "required_unique_ids": list(plan.selection.dbt_required_unique_ids),
             "required_selector_terms": list(plan.dbt_required_selector_terms),
+            "non_model_run_unique_ids": list(plan.dbt_non_model_run_unique_ids),
+            "pruned_seed_unique_ids": list(plan.dbt_pruned_seed_unique_ids),
+            "pruned_test_unique_ids": list(plan.dbt_pruned_test_unique_ids),
             "skipped": plan.dbt_skip_reason is not None,
             "skip_reason": plan.dbt_skip_reason.value if plan.dbt_skip_reason is not None else None,
             "model_plan": _format_dbt_model_plan_json(plan),
@@ -145,6 +148,7 @@ def _format_dbt_section(
         lines.append(style.muted(f"  skipped: {_dbt_skip_reason_label(plan.dbt_skip_reason)}"))
         if plan.dbt_skip_reason == DbtInteropSkipReason.DBT_MODELS_CURRENT:
             _format_dbt_model_plan(lines, plan, display_options=display_options)
+            _format_dbt_non_model_sections(lines, plan, display_options=display_options)
         return
     display_argv: str = _format_display_argv(
         plan.dbt_command_argv,
@@ -157,7 +161,8 @@ def _format_dbt_section(
             f"  {style.label('command')}: "
             f"{style.command(_format_display_argv(argv, display_options=display_options))}"
         )
-    _format_dbt_selected_nodes(lines, plan, display_options=display_options)
+    if _is_verbose(display_options) or plan.dbt_model_plan is None:
+        _format_dbt_selected_nodes(lines, plan, display_options=display_options)
     if _is_verbose(display_options) and plan.selection.dbt_required_unique_ids:
         lines.append("")
         lines.append(style.dbt_label(f"  required: {len(plan.selection.dbt_required_unique_ids)}"))
@@ -180,6 +185,7 @@ def _format_dbt_section(
             options=display_options,
         )
     _format_dbt_model_plan(lines, plan, display_options=display_options)
+    _format_dbt_non_model_sections(lines, plan, display_options=display_options)
 
 
 def _format_dbt_model_plan(
@@ -250,6 +256,119 @@ def _dbt_skip_reason_label(reason: DbtInteropSkipReason) -> str:
     if reason == DbtInteropSkipReason.DBT_MODELS_CURRENT:
         return "all planned dbt models are current"
     return "no dbt work selected"
+
+
+def _format_dbt_non_model_sections(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
+    run_ids: frozenset[str] = frozenset(plan.dbt_non_model_run_unique_ids)
+    pruned_seed_ids: frozenset[str] = frozenset(plan.dbt_pruned_seed_unique_ids)
+    pruned_test_ids: frozenset[str] = frozenset(plan.dbt_pruned_test_unique_ids)
+    seed_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
+        nodes=plan.dbt_selected_nodes,
+        unique_ids=run_ids,
+        resource_type="seed",
+    )
+    test_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
+        nodes=plan.dbt_selected_nodes,
+        unique_ids=run_ids,
+        resource_type="test",
+    )
+    if seed_nodes or test_nodes:
+        style: CliStyle = CliStyle(use_color=True)
+        lines.append("")
+        lines.append(f"  {style.plan_section('Non-model dbt work')}")
+        if seed_nodes:
+            _format_dbt_non_model_resource_group(
+                lines,
+                label=f"Seeds ({len(seed_nodes)}, always run)",
+                nodes=seed_nodes,
+                display_options=display_options,
+            )
+        if test_nodes:
+            _format_dbt_non_model_resource_group(
+                lines,
+                label=f"Tests ({len(test_nodes)})",
+                nodes=test_nodes,
+                display_options=display_options,
+            )
+    if pruned_seed_ids:
+        pruned_seed_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
+            nodes=plan.dbt_selected_nodes,
+            unique_ids=pruned_seed_ids,
+            resource_type="seed",
+        )
+        _format_dbt_pruned_non_model_group(
+            lines,
+            label=f"Seeds pruned ({len(pruned_seed_nodes)})",
+            note="pruned because all planned dbt models are current",
+            nodes=pruned_seed_nodes,
+            display_options=display_options,
+        )
+    if pruned_test_ids:
+        pruned_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
+            nodes=plan.dbt_selected_nodes,
+            unique_ids=pruned_test_ids,
+            resource_type="test",
+        )
+        _format_dbt_pruned_non_model_group(
+            lines,
+            label=f"Tests pruned ({len(pruned_nodes)})",
+            note="use sqb dbt test to run dbt validation",
+            nodes=pruned_nodes,
+            display_options=display_options,
+        )
+
+
+def _format_dbt_non_model_resource_group(
+    lines: list[str], *, label: str, nodes: tuple[DbtLsNode, ...], display_options: DisplayOptions
+) -> None:
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(f"    {style.plan_section(label)}")
+    visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
+    node: DbtLsNode
+    for node in visible_nodes:
+        lines.append(f"      {style.dbt_object_name(_dbt_node_display_name(node))}")
+    _append_dbt_overflow_line(
+        lines,
+        total_count=len(nodes),
+        visible_count=len(visible_nodes),
+        indent="      ",
+        options=display_options,
+    )
+
+
+def _format_dbt_pruned_non_model_group(
+    lines: list[str], *, label: str, note: str, nodes: tuple[DbtLsNode, ...], display_options: DisplayOptions
+) -> None:
+    if not nodes:
+        return
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append("")
+    lines.append(f"  {style.plan_section(label)}")
+    lines.append(style.muted(f"    {note}"))
+    visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
+    node: DbtLsNode
+    for node in visible_nodes:
+        lines.append(f"    {style.muted(_dbt_node_display_name(node))}")
+    _append_dbt_overflow_line(
+        lines,
+        total_count=len(nodes),
+        visible_count=len(visible_nodes),
+        indent="    ",
+        options=display_options,
+    )
+
+
+def _nodes_by_unique_ids(
+    *, nodes: tuple[DbtLsNode, ...], unique_ids: frozenset[str], resource_type: str
+) -> tuple[DbtLsNode, ...]:
+    return tuple(
+        sorted(
+            (node for node in nodes if node.unique_id in unique_ids and node.resource_type == resource_type),
+            key=_dbt_node_sort_key,
+        )
+    )
 
 
 def _format_dbt_model_plan_json(plan: DbtInteropPlan) -> dict[str, object] | None:

@@ -12,6 +12,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
+    DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
@@ -204,6 +205,56 @@ class DbtNodeExecutionResult:
 
 
 @dataclass(frozen=True)
+class DbtCommandExecutionResult:
+    """dbt command execution output from streamed JSON events."""
+
+    returncode: int
+    node_results: tuple[DbtNodeExecutionResult, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtModelExecutionOutcomeEntry:
+    """Actual or planned outcome for one dbt model upstream."""
+
+    unique_id: str
+    state: DbtModelOutcomeState
+    planned_action: DbtModelPlanAction | None = None
+    status: str | None = None
+    relation_name: str | None = None
+    node_checksum: str | None = None
+    messages: tuple[DbtNodeMessage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtExecutionOutcome:
+    """Aggregated dbt model outcomes used as SQLBuild upstream overlay."""
+
+    entries: tuple[DbtModelExecutionOutcomeEntry, ...] = field(default_factory=tuple)
+    stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def changed_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.state == DbtModelOutcomeState.CHANGED
+        )
+
+    @property
+    def current_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.state == DbtModelOutcomeState.CURRENT
+        )
+
+    @property
+    def blocking_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.entries
+            if entry.state == DbtModelOutcomeState.BLOCKING
+        )
+
+
+@dataclass(frozen=True)
 class DbtLsNode:
     """One node returned by `dbt ls --output json`."""
 
@@ -340,6 +391,9 @@ class DbtInteropPlan:
     selection: DbtInteropSelectionResult
     sqlbuild_plan_output: PlanOutput | None = None
     dbt_model_plan: DbtModelPlanningResult | None = None
+    dbt_non_model_run_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+    dbt_pruned_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+    dbt_pruned_test_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
     supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None
