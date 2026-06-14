@@ -102,3 +102,34 @@ class DbtInitDuckDbE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     expected_dbt_stdout_fragments: tuple[str, ...]
     expected_dbt_fingerprint_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11ExecutionTestCase:
+    description: str
+    expected_current_stdout_fragments: tuple[str, ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_fingerprint_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11SourceBlockingTestCase:
+    description: str
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[str, ...]
+    expected_customer_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11PlanOutputTestCase:
+    description: str
+    expected_current_unique_ids: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11ReplayFullTestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]

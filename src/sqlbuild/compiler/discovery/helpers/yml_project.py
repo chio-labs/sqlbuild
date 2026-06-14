@@ -662,7 +662,9 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"project_dir", "profiles_dir", "target", "target_path"}),
+        allowed_keys=frozenset(
+            {"project_dir", "profiles_dir", "target", "target_path", "replay_on_change"}
+        ),
         label="dbt",
         file_path=file_path,
     )
@@ -671,6 +673,7 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         profiles_dir=_optional_str(payload=mapping, key="profiles_dir"),
         target=_optional_str(payload=mapping, key="target"),
         target_path=_optional_str(payload=mapping, key="target_path"),
+        replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
     )
 
 

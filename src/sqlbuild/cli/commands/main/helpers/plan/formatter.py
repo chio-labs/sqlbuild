@@ -134,7 +134,7 @@ def format_plan(
         lines,
         plan,
         display_options=resolved_display_options,
-        section_header_style=resolved_section_header_style,
+        skipped_header_style=style.muted,
     )
 
     _format_python_plan_entries(
@@ -461,7 +461,7 @@ def _format_standard_pruned_metadata(
     plan: PlanOutput,
     *,
     display_options: DisplayOptions,
-    section_header_style: Callable[[str], str],
+    skipped_header_style: Callable[[str], str],
 ) -> None:
     raw_names: object = plan.metadata.get("standard_pruned_model_names")
     if not isinstance(raw_names, tuple):
@@ -470,7 +470,7 @@ def _format_standard_pruned_metadata(
     if not names:
         return
     lines.append("")
-    lines.append(section_header_style(f"Skipped current models ({len(names)} already up to date)"))
+    lines.append(skipped_header_style(f"Skipped current models ({len(names)} already up to date)"))
     if display_options.max_entries_per_section is not None:
         return
     visible_names: Sequence[str] = visible_entries(names, options=display_options)

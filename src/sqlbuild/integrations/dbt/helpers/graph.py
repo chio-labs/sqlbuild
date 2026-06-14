@@ -10,7 +10,11 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import (
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
@@ -61,6 +65,16 @@ def sqlbuild_model_graph_key(model_name: str) -> DbtCombinedGraphKey:
     )
 
 
+def dbt_source_graph_key(unique_id: str) -> DbtCombinedGraphKey:
+    """Return the combined graph key for one dbt source unique_id."""
+
+    return DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.DBT,
+        resource_type=DbtCombinedGraphResourceType.SOURCE,
+        name=unique_id,
+    )
+
+
 def build_combined_downstream_deps(
     upstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
 ) -> dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]:
@@ -105,9 +119,13 @@ def _add_dbt_model_edges(
         upstream.setdefault(key, [])
         dep_unique_id: str
         for dep_unique_id in model.depends_on_nodes:
-            if dep_unique_id not in manifest.models_by_unique_id:
-                continue
-            upstream[key].append(dbt_model_graph_key(dep_unique_id))
+            if dep_unique_id in manifest.models_by_unique_id:
+                upstream[key].append(dbt_model_graph_key(dep_unique_id))
+            if dep_unique_id in manifest.sources_by_unique_id:
+                source: DbtManifestSource = manifest.sources_by_unique_id[dep_unique_id]
+                source_key: DbtCombinedGraphKey = dbt_source_graph_key(source.unique_id)
+                upstream.setdefault(source_key, [])
+                upstream[key].append(source_key)
 
 
 def _add_sqlbuild_model_edges(

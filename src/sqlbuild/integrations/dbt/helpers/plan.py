@@ -9,7 +9,12 @@ from collections.abc import Sequence
 
 from sqlbuild.cli.commands.main.plan_format import format_plan
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
+from sqlbuild.integrations.dbt.models import (
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtLsNode,
+    DbtModelPlanningResult,
+)
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
@@ -29,6 +34,7 @@ def build_dbt_interop_plan(
     supplemental_dbt_command_argvs: Sequence[Sequence[str]] = (),
     warnings: Sequence[str] = (),
     sqlbuild_plan_output: PlanOutput | None = None,
+    dbt_model_plan: DbtModelPlanningResult | None = None,
 ) -> DbtInteropPlan:
     """Build a display-ready plan from dbt preflight and SQLBuild selection results."""
 
@@ -49,6 +55,7 @@ def build_dbt_interop_plan(
         sqlbuild_command_argvs=tuple(tuple(argv) for argv in sqlbuild_command_argvs),
         selection=selection,
         sqlbuild_plan_output=sqlbuild_plan_output,
+        dbt_model_plan=dbt_model_plan,
         dbt_required_selector_terms=tuple(dbt_required_selector_terms),
         supplemental_dbt_command_argvs=tuple(
             tuple(argv) for argv in supplemental_dbt_command_argvs
@@ -100,6 +107,7 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
             "required_selector_terms": list(plan.dbt_required_selector_terms),
             "skipped": plan.dbt_skip_reason is not None,
             "skip_reason": plan.dbt_skip_reason.value if plan.dbt_skip_reason is not None else None,
+            "model_plan": _format_dbt_model_plan_json(plan),
         },
         "sqlbuild": {
             "argvs": [list(argv) for argv in plan.sqlbuild_command_argvs],
@@ -134,14 +142,23 @@ def _format_dbt_section(
     )
     lines.append(style.dbt_section(f"dbt ({dbt_count} selected)"))
     if plan.dbt_skip_reason is not None:
-        lines.append("  skipped: no dbt work selected")
+        lines.append(style.muted(f"  skipped: {_dbt_skip_reason_label(plan.dbt_skip_reason)}"))
+        if plan.dbt_skip_reason == DbtInteropSkipReason.DBT_MODELS_CURRENT:
+            _format_dbt_model_plan(lines, plan, display_options=display_options)
         return
-    lines.append(f"  {style.label('command')}: {style.command(' '.join(plan.dbt_command_argv))}")
+    display_argv: str = _format_display_argv(
+        plan.dbt_command_argv,
+        display_options=display_options,
+    )
+    lines.append(f"  {style.label('command')}: {style.command(display_argv)}")
     argv: tuple[str, ...]
     for argv in plan.supplemental_dbt_command_argvs:
-        lines.append(f"  {style.label('command')}: {style.command(' '.join(argv))}")
+        lines.append(
+            f"  {style.label('command')}: "
+            f"{style.command(_format_display_argv(argv, display_options=display_options))}"
+        )
     _format_dbt_selected_nodes(lines, plan, display_options=display_options)
-    if plan.selection.dbt_required_unique_ids:
+    if _is_verbose(display_options) and plan.selection.dbt_required_unique_ids:
         lines.append("")
         lines.append(style.dbt_label(f"  required: {len(plan.selection.dbt_required_unique_ids)}"))
         if plan.dbt_required_selector_terms:
@@ -162,6 +179,100 @@ def _format_dbt_section(
             indent="    ",
             options=display_options,
         )
+    _format_dbt_model_plan(lines, plan, display_options=display_options)
+
+
+def _format_dbt_model_plan(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
+    if plan.dbt_model_plan is None:
+        return
+    style: CliStyle = CliStyle(use_color=True)
+    run_ids: tuple[str, ...] = plan.dbt_model_plan.run_unique_ids
+    current_ids: tuple[str, ...] = plan.dbt_model_plan.current_unique_ids
+    blocked_ids: tuple[str, ...] = plan.dbt_model_plan.blocked_unique_ids
+    blocked_sqlbuild: tuple[str, ...] = plan.dbt_model_plan.blocked_sqlbuild_model_names
+    if not run_ids and not current_ids and not blocked_ids:
+        return
+    lines.append("")
+    lines.append(f"  {style.plan_section('Model plan')}")
+    lines.append(f"    {style.plan_section(f'Run ({len(run_ids)})')}")
+    if run_ids:
+        visible_run: Sequence[str] = visible_entries(run_ids, options=display_options)
+        for unique_id in visible_run:
+            lines.append(f"      {style.dbt_object_name(unique_id)}")
+        _append_dbt_overflow_line(
+            lines,
+            total_count=len(run_ids),
+            visible_count=len(visible_run),
+            indent="      ",
+            options=display_options,
+        )
+    lines.append(f"    {style.plan_section(f'Current ({len(current_ids)})')}")
+    if current_ids:
+        visible_current: Sequence[str] = visible_entries(current_ids, options=display_options)
+        for unique_id in visible_current:
+            lines.append(f"      {style.dbt_object_name(unique_id)}")
+        _append_dbt_overflow_line(
+            lines,
+            total_count=len(current_ids),
+            visible_count=len(visible_current),
+            indent="      ",
+            options=display_options,
+        )
+    lines.append(f"    {style.plan_section(f'Blocked ({len(blocked_ids)})')}")
+    if blocked_ids:
+        visible_blocked: Sequence[str] = visible_entries(blocked_ids, options=display_options)
+        for unique_id in visible_blocked:
+            lines.append(f"      {style.dbt_object_name(unique_id)}")
+        _append_dbt_overflow_line(
+            lines,
+            total_count=len(blocked_ids),
+            visible_count=len(visible_blocked),
+            indent="      ",
+            options=display_options,
+        )
+    if blocked_sqlbuild:
+        lines.append(f"    {style.label('blocked SQLBuild')}: {len(blocked_sqlbuild)}")
+        visible_sqlbuild: Sequence[str] = visible_entries(blocked_sqlbuild, options=display_options)
+        for name in visible_sqlbuild:
+            lines.append(f"      {style.object_name(name)}")
+        _append_dbt_overflow_line(
+            lines,
+            total_count=len(blocked_sqlbuild),
+            visible_count=len(visible_sqlbuild),
+            indent="      ",
+            options=display_options,
+        )
+
+
+def _dbt_skip_reason_label(reason: DbtInteropSkipReason) -> str:
+    if reason == DbtInteropSkipReason.DBT_MODELS_CURRENT:
+        return "all planned dbt models are current"
+    return "no dbt work selected"
+
+
+def _format_dbt_model_plan_json(plan: DbtInteropPlan) -> dict[str, object] | None:
+    if plan.dbt_model_plan is None:
+        return None
+    return {
+        "run_unique_ids": list(plan.dbt_model_plan.run_unique_ids),
+        "current_unique_ids": list(plan.dbt_model_plan.current_unique_ids),
+        "blocked_unique_ids": list(plan.dbt_model_plan.blocked_unique_ids),
+        "stale_sqlbuild_model_names": list(plan.dbt_model_plan.stale_sqlbuild_model_names),
+        "blocked_sqlbuild_model_names": list(plan.dbt_model_plan.blocked_sqlbuild_model_names),
+        "entries": [
+            {
+                "unique_id": entry.unique_id,
+                "action": entry.action.value,
+                "reason": entry.reason.value,
+                "previous_version_hash": entry.previous_version_hash,
+                "expected_version_hash": entry.expected_version_hash,
+                "blocked_source_unique_ids": list(entry.blocked_source_unique_ids),
+            }
+            for entry in plan.dbt_model_plan.entries
+        ],
+    }
 
 
 def _format_dbt_selected_nodes(
@@ -193,13 +304,54 @@ def _format_dbt_selected_nodes(
                     name_column_width=name_width,
                 )
             )
-        append_overflow_line(
+        _append_dbt_overflow_line(
             lines,
             total_count=len(nodes),
             visible_count=len(visible_nodes),
             indent="    ",
             options=display_options,
         )
+
+
+def _format_display_argv(argv: tuple[str, ...], *, display_options: DisplayOptions) -> str:
+    if _is_verbose(display_options):
+        return " ".join(argv)
+    max_terms: int | None = display_options.max_entries_per_section
+    if max_terms is None or "--select" not in argv:
+        return " ".join(argv)
+    display: list[str] = []
+    index: int = 0
+    while index < len(argv):
+        token: str = argv[index]
+        display.append(token)
+        index += 1
+        if token != "--select":
+            continue
+        select_terms: list[str] = []
+        while index < len(argv) and not argv[index].startswith("--"):
+            select_terms.append(argv[index])
+            index += 1
+        display.extend(select_terms[:max_terms])
+        hidden_count: int = len(select_terms) - max_terms
+        if hidden_count > 0:
+            display.append(f"... and {hidden_count} more")
+    return " ".join(display)
+
+
+def _append_dbt_overflow_line(
+    lines: list[str], *, total_count: int, visible_count: int, indent: str, options: DisplayOptions
+) -> None:
+    before_count: int = len(lines)
+    append_overflow_line(
+        lines,
+        total_count=total_count,
+        visible_count=visible_count,
+        indent=indent,
+        options=options,
+    )
+    if len(lines) > before_count:
+        style: CliStyle = CliStyle(use_color=True)
+        lines[-1] = style.muted(lines[-1])
 
 
 def _format_sqlbuild_section(
@@ -213,7 +365,7 @@ def _format_sqlbuild_section(
     sqlbuild_count: int = len(plan.selection.sqlbuild_model_names)
     lines.append(style.object_name(f"SQLBuild ({sqlbuild_count} selected)"))
     if plan.sqlbuild_skip_reason is not None:
-        lines.append("  skipped: no SQLBuild work selected")
+        lines.append(style.muted("  skipped: no SQLBuild work selected"))
         return
     argv: tuple[str, ...]
     for argv in plan.sqlbuild_command_argvs:
@@ -270,7 +422,7 @@ def _format_sqlbuild_model_fallback(
 def _format_anchor_section(
     lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
 ) -> None:
-    if not plan.selection.dbt_anchor_terms:
+    if not _is_verbose(display_options) or not plan.selection.dbt_anchor_terms:
         return
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
@@ -290,6 +442,10 @@ def _format_anchor_section(
             indent="    ",
             options=display_options,
         )
+
+
+def _is_verbose(display_options: DisplayOptions) -> bool:
+    return display_options.max_entries_per_section is None
 
 
 def _format_path_translation_section(lines: list[str], plan: DbtInteropPlan) -> None:

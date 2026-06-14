@@ -12,6 +12,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
+    DbtModelPlanAction,
+    DbtModelPlanReason,
 )
 
 
@@ -281,6 +283,52 @@ class DbtInteropSelectionResult:
 
 
 @dataclass(frozen=True)
+class DbtModelPlanEntry:
+    """Planner result for one dbt model node."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    action: DbtModelPlanAction
+    reason: DbtModelPlanReason
+    relation_name: str
+    previous_version_hash: str | None = None
+    expected_version_hash: str | None = None
+    blocked_source_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtModelPlanningResult:
+    """dbt model planning summary used for pruning dbt execution."""
+
+    entries: tuple[DbtModelPlanEntry, ...] = field(default_factory=tuple)
+    stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def run_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.RUN
+        )
+
+    @property
+    def run_selector_terms(self) -> tuple[str, ...]:
+        return tuple(entry.name for entry in self.entries if entry.action == DbtModelPlanAction.RUN)
+
+    @property
+    def current_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.CURRENT
+        )
+
+    @property
+    def blocked_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.BLOCKED
+        )
+
+
+@dataclass(frozen=True)
 class DbtInteropPlan:
     """Plan output for one future `sqb dbt` command."""
 
@@ -291,6 +339,7 @@ class DbtInteropPlan:
     sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
     selection: DbtInteropSelectionResult
     sqlbuild_plan_output: PlanOutput | None = None
+    dbt_model_plan: DbtModelPlanningResult | None = None
     dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
     supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None

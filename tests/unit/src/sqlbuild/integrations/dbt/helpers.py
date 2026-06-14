@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
@@ -15,6 +18,9 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -22,7 +28,11 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.integrations.dbt.helpers.graph import dbt_model_graph_key, sqlbuild_model_graph_key
+from sqlbuild.integrations.dbt.helpers.graph import (
+    dbt_model_graph_key,
+    dbt_source_graph_key,
+    sqlbuild_model_graph_key,
+)
 from sqlbuild.integrations.dbt.helpers.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
@@ -30,6 +40,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraphKey,
     DbtCommandResult,
 )
+from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -217,6 +228,7 @@ def build_manifest_model_node(
     database: str | None = None,
     schema: str | None = None,
     alias: str | None = None,
+    checksum: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
@@ -235,6 +247,8 @@ def build_manifest_model_node(
         node["schema"] = schema
     if alias is not None:
         node["alias"] = alias
+    if checksum is not None:
+        node["checksum"] = {"checksum": checksum}
     if depends_on_nodes:
         node["depends_on"] = {"nodes": list(depends_on_nodes)}
     return node
@@ -359,7 +373,67 @@ def graph_key_stable_ids(keys: frozenset[DbtCombinedGraphKey]) -> tuple[str, ...
 def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
     """Build a graph key from its stable string form."""
 
-    owner, _resource_type, name = stable_id.split(":", maxsplit=2)
-    if owner == "dbt":
+    owner, resource_type, name = stable_id.split(":", maxsplit=2)
+    owner_enum: DbtCombinedGraphOwner = DbtCombinedGraphOwner(owner)
+    resource_type_enum: DbtCombinedGraphResourceType = DbtCombinedGraphResourceType(resource_type)
+    if (
+        owner_enum == DbtCombinedGraphOwner.DBT
+        and resource_type_enum == DbtCombinedGraphResourceType.SOURCE
+    ):
+        return dbt_source_graph_key(name)
+    if owner_enum == DbtCombinedGraphOwner.DBT:
         return dbt_model_graph_key(name)
     return sqlbuild_model_graph_key(name)
+
+
+def write_dbt_test_fingerprint(
+    *, adapter: Any, connection: Any, unique_id: str, version_hash: str
+) -> None:
+    """Write one dbt fingerprint row for planning tests."""
+
+    fingerprint: Fingerprint = Fingerprint(
+        node_type=NODE_TYPE_DBT,
+        node_name=unique_id,
+        target_database=None,
+        target_schema="main",
+        target_name="orders",
+        run_id="test",
+        definition_hash=version_hash,
+        version_hash=version_hash,
+        schema_fingerprint=hashlib.sha256(b"").hexdigest(),
+        definition="{}",
+        metadata_json="{}",
+        ts=datetime.now(tz=UTC),
+    )
+    write_fingerprint(
+        connection=connection,
+        execute=adapter.execute,
+        database=None,
+        schema="main",
+        fingerprint=fingerprint,
+        render_qualified_name=adapter.render_qualified_name,
+        render_framework_type=adapter.render_framework_type,
+        render_create_table_sql=adapter.render_create_fingerprint_table_sql,
+        render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
+    )
+
+
+def setup_dbt_model_planning_state(
+    *,
+    adapter: Any,
+    connection: Any,
+    unique_id: str,
+    create_relation: bool,
+    fingerprint_hash: str | None,
+) -> None:
+    """Create optional relation and fingerprint state for dbt model planning tests."""
+
+    if create_relation:
+        adapter.execute(connection, "CREATE TABLE main.orders AS SELECT 1 AS id")
+    if fingerprint_hash is not None:
+        write_dbt_test_fingerprint(
+            adapter=adapter,
+            connection=connection,
+            unique_id=unique_id,
+            version_hash=fingerprint_hash,
+        )

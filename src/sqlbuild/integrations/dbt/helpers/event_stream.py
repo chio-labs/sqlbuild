@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
@@ -49,6 +51,7 @@ def execute_dbt_json_event_stream(
     style: CliStyle = CliStyle(use_color=use_color)
     pending_messages: dict[str, list[DbtNodeMessage]] = {}
     results: list[DbtNodeExecutionResult] = []
+    spinner: _DbtSpinner | None = _start_dbt_spinner(stream=stream, style=style)
     try:
         process: subprocess.Popen[str] = subprocess.Popen(
             argv,
@@ -83,13 +86,53 @@ def execute_dbt_json_event_stream(
                 )
                 if result is None:
                     continue
+                if spinner is not None:
+                    spinner.stop()
+                    spinner = None
                 results.append(result)
                 if on_node_result is not None:
                     on_node_result(result)
                 _render_dbt_node_result(stream=stream, style=style, result=result)
 
     returncode: int = process.wait()
+    if spinner is not None:
+        spinner.stop()
     return returncode, tuple(results)
+
+
+class _DbtSpinner:
+    def __init__(self, *, stream: TextIO, style: CliStyle) -> None:
+        self.stream: TextIO = stream
+        self.style: CliStyle = style
+        self.stop_event: threading.Event = threading.Event()
+        self.thread: threading.Thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        self.thread.join(timeout=1)
+        self.stream.write("\r\033[K")
+        self.stream.flush()
+
+    def _run(self) -> None:
+        frames: tuple[str, ...] = ("-", "\\", "|", "/")
+        index: int = 0
+        while not self.stop_event.is_set():
+            frame: str = frames[index % len(frames)]
+            self.stream.write(f"\r{self.style.muted(f'  {frame} waiting for dbt node output...')}")
+            self.stream.flush()
+            index += 1
+            time.sleep(0.12)
+
+
+def _start_dbt_spinner(*, stream: TextIO, style: CliStyle) -> _DbtSpinner | None:
+    if not stream.isatty():
+        return None
+    spinner: _DbtSpinner = _DbtSpinner(stream=stream, style=style)
+    spinner.start()
+    return spinner
 
 
 def parse_dbt_json_event(*, line: str) -> dict[str, object] | None:

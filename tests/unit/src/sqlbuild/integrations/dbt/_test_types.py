@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
+from sqlbuild.integrations.dbt.types import DbtModelPlanAction, DbtModelPlanReason
 from sqlbuild.spec.models.project import DbtConfig
 
 
@@ -150,6 +151,29 @@ class DbtSourceFreshnessTranslationErrorTestCase:
     description: str
     manifest_data: dict[str, object]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtModelPlanningTestCase:
+    description: str
+    create_relation: bool
+    fingerprint_hash: str | None
+    expected_action: DbtModelPlanAction
+    expected_reason: DbtModelPlanReason
+
+
+@dataclass(frozen=True)
+class DbtModelSourceBlockingTestCase:
+    description: str
+    expected_blocked_unique_ids: tuple[str, ...]
+    expected_blocked_sqlbuild_model_names: tuple[str, ...]
+    expected_blocked_source_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtExecutionArgvPruningTestCase:
+    description: str
+    expected_argv: tuple[str, ...] | None
 
 
 @dataclass(frozen=True)

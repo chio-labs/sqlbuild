@@ -66,7 +66,7 @@ def _run_dbt_plan(
         use_color=use_color,
     )
     display_options: DisplayOptions = DisplayOptions(
-        max_entries_per_section=None if verbose else 50
+        max_entries_per_section=None if verbose else 10
     )
     print(
         render_dbt_interop_plan(

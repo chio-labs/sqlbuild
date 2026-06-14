@@ -75,6 +75,8 @@ def _translate_freshness(source: DbtManifestSource) -> SourceFreshnessConfig | N
             query=_loaded_at_expression_query(source),
             age_policy=age_policy,
         )
+    if age_policy is None:
+        return None
     return SourceFreshnessConfig(
         strategy=SourceFreshnessStrategy.ADAPTER,
         value_kind=SourceFreshnessValueKind.TIMESTAMP,
@@ -110,6 +112,8 @@ def _translate_duration(value: object, *, unique_id: str, field_name: str) -> st
     duration: dict[str, object] = cast(dict[str, object], value)
     count: object | None = duration.get("count")
     period: object | None = duration.get("period")
+    if count is None and period is None:
+        return None
     if not isinstance(count, int) or count <= 0 or not isinstance(period, str):
         raise DbtInteropConfigError(
             f"dbt source '{unique_id}' freshness.{field_name} must include positive count "

@@ -80,6 +80,7 @@ def build_execution_plan(
     cursor_overrides: CursorOverrides | None = None,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
+    forced_stale_model_names: tuple[str, ...] = (),
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
@@ -191,6 +192,7 @@ def build_execution_plan(
                     model_name: fingerprint.version_hash
                     for model_name, fingerprint in snapshot.fingerprints.models.items()
                 },
+                forced_stale_model_names=forced_stale_model_names,
             )
         )
         source_stale_model_names: frozenset[str] = (
@@ -218,6 +220,7 @@ def build_execution_plan(
             resolved_actions=resolved_actions,
             source_freshness=source_freshness,
             run_despite_unchanged=run_despite_unchanged,
+            forced_stale_model_names=forced_stale_model_names,
             expected_version_hashes=version_identities.model_version_hashes,
             expected_seed_version_hashes=version_identities.seed_version_hashes,
             built_seed_fingerprints=snapshot.fingerprints.seeds,
@@ -236,6 +239,7 @@ def build_execution_plan(
             scope=scope,
             resolved_actions=resolved_actions,
             expected_version_hashes=version_identities.model_version_hashes,
+            forced_stale_model_names=forced_stale_model_names,
         )
         resolved_actions = mark_run_despite_unchanged_actions(
             scope=scope,
