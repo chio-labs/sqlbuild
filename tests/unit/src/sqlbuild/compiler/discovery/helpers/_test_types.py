@@ -300,7 +300,10 @@ class ParseSourcesYamlTestCase:
     expected_freshness_value_kinds: tuple[str | None, ...] | None = None
     expected_freshness_columns: tuple[str | None, ...] | None = None
     expected_freshness_queries: tuple[str | None, ...] | None = None
+    expected_freshness_filters: tuple[str | None, ...] | None = None
     expected_freshness_lag_tolerances: tuple[str | None, ...] | None = None
+    expected_freshness_age_policy_warn_afters: tuple[str | None, ...] | None = None
+    expected_freshness_age_policy_error_afters: tuple[str | None, ...] | None = None
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()
     expected_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None

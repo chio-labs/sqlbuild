@@ -69,6 +69,26 @@ OBSERVED_AT_TEST_CASES: list[SharedSourceFreshnessObservationTestCase] = [
     ),
 ]
 
+COLUMN_SQL_TEST_CASES: list[SharedSourceFreshnessColumnSqlTestCase] = [
+    SharedSourceFreshnessColumnSqlTestCase(
+        description="renders database schema table and filter for column freshness",
+        source_database="warehouse",
+        source_schema="raw",
+        source_table="orders",
+        expected_sql_fragment="FROM warehouse.raw.orders",
+        freshness_filter="updated_at >= current_date - interval '2 days'",
+        expected_filter_fragment="WHERE updated_at >= current_date - interval '2 days'",
+    ),
+    SharedSourceFreshnessColumnSqlTestCase(
+        description="omits where clause when column freshness has no filter",
+        source_database="warehouse",
+        source_schema="raw",
+        source_table="orders",
+        expected_sql_fragment="FROM warehouse.raw.orders",
+        unexpected_sql_fragment=" WHERE ",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -101,16 +121,8 @@ def test_given_adapter_freshness_metadata_when_observing_then_uses_expected_obse
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        SharedSourceFreshnessColumnSqlTestCase(
-            description="renders database schema and table parts for column freshness",
-            source_database="warehouse",
-            source_schema="raw",
-            source_table="orders",
-            expected_sql_fragment="FROM warehouse.raw.orders",
-        )
-    ],
-    ids=["renders database schema and table parts for column freshness"],
+    COLUMN_SQL_TEST_CASES,
+    ids=[case.description for case in COLUMN_SQL_TEST_CASES],
 )
 def test_given_column_freshness_source_when_observing_then_renders_full_relation(
     test_case: SharedSourceFreshnessColumnSqlTestCase,
@@ -128,6 +140,7 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
                 strategy=SourceFreshnessStrategy.COLUMN,
                 value_kind=SourceFreshnessValueKind.INTEGER,
                 column="batch_id",
+                filter=test_case.freshness_filter,
             ),
         ),
         observed_at=datetime(2026, 1, 15, 12, 5, 0),
@@ -135,6 +148,8 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
 
     assert adapter.captured_sql is not None
     assert test_case.expected_sql_fragment in adapter.captured_sql
+    assert (test_case.expected_filter_fragment or "") in adapter.captured_sql
+    assert (test_case.unexpected_sql_fragment or "__not_present__") not in adapter.captured_sql
 
 
 @pytest.mark.parametrize(

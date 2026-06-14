@@ -21,10 +21,11 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessAgePolicy, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessAdapterDefaultTestCase,
+    StandardSourceFreshnessAgePolicyTestCase,
     StandardSourceFreshnessDuplicateSchemaTestCase,
     StandardSourceFreshnessLagToleranceTestCase,
     StandardSourceFreshnessManagedSkipTestCase,
@@ -43,6 +44,11 @@ RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_f
 
 
 class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
+    def __init__(self, *, data_version: object = 42, value_kind: str = "integer") -> None:
+        super().__init__()
+        self.data_version: object = data_version
+        self.value_kind: str = value_kind
+
     def supports_table_freshness_metadata(self) -> bool:
         return True
 
@@ -55,8 +61,8 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         name: str,
     ) -> TableFreshnessMetadata:
         return TableFreshnessMetadata(
-            data_version=42,
-            value_kind="integer",
+            data_version=self.data_version,
+            value_kind=self.value_kind,
             observed_at=datetime(2026, 1, 15, 12, 0, 0),
         )
 
@@ -132,6 +138,139 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
     assert len(result.changed_identities) == test_case.expected_changed_count
     assert len(result.unchanged_identities) == test_case.expected_unchanged_count
     assert len(result.observed_records) == 1
+
+
+AGE_POLICY_TEST_CASES: tuple[StandardSourceFreshnessAgePolicyTestCase, ...] = (
+    StandardSourceFreshnessAgePolicyTestCase(
+        description="fresh timestamp passes age policy",
+        current_query="SELECT CAST('2026-01-15 11:30:00' AS TIMESTAMP) AS data_version",
+        warn_after="1h",
+        error_after="2h",
+        expected_age_status="pass",
+    ),
+    StandardSourceFreshnessAgePolicyTestCase(
+        description="older timestamp warns before error threshold",
+        current_query="SELECT CAST('2026-01-15 10:30:00' AS TIMESTAMP) AS data_version",
+        warn_after="1h",
+        error_after="2h",
+        expected_age_status="warn",
+    ),
+    StandardSourceFreshnessAgePolicyTestCase(
+        description="old timestamp errors after error threshold",
+        current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
+        warn_after="1h",
+        error_after="2h",
+        expected_age_status="error",
+    ),
+    StandardSourceFreshnessAgePolicyTestCase(
+        description="non timestamp observation is unknown for age policy",
+        current_query="SELECT 42 AS data_version",
+        warn_after="1h",
+        error_after="2h",
+        expected_age_status="unknown",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    AGE_POLICY_TEST_CASES,
+    ids=[case.description for case in AGE_POLICY_TEST_CASES],
+)
+def test_given_source_freshness_age_policy_when_planning_then_records_age_status(
+    test_case: StandardSourceFreshnessAgePolicyTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        connection.execute("CREATE SCHEMA state_schema")
+        source: SourceEntry = SourceEntry(
+            name="raw.orders",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.TIMESTAMP
+                if test_case.expected_age_status != "unknown"
+                else SourceFreshnessValueKind.INTEGER,
+                query=test_case.current_query,
+                age_policy=SourceFreshnessAgePolicy(
+                    warn_after=test_case.warn_after,
+                    error_after=test_case.error_after,
+                ),
+            ),
+        )
+
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(source,),
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
+        )
+    finally:
+        adapter.close(connection)
+
+    assert len(result.age_statuses) == 1
+    assert next(iter(result.age_statuses.values())) == test_case.expected_age_status
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardSourceFreshnessAgePolicyTestCase(
+            description="adapter metadata timestamp can error age policy",
+            current_query="",
+            warn_after="1h",
+            error_after="2h",
+            expected_age_status="error",
+        )
+    ],
+    ids=["adapter metadata timestamp can error age policy"],
+)
+def test_given_adapter_metadata_age_policy_when_planning_then_records_age_status(
+    test_case: StandardSourceFreshnessAgePolicyTestCase,
+) -> None:
+    adapter: FreshnessMetadataDuckDbAdapter = FreshnessMetadataDuckDbAdapter(
+        data_version=datetime(2026, 1, 15, 9, 30, 0),
+        value_kind="timestamp",
+    )
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        connection.execute("CREATE SCHEMA state_schema")
+        source: SourceEntry = SourceEntry(
+            name="raw.orders",
+            schema="raw",
+            table="orders",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.ADAPTER,
+                age_policy=SourceFreshnessAgePolicy(
+                    warn_after=test_case.warn_after,
+                    error_after=test_case.error_after,
+                ),
+            ),
+        )
+
+        result: StandardSourceFreshnessPlanningResult = (
+            build_standard_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=(source,),
+                state_database=None,
+                state_schemas=("state_schema",),
+                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                run_id="planning",
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+            )
+        )
+    finally:
+        adapter.close(connection)
+
+    assert len(result.age_statuses) == 1
+    assert next(iter(result.age_statuses.values())) == test_case.expected_age_status
 
 
 LAG_TOLERANCE_TEST_CASES: tuple[StandardSourceFreshnessLagToleranceTestCase, ...] = (
