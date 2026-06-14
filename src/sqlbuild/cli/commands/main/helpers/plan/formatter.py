@@ -1391,8 +1391,17 @@ def _format_standard_source_freshness_metadata(
     unknown_source_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("unknown_source_names")
     )
+    age_warning_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("age_warning_source_names")
+    )
+    age_error_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("age_error_source_names")
+    )
     stale_model_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("stale_model_names")
+    )
+    blocked_model_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("blocked_model_names")
     )
     if not observed_source_names and not unknown_source_names:
         return
@@ -1445,12 +1454,42 @@ def _format_standard_source_freshness_metadata(
                 warn=True,
             )
         )
+    if age_warning_source_names:
+        lines.append(
+            _source_freshness_set_line(
+                style,
+                "age warnings",
+                age_warning_source_names,
+                display_options=display_options,
+                warn=True,
+            )
+        )
+    if age_error_source_names:
+        lines.append(
+            _source_freshness_set_line(
+                style,
+                "age errors",
+                age_error_source_names,
+                display_options=display_options,
+                warn=True,
+            )
+        )
     if stale_model_names:
         lines.append(
             _source_freshness_set_line(
                 style,
                 "source-stale models",
                 stale_model_names,
+                display_options=display_options,
+                warn=True,
+            )
+        )
+    if blocked_model_names:
+        lines.append(
+            _source_freshness_set_line(
+                style,
+                "source-blocked models",
+                blocked_model_names,
                 display_options=display_options,
                 warn=True,
             )

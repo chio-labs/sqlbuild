@@ -154,6 +154,39 @@ def prepare_build_test_audit_flag_project(*, tmp_path: Path, project_name: str) 
     )
 
 
+def build_freshness_error_branch_source_yml(
+    *,
+    order_id: int,
+    customer_id: int,
+    order_freshness_query: str,
+    customer_freshness_query: str,
+) -> str:
+    return (
+        dedent(
+            f"""
+        sources:
+          - name: raw_orders
+            expression: SELECT {order_id} AS order_id
+            freshness:
+              strategy: sql
+              type: timestamp
+              query: {order_freshness_query}
+              age_policy:
+                error_after: 1h
+          - name: raw_customers
+            expression: SELECT {customer_id} AS customer_id
+            freshness:
+              strategy: sql
+              type: timestamp
+              query: {customer_freshness_query}
+              age_policy:
+                error_after: 1h
+        """
+        ).strip()
+        + "\n"
+    )
+
+
 def prepare_virtual_cursor_override_without_snapshot_project(
     *,
     tmp_path: Path,

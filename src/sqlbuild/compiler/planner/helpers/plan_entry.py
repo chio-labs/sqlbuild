@@ -213,6 +213,7 @@ def build_plan_entries(
     full_refresh: bool,
     standard_reuse_decisions: StandardReuseDecisionResults | None = None,
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
+    source_freshness_blocked_model_names: frozenset[str] = frozenset(),
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
@@ -263,6 +264,12 @@ def build_plan_entries(
         )
         if resolved.cascade is not None:
             entry = replace(entry, cascade=resolved.cascade)
+        if entry.name in source_freshness_blocked_model_names:
+            entry = replace(
+                entry,
+                action=PlanAction.SKIP,
+                reason=PlanReason.SOURCE_FRESHNESS_ERROR,
+            )
         if run_despite_unchanged is not None:
             run_decision: RunDespiteUnchangedDecision | None = run_despite_unchanged.decisions.get(
                 entry.name
@@ -274,7 +281,11 @@ def build_plan_entries(
             if standard_reuse_decisions is not None
             else None
         )
-        if standard_reuse_decisions is not None and reuse_decision is not None:
+        if (
+            standard_reuse_decisions is not None
+            and reuse_decision is not None
+            and entry.action != PlanAction.SKIP
+        ):
             if _can_use_relation_reuse(entry=entry, reuse_decision=reuse_decision):
                 entry = replace(
                     entry,
