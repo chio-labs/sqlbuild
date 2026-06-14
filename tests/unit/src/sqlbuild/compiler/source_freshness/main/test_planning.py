@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -163,6 +163,14 @@ AGE_POLICY_TEST_CASES: tuple[StandardSourceFreshnessAgePolicyTestCase, ...] = (
         expected_age_status="error",
     ),
     StandardSourceFreshnessAgePolicyTestCase(
+        description="naive timestamp compares against aware observed timestamp",
+        current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
+        warn_after="1h",
+        error_after="2h",
+        expected_age_status="error",
+        observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
+    ),
+    StandardSourceFreshnessAgePolicyTestCase(
         description="non timestamp observation is unknown for age policy",
         current_query="SELECT 42 AS data_version",
         warn_after="1h",
@@ -206,7 +214,7 @@ def test_given_source_freshness_age_policy_when_planning_then_records_age_status
                 sources=(source,),
                 state_database=None,
                 state_schemas=("state_schema",),
-                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                observed_at=test_case.observed_at,
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
             )

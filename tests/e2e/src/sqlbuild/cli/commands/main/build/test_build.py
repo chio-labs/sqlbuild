@@ -20,6 +20,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     PythonTargetIsolationBuildE2ETestCase,
     StandardPythonBuildHardeningE2ETestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    build_freshness_error_branch_source_yml,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
@@ -1021,6 +1024,101 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
         ),
     )
     assert rows == [("raw_orders", 2), ("raw_payments", 1)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DirectChangesOnlyBuildE2ETestCase(
+            description="source freshness error blocks affected branch but unrelated branch runs",
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "age errors:",
+                "raw_orders",
+                "source-blocked models:",
+                "stg_orders",
+                "fact_orders",
+                "dim_customers",
+                "SKIP",
+                "OK",
+                "Blocked by source freshness error",
+            ),
+        )
+    ],
+    ids=["source freshness error blocks affected branch but unrelated branch runs"],
+)
+def test_given_source_freshness_error_when_building_then_blocks_only_affected_branch(
+    test_case: DirectChangesOnlyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="standard_source_freshness_error_blocks_branch_build",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "standard_source_freshness_error_blocks_branch_build"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "sources/raw.yml": build_freshness_error_branch_source_yml(
+                order_id=1,
+                customer_id=1,
+                order_freshness_query="SELECT CURRENT_TIMESTAMP AS data_version",
+                customer_freshness_query="SELECT CURRENT_TIMESTAMP AS data_version",
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __ref("stg_orders")\n'
+            ),
+            "models/dim_customers.sql": (
+                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_customers")\n'
+            ),
+        },
+    )
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+    (project_dir / "sources" / "raw.yml").write_text(
+        build_freshness_error_branch_source_yml(
+            order_id=2,
+            customer_id=2,
+            order_freshness_query=(
+                "SELECT CAST('2000-01-01 00:00:00' AS TIMESTAMP) AS data_version"
+            ),
+            customer_freshness_query="SELECT CURRENT_TIMESTAMP AS data_version",
+        ),
+        encoding="utf-8",
+    )
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    output: str = build_result.stdout + build_result.stderr
+    fragment: str
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    fact_orders_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT order_id FROM main.fact_orders ORDER BY order_id",
+    )
+    dim_customers_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT customer_id FROM main.dim_customers ORDER BY customer_id",
+    )
+    assert fact_orders_rows == [(1,)]
+    assert dim_customers_rows == [(2,)]
 
 
 @pytest.mark.parametrize(

@@ -94,6 +94,7 @@ class PlanReason(StrEnum):
     NORMAL_INCREMENTAL = "normal_incremental"
     NO_CHANGE = "no_change"
     DISABLED = "disabled"
+    SOURCE_FRESHNESS_ERROR = "source_freshness_error"
 
 
 class RunDespiteUnchangedMode(StrEnum):

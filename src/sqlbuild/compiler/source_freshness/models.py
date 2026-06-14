@@ -71,7 +71,11 @@ class StandardSourceFreshnessPropagationResult:
         default_factory=dict
     )
     unknown_source_model_names: dict[str, frozenset[str]] = field(default_factory=dict)
+    error_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = field(
+        default_factory=dict
+    )
     stale_model_names: frozenset[str] = frozenset()
+    blocked_model_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

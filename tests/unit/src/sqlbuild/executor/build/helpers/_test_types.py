@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build.helpers.helpers import ModelPlanOverride
@@ -45,6 +46,16 @@ class BuildSchedulerModelHookTestCase:
 class BuildSchedulerPreHookSkipTestCase:
     description: str
     expected_model_statuses: tuple[ExecutionStatus, ...]
+    expected_execution_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BuildSchedulerPlannedSkipTestCase:
+    description: str
+    expected_model_statuses: tuple[ExecutionStatus, ...]
+    expected_build_status: BuildStatus
+    expected_failure_count: int
+    expected_skip_reason: str
     expected_execution_order: tuple[str, ...]
 
 

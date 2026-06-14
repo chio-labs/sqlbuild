@@ -62,6 +62,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -255,6 +256,11 @@ def build_execution_plan(
         full_refresh=full_refresh,
         standard_reuse_decisions=(standard_reuse.decisions if standard_reuse is not None else None),
         run_despite_unchanged=run_despite_unchanged,
+        source_freshness_blocked_model_names=(
+            source_freshness.propagation.blocked_model_names
+            if source_freshness is not None and source_freshness.propagation is not None
+            else frozenset()
+        ),
         custom_prepare_version_materializations=custom_prepare_version_materializations,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -331,6 +337,25 @@ def _serialize_standard_source_freshness_metadata(
         if source_freshness.propagation is not None
         else ()
     )
+    blocked_model_names: tuple[str, ...] = (
+        tuple(sorted(source_freshness.propagation.blocked_model_names))
+        if source_freshness.propagation is not None
+        else ()
+    )
+    age_warning_source_names: tuple[str, ...] = tuple(
+        sorted(
+            identity.source_name
+            for identity, status in source_freshness.age_statuses.items()
+            if status == SourceFreshnessAgeStatus.WARN
+        )
+    )
+    age_error_source_names: tuple[str, ...] = tuple(
+        sorted(
+            identity.source_name
+            for identity, status in source_freshness.age_statuses.items()
+            if status == SourceFreshnessAgeStatus.ERROR
+        )
+    )
     return {
         "observed_source_names": tuple(
             sorted(record.source_name for record in source_freshness.observed_records)
@@ -338,7 +363,10 @@ def _serialize_standard_source_freshness_metadata(
         "changed_source_names": changed_source_names,
         "unchanged_source_names": unchanged_source_names,
         "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
+        "age_warning_source_names": age_warning_source_names,
+        "age_error_source_names": age_error_source_names,
         "stale_model_names": stale_model_names,
+        "blocked_model_names": blocked_model_names,
     }
 
 

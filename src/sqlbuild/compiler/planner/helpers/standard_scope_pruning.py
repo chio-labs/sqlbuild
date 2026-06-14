@@ -268,7 +268,10 @@ def _source_freshness_marks_model_stale(
 ) -> bool:
     if source_freshness is None or source_freshness.propagation is None:
         return False
-    return model_name in source_freshness.propagation.stale_model_names
+    return model_name in (
+        source_freshness.propagation.stale_model_names
+        | source_freshness.propagation.blocked_model_names
+    )
 
 
 def _backfill_is_stale(backfill: BackfillResult) -> bool:

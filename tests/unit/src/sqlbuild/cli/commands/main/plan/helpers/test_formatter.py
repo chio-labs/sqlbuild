@@ -69,6 +69,32 @@ TEST_CASES: list[FormatPlanTestCase] = [
         unexpected_fragments=("changes-only",),
     ),
     FormatPlanTestCase(
+        description="source freshness age warnings and errors are visible",
+        plan_output=build_plan_output(
+            metadata={
+                "standard_source_freshness": {
+                    "observed_source_names": ("raw.orders", "raw.payments"),
+                    "changed_source_names": (),
+                    "unchanged_source_names": ("raw.orders",),
+                    "unknown_source_names": (),
+                    "age_warning_source_names": ("raw.payments",),
+                    "age_error_source_names": ("raw.orders",),
+                    "stale_model_names": (),
+                    "blocked_model_names": ("fact_orders",),
+                }
+            }
+        ),
+        expected_fragments=(
+            "Source freshness",
+            "age warnings:",
+            "raw.payments",
+            "age errors:",
+            "raw.orders",
+            "source-blocked models:",
+            "fact_orders",
+        ),
+    ),
+    FormatPlanTestCase(
         description="routine models section shows names with strategy and cursor type",
         plan_output=build_plan_output(
             model_entries=(

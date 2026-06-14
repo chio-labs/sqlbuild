@@ -93,6 +93,7 @@ class StandardSourceFreshnessAgePolicyTestCase:
     warn_after: str | None
     error_after: str | None
     expected_age_status: str
+    observed_at: datetime = datetime(2026, 1, 15, 12, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -138,6 +139,9 @@ class StandardSourceFreshnessPropagationTestCase:
     expected_stale_model_names: frozenset[str]
     expected_changed_source_model_names: dict[str, frozenset[str]]
     expected_unknown_source_model_names: dict[str, frozenset[str]]
+    error_source_names: tuple[str, ...] = ()
+    expected_blocked_model_names: frozenset[str] = frozenset()
+    expected_error_source_model_names: dict[str, frozenset[str]] | None = None
 
 
 @dataclass(frozen=True)

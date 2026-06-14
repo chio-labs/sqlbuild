@@ -99,6 +99,7 @@ def build_model_plan_entry(
     name: str,
     materialization_type: MaterializationType = MaterializationType.TABLE,
     action: PlanAction = PlanAction.CREATE_TABLE,
+    reason: PlanReason = PlanReason.FIRST_RUN,
     resolved_sql: str = "SELECT 1",
     incremental_strategy: str | None = None,
     snapshot_strategy: str | None = None,
@@ -111,7 +112,7 @@ def build_model_plan_entry(
         relative_path=Path(f"models/{name}.sql"),
         materialization_type=materialization_type,
         action=action,
-        reason=PlanReason.FIRST_RUN,
+        reason=reason,
         destination=CompiledRelationLocation(
             database=None, schema="main", name=name, qualified_name=f"main.{name}"
         ),
