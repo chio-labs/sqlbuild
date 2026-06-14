@@ -8,6 +8,7 @@ from typing import TextIO
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.helpers.config import resolve_dbt_config
+from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
 from sqlbuild.integrations.dbt.helpers.plan_runtime import parse_dbt_config_overrides
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, ResolvedDbtConfig
@@ -25,6 +26,7 @@ def debug_dbt_from_project(
     """Run dbt debug from SQLBuild project configuration."""
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
     resolved: ResolvedDbtConfig = resolve_dbt_config(
         project_root=project_dir,
         config=discovered_inputs.project_config.dbt,

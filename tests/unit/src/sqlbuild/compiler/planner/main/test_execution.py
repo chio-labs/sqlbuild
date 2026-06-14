@@ -34,8 +34,8 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_scope,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
-    HookFunctionPlanOutputTestCase,
     ExternalBlockedPlanOutputTestCase,
+    HookFunctionPlanOutputTestCase,
     StandardReuseFromSourceDeferralConflictTestCase,
     StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,

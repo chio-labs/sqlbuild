@@ -12,10 +12,14 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
+from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
+    DbtCommandExecutionResult,
+    DbtCommandResult,
+    DbtExecutionOutcome,
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsNode,
@@ -41,6 +45,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtModelSourceBlockingTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    RecordingDbtInvoker,
     build_compiled_project_with_models,
     build_manifest_data,
     build_manifest_model_node,
@@ -504,7 +509,7 @@ def test_given_dbt_node_results_when_building_outcome_then_maps_sqlbuild_overlay
         ),
     )
 
-    outcome = build_dbt_execution_outcome(
+    outcome: DbtExecutionOutcome = build_dbt_execution_outcome(
         plan=plan,
         graph=graph,
         node_results=(
@@ -556,7 +561,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class StubProcess:
-        stdout = None
+        stdout: None = None
 
         def wait(self) -> int:
             return 1
@@ -608,8 +613,10 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         ),
     )
 
-    result = execute_dbt_commands(
-        runner=object(),  # type: ignore[arg-type]
+    result: DbtCommandExecutionResult = execute_dbt_commands(
+        runner=DbtRunner(
+            invoker=RecordingDbtInvoker(DbtCommandResult(argv=("dbt", "build"), returncode=1))
+        ),
         options=DbtCliOptions(target_path=target_path),
         merged_argv=("dbt", "build"),
         progress_stream=io.StringIO(),
@@ -617,7 +624,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         stderr_stream=io.StringIO(),
         use_color=False,
     )
-    outcome = build_dbt_execution_outcome(
+    outcome: DbtExecutionOutcome = build_dbt_execution_outcome(
         plan=plan,
         graph=graph,
         node_results=result.node_results,

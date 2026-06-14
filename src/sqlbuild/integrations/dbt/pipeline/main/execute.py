@@ -12,7 +12,6 @@ from typing import Any, TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.connection_progress import build_connection_progress_reporter
 from sqlbuild.cli.commands.main.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
-from sqlbuild.cli.commands.main.plan_format import format_plan
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -26,6 +25,7 @@ from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceRe
 from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import (
     plan_dbt_interop_command,
     resolve_sqlbuild_test_actions,
@@ -39,8 +39,8 @@ from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCommandExecutionResult,
     DbtCombinedGraph,
+    DbtCommandExecutionResult,
     DbtCommandResult,
     DbtExecutionOutcome,
     DbtInteropPlan,
@@ -49,11 +49,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
-    build_deferred_dbt_relations,
     build_dbt_execution_outcome,
     build_dbt_non_model_run_unique_ids,
     build_dbt_pruned_seed_unique_ids,
     build_dbt_pruned_test_unique_ids,
+    build_deferred_dbt_relations,
     build_merged_dbt_execution_argv,
     dbt_blocked_exit_code,
     execute_dbt_commands,
@@ -70,8 +70,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropSkipReason,
     DbtInteropSqlbuildTestAction,
 )
-from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -101,6 +101,7 @@ def execute_dbt_interop_from_project(
     dbt_output_stream: TextIO = dbt_stdout_stream or output_stream
     routed: DbtInteropRoutedArgs = route_dbt_interop_args(command=command, args=args)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
@@ -173,7 +174,6 @@ def execute_dbt_interop_from_project(
     connection_progress: Any = build_connection_progress_reporter(
         adapter_name=adapter_name,
         stream=output_stream,
-        blank_line_after_complete=True,
         use_color=use_color,
     )
     dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
@@ -372,7 +372,9 @@ def execute_dbt_interop_from_project(
         return max(dbt_execution.returncode, dbt_blocked_exit_code(plan))
     if not plan_has_executable_work(plan_output):
         style: CliStyle = CliStyle(use_color=use_color)
-        output_stream.write(style.muted("Skipping SQLBuild: selected models are already current.") + "\n")
+        output_stream.write(
+            style.muted("Skipping SQLBuild: selected models are already current.") + "\n"
+        )
         output_stream.flush()
         return max(dbt_execution.returncode, dbt_blocked_exit_code(plan))
 

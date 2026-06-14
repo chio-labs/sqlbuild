@@ -339,7 +339,12 @@ def _format_dbt_non_model_resource_group(
 
 
 def _format_dbt_pruned_non_model_group(
-    lines: list[str], *, label: str, note: str, nodes: tuple[DbtLsNode, ...], display_options: DisplayOptions
+    lines: list[str],
+    *,
+    label: str,
+    note: str,
+    nodes: tuple[DbtLsNode, ...],
+    display_options: DisplayOptions,
 ) -> None:
     if not nodes:
         return
@@ -365,7 +370,11 @@ def _nodes_by_unique_ids(
 ) -> tuple[DbtLsNode, ...]:
     return tuple(
         sorted(
-            (node for node in nodes if node.unique_id in unique_ids and node.resource_type == resource_type),
+            (
+                node
+                for node in nodes
+                if node.unique_id in unique_ids and node.resource_type == resource_type
+            ),
             key=_dbt_node_sort_key,
         )
     )
