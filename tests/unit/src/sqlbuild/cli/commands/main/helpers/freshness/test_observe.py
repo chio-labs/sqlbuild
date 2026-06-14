@@ -25,6 +25,10 @@ FRESHNESS_OBSERVATION_TEST_CASES: list[FreshnessObservationTestCase] = [
         select=(),
         exclude=(),
         expected_statuses={
+            "raw_age_error": "observed",
+            "raw_age_pass": "observed",
+            "raw_age_unknown": "observed",
+            "raw_age_warn": "observed",
             "raw_error": "error",
             "raw_lag": "observed",
             "raw_orders": "observed",
@@ -32,9 +36,19 @@ FRESHNESS_OBSERVATION_TEST_CASES: list[FreshnessObservationTestCase] = [
             "raw_unknown": "unknown",
         },
         expected_versions={
+            "raw_age_error": "2025-12-31T21:00:00",
+            "raw_age_pass": "2025-12-31T23:30:00",
+            "raw_age_unknown": "42",
+            "raw_age_warn": "2025-12-31T22:30:00",
             "raw_lag": "2026-01-01T00:05:00",
             "raw_orders": "1",
             "raw_payments": "2",
+        },
+        expected_age_statuses={
+            "raw_age_error": "error",
+            "raw_age_pass": "pass",
+            "raw_age_unknown": "unknown",
+            "raw_age_warn": "warn",
         },
     ),
     FreshnessObservationTestCase(
@@ -43,6 +57,7 @@ FRESHNESS_OBSERVATION_TEST_CASES: list[FreshnessObservationTestCase] = [
         exclude=("raw_unknown",),
         expected_statuses={"raw_orders": "observed"},
         expected_versions={"raw_orders": "1"},
+        expected_age_statuses={},
     ),
     FreshnessObservationTestCase(
         description="compares current observations to previous state",
@@ -85,6 +100,7 @@ FRESHNESS_OBSERVATION_TEST_CASES: list[FreshnessObservationTestCase] = [
             "raw_orders": "1",
             "raw_payments": "2",
         },
+        expected_age_statuses={},
     ),
 ]
 
@@ -117,6 +133,12 @@ def test_given_sources_when_observing_freshness_then_classifies_sources(
     assert {
         name: version for name, version in versions.items() if name in test_case.expected_versions
     } == test_case.expected_versions
+    age_statuses: dict[str, str] = {
+        source.name: source.age_status.value
+        for source in result.sources
+        if source.age_status is not None
+    }
+    assert age_statuses == (test_case.expected_age_statuses or {})
 
 
 @pytest.mark.parametrize(

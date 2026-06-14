@@ -884,7 +884,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "stale root set: root_a, root_b",
             "stale models: 55",
             "stale model set: model_00",
-            "... (+5 more; use --verbose to show all)",
+            "... (+35 more; use --verbose to show all)",
         ),
         expected_ordered_fragments=(
             "stale roots: 2",
@@ -944,7 +944,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Remaining stale",
             "models outside selection: 55",
             "model set: model_00",
-            "... (+5 more; use --verbose to show all)",
+            "... (+35 more; use --verbose to show all)",
         ),
     ),
     FormatPlanTestCase(

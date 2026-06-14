@@ -46,6 +46,9 @@ class SharedSourceFreshnessColumnSqlTestCase:
     source_schema: str | None
     source_table: str
     expected_sql_fragment: str
+    freshness_filter: str | None = None
+    expected_filter_fragment: str | None = None
+    unexpected_sql_fragment: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,15 @@ class StandardSourceFreshnessLagToleranceTestCase:
     current_query: str
     expected_changed_count: int
     expected_unchanged_count: int
+
+
+@dataclass(frozen=True)
+class StandardSourceFreshnessAgePolicyTestCase:
+    description: str
+    current_query: str
+    warn_after: str | None
+    error_after: str | None
+    expected_age_status: str
 
 
 @dataclass(frozen=True)

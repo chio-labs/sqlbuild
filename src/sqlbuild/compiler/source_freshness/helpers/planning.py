@@ -8,6 +8,9 @@ from typing import Any
 
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness.helpers.age_policy import (
+    evaluate_source_freshness_age_policy,
+)
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -26,6 +29,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessSet,
     StandardSourceFreshnessPlanningResult,
 )
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy
 
@@ -54,6 +58,7 @@ def build_standard_source_freshness_planning_result(
     unknown_source_names: list[str] = []
     changed_identities: set[SourceFreshnessIdentity] = set()
     unchanged_identities: set[SourceFreshnessIdentity] = set()
+    age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = {}
 
     source: SourceEntry
     for source in sources:
@@ -83,6 +88,15 @@ def build_standard_source_freshness_planning_result(
             run_id=run_id,
         )
         observed_records.append(observed_record)
+        age_status: SourceFreshnessAgeStatus | None = evaluate_source_freshness_age_policy(
+            policy=observation_source.freshness.age_policy
+            if observation_source.freshness is not None
+            else None,
+            data_version=observation.data_version,
+            observed_at=observation.observed_at,
+        )
+        if age_status is not None:
+            age_statuses[observed_record.identity] = age_status
         previous_record: SourceFreshnessRecord | None = previous_records_by_identity.get(
             observed_record.identity
         )
@@ -108,6 +122,7 @@ def build_standard_source_freshness_planning_result(
         changed_identities=frozenset(changed_identities),
         unchanged_identities=frozenset(unchanged_identities),
         unknown_source_names=tuple(sorted(unknown_source_names)),
+        age_statuses=age_statuses,
     )
 
 

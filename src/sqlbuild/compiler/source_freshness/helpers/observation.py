@@ -40,9 +40,10 @@ def observe_configured_source_freshness(
             raise SourceFreshnessObservationError(
                 f"source '{source.name}' has incomplete column freshness configuration"
             )
+        where_sql: str = f" WHERE {config.filter}" if config.filter is not None else ""
         sql: str = (
             f"SELECT MAX({adapter.render_identifier(config.column)}) AS data_version "
-            f"FROM {_source_relation(source)}"
+            f"FROM {_source_relation(source)}{where_sql}"
         )
         data_version: object = _query_single_data_version(
             adapter=adapter,

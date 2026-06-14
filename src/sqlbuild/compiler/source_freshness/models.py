@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -82,4 +83,7 @@ class StandardSourceFreshnessPlanningResult:
     changed_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unchanged_identities: frozenset[SourceFreshnessIdentity] = frozenset()
     unknown_source_names: tuple[str, ...] = ()
+    age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = field(
+        default_factory=dict
+    )
     propagation: StandardSourceFreshnessPropagationResult | None = None

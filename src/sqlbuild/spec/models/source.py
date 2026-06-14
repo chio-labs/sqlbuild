@@ -21,6 +21,14 @@ class IntegrationLoaderConfig:
 
 
 @dataclass(frozen=True)
+class SourceFreshnessAgePolicy:
+    """Age-based source freshness warning/error thresholds."""
+
+    warn_after: str | None = None
+    error_after: str | None = None
+
+
+@dataclass(frozen=True)
 class SourceFreshnessConfig:
     """Configured source freshness observation for virtual planning."""
 
@@ -28,7 +36,9 @@ class SourceFreshnessConfig:
     value_kind: SourceFreshnessValueKind | None = None
     column: str | None = None
     query: str | None = None
+    filter: str | None = None
     lag_tolerance: str | None = None
+    age_policy: SourceFreshnessAgePolicy | None = None
 
 
 @dataclass(frozen=True)
