@@ -21,9 +21,29 @@ class DbtManifestModel:
 
 
 @dataclass(frozen=True)
+class DbtManifestSource:
+    """One dbt source node needed for SQLBuild freshness translation."""
+
+    unique_id: str
+    package_name: str
+    source_name: str
+    name: str
+    relation_name: str
+    database: str | None = None
+    schema: str | None = None
+    identifier: str | None = None
+    loaded_at_field: str | None = None
+    loaded_at_query: str | None = None
+    freshness: dict[str, object] | None = None
+    freshness_filter: str | None = None
+    payload: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class DbtManifestIndex:
-    """Lookup indexes for dbt model nodes in a manifest."""
+    """Lookup indexes for dbt model and source nodes in a manifest."""
 
     models_by_unique_id: dict[str, DbtManifestModel]
     models_by_name: dict[str, tuple[DbtManifestModel, ...]]
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
+    sources_by_unique_id: dict[str, DbtManifestSource] = field(default_factory=dict)
