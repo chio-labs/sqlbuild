@@ -43,20 +43,28 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropRoutedArgs,
+    DbtModelPlanningResult,
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_deferred_dbt_relations,
     build_merged_dbt_execution_argv,
+    build_unblocked_sqlbuild_model_names,
+    dbt_blocked_exit_code,
     execute_dbt_commands,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
+    build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
     resolve_connection_config,
 )
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
+from sqlbuild.integrations.dbt.types import (
+    DbtInteropCommand,
+    DbtInteropSkipReason,
+    DbtInteropSqlbuildTestAction,
+)
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -156,11 +164,38 @@ def execute_dbt_interop_from_project(
         on_progress,
         f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
     )
+    connection_progress: Any = build_connection_progress_reporter(
+        adapter_name=adapter_name,
+        stream=output_stream,
+        blank_line_after_complete=True,
+        use_color=use_color,
+    )
+    dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        project=project,
+        adapter=adapter,
+        adapter_name=adapter_name,
+        manifest=manifest,
+        graph=graph,
+        candidate_unique_ids=tuple(
+            sorted(
+                frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
+            )
+        ),
+        full_refresh="--full-refresh" in routed.dbt_args,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+    )
+    if dbt_model_plan is not None:
+        plan = replace(plan, dbt_model_plan=dbt_model_plan)
     merged_dbt_argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
         command=command,
         options=dbt_options,
         routed_args=routed.dbt_args,
         plan=plan,
+        replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
     )
     if not json_output:
         display_plan: DbtInteropPlan = plan
@@ -170,11 +205,21 @@ def execute_dbt_interop_from_project(
                 dbt_command_argv=merged_dbt_argv,
                 supplemental_dbt_command_argvs=(),
             )
+        elif (
+            plan.dbt_model_plan is not None
+            and plan.dbt_model_plan.current_unique_ids
+            and not plan.dbt_model_plan.blocked_unique_ids
+        ):
+            display_plan = replace(
+                plan,
+                dbt_skip_reason=DbtInteropSkipReason.DBT_MODELS_CURRENT,
+                supplemental_dbt_command_argvs=(),
+            )
         rendered_plan: str = render_dbt_interop_plan(
             display_plan,
             json_output=False,
             use_color=use_color,
-            display_options=DisplayOptions(max_entries_per_section=None if verbose else 50),
+            display_options=DisplayOptions(max_entries_per_section=None if verbose else 10),
         )
         output_stream.write(rendered_plan + "\n\n")
         output_stream.flush()
@@ -255,20 +300,19 @@ def execute_dbt_interop_from_project(
     output_stream.write("\n")
     output_stream.flush()
 
-    connection_progress: Any = build_connection_progress_reporter(
-        adapter_name=adapter_name,
-        stream=output_stream,
-        blank_line_after_complete=True,
-        use_color=use_color,
-    )
     plan_output: PlanOutput | None = build_sqlbuild_plan_output(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         project=project,
         adapter=adapter,
         adapter_name=adapter_name,
-        selected_model_names=plan.selection.sqlbuild_model_names,
+        selected_model_names=build_unblocked_sqlbuild_model_names(plan),
         required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+        forced_stale_model_names=(
+            plan.dbt_model_plan.stale_sqlbuild_model_names
+            if plan.dbt_model_plan is not None
+            else ()
+        ),
         sqlbuild_args=routed.sqlbuild_args,
         on_progress=None,
         on_connection_start=connection_progress.on_connection_start,
@@ -277,23 +321,23 @@ def execute_dbt_interop_from_project(
         deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
     )
     if plan_output is None:
-        return 0
+        return dbt_blocked_exit_code(plan)
     if not plan_has_executable_work(plan_output):
         output_stream.write(
             format_plan(
                 plan_output,
                 use_color=use_color,
-                display_options=DisplayOptions(max_entries_per_section=None if verbose else 50),
+                display_options=DisplayOptions(max_entries_per_section=None if verbose else 10),
             )
             + "\n"
         )
         output_stream.flush()
-        return 0
+        return dbt_blocked_exit_code(plan)
 
     actions: tuple[DbtInteropSqlbuildTestAction, ...] = ()
     if command == DbtInteropCommand.TEST:
         actions = resolve_sqlbuild_test_actions(select=routed.select)
-    return execute_dbt_sqlbuild_work(
+    sqlbuild_exit_code: int = execute_dbt_sqlbuild_work(
         command=command,
         plan_output=plan_output,
         connection_config=connection_config,
@@ -307,6 +351,9 @@ def execute_dbt_interop_from_project(
         output_stream=output_stream,
         use_color=use_color,
     )
+    if sqlbuild_exit_code != 0:
+        return sqlbuild_exit_code
+    return dbt_blocked_exit_code(plan)
 
 
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:

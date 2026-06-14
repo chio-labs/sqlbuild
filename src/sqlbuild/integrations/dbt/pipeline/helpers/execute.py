@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import TextIO
 
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.event_stream import execute_dbt_json_event_stream
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_command_argv
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
@@ -33,7 +34,8 @@ def execute_dbt_commands(
     """Execute the merged dbt command, or skip when no dbt work exists."""
 
     if merged_argv is None:
-        progress_stream.write("Skipping dbt: no dbt work selected.\n")
+        style: CliStyle = CliStyle(use_color=use_color)
+        progress_stream.write(style.muted("Skipping dbt: no dbt work selected.") + "\n")
         progress_stream.flush()
         return 0
     argv: tuple[str, ...] = merged_argv
@@ -62,11 +64,31 @@ def build_merged_dbt_execution_argv(
     options: DbtCliOptions,
     routed_args: tuple[str, ...],
     plan: DbtInteropPlan,
+    replay_on_change: str | None = None,
 ) -> tuple[str, ...] | None:
     """Build the single dbt argv used for execution."""
 
     if command == DbtInteropCommand.TEST and not plan.dbt_selected_unique_ids:
         return None
+    planned_select_terms: tuple[str, ...] = _planned_dbt_select_terms(plan)
+    if plan.dbt_model_plan is not None:
+        if not planned_select_terms:
+            return None
+        pruned_args: tuple[str, ...] = _replace_dbt_select_terms(
+            args=_strip_resolved_dbt_options(routed_args),
+            select_terms=planned_select_terms,
+        )
+        pruned_args = _apply_dbt_replay_on_change(
+            args=pruned_args,
+            replay_on_change=replay_on_change,
+            has_planned_model_work=bool(plan.dbt_model_plan.run_unique_ids),
+        )
+        return build_dbt_command_argv(
+            dbt_executable=plan.dbt_command_argv[0],
+            command=command.value,
+            options=options,
+            args=pruned_args,
+        )
     if not plan.dbt_selected_unique_ids and not plan.dbt_required_selector_terms:
         return None
     merged_args: tuple[str, ...] = _merge_dbt_select_terms(
@@ -79,6 +101,22 @@ def build_merged_dbt_execution_argv(
         options=options,
         args=merged_args,
     )
+
+
+def _apply_dbt_replay_on_change(
+    *, args: tuple[str, ...], replay_on_change: str | None, has_planned_model_work: bool
+) -> tuple[str, ...]:
+    policy: str | None = replay_on_change.strip().lower() if replay_on_change is not None else None
+    if policy in (None, "", "forward_only"):
+        return args
+    if policy != "full":
+        raise DbtInteropConfigError(
+            "[dbt].replay_on_change must be 'forward_only' or 'full'; "
+            "bounded replay policies are not supported for dbt"
+        )
+    if not has_planned_model_work or "--full-refresh" in args:
+        return args
+    return ("--full-refresh", *args)
 
 
 def build_deferred_dbt_relations(
@@ -106,6 +144,23 @@ def build_deferred_dbt_relations(
         relations[model.name] = relation
         relations[f"{model.package_name}.{model.name}"] = relation
     return relations
+
+
+def build_unblocked_sqlbuild_model_names(plan: DbtInteropPlan) -> tuple[str, ...]:
+    """Return selected SQLBuild models not blocked by dbt model planning."""
+
+    if plan.dbt_model_plan is None or not plan.dbt_model_plan.blocked_sqlbuild_model_names:
+        return plan.selection.sqlbuild_model_names
+    blocked: frozenset[str] = frozenset(plan.dbt_model_plan.blocked_sqlbuild_model_names)
+    return tuple(name for name in plan.selection.sqlbuild_model_names if name not in blocked)
+
+
+def dbt_blocked_exit_code(plan: DbtInteropPlan) -> int:
+    """Return non-zero when dbt model planning blocked selected work."""
+
+    if plan.dbt_model_plan is None:
+        return 0
+    return 1 if plan.dbt_model_plan.blocked_unique_ids else 0
 
 
 def _strip_resolved_dbt_options(args: tuple[str, ...]) -> tuple[str, ...]:
@@ -152,3 +207,31 @@ def _merge_dbt_select_terms(
     if not inserted:
         merged.extend(("--select", *extra_terms))
     return tuple(merged)
+
+
+def _planned_dbt_select_terms(plan: DbtInteropPlan) -> tuple[str, ...]:
+    if plan.dbt_model_plan is None:
+        return ()
+    if not plan.dbt_model_plan.run_selector_terms:
+        return ()
+    non_model_selected: tuple[str, ...] = tuple(
+        sorted(node.unique_id for node in plan.dbt_selected_nodes if node.resource_type != "model")
+    )
+    return tuple(sorted(frozenset((*plan.dbt_model_plan.run_selector_terms, *non_model_selected))))
+
+
+def _replace_dbt_select_terms(
+    *, args: tuple[str, ...], select_terms: tuple[str, ...]
+) -> tuple[str, ...]:
+    stripped: list[str] = []
+    index: int = 0
+    while index < len(args):
+        token: str = args[index]
+        if token in {"--select", "--exclude"}:
+            index += 1
+            while index < len(args) and not args[index].startswith("--"):
+                index += 1
+            continue
+        stripped.append(token)
+        index += 1
+    return (*stripped, "--select", *select_terms)

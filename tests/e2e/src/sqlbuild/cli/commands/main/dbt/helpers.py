@@ -81,3 +81,133 @@ def load_json_stdout(stdout: str) -> dict[str, object]:
     payload: object = json.loads(stdout)
     assert isinstance(payload, dict)
     return payload
+
+
+def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None = None) -> Path:
+    """Write a focused dbt interop project for model-planning E2Es."""
+
+    root_dir: Path = tmp_path / "dbt_phase11"
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_models_dir.mkdir(parents=True)
+
+    db_path: Path = sqlbuild_project_dir / "dbt_phase11.duckdb"
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n",
+        encoding="utf-8",
+    )
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "sources.yml").write_text(
+        "version: 2\n"
+        "sources:\n"
+        "  - name: raw\n"
+        "    schema: main\n"
+        "    tables:\n"
+        "      - name: orders\n"
+        "        identifier: raw_orders\n"
+        "        loaded_at_field: loaded_at\n"
+        "        freshness:\n"
+        "          error_after: {count: 1, period: day}\n"
+        "      - name: customers\n"
+        "        identifier: raw_customers\n",
+        encoding="utf-8",
+    )
+    write_dbt_phase11_fact_orders_model(
+        project_dir=sqlbuild_project_dir, amount_expression="amount"
+    )
+    (dbt_models_dir / "stg_orders.sql").write_text(
+        "select order_id, customer_id, amount, loaded_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "stg_customers.sql").write_text(
+        "select customer_id, customer_name from {{ source('raw', 'customers') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "dim_customers.sql").write_text(
+        "select customer_id, customer_name from {{ ref('stg_customers') }}\n",
+        encoding="utf-8",
+    )
+    replay_line: str = (
+        f'replay_on_change = "{replay_on_change}"\n' if replay_on_change is not None else ""
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dbt_phase11"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n'
+        "[connection]\n"
+        'database = "dbt_phase11.duckdb"\n'
+        "[targets.dev]\n"
+        'schema = "main"\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n'
+        f"{replay_line}",
+        encoding="utf-8",
+    )
+    (sqlbuild_models_dir / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT order_id, amount AS downstream_amount FROM __dbt_ref("analytics", "fact_orders")\n',
+        encoding="utf-8",
+    )
+    (sqlbuild_models_dir / "customer_summary.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT customer_id, customer_name FROM __dbt_ref("analytics", "dim_customers")\n',
+        encoding="utf-8",
+    )
+    seed_dbt_phase11_sources(project_dir=sqlbuild_project_dir, stale_orders=False)
+    return sqlbuild_project_dir
+
+
+def write_dbt_phase11_fact_orders_model(*, project_dir: Path, amount_expression: str) -> None:
+    """Write the mutable dbt fact_orders model used by Phase 11 E2Es."""
+
+    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
+    (dbt_models_dir / "fact_orders.sql").write_text(
+        "select order_id, customer_id, "
+        f"{amount_expression} as amount from {{{{ ref('stg_orders') }}}}\n",
+        encoding="utf-8",
+    )
+
+
+def seed_dbt_phase11_sources(*, project_dir: Path, stale_orders: bool) -> None:
+    """Create raw DuckDB tables for the focused Phase 11 dbt project."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    loaded_at: str = "2000-01-01 00:00:00" if stale_orders else "2999-01-01 00:00:00"
+    db_path: Path = project_dir / "dbt_phase11.duckdb"
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE OR REPLACE TABLE main.raw_orders AS "
+            "SELECT 1 AS order_id, 10 AS customer_id, 100 AS amount, "
+            f"TIMESTAMP '{loaded_at}' AS loaded_at"
+        ),
+    )
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE OR REPLACE TABLE main.raw_customers AS "
+            "SELECT 10 AS customer_id, 'Ada' AS customer_name"
+        ),
+    )

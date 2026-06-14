@@ -20,6 +20,7 @@ class DbtCombinedGraphResourceType(StrEnum):
     """Resource type namespace for a combined dbt/SQLBuild graph node."""
 
     MODEL = "model"
+    SOURCE = "source"
 
 
 class DbtInteropCommand(StrEnum):
@@ -43,4 +44,25 @@ class DbtInteropSkipReason(StrEnum):
     """Reason one side of a dbt interop plan has no work."""
 
     NO_DBT_WORK = "no_dbt_work"
+    DBT_MODELS_CURRENT = "dbt_models_current"
     NO_SQLBUILD_WORK = "no_sqlbuild_work"
+
+
+class DbtModelPlanAction(StrEnum):
+    """Planner action for one dbt model node."""
+
+    RUN = "run"
+    CURRENT = "current"
+    BLOCKED = "blocked"
+
+
+class DbtModelPlanReason(StrEnum):
+    """Planner reason for one dbt model node action."""
+
+    FIRST_RUN = "first_run"
+    FULL_REFRESH = "full_refresh"
+    RELATION_MISSING = "relation_missing"
+    CHECKSUM_CHANGED = "checksum_changed"
+    UPSTREAM_CHANGED = "upstream_changed"
+    NO_CHANGE = "no_change"
+    SOURCE_FRESHNESS_ERROR = "source_freshness_error"

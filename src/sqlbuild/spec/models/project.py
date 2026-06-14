@@ -161,6 +161,7 @@ class DbtConfig:
     profiles_dir: str | None = None
     target: str | None = None
     target_path: str | None = None
+    replay_on_change: str | None = None
 
 
 @dataclass(frozen=True)

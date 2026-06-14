@@ -143,6 +143,7 @@ def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManife
         database=database,
         schema=schema,
         alias=alias,
+        node_checksum=_parse_checksum(raw_node.get("checksum")),
         relation_name=relation_name,
         depends_on_nodes=depends_on_nodes,
         payload={str(key): value for key, value in raw_node.items()},
@@ -201,6 +202,16 @@ def _optional_dict(value: object) -> dict[str, object] | None:
     if isinstance(value, dict):
         return {str(key): item for key, item in value.items()}
     return None
+
+
+def _parse_checksum(value: object) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    if not isinstance(value, dict):
+        return None
+    raw_checksum: dict[str, object] = cast(dict[str, object], value)
+    checksum: object | None = raw_checksum.get("checksum")
+    return checksum if isinstance(checksum, str) and checksum else None
 
 
 def _parse_depends_on_nodes(value: object) -> tuple[str, ...]:

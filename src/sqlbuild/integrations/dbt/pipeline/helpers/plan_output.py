@@ -19,8 +19,15 @@ from sqlbuild.compiler.planner.main.display_plan import build_display_only_sqlbu
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import StandardScopePruning
+from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
 from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
-from sqlbuild.integrations.dbt.models import DbtCommandResult, NormalizedDbtProfileConnection
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import (
+    DbtCombinedGraph,
+    DbtCommandResult,
+    DbtModelPlanningResult,
+    NormalizedDbtProfileConnection,
+)
 
 
 def dbt_failure_detail(result: DbtCommandResult) -> str | None:
@@ -37,6 +44,7 @@ def build_sqlbuild_plan_output(
     adapter_name: str,
     selected_model_names: tuple[str, ...],
     required_dbt_unique_ids: tuple[str, ...],
+    forced_stale_model_names: tuple[str, ...] = (),
     sqlbuild_args: tuple[str, ...],
     on_progress: Callable[[str], None] | None,
     on_connection_start: Callable[[int], None] | None,
@@ -74,6 +82,7 @@ def build_sqlbuild_plan_output(
                 select=selected_model_names,
                 cursor_overrides=cursor_overrides,
                 full_refresh="--full-refresh" in sqlbuild_args,
+                forced_stale_model_names=forced_stale_model_names,
                 standard_scope_pruning=(
                     StandardScopePruning.PRUNE_UNCHANGED
                     if "--force" not in sqlbuild_args
@@ -88,6 +97,54 @@ def build_sqlbuild_plan_output(
                 selected_model_names=selected_model_names,
                 full_refresh="--full-refresh" in sqlbuild_args,
             )
+    finally:
+        adapter.close(connection)
+
+
+def build_dbt_model_plan_output(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    adapter_name: str,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph | None = None,
+    candidate_unique_ids: tuple[str, ...],
+    full_refresh: bool = False,
+    on_connection_start: Callable[[int], None] | None,
+    on_connection_complete: Callable[[int, float], None] | None,
+    on_connection_error: Callable[[int, float], None] | None,
+) -> DbtModelPlanningResult | None:
+    if not candidate_unique_ids:
+        return None
+    connection_config: dict[str, object] = resolve_connection_config(
+        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
+        project_dir=project_dir,
+        adapter_name=adapter_name,
+        discovered_inputs=discovered_inputs,
+    )
+    if on_connection_start is not None:
+        on_connection_start(1)
+    start: float = time.monotonic()
+    try:
+        connection: Any = adapter.connect(connection_config)
+    except Exception:
+        if on_connection_error is not None:
+            on_connection_error(1, time.monotonic() - start)
+        raise
+    if on_connection_complete is not None:
+        on_connection_complete(1, time.monotonic() - start)
+    try:
+        return build_dbt_model_planning_result(
+            manifest=manifest,
+            candidate_unique_ids=candidate_unique_ids,
+            project=project,
+            graph=graph,
+            full_refresh=full_refresh,
+            adapter=adapter,
+            connection=connection,
+        )
     finally:
         adapter.close(connection)
 

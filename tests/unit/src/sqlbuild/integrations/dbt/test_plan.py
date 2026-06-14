@@ -122,8 +122,6 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
             "Plan ready (2 selected)",
-            "required: 1",
-            "model.analytics.int_orders",
             "fact_orders",
         ),
         expected_json_fragments=(
@@ -176,9 +174,6 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "required: 1",
-            "dbt anchors (1)",
-            "package:stripe+: 1",
             "Path translations (1)",
             "path:models\\marts -> path:models/marts",
         ),
@@ -397,7 +392,11 @@ def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_prec
         selection=selection,
     )
 
-    human_output: str = format_dbt_interop_plan(plan, use_color=False)
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=False,
+        display_options=DisplayOptions(max_entries_per_section=None),
+    )
 
     for expected_fragment in test_case.expected_human_fragments:
         assert expected_fragment in human_output

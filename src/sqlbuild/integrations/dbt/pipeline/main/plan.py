@@ -34,8 +34,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropRoutedArgs,
+    DbtModelPlanningResult,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers.execute import build_unblocked_sqlbuild_model_names
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
+    build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
 )
@@ -134,14 +137,45 @@ def plan_dbt_interop_from_project(
         dbt_executable=dbt_executable,
         sqlbuild_executable=sqlbuild_executable,
     )
+    dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        project=project,
+        adapter=adapter,
+        adapter_name=adapter_name,
+        manifest=manifest,
+        graph=graph,
+        candidate_unique_ids=tuple(
+            sorted(
+                frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
+            )
+        ),
+        full_refresh="--full-refresh" in routed.dbt_args,
+        on_connection_start=(
+            None if connection_progress is None else connection_progress.on_connection_start
+        ),
+        on_connection_complete=(
+            None if connection_progress is None else connection_progress.on_connection_complete
+        ),
+        on_connection_error=(
+            None if connection_progress is None else connection_progress.on_connection_error
+        ),
+    )
+    if dbt_model_plan is not None:
+        plan = replace(plan, dbt_model_plan=dbt_model_plan)
     sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         project=project,
         adapter=adapter,
         adapter_name=adapter_name,
-        selected_model_names=plan.selection.sqlbuild_model_names,
+        selected_model_names=build_unblocked_sqlbuild_model_names(plan),
         required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+        forced_stale_model_names=(
+            plan.dbt_model_plan.stale_sqlbuild_model_names
+            if plan.dbt_model_plan is not None
+            else ()
+        ),
         sqlbuild_args=routed.sqlbuild_args,
         on_progress=on_progress,
         on_connection_start=(
