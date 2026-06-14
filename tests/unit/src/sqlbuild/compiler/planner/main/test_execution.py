@@ -22,7 +22,12 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     StandardModelVersionIdentities,
 )
-from sqlbuild.compiler.planner.types import PlanAction, RelationReuseKind, StandardScopePruning
+from sqlbuild.compiler.planner.types import (
+    PlanAction,
+    PlanReason,
+    RelationReuseKind,
+    StandardScopePruning,
+)
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_project,
@@ -30,11 +35,13 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     HookFunctionPlanOutputTestCase,
+    ExternalBlockedPlanOutputTestCase,
     StandardReuseFromSourceDeferralConflictTestCase,
     StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,
     StandardSourceFreshnessPlanOutputTestCase,
 )
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
 PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
     StandardSourceFreshnessPlanOutputTestCase(
@@ -135,6 +142,47 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
         adapter.close(connection)
 
     assert tuple(hook.name for hook in plan_output.hook_functions) == test_case.expected_hook_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExternalBlockedPlanOutputTestCase(
+            description="external blocked overlay skips blocked model but keeps sibling work",
+            expected_model_names=("blocked", "unrelated"),
+        )
+    ],
+    ids=["external blocked overlay skips blocked model but keeps sibling work"],
+)
+def test_given_external_blocked_model_when_building_execution_plan_then_only_that_model_is_skipped(
+    test_case: ExternalBlockedPlanOutputTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    project: CompiledProject = build_compiled_project_with_models(
+        {
+            "blocked": "select 1 as id",
+            "unrelated": "select 2 as id",
+        }
+    )
+    try:
+        plan_output: PlanOutput = build_execution_plan(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            select=("blocked", "unrelated"),
+            external_blocked_model_names=("blocked",),
+        )
+    finally:
+        adapter.close(connection)
+
+    entries_by_name: dict[str, ModelPlanEntry] = {
+        entry.name: entry for entry in plan_output.model_entries
+    }
+    assert tuple(sorted(entries_by_name)) == test_case.expected_model_names
+    assert entries_by_name["blocked"].action == PlanAction.SKIP
+    assert entries_by_name["blocked"].reason == PlanReason.EXTERNAL_UPSTREAM_FAILED
+    assert entries_by_name["unrelated"].action != PlanAction.SKIP
 
 
 @pytest.mark.parametrize(

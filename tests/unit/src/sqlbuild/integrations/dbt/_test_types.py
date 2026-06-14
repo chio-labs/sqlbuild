@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
-from sqlbuild.integrations.dbt.types import DbtModelPlanAction, DbtModelPlanReason
+from sqlbuild.integrations.dbt.types import (
+    DbtModelOutcomeState,
+    DbtModelPlanAction,
+    DbtModelPlanReason,
+)
 from sqlbuild.spec.models.project import DbtConfig
 
 
@@ -174,6 +178,14 @@ class DbtModelSourceBlockingTestCase:
 class DbtExecutionArgvPruningTestCase:
     description: str
     expected_argv: tuple[str, ...] | None
+
+
+@dataclass(frozen=True)
+class DbtExecutionOutcomeTestCase:
+    description: str
+    expected_states_by_unique_id: tuple[tuple[str, DbtModelOutcomeState], ...]
+    expected_stale_sqlbuild_model_names: tuple[str, ...]
+    expected_blocked_sqlbuild_model_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

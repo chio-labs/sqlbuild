@@ -45,6 +45,7 @@ def build_sqlbuild_plan_output(
     selected_model_names: tuple[str, ...],
     required_dbt_unique_ids: tuple[str, ...],
     forced_stale_model_names: tuple[str, ...] = (),
+    external_blocked_model_names: tuple[str, ...] = (),
     sqlbuild_args: tuple[str, ...],
     on_progress: Callable[[str], None] | None,
     on_connection_start: Callable[[int], None] | None,
@@ -83,6 +84,7 @@ def build_sqlbuild_plan_output(
                 cursor_overrides=cursor_overrides,
                 full_refresh="--full-refresh" in sqlbuild_args,
                 forced_stale_model_names=forced_stale_model_names,
+                external_blocked_model_names=external_blocked_model_names,
                 standard_scope_pruning=(
                     StandardScopePruning.PRUNE_UNCHANGED
                     if "--force" not in sqlbuild_args

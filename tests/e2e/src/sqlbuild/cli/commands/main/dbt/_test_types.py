@@ -108,6 +108,7 @@ class DbtInitDuckDbE2ETestCase:
 class DbtPhase11ExecutionTestCase:
     description: str
     expected_current_stdout_fragments: tuple[str, ...]
+    expected_current_absent_stdout_fragments: tuple[str, ...]
     expected_changed_rows: tuple[tuple[object, ...], ...]
     expected_fingerprint_unique_ids: tuple[str, ...]
 
@@ -119,6 +120,31 @@ class DbtPhase11SourceBlockingTestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_relations: tuple[str, ...]
     expected_customer_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11ModelFailureTestCase:
+    description: str
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[str, ...]
+    expected_customer_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11NonModelWorkTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = ()
+    expected_returncode: int = 0
+
+
+@dataclass(frozen=True)
+class DbtPhase11SqlbuildNativePlanTestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
 
 
 @dataclass(frozen=True)

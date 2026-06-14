@@ -81,6 +81,7 @@ def build_execution_plan(
     auto_load_sources: bool = False,
     reload_sources: bool = False,
     forced_stale_model_names: tuple[str, ...] = (),
+    external_blocked_model_names: tuple[str, ...] = (),
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
@@ -265,6 +266,7 @@ def build_execution_plan(
             if source_freshness is not None and source_freshness.propagation is not None
             else frozenset()
         ),
+        external_blocked_model_names=frozenset(external_blocked_model_names),
         custom_prepare_version_materializations=custom_prepare_version_materializations,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,

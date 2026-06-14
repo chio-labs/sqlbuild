@@ -214,6 +214,7 @@ def build_plan_entries(
     standard_reuse_decisions: StandardReuseDecisionResults | None = None,
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
     source_freshness_blocked_model_names: frozenset[str] = frozenset(),
+    external_blocked_model_names: frozenset[str] = frozenset(),
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
     start_cursor_override: str | None = None,
     end_cursor_override: str | None = None,
@@ -269,6 +270,12 @@ def build_plan_entries(
                 entry,
                 action=PlanAction.SKIP,
                 reason=PlanReason.SOURCE_FRESHNESS_ERROR,
+            )
+        if entry.name in external_blocked_model_names:
+            entry = replace(
+                entry,
+                action=PlanAction.SKIP,
+                reason=PlanReason.EXTERNAL_UPSTREAM_FAILED,
             )
         if run_despite_unchanged is not None:
             run_decision: RunDespiteUnchangedDecision | None = run_despite_unchanged.decisions.get(

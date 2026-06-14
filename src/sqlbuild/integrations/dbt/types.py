@@ -66,3 +66,11 @@ class DbtModelPlanReason(StrEnum):
     UPSTREAM_CHANGED = "upstream_changed"
     NO_CHANGE = "no_change"
     SOURCE_FRESHNESS_ERROR = "source_freshness_error"
+
+
+class DbtModelOutcomeState(StrEnum):
+    """SQLBuild-facing state for one dbt model outcome."""
+
+    CHANGED = "changed"
+    CURRENT = "current"
+    BLOCKING = "blocking"

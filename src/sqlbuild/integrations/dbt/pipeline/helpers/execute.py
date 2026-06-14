@@ -2,22 +2,38 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.event_stream import execute_dbt_json_event_stream
+from sqlbuild.integrations.dbt.helpers.model_planning import build_downstream_sqlbuild_model_names
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_command_argv
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
+    DbtCommandExecutionResult,
+    DbtCombinedGraph,
+    DbtExecutionOutcome,
     DbtInteropPlan,
     DbtLsNode,
+    DbtModelExecutionOutcomeEntry,
+    DbtModelPlanEntry,
     DbtNodeExecutionResult,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild.integrations.dbt.types import (
+    DbtInteropCommand,
+    DbtModelOutcomeState,
+    DbtModelPlanAction,
+)
 from sqlbuild.shared.helpers.cli_style import CliStyle
+
+_DBT_SUCCESS_STATUSES: frozenset[str] = frozenset(
+    {"ok", "success", "pass", "passed", "warn", "warning"}
+)
 
 
 def execute_dbt_commands(
@@ -30,14 +46,14 @@ def execute_dbt_commands(
     stderr_stream: TextIO,
     use_color: bool,
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
-) -> int:
+) -> DbtCommandExecutionResult:
     """Execute the merged dbt command, or skip when no dbt work exists."""
 
     if merged_argv is None:
         style: CliStyle = CliStyle(use_color=use_color)
         progress_stream.write(style.muted("Skipping dbt: no dbt work selected.") + "\n")
         progress_stream.flush()
-        return 0
+        return DbtCommandExecutionResult(returncode=0)
     argv: tuple[str, ...] = merged_argv
     style: CliStyle = CliStyle(use_color=use_color)
     dbt_execution_label: str = style.dbt_execution_label("dbt execution")
@@ -46,7 +62,8 @@ def execute_dbt_commands(
     progress_stream.write(f"{dbt_execution_label}  {dbt_execution_detail}\n\n")
     progress_stream.flush()
     returncode: int
-    returncode, _results = execute_dbt_json_event_stream(
+    results: tuple[DbtNodeExecutionResult, ...]
+    returncode, results = execute_dbt_json_event_stream(
         argv=argv,
         cwd=options.project_dir,
         stream=stdout_stream,
@@ -54,8 +71,165 @@ def execute_dbt_commands(
         target_path=options.target_path,
         on_node_result=on_node_result,
     )
-    del runner, stderr_stream, _results
-    return returncode
+    results = _append_missing_run_results(
+        results=results,
+        target_path=options.target_path,
+    )
+    del runner, stderr_stream
+    return DbtCommandExecutionResult(returncode=returncode, node_results=results)
+
+
+def build_dbt_execution_outcome(
+    *, plan: DbtInteropPlan, graph: DbtCombinedGraph, node_results: tuple[DbtNodeExecutionResult, ...]
+) -> DbtExecutionOutcome:
+    """Build a SQLBuild-facing dbt model outcome overlay."""
+
+    if plan.dbt_model_plan is None:
+        return DbtExecutionOutcome()
+    planned_entries: dict[str, DbtModelPlanEntry] = {
+        entry.unique_id: entry for entry in plan.dbt_model_plan.entries
+    }
+    entries_by_unique_id: dict[str, DbtModelExecutionOutcomeEntry] = {}
+    for entry in plan.dbt_model_plan.entries:
+        if entry.action == DbtModelPlanAction.CURRENT:
+            entries_by_unique_id[entry.unique_id] = DbtModelExecutionOutcomeEntry(
+                unique_id=entry.unique_id,
+                state=DbtModelOutcomeState.CURRENT,
+                planned_action=entry.action,
+                relation_name=entry.relation_name,
+                node_checksum=entry.expected_version_hash,
+            )
+        elif entry.action == DbtModelPlanAction.BLOCKED:
+            entries_by_unique_id[entry.unique_id] = DbtModelExecutionOutcomeEntry(
+                unique_id=entry.unique_id,
+                state=DbtModelOutcomeState.BLOCKING,
+                planned_action=entry.action,
+                status=entry.reason.value,
+                relation_name=entry.relation_name,
+                node_checksum=entry.expected_version_hash,
+            )
+    result: DbtNodeExecutionResult
+    for result in node_results:
+        if result.resource_type != "model":
+            continue
+        planned_entry: DbtModelPlanEntry | None = planned_entries.get(result.unique_id)
+        planned_action: DbtModelPlanAction | None = (
+            planned_entry.action if planned_entry is not None else None
+        )
+        state: DbtModelOutcomeState = _outcome_state_for_result(
+            result=result,
+            planned_action=planned_action,
+        )
+        entries_by_unique_id[result.unique_id] = DbtModelExecutionOutcomeEntry(
+            unique_id=result.unique_id,
+            state=state,
+            planned_action=planned_action,
+            status=result.status,
+            relation_name=(
+                result.relation_name
+                or (planned_entry.relation_name if planned_entry is not None else None)
+            ),
+            node_checksum=(
+                result.node_checksum
+                or (planned_entry.expected_version_hash if planned_entry is not None else None)
+            ),
+            messages=result.messages,
+        )
+    entries: tuple[DbtModelExecutionOutcomeEntry, ...] = tuple(
+        entries_by_unique_id[unique_id] for unique_id in sorted(entries_by_unique_id)
+    )
+    return DbtExecutionOutcome(
+        entries=entries,
+        stale_sqlbuild_model_names=build_downstream_sqlbuild_model_names(
+            graph=graph,
+            dbt_unique_ids=tuple(
+                entry.unique_id for entry in entries if entry.state == DbtModelOutcomeState.CHANGED
+            ),
+        ),
+        blocked_sqlbuild_model_names=build_downstream_sqlbuild_model_names(
+            graph=graph,
+            dbt_unique_ids=tuple(
+                entry.unique_id
+                for entry in entries
+                if entry.state == DbtModelOutcomeState.BLOCKING
+            ),
+        ),
+    )
+
+
+def _outcome_state_for_result(
+    *, result: DbtNodeExecutionResult, planned_action: DbtModelPlanAction | None
+) -> DbtModelOutcomeState:
+    normalized_status: str = result.status.lower()
+    if normalized_status not in _DBT_SUCCESS_STATUSES:
+        return DbtModelOutcomeState.BLOCKING
+    if planned_action == DbtModelPlanAction.RUN:
+        return DbtModelOutcomeState.CHANGED
+    return DbtModelOutcomeState.CURRENT
+
+
+def _append_missing_run_results(
+    *, results: tuple[DbtNodeExecutionResult, ...], target_path: Path | None
+) -> tuple[DbtNodeExecutionResult, ...]:
+    if target_path is None:
+        return results
+    run_results_path: Path = target_path / "run_results.json"
+    if not run_results_path.exists():
+        return results
+    existing_unique_ids: frozenset[str] = frozenset(result.unique_id for result in results)
+    try:
+        payload: object = json.loads(run_results_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return results
+    if not isinstance(payload, dict):
+        return results
+    raw_results: object = payload.get("results")
+    if not isinstance(raw_results, list):
+        return results
+    appended: list[DbtNodeExecutionResult] = list(results)
+    total: int = len(raw_results)
+    index: int
+    raw_result: object
+    for index, raw_result in enumerate(raw_results, start=1):
+        if not isinstance(raw_result, dict):
+            continue
+        unique_id: object = raw_result.get("unique_id")
+        status: object = raw_result.get("status")
+        if not isinstance(unique_id, str) or unique_id in existing_unique_ids:
+            continue
+        if not isinstance(status, str):
+            status = "unknown"
+        appended.append(
+            DbtNodeExecutionResult(
+                unique_id=unique_id,
+                resource_type=_resource_type_from_unique_id(unique_id),
+                node_name=_node_name_from_unique_id(unique_id),
+                status=status,
+                index=index,
+                total=total,
+                execution_time=_execution_time_from_run_result(raw_result),
+            )
+        )
+    return tuple(appended)
+
+
+def _resource_type_from_unique_id(unique_id: str) -> str:
+    if "." not in unique_id:
+        return "node"
+    return unique_id.split(".", 1)[0]
+
+
+def _node_name_from_unique_id(unique_id: str) -> str:
+    if "." not in unique_id:
+        return unique_id
+    return unique_id.rsplit(".", 1)[-1]
+
+
+def _execution_time_from_run_result(raw_result: dict[str, object]) -> float | None:
+    value: object = raw_result.get("execution_time")
+    if isinstance(value, int | float):
+        return float(value)
+    return None
 
 
 def build_merged_dbt_execution_argv(
@@ -70,7 +244,7 @@ def build_merged_dbt_execution_argv(
 
     if command == DbtInteropCommand.TEST and not plan.dbt_selected_unique_ids:
         return None
-    planned_select_terms: tuple[str, ...] = _planned_dbt_select_terms(plan)
+    planned_select_terms: tuple[str, ...] = _planned_dbt_select_terms(command=command, plan=plan)
     if plan.dbt_model_plan is not None:
         if not planned_select_terms:
             return None
@@ -146,6 +320,50 @@ def build_deferred_dbt_relations(
     return relations
 
 
+def build_dbt_non_model_run_unique_ids(
+    *, command: DbtInteropCommand, plan: DbtInteropPlan
+) -> tuple[str, ...]:
+    """Return non-model dbt selected resources preserved in pruned execution."""
+
+    if plan.dbt_model_plan is None:
+        return ()
+    seed_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(plan=plan, resource_type="seed")
+    test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(plan=plan, resource_type="test")
+    if command == DbtInteropCommand.TEST:
+        return test_unique_ids
+    if command == DbtInteropCommand.BUILD:
+        if not plan.dbt_model_plan.run_selector_terms:
+            return ()
+        return tuple(
+            sorted(frozenset((*seed_unique_ids, *test_unique_ids)))
+        )
+    return ()
+
+
+def build_dbt_pruned_test_unique_ids(
+    *, command: DbtInteropCommand, plan: DbtInteropPlan
+) -> tuple[str, ...]:
+    """Return selected dbt tests pruned from dbt build due to no producer work."""
+
+    if command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
+        return ()
+    if plan.dbt_model_plan.run_selector_terms:
+        return ()
+    return _selected_non_model_unique_ids(plan=plan, resource_type="test")
+
+
+def build_dbt_pruned_seed_unique_ids(
+    *, command: DbtInteropCommand, plan: DbtInteropPlan
+) -> tuple[str, ...]:
+    """Return selected dbt seeds pruned from dbt build due to no producer work."""
+
+    if command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
+        return ()
+    if plan.dbt_model_plan.run_selector_terms:
+        return ()
+    return _selected_non_model_unique_ids(plan=plan, resource_type="seed")
+
+
 def build_unblocked_sqlbuild_model_names(plan: DbtInteropPlan) -> tuple[str, ...]:
     """Return selected SQLBuild models not blocked by dbt model planning."""
 
@@ -209,15 +427,41 @@ def _merge_dbt_select_terms(
     return tuple(merged)
 
 
-def _planned_dbt_select_terms(plan: DbtInteropPlan) -> tuple[str, ...]:
+def _planned_dbt_select_terms(*, command: DbtInteropCommand, plan: DbtInteropPlan) -> tuple[str, ...]:
     if plan.dbt_model_plan is None:
         return ()
-    if not plan.dbt_model_plan.run_selector_terms:
-        return ()
-    non_model_selected: tuple[str, ...] = tuple(
-        sorted(node.unique_id for node in plan.dbt_selected_nodes if node.resource_type != "model")
+    non_model_unique_ids: tuple[str, ...] = build_dbt_non_model_run_unique_ids(
+        command=command,
+        plan=plan,
     )
-    return tuple(sorted(frozenset((*plan.dbt_model_plan.run_selector_terms, *non_model_selected))))
+    non_model_terms: tuple[str, ...] = _selector_terms_for_unique_ids(
+        plan=plan,
+        unique_ids=non_model_unique_ids,
+    )
+    return tuple(sorted(frozenset((*plan.dbt_model_plan.run_selector_terms, *non_model_terms))))
+
+
+def _selected_non_model_unique_ids(*, plan: DbtInteropPlan, resource_type: str) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            node.unique_id
+            for node in plan.dbt_selected_nodes
+            if node.resource_type == resource_type
+        )
+    )
+
+
+def _selector_terms_for_unique_ids(
+    *, plan: DbtInteropPlan, unique_ids: tuple[str, ...]
+) -> tuple[str, ...]:
+    unique_id_set: frozenset[str] = frozenset(unique_ids)
+    return tuple(
+        sorted(
+            node.name or node.unique_id
+            for node in plan.dbt_selected_nodes
+            if node.unique_id in unique_id_set
+        )
+    )
 
 
 def _replace_dbt_select_terms(

@@ -91,8 +91,10 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
     profiles_dir: Path = root_dir / "profiles"
     sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
     dbt_models_dir: Path = dbt_project_dir / "models"
+    dbt_seeds_dir: Path = dbt_project_dir / "seeds"
     sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
     dbt_models_dir.mkdir(parents=True)
+    dbt_seeds_dir.mkdir(parents=True)
     profiles_dir.mkdir(parents=True)
     sqlbuild_models_dir.mkdir(parents=True)
 
@@ -111,9 +113,14 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "version: '1.0'\n"
         "profile: analytics\n"
         "model-paths: ['models']\n"
+        "seed-paths: ['seeds']\n"
         "models:\n"
         "  analytics:\n"
         "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (dbt_seeds_dir / "country_codes.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
         encoding="utf-8",
     )
     (dbt_models_dir / "sources.yml").write_text(
@@ -146,6 +153,19 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "select customer_id, customer_name from {{ ref('stg_customers') }}\n",
         encoding="utf-8",
     )
+    (dbt_models_dir / "schema.yml").write_text(
+        "version: 2\n"
+        "models:\n"
+        "  - name: fact_orders\n"
+        "    columns:\n"
+        "      - name: order_id\n"
+        "        tests: [not_null]\n"
+        "  - name: dim_customers\n"
+        "    columns:\n"
+        "      - name: customer_id\n"
+        "        tests: [not_null]\n",
+        encoding="utf-8",
+    )
     replay_line: str = (
         f'replay_on_change = "{replay_on_change}"\n' if replay_on_change is not None else ""
     )
@@ -176,6 +196,30 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
     )
     seed_dbt_phase11_sources(project_dir=sqlbuild_project_dir, stale_orders=False)
     return sqlbuild_project_dir
+
+
+def add_dbt_phase11_sqlbuild_function_branch(*, project_dir: Path) -> None:
+    """Add a SQLBuild UDF branch downstream of the dbt orders model."""
+
+    functions_dir: Path = project_dir / "functions" / "sql"
+    models_dir: Path = project_dir / "models"
+    functions_dir.mkdir(parents=True, exist_ok=True)
+    (functions_dir / "is_large_amount.sql").write_text(
+        "FUNCTION (\n"
+        "  arguments (amount INTEGER),\n"
+        "  returns BOOLEAN,\n"
+        ");\n\n"
+        "amount > 50\n",
+        encoding="utf-8",
+    )
+    (models_dir / "amount_quality.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        "SELECT\n"
+        "  order_id,\n"
+        "  __udf(\"is_large_amount\")(downstream_amount) AS is_large_amount\n"
+        "FROM __ref(\"downstream_orders\")\n",
+        encoding="utf-8",
+    )
 
 
 def write_dbt_phase11_fact_orders_model(*, project_dir: Path, amount_expression: str) -> None:

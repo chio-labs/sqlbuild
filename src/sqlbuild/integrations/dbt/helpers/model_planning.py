@@ -110,6 +110,14 @@ def build_dbt_model_planning_result(
     )
 
 
+def build_downstream_sqlbuild_model_names(
+    *, graph: DbtCombinedGraph | None, dbt_unique_ids: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Return SQLBuild model names downstream of dbt model unique IDs."""
+
+    return _downstream_sqlbuild_model_names(graph=graph, dbt_unique_ids=dbt_unique_ids)
+
+
 def _expand_candidate_unique_ids(
     *, candidate_unique_ids: Sequence[str], graph: DbtCombinedGraph | None
 ) -> tuple[str, ...]:

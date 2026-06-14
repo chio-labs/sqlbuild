@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -20,15 +21,22 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtModelPlanEntry,
     DbtModelPlanningResult,
+    DbtNodeExecutionResult,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.execute import build_merged_dbt_execution_argv
+from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    build_dbt_execution_outcome,
+    build_merged_dbt_execution_argv,
+    execute_dbt_commands,
+)
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
+    DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtExecutionArgvPruningTestCase,
+    DbtExecutionOutcomeTestCase,
     DbtModelPlanningTestCase,
     DbtModelSourceBlockingTestCase,
 )
@@ -131,18 +139,18 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
-            description="pruned execution argv keeps runnable models and non-model resources",
+            description="pruned execution argv keeps runnable models and seed names",
             expected_argv=(
                 "dbt",
                 "build",
                 "--full-refresh",
                 "--select",
+                "country_codes",
                 "run_me",
-                "seed.analytics.country_codes",
             ),
         )
     ],
-    ids=["pruned execution argv keeps runnable models and non-model resources"],
+    ids=["pruned execution argv keeps runnable models and seed names"],
 )
 def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable_work(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -153,7 +161,11 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
         dbt_selected_nodes=(
             DbtLsNode(unique_id="model.analytics.run_me", resource_type="model"),
             DbtLsNode(unique_id="model.analytics.current", resource_type="model"),
-            DbtLsNode(unique_id="seed.analytics.country_codes", resource_type="seed"),
+            DbtLsNode(
+                unique_id="seed.analytics.country_codes",
+                resource_type="seed",
+                name="country_codes",
+            ),
         ),
         dbt_selected_unique_ids=(
             "model.analytics.current",
@@ -198,11 +210,11 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
-            description="current model plan skips dbt even when selected tests are present",
+            description="current model plan skips dbt build when only selected tests remain",
             expected_argv=None,
         )
     ],
-    ids=["current model plan skips dbt even when selected tests are present"],
+    ids=["current model plan skips dbt build when only selected tests remain"],
 )
 def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_dbt(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -242,6 +254,380 @@ def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_db
     )
 
     assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
+            description="current model plan prunes selected seeds",
+            expected_argv=None,
+        )
+    ],
+    ids=["current model plan prunes selected seeds"],
+)
+def test_given_current_dbt_models_and_selected_seed_when_building_execution_argv_then_prunes_seed(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(
+            DbtLsNode(unique_id="model.analytics.current", resource_type="model"),
+            DbtLsNode(unique_id="seed.analytics.country_codes", resource_type="seed"),
+        ),
+        dbt_selected_unique_ids=(
+            "model.analytics.current",
+            "seed.analytics.country_codes",
+        ),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.current",
+                ),
+            )
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=DbtCliOptions(),
+        routed_args=("--select", "+current+"),
+        plan=plan,
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
+            description="runnable model plan keeps selected tests",
+            expected_argv=(
+                "dbt",
+                "build",
+                "--select",
+                "not_null_run_me_id",
+                "run_me",
+            ),
+        )
+    ],
+    ids=["runnable model plan keeps selected tests"],
+)
+def test_given_runnable_dbt_model_and_selected_test_when_building_execution_argv_then_runs_test(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(
+            DbtLsNode(unique_id="model.analytics.run_me", resource_type="model"),
+            DbtLsNode(
+                unique_id="test.analytics.not_null_run_me_id",
+                resource_type="test",
+                name="not_null_run_me_id",
+            ),
+        ),
+        dbt_selected_unique_ids=(
+            "model.analytics.run_me",
+            "test.analytics.not_null_run_me_id",
+        ),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.run_me",
+                    package_name="analytics",
+                    name="run_me",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.run_me",
+                ),
+            )
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=DbtCliOptions(),
+        routed_args=("--select", "+run_me+"),
+        plan=plan,
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
+            description="dbt test preserves selected tests even when models are current",
+            expected_argv=("dbt", "test", "--select", "not_null_current_id"),
+        )
+    ],
+    ids=["dbt test preserves selected tests even when models are current"],
+)
+def test_given_current_dbt_model_and_selected_test_when_testing_then_runs_test(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.TEST,
+        dbt_command_argv=("dbt", "test"),
+        dbt_selected_nodes=(
+            DbtLsNode(unique_id="model.analytics.current", resource_type="model"),
+            DbtLsNode(
+                unique_id="test.analytics.not_null_current_id",
+                resource_type="test",
+                name="not_null_current_id",
+            ),
+        ),
+        dbt_selected_unique_ids=(
+            "model.analytics.current",
+            "test.analytics.not_null_current_id",
+        ),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.current",
+                ),
+            )
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.TEST,
+        options=DbtCliOptions(),
+        routed_args=("--select", "not_null_current_id"),
+        plan=plan,
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionOutcomeTestCase(
+            description="dbt model outcomes map changed and failed models to SQLBuild overlay",
+            expected_states_by_unique_id=(
+                ("model.analytics.current", DbtModelOutcomeState.CURRENT),
+                ("model.analytics.failed", DbtModelOutcomeState.BLOCKING),
+                ("model.analytics.run_me", DbtModelOutcomeState.CHANGED),
+            ),
+            expected_stale_sqlbuild_model_names=("downstream_run",),
+            expected_blocked_sqlbuild_model_names=("downstream_failed",),
+        )
+    ],
+    ids=["dbt model outcomes map changed and failed models to SQLBuild overlay"],
+)
+def test_given_dbt_node_results_when_building_outcome_then_maps_sqlbuild_overlay(
+    test_case: DbtExecutionOutcomeTestCase,
+) -> None:
+    project: CompiledProject = build_compiled_project_with_models(
+        {
+            "downstream_run": 'select * from __dbt_ref("run_me")',
+            "downstream_failed": 'select * from __dbt_ref("failed")',
+        }
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.run_me",
+                    package_name="analytics",
+                    name="run_me",
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.failed",
+                    package_name="analytics",
+                    name="failed",
+                ),
+            )
+        )
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.current",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.run_me",
+                    package_name="analytics",
+                    name="run_me",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.run_me",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.failed",
+                    package_name="analytics",
+                    name="failed",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.failed",
+                ),
+            )
+        ),
+    )
+
+    outcome = build_dbt_execution_outcome(
+        plan=plan,
+        graph=graph,
+        node_results=(
+            DbtNodeExecutionResult(
+                unique_id="model.analytics.run_me",
+                resource_type="model",
+                node_name="run_me",
+                status="success",
+                index=1,
+                total=2,
+                execution_time=0.1,
+            ),
+            DbtNodeExecutionResult(
+                unique_id="model.analytics.failed",
+                resource_type="model",
+                node_name="failed",
+                status="error",
+                index=2,
+                total=2,
+                execution_time=0.1,
+            ),
+        ),
+    )
+
+    assert tuple((entry.unique_id, entry.state) for entry in outcome.entries) == (
+        test_case.expected_states_by_unique_id
+    )
+    assert outcome.stale_sqlbuild_model_names == test_case.expected_stale_sqlbuild_model_names
+    assert outcome.blocked_sqlbuild_model_names == test_case.expected_blocked_sqlbuild_model_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionOutcomeTestCase(
+            description="run results fallback captures failed model omitted from event stream",
+            expected_states_by_unique_id=(
+                ("model.analytics.failed", DbtModelOutcomeState.BLOCKING),
+            ),
+            expected_stale_sqlbuild_model_names=(),
+            expected_blocked_sqlbuild_model_names=("downstream_failed",),
+        )
+    ],
+    ids=["run results fallback captures failed model omitted from event stream"],
+)
+def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome_blocks_downstream(
+    test_case: DbtExecutionOutcomeTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StubProcess:
+        stdout = None
+
+        def wait(self) -> int:
+            return 1
+
+    target_path: Path = tmp_path / "target"
+    target_path.mkdir()
+    (target_path / "run_results.json").write_text(
+        '{"results":[{"unique_id":"model.analytics.failed","status":"error",'
+        '"execution_time":0.1}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.event_stream.subprocess.Popen",
+        lambda *args, **kwargs: StubProcess(),
+    )
+    project: CompiledProject = build_compiled_project_with_models(
+        {"downstream_failed": 'select * from __dbt_ref("failed")'}
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.failed",
+                    package_name="analytics",
+                    name="failed",
+                ),
+            )
+        )
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.failed",
+                    package_name="analytics",
+                    name="failed",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.failed",
+                ),
+            )
+        ),
+    )
+
+    result = execute_dbt_commands(
+        runner=object(),  # type: ignore[arg-type]
+        options=DbtCliOptions(target_path=target_path),
+        merged_argv=("dbt", "build"),
+        progress_stream=io.StringIO(),
+        stdout_stream=io.StringIO(),
+        stderr_stream=io.StringIO(),
+        use_color=False,
+    )
+    outcome = build_dbt_execution_outcome(
+        plan=plan,
+        graph=graph,
+        node_results=result.node_results,
+    )
+
+    assert result.returncode == 1
+    assert tuple((entry.unique_id, entry.state) for entry in outcome.entries) == (
+        test_case.expected_states_by_unique_id
+    )
+    assert outcome.blocked_sqlbuild_model_names == test_case.expected_blocked_sqlbuild_model_names
 
 
 @pytest.mark.parametrize(
