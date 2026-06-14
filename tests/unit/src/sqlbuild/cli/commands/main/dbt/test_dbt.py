@@ -8,14 +8,19 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.dbt import run_dbt_command
-from sqlbuild.integrations.dbt.models import DbtInteropPlan
+from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult, DbtInteropPlan
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtAutoInitTestCase,
     DbtDebugWrapperTestCase,
     DbtExecutionWrapperTestCase,
     DbtPlanProgressTestCase,
 )
-from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import build_empty_dbt_plan
+from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    build_empty_dbt_plan,
+    prepare_dbt_auto_init_dirs,
+    write_minimal_sqlbuild_project,
+)
 
 PROGRESS_TEST_CASES: list[DbtPlanProgressTestCase] = [
     DbtPlanProgressTestCase(
@@ -83,6 +88,31 @@ DEBUG_WRAPPER_TEST_CASES: list[DbtDebugWrapperTestCase] = [
     ),
 ]
 
+AUTO_INIT_NO_CREATE_TEST_CASES: list[DbtAutoInitTestCase] = [
+    DbtAutoInitTestCase(
+        description="uses current SQLBuild project when config exists",
+        has_current_sqlbuild_project=True,
+        has_sibling_sqlbuild_project=False,
+        dbt_args=("--select", "orders"),
+        expected_init_called=False,
+        expected_forwarded_project_dir_name="dbt_project",
+        expected_request_dbt_project_dir_name=None,
+        expected_request_profiles_dir=None,
+        expected_request_target_name=None,
+    ),
+    DbtAutoInitTestCase(
+        description="uses existing sibling SQLBuild twin when current project is dbt",
+        has_current_sqlbuild_project=False,
+        has_sibling_sqlbuild_project=True,
+        dbt_args=("--select", "orders"),
+        expected_init_called=False,
+        expected_forwarded_project_dir_name="sqlbuild_project",
+        expected_request_dbt_project_dir_name=None,
+        expected_request_profiles_dir=None,
+        expected_request_target_name=None,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -111,6 +141,12 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt.ensure_sqlbuild_project_for_dbt_command",
+        lambda *, project_dir, args, no_color: (
+            project_dir if project_dir is not None else Path.cwd()
+        ),
     )
     args: tuple[str, ...] = ("--json",) if test_case.json_output else ()
 
@@ -159,6 +195,12 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt.execute_dbt_interop_from_project",
         execute_dbt_interop_from_project,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt.ensure_sqlbuild_project_for_dbt_command",
+        lambda *, project_dir, args, no_color: (
+            project_dir if project_dir is not None else Path.cwd()
+        ),
     )
 
     exit_code: int = run_dbt_command(
@@ -213,6 +255,12 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt_debug.run_sqlbuild_debug", run_sqlbuild_debug
     )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt.ensure_sqlbuild_project_for_dbt_command",
+        lambda *, project_dir, args, no_color: (
+            project_dir if project_dir is not None else Path.cwd()
+        ),
+    )
 
     exit_code: int = run_dbt_command(
         command=DbtInteropCommand.DEBUG,
@@ -226,3 +274,161 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     assert sqlbuild_calls == [
         (Path("/project"), True, test_case.expected_sqlbuild_no_connection, False)
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    AUTO_INIT_NO_CREATE_TEST_CASES,
+    ids=[case.description for case in AUTO_INIT_NO_CREATE_TEST_CASES],
+)
+def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expected_project(
+    test_case: DbtAutoInitTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dbt_project_dir: Path = prepare_dbt_auto_init_dirs(test_case=test_case, tmp_path=tmp_path)
+    forwarded_project_dirs: list[Path] = []
+    init_requests: list[DbtInitRequest] = []
+
+    def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
+        init_requests.append(request)
+        output_dir: Path | None = request.sqb_output_dir
+        assert output_dir is not None
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "sqlbuild_project.toml").write_text(
+            'name = "demo"\nadapter = "duckdb"\n', encoding="utf-8"
+        )
+        return DbtInitResult(
+            output_dir=output_dir,
+            project_file=output_dir / "sqlbuild_project.toml",
+            project_name="demo",
+            adapter="duckdb",
+            target_name=request.target_name or "dev",
+            profile_name="demo",
+            toml='name = "demo"\n',
+        )
+
+    def plan_dbt_interop_from_project(
+        *,
+        project_dir: Path,
+        args: tuple[str, ...],
+        on_progress: Callable[[str], None],
+        progress_stream: object,
+        use_color: bool,
+    ) -> DbtInteropPlan:
+        del args, on_progress, progress_stream, use_color
+        forwarded_project_dirs.append(project_dir)
+        return build_empty_dbt_plan()
+
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.helpers.dbt_auto_init.run_dbt_profile_init",
+        run_dbt_profile_init,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt.plan_dbt_interop_from_project",
+        plan_dbt_interop_from_project,
+    )
+
+    exit_code: int = run_dbt_command(
+        command=DbtInteropCommand.PLAN,
+        project_dir=dbt_project_dir,
+        args=test_case.dbt_args,
+        no_color=True,
+    )
+
+    assert exit_code == 0
+    assert forwarded_project_dirs[0].name == test_case.expected_forwarded_project_dir_name
+    assert init_requests == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtAutoInitTestCase(
+            description="creates sibling SQLBuild twin from typed dbt config flags",
+            has_current_sqlbuild_project=False,
+            has_sibling_sqlbuild_project=False,
+            dbt_args=(
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--target",
+                "dev",
+                "--select",
+                "orders",
+            ),
+            expected_init_called=True,
+            expected_forwarded_project_dir_name="sqlbuild_project",
+            expected_request_dbt_project_dir_name="dbt_project",
+            expected_request_profiles_dir="profiles",
+            expected_request_target_name="dev",
+        )
+    ],
+    ids=["creates sibling SQLBuild twin from typed dbt config flags"],
+)
+def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_and_uses_twin(
+    test_case: DbtAutoInitTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dbt_project_dir: Path = prepare_dbt_auto_init_dirs(test_case=test_case, tmp_path=tmp_path)
+    forwarded_project_dirs: list[Path] = []
+    init_requests: list[DbtInitRequest] = []
+
+    def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
+        init_requests.append(request)
+        output_dir: Path | None = request.sqb_output_dir
+        assert output_dir is not None
+        output_dir.mkdir(parents=True, exist_ok=True)
+        write_minimal_sqlbuild_project(output_dir)
+        return DbtInitResult(
+            output_dir=output_dir,
+            project_file=output_dir / "sqlbuild_project.toml",
+            project_name="demo",
+            adapter="duckdb",
+            target_name=request.target_name or "dev",
+            profile_name="demo",
+            toml='name = "demo"\n',
+        )
+
+    def plan_dbt_interop_from_project(
+        *,
+        project_dir: Path,
+        args: tuple[str, ...],
+        on_progress: Callable[[str], None],
+        progress_stream: object,
+        use_color: bool,
+    ) -> DbtInteropPlan:
+        del args, on_progress, progress_stream, use_color
+        forwarded_project_dirs.append(project_dir)
+        return build_empty_dbt_plan()
+
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.helpers.dbt_auto_init.run_dbt_profile_init",
+        run_dbt_profile_init,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands.main.dbt.plan_dbt_interop_from_project",
+        plan_dbt_interop_from_project,
+    )
+
+    exit_code: int = run_dbt_command(
+        command=DbtInteropCommand.PLAN,
+        project_dir=dbt_project_dir,
+        args=test_case.dbt_args,
+        no_color=True,
+    )
+
+    assert exit_code == 0
+    assert forwarded_project_dirs[0].name == test_case.expected_forwarded_project_dir_name
+    assert bool(init_requests) is test_case.expected_init_called
+    request: DbtInitRequest = init_requests[0]
+    assert request.dbt_project_dir.name == test_case.expected_request_dbt_project_dir_name
+    assert (
+        None if request.profiles_dir is None else request.profiles_dir.as_posix()
+    ) == test_case.expected_request_profiles_dir
+    assert request.target_name == test_case.expected_request_target_name
+    assert request.sqb_output_dir is not None
+    assert request.sqb_output_dir.name == "sqlbuild_project"
+    assert request.skip_dbt_debug is True

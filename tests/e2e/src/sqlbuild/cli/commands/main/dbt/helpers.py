@@ -205,19 +205,15 @@ def add_dbt_phase11_sqlbuild_function_branch(*, project_dir: Path) -> None:
     models_dir: Path = project_dir / "models"
     functions_dir.mkdir(parents=True, exist_ok=True)
     (functions_dir / "is_large_amount.sql").write_text(
-        "FUNCTION (\n"
-        "  arguments (amount INTEGER),\n"
-        "  returns BOOLEAN,\n"
-        ");\n\n"
-        "amount > 50\n",
+        "FUNCTION (\n  arguments (amount INTEGER),\n  returns BOOLEAN,\n);\n\namount > 50\n",
         encoding="utf-8",
     )
     (models_dir / "amount_quality.sql").write_text(
         "MODEL (materialized table);\n\n"
         "SELECT\n"
         "  order_id,\n"
-        "  __udf(\"is_large_amount\")(downstream_amount) AS is_large_amount\n"
-        "FROM __ref(\"downstream_orders\")\n",
+        '  __udf("is_large_amount")(downstream_amount) AS is_large_amount\n'
+        'FROM __ref("downstream_orders")\n',
         encoding="utf-8",
     )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
@@ -15,8 +15,8 @@ from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_comman
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCommandExecutionResult,
     DbtCombinedGraph,
+    DbtCommandExecutionResult,
     DbtExecutionOutcome,
     DbtInteropPlan,
     DbtLsNode,
@@ -80,7 +80,10 @@ def execute_dbt_commands(
 
 
 def build_dbt_execution_outcome(
-    *, plan: DbtInteropPlan, graph: DbtCombinedGraph, node_results: tuple[DbtNodeExecutionResult, ...]
+    *,
+    plan: DbtInteropPlan,
+    graph: DbtCombinedGraph,
+    node_results: tuple[DbtNodeExecutionResult, ...],
 ) -> DbtExecutionOutcome:
     """Build a SQLBuild-facing dbt model outcome overlay."""
 
@@ -149,9 +152,7 @@ def build_dbt_execution_outcome(
         blocked_sqlbuild_model_names=build_downstream_sqlbuild_model_names(
             graph=graph,
             dbt_unique_ids=tuple(
-                entry.unique_id
-                for entry in entries
-                if entry.state == DbtModelOutcomeState.BLOCKING
+                entry.unique_id for entry in entries if entry.state == DbtModelOutcomeState.BLOCKING
             ),
         ),
     )
@@ -193,8 +194,9 @@ def _append_missing_run_results(
     for index, raw_result in enumerate(raw_results, start=1):
         if not isinstance(raw_result, dict):
             continue
-        unique_id: object = raw_result.get("unique_id")
-        status: object = raw_result.get("status")
+        result_payload: dict[str, object] = cast(dict[str, object], raw_result)
+        unique_id: object = result_payload.get("unique_id")
+        status: object = result_payload.get("status")
         if not isinstance(unique_id, str) or unique_id in existing_unique_ids:
             continue
         if not isinstance(status, str):
@@ -207,7 +209,7 @@ def _append_missing_run_results(
                 status=status,
                 index=index,
                 total=total,
-                execution_time=_execution_time_from_run_result(raw_result),
+                execution_time=_execution_time_from_run_result(result_payload),
             )
         )
     return tuple(appended)
@@ -327,16 +329,18 @@ def build_dbt_non_model_run_unique_ids(
 
     if plan.dbt_model_plan is None:
         return ()
-    seed_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(plan=plan, resource_type="seed")
-    test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(plan=plan, resource_type="test")
+    seed_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
+        plan=plan, resource_type="seed"
+    )
+    test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
+        plan=plan, resource_type="test"
+    )
     if command == DbtInteropCommand.TEST:
         return test_unique_ids
     if command == DbtInteropCommand.BUILD:
         if not plan.dbt_model_plan.run_selector_terms:
             return ()
-        return tuple(
-            sorted(frozenset((*seed_unique_ids, *test_unique_ids)))
-        )
+        return tuple(sorted(frozenset((*seed_unique_ids, *test_unique_ids))))
     return ()
 
 
@@ -427,7 +431,9 @@ def _merge_dbt_select_terms(
     return tuple(merged)
 
 
-def _planned_dbt_select_terms(*, command: DbtInteropCommand, plan: DbtInteropPlan) -> tuple[str, ...]:
+def _planned_dbt_select_terms(
+    *, command: DbtInteropCommand, plan: DbtInteropPlan
+) -> tuple[str, ...]:
     if plan.dbt_model_plan is None:
         return ()
     non_model_unique_ids: tuple[str, ...] = build_dbt_non_model_run_unique_ids(

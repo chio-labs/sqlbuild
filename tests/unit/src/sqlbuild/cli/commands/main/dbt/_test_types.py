@@ -30,6 +30,19 @@ class DbtDebugWrapperTestCase:
 
 
 @dataclass(frozen=True)
+class DbtAutoInitTestCase:
+    description: str
+    has_current_sqlbuild_project: bool
+    has_sibling_sqlbuild_project: bool
+    dbt_args: tuple[str, ...]
+    expected_init_called: bool
+    expected_forwarded_project_dir_name: str
+    expected_request_dbt_project_dir_name: str | None
+    expected_request_profiles_dir: str | None
+    expected_request_target_name: str | None
+
+
+@dataclass(frozen=True)
 class DbtInitOutputTestCase:
     description: str
     dry_run: bool

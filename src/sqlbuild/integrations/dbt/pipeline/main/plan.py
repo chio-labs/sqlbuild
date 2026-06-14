@@ -20,6 +20,7 @@ from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import plan_dbt_interop_command
 from sqlbuild.integrations.dbt.helpers.plan_runtime import (
     resolve_dbt_interop_adapter,
@@ -65,6 +66,7 @@ def plan_dbt_interop_from_project(
         args=args,
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,

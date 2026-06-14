@@ -13,8 +13,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtPhase11NonModelWorkTestCase,
     DbtPhase11PlanOutputTestCase,
     DbtPhase11ReplayFullTestCase,
-    DbtPhase11SqlbuildNativePlanTestCase,
     DbtPhase11SourceBlockingTestCase,
+    DbtPhase11SqlbuildNativePlanTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     add_dbt_phase11_sqlbuild_function_branch,

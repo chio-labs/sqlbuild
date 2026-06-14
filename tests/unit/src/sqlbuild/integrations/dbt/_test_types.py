@@ -69,6 +69,23 @@ class DbtRunnerCommandTestCase:
 
 
 @dataclass(frozen=True)
+class DbtModeGuardTestCase:
+    description: str
+    virtual_environments: bool
+    expected_error_fragment: str | None
+    expected_code: str | None
+    expected_help_fragment: str | None
+
+
+@dataclass(frozen=True)
+class DbtExecutionSpacingTestCase:
+    description: str
+    expected_spacing_fragment: str
+    unexpected_no_blank_fragment: str
+    unexpected_extra_blank_fragment: str
+
+
+@dataclass(frozen=True)
 class DbtEventParseTestCase:
     description: str
     event: dict[str, object]

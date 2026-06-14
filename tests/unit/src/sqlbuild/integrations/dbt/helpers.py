@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
@@ -33,7 +34,7 @@ from sqlbuild.integrations.dbt.helpers.graph import (
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.runner import build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -100,6 +101,27 @@ class MappingDbtInvoker:
         if result is not None:
             return result
         return DbtCommandResult(argv=argv, returncode=0, stdout="")
+
+
+class CompileOnlyDbtRunner(DbtRunner):
+    """Minimal dbt runner for execution-pipeline tests that only compile."""
+
+    def compile(self, *, options: DbtCliOptions) -> DbtCommandResult:
+        del options
+        return DbtCommandResult(argv=("dbt", "compile"), returncode=0)
+
+
+def emit_connection_progress(**kwargs: object) -> None:
+    """Emit one successful connection progress cycle from a mocked planner."""
+
+    start: object = kwargs["on_connection_start"]
+    complete: object = kwargs["on_connection_complete"]
+    assert callable(start)
+    assert callable(complete)
+    on_start: Callable[[int], None] = cast(Callable[[int], None], start)
+    on_complete: Callable[[int, float], None] = cast(Callable[[int, float], None], complete)
+    on_start(1)
+    on_complete(1, 0.0)
 
 
 def build_dbt_ls_command_result(
