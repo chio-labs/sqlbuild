@@ -146,6 +146,7 @@ def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManife
         node_checksum=_parse_checksum(raw_node.get("checksum")),
         relation_name=relation_name,
         fqn=_parse_fqn(raw_node.get("fqn")),
+        query_sql=_required_str(raw_node.get("raw_code"), field_name="raw_code"),
         depends_on_nodes=depends_on_nodes,
         payload={str(key): value for key, value in raw_node.items()},
     )

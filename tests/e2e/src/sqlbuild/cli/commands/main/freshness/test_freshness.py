@@ -75,6 +75,10 @@ def test_given_configured_source_freshness_when_running_then_observes_read_only(
         "tolerated": 0,
         "unknown": 0,
         "errors": 0,
+        "age_pass": 0,
+        "age_warn": 0,
+        "age_error": 0,
+        "age_unknown": 0,
     }
     assert payload["sources"][0]["name"] == "raw_orders"
     assert payload["sources"][0]["status"] == "observed"
@@ -100,6 +104,10 @@ def test_given_configured_source_freshness_when_running_then_observes_read_only(
         "tolerated": 0,
         "unknown": 0,
         "errors": 0,
+        "age_pass": 0,
+        "age_warn": 0,
+        "age_error": 0,
+        "age_unknown": 0,
     }
 
 

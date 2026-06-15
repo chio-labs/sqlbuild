@@ -9,6 +9,10 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
@@ -42,6 +46,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtExecutionArgvPruningTestCase,
     DbtExecutionOutcomeTestCase,
     DbtExecutionTotalRenderTestCase,
+    DbtFingerprintWriteTestCase,
     DbtModelPlanningTestCase,
     DbtModelSourceBlockingTestCase,
     DbtRunResultsFallbackRenderTestCase,
@@ -141,6 +146,74 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
     assert len(result.entries) == 1
     assert result.entries[0].action == test_case.expected_action
     assert result.entries[0].reason == test_case.expected_reason
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtFingerprintWriteTestCase(
+            description="model fingerprint stores SQL definition and metadata separately",
+            query_sql="select 1 as order_id",
+            node_checksum="checksum_hash",
+            expected_definition="select 1 as order_id",
+            expected_version_hash="checksum_hash",
+            expected_metadata_fragment='"resource_type":"model"',
+        )
+    ],
+    ids=["model fingerprint stores SQL definition and metadata separately"],
+)
+def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_query_sql(
+    test_case: DbtFingerprintWriteTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_fingerprint.duckdb")})
+    warnings: list[str] = []
+    try:
+        try_write_dbt_node_fingerprint(
+            result=DbtNodeExecutionResult(
+                unique_id="model.analytics.orders",
+                resource_type="model",
+                node_name="orders",
+                status="success",
+                index=1,
+                total=1,
+                execution_time=0.1,
+                materialized="table",
+                relation_name="orders",
+                schema="main",
+                node_checksum=test_case.node_checksum,
+            ),
+            adapter=adapter,
+            connection=connection,
+            run_id="test-run",
+            fingerprint_database=None,
+            fingerprint_schema="main",
+            target_name="dev",
+            warnings=warnings,
+            query_sql=test_case.query_sql,
+        )
+
+        fingerprint_set: FingerprintSet = read_latest_fingerprints(
+            connection=connection,
+            execute=adapter.execute,
+            relation_exists=adapter.relation_exists,
+            database=None,
+            schema="main",
+            render_qualified_name=adapter.render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert warnings == []
+    assert fingerprint_set.fingerprints_by_identity is not None
+    fingerprint: Fingerprint = fingerprint_set.fingerprints_by_identity[
+        (NODE_TYPE_DBT, "model.analytics.orders")
+    ]
+    assert fingerprint.definition == test_case.expected_definition
+    assert fingerprint.version_hash == test_case.expected_version_hash
+    assert test_case.expected_metadata_fragment in fingerprint.metadata_json
 
 
 @pytest.mark.parametrize(

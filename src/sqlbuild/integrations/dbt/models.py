@@ -350,6 +350,8 @@ class DbtModelPlanEntry:
     reason: DbtModelPlanReason
     relation_name: str
     fqn: tuple[str, ...] = field(default_factory=tuple)
+    fingerprint_query_sql: str | None = None
+    previous_query_sql: str | None = None
     previous_version_hash: str | None = None
     expected_version_hash: str | None = None
     blocked_source_unique_ids: tuple[str, ...] = field(default_factory=tuple)

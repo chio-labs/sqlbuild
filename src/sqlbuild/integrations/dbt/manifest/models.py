@@ -18,6 +18,7 @@ class DbtManifestModel:
     alias: str | None = None
     node_checksum: str | None = None
     fqn: tuple[str, ...] = field(default_factory=tuple)
+    query_sql: str = ""
     depends_on_nodes: tuple[str, ...] = field(default_factory=tuple)
     payload: dict[str, object] = field(default_factory=dict)
 
