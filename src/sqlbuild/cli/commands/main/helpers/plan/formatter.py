@@ -1508,14 +1508,18 @@ def _format_standard_remaining_stale_metadata(
     )
     if not remaining_stale_model_names:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(section_header_style("Remaining stale"))
-    lines.append(f"  models outside selection: {len(remaining_stale_model_names)}")
+    lines.append(style.muted(f"  models outside selection: {len(remaining_stale_model_names)}"))
     lines.append(
-        "  model set: "
-        + _format_capped_name_list(
-            remaining_stale_model_names,
-            display_options=display_options,
+        style.muted(
+            "  model set: "
+            + _format_capped_name_list(
+                remaining_stale_model_names,
+                display_options=display_options,
+                name_style=style.muted,
+            )
         )
     )
 

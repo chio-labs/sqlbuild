@@ -41,10 +41,13 @@ from sqlbuild.integrations.dbt.types import (
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtExecutionArgvPruningTestCase,
     DbtExecutionOutcomeTestCase,
+    DbtExecutionTotalRenderTestCase,
     DbtModelPlanningTestCase,
     DbtModelSourceBlockingTestCase,
+    DbtRunResultsFallbackRenderTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    MappingDbtInvoker,
     RecordingDbtInvoker,
     build_compiled_project_with_models,
     build_manifest_data,
@@ -551,6 +554,11 @@ def test_given_dbt_node_results_when_building_outcome_then_maps_sqlbuild_overlay
             ),
             expected_stale_sqlbuild_model_names=(),
             expected_blocked_sqlbuild_model_names=("downstream_failed",),
+            expected_output_fragments=(
+                "model     failed",
+                "FAIL",
+                "Database Error in model failed",
+            ),
         )
     ],
     ids=["run results fallback captures failed model omitted from event stream"],
@@ -570,7 +578,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
     target_path.mkdir()
     (target_path / "run_results.json").write_text(
         '{"results":[{"unique_id":"model.analytics.failed","status":"error",'
-        '"execution_time":0.1}]}',
+        '"execution_time":0.1,"message":"Database Error in model failed"}]}',
         encoding="utf-8",
     )
     monkeypatch.setattr(
@@ -613,6 +621,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         ),
     )
 
+    stdout_stream: io.StringIO = io.StringIO()
     result: DbtCommandExecutionResult = execute_dbt_commands(
         runner=DbtRunner(
             invoker=RecordingDbtInvoker(DbtCommandResult(argv=("dbt", "build"), returncode=1))
@@ -620,7 +629,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         options=DbtCliOptions(target_path=target_path),
         merged_argv=("dbt", "build"),
         progress_stream=io.StringIO(),
-        stdout_stream=io.StringIO(),
+        stdout_stream=stdout_stream,
         stderr_stream=io.StringIO(),
         use_color=False,
     )
@@ -635,6 +644,143 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         test_case.expected_states_by_unique_id
     )
     assert outcome.blocked_sqlbuild_model_names == test_case.expected_blocked_sqlbuild_model_names
+    output: str = stdout_stream.getvalue()
+    for expected_fragment in test_case.expected_output_fragments:
+        assert expected_fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtRunResultsFallbackRenderTestCase(
+            description="run results fallback renders failed dbt test detail",
+            unique_id="test.analytics.assert_total_revenue",
+            status="fail",
+            message="Failure in test assert_total_revenue",
+            expected_output_fragments=(
+                "test      assert_total_revenue",
+                "FAIL",
+                "Failure in test assert_total_revenue",
+            ),
+        )
+    ],
+    ids=["run results fallback renders failed dbt test detail"],
+)
+def test_given_dbt_run_results_when_event_stream_omits_failed_test_then_renders_failure(
+    test_case: DbtRunResultsFallbackRenderTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StubProcess:
+        stdout: None = None
+
+        def wait(self) -> int:
+            return 1
+
+    target_path: Path = tmp_path / "target"
+    target_path.mkdir()
+    (target_path / "run_results.json").write_text(
+        '{"results":[{"unique_id":"'
+        + test_case.unique_id
+        + '","status":"'
+        + test_case.status
+        + '","execution_time":0.1,"message":"'
+        + test_case.message
+        + '"}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.event_stream.subprocess.Popen",
+        lambda *args, **kwargs: StubProcess(),
+    )
+    stdout_stream: io.StringIO = io.StringIO()
+
+    result: DbtCommandExecutionResult = execute_dbt_commands(
+        runner=DbtRunner(
+            invoker=RecordingDbtInvoker(DbtCommandResult(argv=("dbt", "test"), returncode=1))
+        ),
+        options=DbtCliOptions(target_path=target_path),
+        merged_argv=("dbt", "test"),
+        progress_stream=io.StringIO(),
+        stdout_stream=stdout_stream,
+        stderr_stream=io.StringIO(),
+        use_color=False,
+    )
+
+    assert result.returncode == 1
+    assert tuple(node.unique_id for node in result.node_results) == (test_case.unique_id,)
+    output: str = stdout_stream.getvalue()
+    for expected_fragment in test_case.expected_output_fragments:
+        assert expected_fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionTotalRenderTestCase(
+            description="dbt ls total overrides inconsistent dbt event counters",
+            expected_output_fragments=("  1/2   model", "  2/2   test"),
+            unexpected_output_fragments=("2/7", "1/6"),
+        )
+    ],
+    ids=["dbt ls total overrides inconsistent dbt event counters"],
+)
+def test_given_dbt_execution_when_ls_counts_final_selection_then_streams_consistent_total(
+    test_case: DbtExecutionTotalRenderTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StubProcess:
+        stdout: io.StringIO = io.StringIO(
+            '{"data":{"execution_time":0.1,"index":2,"total":7,"status":"OK",'
+            '"node_info":{"node_name":"orders","resource_type":"model",'
+            '"unique_id":"model.analytics.orders"}},'
+            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n'
+            '{"data":{"execution_time":0.1,"index":1,"num_models":6,"status":"pass",'
+            '"node_info":{"node_name":"orders_check","resource_type":"test",'
+            '"unique_id":"test.analytics.orders_check"}},'
+            '"info":{"level":"info","name":"LogTestResult","msg":"PASS"}}\n'
+        )
+
+        def wait(self) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.event_stream.subprocess.Popen",
+        lambda *args, **kwargs: StubProcess(),
+    )
+    runner: DbtRunner = DbtRunner(
+        invoker=MappingDbtInvoker(
+            {
+                ("dbt", "ls", "--output", "json", "--select", "orders"): DbtCommandResult(
+                    argv=("dbt", "ls", "--output", "json", "--select", "orders"),
+                    returncode=0,
+                    stdout=(
+                        '{"unique_id":"model.analytics.orders","resource_type":"model"}\n'
+                        '{"unique_id":"test.analytics.orders_check",'
+                        '"resource_type":"test"}\n'
+                    ),
+                )
+            }
+        )
+    )
+    stdout_stream: io.StringIO = io.StringIO()
+
+    result: DbtCommandExecutionResult = execute_dbt_commands(
+        runner=runner,
+        options=DbtCliOptions(),
+        merged_argv=("dbt", "build", "--select", "orders"),
+        progress_stream=io.StringIO(),
+        stdout_stream=stdout_stream,
+        stderr_stream=io.StringIO(),
+        use_color=False,
+    )
+
+    assert result.returncode == 0
+    output: str = stdout_stream.getvalue()
+    for expected_fragment in test_case.expected_output_fragments:
+        assert expected_fragment in output
+    for unexpected_fragment in test_case.unexpected_output_fragments:
+        assert unexpected_fragment not in output
 
 
 @pytest.mark.parametrize(

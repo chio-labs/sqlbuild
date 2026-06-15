@@ -30,6 +30,9 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
 
     root_dir: Path = tmp_path / "dbt_interop"
     copytree(DBT_INTEROP_FIXTURE_DIR, root_dir)
+    local_config_path: Path = root_dir / "sqlbuild_project" / "sqlbuild_local.toml"
+    if local_config_path.exists():
+        local_config_path.unlink()
     db_path: Path = root_dir / "sqlbuild_project" / "dbt_interop.duckdb"
     if db_path.exists():
         db_path.unlink()
@@ -67,12 +70,6 @@ def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedPr
         check=False,
         text=True,
     )
-
-
-def static_dbt_interop_project_dir() -> Path:
-    """Return the repository fixture SQLBuild project path."""
-
-    return DBT_INTEROP_FIXTURE_DIR / "sqlbuild_project"
 
 
 def load_json_stdout(stdout: str) -> dict[str, object]:

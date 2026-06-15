@@ -254,11 +254,12 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
         lambda *args, **kwargs: StubProcess(),
     )
 
+    stream: io.StringIO = io.StringIO()
     returncode: int
     returncode, results = execute_dbt_json_event_stream(
         argv=("dbt", "run"),
         cwd=None,
-        stream=io.StringIO(),
+        stream=stream,
         use_color=False,
         target_path=None,
         on_node_result=captured_results.append,
@@ -267,3 +268,4 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     assert returncode == 0
     assert tuple(result.unique_id for result in results) == test_case.expected_unique_ids
     assert tuple(result.unique_id for result in captured_results) == test_case.expected_unique_ids
+    assert "  1/1   model" in stream.getvalue()

@@ -49,7 +49,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "Plan ready (3 selected)",
+            "Plan ready (3 selected resources)",
             "dbt",
             "command: dbt run --select tag:nightly",
             "SQLBuild",
@@ -81,7 +81,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=True,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "Plan ready (1 selected)",
+            "Plan ready (1 selected resources)",
             "skipped: no dbt work selected",
             "local_only",
         ),
@@ -106,7 +106,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=True,
         expected_human_fragments=(
-            "Plan ready (1 selected)",
+            "Plan ready (1 selected resources)",
             "command: dbt build --select state:modified",
             "skipped: no SQLBuild work selected",
         ),
@@ -133,7 +133,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "Plan ready (2 selected)",
+            "Plan ready (1 required dbt, 1 SQLBuild)",
             "fact_orders",
         ),
         expected_json_fragments=(
@@ -154,13 +154,14 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         selection_dbt_anchor_terms=(),
         selection_dbt_anchor_unique_ids_by_term={},
         selection_path_translations=(),
-        warnings=(),
+        warnings=("No dbt or SQLBuild resources matched the selection.",),
         expected_dbt_skipped=True,
         expected_sqlbuild_skipped=True,
         expected_human_fragments=(
-            "Plan ready (0 selected)",
+            "Plan ready (0 selected resources)",
             "skipped: no dbt work selected",
             "skipped: no SQLBuild work selected",
+            "No dbt or SQLBuild resources matched the selection.",
         ),
         expected_json_fragments=(
             '"selected_unique_ids": []',
@@ -268,7 +269,7 @@ FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
         display_limit=None,
         use_color=True,
         expected_human_fragments=(
-            "dbt (2 selected)",
+            "dbt (2 selected resources)",
             "Models (1)",
             "Tests (1)",
             "analytics.orders",
@@ -660,6 +661,88 @@ def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_term
         dbt_selected_unique_ids=(),
         sqlbuild_command_argvs=(),
         selection=DbtInteropSelectionResult(),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanFormatterTestCase(
+            description="model plan shows reasons and inspected dependency wording",
+            dbt_ls_nodes=(),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=None,
+            use_color=False,
+            expected_human_fragments=(
+                "Plan ready (2 required dbt)",
+                "dbt (2 required)",
+                "selected by dbt selector: 0 from dbt selector",
+                "added for SQLBuild dependencies: 2 dbt resources",
+                "planned models: 2 run, 1 current, 0 blocked",
+                "planned non-model dbt work: 0",
+                "model.analytics.changed checksum changed",
+                "model.analytics.cascade upstream changed",
+                "Current (1)",
+                "model.analytics.current no change",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=(),
+        )
+    ],
+    ids=["model plan shows reasons and inspected dependency wording"],
+)
+def test_given_dbt_model_plan_when_formatting_then_shows_reasons_and_dependency_context(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build", "--select", "changed+"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(
+            dbt_required_unique_ids=("model.analytics.changed", "model.analytics.cascade")
+        ),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.changed",
+                    package_name="analytics",
+                    name="changed",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.changed",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.cascade",
+                    package_name="analytics",
+                    name="cascade",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.UPSTREAM_CHANGED,
+                    relation_name="main.cascade",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.current",
+                ),
+            )
+        ),
     )
 
     human_output: str = format_dbt_interop_plan(

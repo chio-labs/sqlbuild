@@ -351,6 +351,12 @@ def execute_dbt_interop_from_project(
 
     plan_output: PlanOutput | None = plan.sqlbuild_plan_output
     if plan_output is None or merged_dbt_argv is not None:
+        execution_plan_connection_progress: Any = build_connection_progress_reporter(
+            adapter_name=adapter_name,
+            stream=output_stream,
+            blank_line_after_complete=True,
+            use_color=use_color,
+        )
         plan_output = build_sqlbuild_plan_output(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -363,9 +369,9 @@ def execute_dbt_interop_from_project(
             external_blocked_model_names=dbt_outcome.blocked_sqlbuild_model_names,
             sqlbuild_args=routed.sqlbuild_args,
             on_progress=None,
-            on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_start=execution_plan_connection_progress.on_connection_start,
+            on_connection_complete=execution_plan_connection_progress.on_connection_complete,
+            on_connection_error=execution_plan_connection_progress.on_connection_error,
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
         )
     if plan_output is None:

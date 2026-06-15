@@ -9,20 +9,29 @@ from typing import TextIO, cast
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.event_stream import execute_dbt_json_event_stream
+from sqlbuild.integrations.dbt.helpers.event_stream import (
+    execute_dbt_json_event_stream,
+    render_dbt_node_result,
+)
 from sqlbuild.integrations.dbt.helpers.model_planning import build_downstream_sqlbuild_model_names
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_command_argv
+from sqlbuild.integrations.dbt.helpers.runner import (
+    DbtRunner,
+    build_dbt_command_argv,
+    parse_dbt_ls_json_lines,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandExecutionResult,
+    DbtCommandResult,
     DbtExecutionOutcome,
     DbtInteropPlan,
     DbtLsNode,
     DbtModelExecutionOutcomeEntry,
     DbtModelPlanEntry,
     DbtNodeExecutionResult,
+    DbtNodeMessage,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
@@ -30,6 +39,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 
 _DBT_SUCCESS_STATUSES: frozenset[str] = frozenset(
     {"ok", "success", "pass", "passed", "warn", "warning"}
@@ -61,6 +71,13 @@ def execute_dbt_commands(
     dbt_execution_detail: str = style.muted(dbt_execution_detail_text)
     progress_stream.write(f"{dbt_execution_label}  {dbt_execution_detail}\n\n")
     progress_stream.flush()
+    expected_total: int | None = _dbt_execution_expected_total(
+        runner=runner,
+        options=options,
+        argv=argv,
+        stream=progress_stream,
+        use_color=use_color,
+    )
     returncode: int
     results: tuple[DbtNodeExecutionResult, ...]
     returncode, results = execute_dbt_json_event_stream(
@@ -69,14 +86,73 @@ def execute_dbt_commands(
         stream=stdout_stream,
         use_color=use_color,
         target_path=options.target_path,
+        display_total=expected_total,
         on_node_result=on_node_result,
     )
+    streamed_result_count: int = len(results)
     results = _append_missing_run_results(
         results=results,
         target_path=options.target_path,
     )
+    for offset, result in enumerate(results[streamed_result_count:], start=1):
+        render_dbt_node_result(
+            stream=stdout_stream,
+            style=style,
+            result=result,
+            display_index=streamed_result_count + offset,
+            display_total=(expected_total if expected_total is not None else len(results)),
+        )
+        if on_node_result is not None:
+            on_node_result(result)
     del runner, stderr_stream
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
+
+
+def _dbt_execution_expected_total(
+    *,
+    runner: DbtRunner,
+    options: DbtCliOptions,
+    argv: tuple[str, ...],
+    stream: TextIO,
+    use_color: bool,
+) -> int | None:
+    ls_argv: tuple[str, ...] | None = _dbt_ls_argv_from_execution_argv(argv)
+    if ls_argv is None:
+        return None
+    status: TransientStatusReporter | None = _start_dbt_execution_selection_status(
+        stream=stream,
+        use_color=use_color,
+    )
+    try:
+        result: DbtCommandResult = runner.invoke(argv=ls_argv, cwd=options.project_dir)
+    finally:
+        if status is not None:
+            status.close()
+    if result.returncode != 0:
+        return None
+    return len(parse_dbt_ls_json_lines(stdout=result.stdout))
+
+
+def _start_dbt_execution_selection_status(
+    *, stream: TextIO, use_color: bool
+) -> TransientStatusReporter | None:
+    if not stream.isatty():
+        return None
+    status: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=use_color)
+    status.start("Resolving dbt execution selection...")
+    return status
+
+
+def _dbt_ls_argv_from_execution_argv(argv: tuple[str, ...]) -> tuple[str, ...] | None:
+    if len(argv) < 2:
+        return None
+    execution_only_flags: frozenset[str] = frozenset({"--full-refresh", "--fail-fast"})
+    converted: list[str] = [argv[0], "ls", "--output", "json"]
+    for arg in argv[2:]:
+        if arg in execution_only_flags:
+            continue
+        converted.append(arg)
+    return tuple(converted)
 
 
 def build_dbt_execution_outcome(
@@ -210,6 +286,7 @@ def _append_missing_run_results(
                 index=index,
                 total=total,
                 execution_time=_execution_time_from_run_result(result_payload),
+                messages=_messages_from_run_result(result_payload),
             )
         )
     return tuple(appended)
@@ -232,6 +309,16 @@ def _execution_time_from_run_result(raw_result: dict[str, object]) -> float | No
     if isinstance(value, int | float):
         return float(value)
     return None
+
+
+def _messages_from_run_result(raw_result: dict[str, object]) -> tuple[DbtNodeMessage, ...]:
+    message: object = raw_result.get("message")
+    if isinstance(message, str) and message.strip():
+        return (DbtNodeMessage(level="error", message=message.strip()),)
+    failures: object = raw_result.get("failures")
+    if isinstance(failures, int) and failures > 0:
+        return (DbtNodeMessage(level="error", message=f"{failures} failure(s)"),)
+    return ()
 
 
 def build_merged_dbt_execution_argv(
@@ -335,12 +422,15 @@ def build_dbt_non_model_run_unique_ids(
     test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
         plan=plan, resource_type="test"
     )
+    unit_test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
+        plan=plan, resource_type="unit_test"
+    )
     if command == DbtInteropCommand.TEST:
-        return test_unique_ids
+        return tuple(sorted(frozenset((*test_unique_ids, *unit_test_unique_ids))))
     if command == DbtInteropCommand.BUILD:
         if not plan.dbt_model_plan.run_selector_terms:
             return ()
-        return tuple(sorted(frozenset((*seed_unique_ids, *test_unique_ids))))
+        return tuple(sorted(frozenset((*seed_unique_ids, *test_unique_ids, *unit_test_unique_ids))))
     return ()
 
 
@@ -353,7 +443,16 @@ def build_dbt_pruned_test_unique_ids(
         return ()
     if plan.dbt_model_plan.run_selector_terms:
         return ()
-    return _selected_non_model_unique_ids(plan=plan, resource_type="test")
+    return tuple(
+        sorted(
+            frozenset(
+                (
+                    *_selected_non_model_unique_ids(plan=plan, resource_type="test"),
+                    *_selected_non_model_unique_ids(plan=plan, resource_type="unit_test"),
+                )
+            )
+        )
+    )
 
 
 def build_dbt_pruned_seed_unique_ids(
