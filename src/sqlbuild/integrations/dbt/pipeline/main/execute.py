@@ -47,6 +47,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropRoutedArgs,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
+    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_execution_outcome,
@@ -66,13 +67,19 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
+    find_direct_dbt_dependency_unique_ids,
     resolve_connection_config,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
+    execute_dbt_complete_reuse_plan,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
     DbtInteropSqlbuildTestAction,
+    DbtReusePlanAction,
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions
@@ -190,7 +197,17 @@ def execute_dbt_interop_from_project(
         graph=graph,
         candidate_unique_ids=tuple(
             sorted(
-                frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
+                frozenset(
+                    (
+                        *plan.dbt_selected_unique_ids,
+                        *plan.selection.dbt_required_unique_ids,
+                        *find_direct_dbt_dependency_unique_ids(
+                            project=project,
+                            manifest=manifest,
+                            selected_model_names=plan.selection.sqlbuild_model_names,
+                        ),
+                    )
+                )
             )
         ),
         full_refresh="--full-refresh" in routed.dbt_args,
@@ -200,6 +217,44 @@ def execute_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
+    dbt_reuse_plan: DbtReusePlanningResult | None = build_dbt_reuse_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        current_manifest=manifest,
+        dbt_model_plan=dbt_model_plan,
+        plan=plan,
+        dbt_options=dbt_options,
+        runner=runner,
+    )
+    if dbt_reuse_plan is not None:
+        plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
+    connection_config: dict[str, object] = resolve_connection_config(
+        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
+        project_dir=project_dir,
+        adapter_name=adapter_name,
+        discovered_inputs=discovered_inputs,
+    )
+    dbt_fingerprint_warnings: list[str] = []
+    if _has_complete_dbt_reuse_work(plan):
+        reuse_connection: object = adapter.connect(connection_config)
+        try:
+            reused_dbt_unique_ids: tuple[str, ...] = execute_dbt_complete_reuse_plan(
+                adapter=adapter,
+                connection=reuse_connection,
+                manifest=manifest,
+                plan=plan,
+                run_id=project.run_id,
+                fingerprint_database=project.effective_target_database,
+                fingerprint_schema=project.effective_target_schema,
+                target_name=project.effective_target_name,
+                warnings=dbt_fingerprint_warnings,
+            )
+            for reused_dbt_unique_id in reused_dbt_unique_ids:
+                output_stream.write(f"Reused dbt relation: {reused_dbt_unique_id}\n")
+            if reused_dbt_unique_ids:
+                output_stream.flush()
+        finally:
+            adapter.close(reuse_connection)
     plan = replace(
         plan,
         dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
@@ -289,18 +344,11 @@ def execute_dbt_interop_from_project(
         output_stream.write(rendered_plan + "\n\n")
         output_stream.flush()
 
-    dbt_fingerprint_warnings: list[str] = []
     buffered_dbt_results: list[DbtNodeExecutionResult] = []
     dbt_state_connection: object | None = None
     dbt_query_sql_by_unique_id: dict[str, str] = {
         unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
     }
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
-        project_dir=project_dir,
-        adapter_name=adapter_name,
-        discovered_inputs=discovered_inputs,
-    )
     if project.settings.query_change_tracking and adapter_name != "duckdb":
         dbt_state_connection = adapter.connect(connection_config)
 
@@ -469,3 +517,11 @@ def execute_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _has_complete_dbt_reuse_work(plan: DbtInteropPlan) -> bool:
+    if plan.dbt_reuse_plan is None:
+        return False
+    return any(
+        entry.action == DbtReusePlanAction.COMPLETE_REUSE for entry in plan.dbt_reuse_plan.entries
+    )

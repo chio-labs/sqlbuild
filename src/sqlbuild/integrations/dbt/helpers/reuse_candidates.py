@@ -137,11 +137,15 @@ def _dbt_reuse_scope_unique_ids(*, plan: DbtInteropPlan) -> tuple[str, ...]:
     unique_ids: tuple[str, ...]
     for unique_ids in plan.selection.dbt_anchor_unique_ids_by_term.values():
         anchor_unique_ids.extend(unique_ids)
+    model_plan_unique_ids: tuple[str, ...] = tuple(
+        entry.unique_id for entry in (plan.dbt_model_plan.entries if plan.dbt_model_plan else ())
+    )
     return _dedupe_preserving_order(
         values=(
             *plan.dbt_selected_unique_ids,
             *plan.selection.dbt_required_unique_ids,
             *anchor_unique_ids,
+            *model_plan_unique_ids,
         )
     )
 

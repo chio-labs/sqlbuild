@@ -36,6 +36,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropRoutedArgs,
     DbtModelPlanningResult,
+    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_non_model_run_unique_ids,
@@ -47,7 +48,9 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
+    find_direct_dbt_dependency_unique_ids,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -154,7 +157,17 @@ def plan_dbt_interop_from_project(
         graph=graph,
         candidate_unique_ids=tuple(
             sorted(
-                frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
+                frozenset(
+                    (
+                        *plan.dbt_selected_unique_ids,
+                        *plan.selection.dbt_required_unique_ids,
+                        *find_direct_dbt_dependency_unique_ids(
+                            project=project,
+                            manifest=manifest,
+                            selected_model_names=plan.selection.sqlbuild_model_names,
+                        ),
+                    )
+                )
             )
         ),
         full_refresh="--full-refresh" in routed.dbt_args,
@@ -170,6 +183,17 @@ def plan_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
+    dbt_reuse_plan: DbtReusePlanningResult | None = build_dbt_reuse_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        current_manifest=manifest,
+        dbt_model_plan=dbt_model_plan,
+        plan=plan,
+        dbt_options=dbt_options,
+        runner=runner,
+    )
+    if dbt_reuse_plan is not None:
+        plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
     plan = replace(
         plan,
         dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(

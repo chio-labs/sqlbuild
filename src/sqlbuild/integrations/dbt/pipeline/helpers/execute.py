@@ -37,6 +37,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtModelOutcomeState,
     DbtModelPlanAction,
+    DbtReusePlanAction,
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
@@ -543,7 +544,17 @@ def _planned_dbt_select_terms(
         plan=plan,
         unique_ids=non_model_unique_ids,
     )
-    return tuple(sorted(frozenset((*plan.dbt_model_plan.run_selector_terms, *non_model_terms))))
+    reused_unique_ids: frozenset[str] = frozenset(
+        entry.unique_id
+        for entry in (plan.dbt_reuse_plan.entries if plan.dbt_reuse_plan is not None else ())
+        if entry.action == DbtReusePlanAction.COMPLETE_REUSE
+    )
+    model_terms: tuple[str, ...] = tuple(
+        entry.selector_term
+        for entry in plan.dbt_model_plan.entries
+        if entry.action == DbtModelPlanAction.RUN and entry.unique_id not in reused_unique_ids
+    )
+    return tuple(sorted(frozenset((*model_terms, *non_model_terms))))
 
 
 def _selected_non_model_unique_ids(*, plan: DbtInteropPlan, resource_type: str) -> tuple[str, ...]:

@@ -427,6 +427,81 @@ def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
     "test_case",
     [
         DbtPlanTestCase(
+            description="formats dbt reuse plan in human and json output",
+            command="build",
+            dbt_command_argv=("dbt", "build"),
+            dbt_ls_unique_ids=("model.analytics.orders",),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=(
+                "Reuse plan",
+                "complete reuse: 1",
+                "seeded reuse: 1",
+            ),
+            expected_json_fragments=(
+                '"reuse_plan"',
+                '"complete_reuse_unique_ids"',
+                '"seeded_reuse_unique_ids"',
+                '"reuse_relation_name": "prod.events"',
+            ),
+        )
+    ],
+    ids=["formats dbt reuse plan in human and json output"],
+)
+def test_given_dbt_reuse_plan_when_formatting_then_outputs_reuse_sections(
+    test_case: DbtPlanTestCase,
+) -> None:
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=tuple(
+            DbtLsNode(unique_id=unique_id) for unique_id in test_case.dbt_ls_unique_ids
+        ),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=DbtInteropSelectionResult(),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.orders",
+                    action=DbtReusePlanAction.COMPLETE_REUSE,
+                    reason=DbtReusePlanReason.TARGET_MISSING,
+                    materialization="table",
+                    current_relation_name="dev.orders",
+                    reuse_relation_name="prod.orders",
+                ),
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.events",
+                    action=DbtReusePlanAction.SEEDED_REUSE,
+                    reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
+                    materialization="microbatch",
+                    current_relation_name="dev.events",
+                    reuse_relation_name="prod.events",
+                ),
+            )
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(plan, use_color=False)
+    json_output: str = format_dbt_interop_plan_json(plan)
+
+    assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
+    for fragment in test_case.expected_human_fragments:
+        assert fragment in human_output
+    for fragment in test_case.expected_json_fragments:
+        assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
             description="places dbt anchors before SQLBuild selection",
             command="build",
             dbt_command_argv=("dbt", "build", "--select", "+fct_customer_revenue+"),
