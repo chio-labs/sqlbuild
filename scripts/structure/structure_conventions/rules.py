@@ -128,6 +128,60 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
     return violations
 
 
+def check_no_internal_reexport_modules(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Reject internal modules that only re-export imports from another module."""
+
+    if not _is_runtime_file(repo_root, file_path):
+        return []
+    if _is_allowed_reexport_surface(repo_root, file_path):
+        return []
+    if not _is_pure_reexport_module(module):
+        return []
+    return [
+        Violation(
+            code="SC046",
+            path=file_path,
+            line=1,
+            message=(
+                "runtime modules must not be pure re-export shims; import from the "
+                "implementation module directly or define a real public API surface"
+            ),
+        )
+    ]
+
+
+def check_no_internal_helper_exports(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Reject __all__ export surfaces inside internal helper packages."""
+
+    if not _is_runtime_file(repo_root, file_path):
+        return []
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if "helpers" not in relative_parts:
+        return []
+    if len(relative_parts) >= 4 and relative_parts[:3] == ("src", "sqlbuild", "integrations"):
+        return []
+
+    violations: list[Violation] = []
+    for node in module.body:
+        if _is_all_assignment(node):
+            violations.append(
+                Violation(
+                    code="SC047",
+                    path=file_path,
+                    line=getattr(node, "lineno", 1),
+                    message=(
+                        "internal helper modules must not define __all__; expose public APIs "
+                        "from an approved public surface instead"
+                    ),
+                )
+            )
+    return violations
+
+
 def check_banned_generic_filename(file_path: Path) -> list[Violation]:
     """Reject vague generic module names in runtime and script code."""
 
@@ -1396,6 +1450,68 @@ def _has_deep_internal_segment(parts: tuple[str, ...], internal_segments: frozen
     """Check whether any segment in the import path is a deep internal boundary."""
 
     return any(seg in internal_segments for seg in parts)
+
+
+def _is_runtime_file(repo_root: Path, file_path: Path) -> bool:
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    return len(relative_parts) >= 3 and relative_parts[:2] == ("src", "sqlbuild")
+
+
+def _is_allowed_reexport_surface(repo_root: Path, file_path: Path) -> bool:
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if file_path.name == "__init__.py":
+        return True
+    if len(relative_parts) == 3 and relative_parts[:2] == ("src", "sqlbuild"):
+        return True
+    if len(relative_parts) >= 4 and relative_parts[:3] == ("src", "sqlbuild", "integrations"):
+        return True
+    if len(relative_parts) == 4 and relative_parts[3] == "exceptions.py":
+        return True
+    return False
+
+
+def _is_pure_reexport_module(module: ast.Module) -> bool:
+    saw_import: bool = False
+    saw_all: bool = False
+    for node in module.body:
+        if _is_module_docstring(node) or _is_future_annotations_import(node):
+            continue
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            saw_import = True
+            continue
+        if _is_all_assignment(node):
+            saw_all = True
+            continue
+        return False
+    return saw_import and saw_all
+
+
+def _is_module_docstring(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
+
+
+def _is_future_annotations_import(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+    )
+
+
+def _is_all_assignment(node: ast.stmt) -> bool:
+    if isinstance(node, ast.Assign):
+        return any(
+            isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+        )
+    return (
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "__all__"
+    )
 
 
 def _adapter_contract_class_names(

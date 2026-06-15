@@ -19,7 +19,6 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
     format_build_header,
 )
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
-from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
@@ -35,6 +34,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 
 
 def execute_sqlbuild_build_work(
