@@ -28,7 +28,6 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_h
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
     write_test_runtime_target,
 )
-from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -39,6 +38,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 

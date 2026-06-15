@@ -15,7 +15,6 @@ from sqlbuild.cli.commands.main.helpers.lineage.models import (
     ParsedLineageSelector,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.status import maybe_status
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
@@ -29,6 +28,7 @@ from sqlbuild.compiler.lineage.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.shared.helpers.status import maybe_status
 
 
 @dataclass(frozen=True)

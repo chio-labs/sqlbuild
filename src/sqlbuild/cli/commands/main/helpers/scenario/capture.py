@@ -25,7 +25,6 @@ from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
 )
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
-from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -45,6 +44,7 @@ from sqlbuild.shared.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.coded_errors import format_coded_error
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
