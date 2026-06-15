@@ -1281,12 +1281,8 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             name=FINGERPRINT_TABLE_NAME,
         )
-        index_name: str | None = self.render_qualified_name(
-            database=None,
-            schema=schema,
-            name="_sqlbuild_fingerprints_latest_idx",
-        )
-        if table_name is None or index_name is None:
+        index_name: str = "_sqlbuild_fingerprints_latest_idx"
+        if table_name is None:
             return ()
         return (
             "CREATE INDEX IF NOT EXISTS "
@@ -1348,12 +1344,8 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
         )
-        index_name: str | None = self.render_qualified_name(
-            database=None,
-            schema=schema,
-            name="_sqlbuild_source_freshness_latest_idx",
-        )
-        if table_name is None or index_name is None:
+        index_name: str = "_sqlbuild_source_freshness_latest_idx"
+        if table_name is None:
             return ()
         return (
             "CREATE INDEX IF NOT EXISTS "

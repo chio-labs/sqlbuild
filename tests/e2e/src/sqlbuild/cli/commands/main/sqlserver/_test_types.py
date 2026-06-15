@@ -12,6 +12,13 @@ class SqlServerBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerDbtProfileE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_toml_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SqlServerNodeResultE2ETestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]

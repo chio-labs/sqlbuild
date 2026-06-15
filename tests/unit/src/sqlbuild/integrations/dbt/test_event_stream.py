@@ -75,6 +75,52 @@ DBT_RESULT_PARSE_TEST_CASES: list[DbtEventParseTestCase] = [
         expected_status="pass",
         expected_total=8,
     ),
+    DbtEventParseTestCase(
+        description="prefers node finished run result status over adapter response",
+        event={
+            "data": {
+                "execution_time": 0.14,
+                "index": 1,
+                "total": 1,
+                "status": "SELECT 1",
+                "run_result": {"status": "success"},
+                "node_info": {
+                    "node_name": "dbt_orders",
+                    "resource_type": "model",
+                    "unique_id": "model.analytics.dbt_orders",
+                },
+            },
+            "info": {"level": "info", "name": "NodeFinished", "msg": "SELECT 1"},
+        },
+        expected_unique_id="model.analytics.dbt_orders",
+        expected_resource_type="model",
+        expected_node_name="dbt_orders",
+        expected_status="success",
+        expected_total=1,
+    ),
+    DbtEventParseTestCase(
+        description="uses node status when result event status is adapter response",
+        event={
+            "data": {
+                "execution_time": 0.14,
+                "index": 1,
+                "total": 1,
+                "status": "SELECT 1",
+                "node_info": {
+                    "node_name": "dbt_orders",
+                    "node_status": "success",
+                    "resource_type": "model",
+                    "unique_id": "model.analytics.dbt_orders",
+                },
+            },
+            "info": {"level": "info", "name": "LogModelResult", "msg": "SELECT 1"},
+        },
+        expected_unique_id="model.analytics.dbt_orders",
+        expected_resource_type="model",
+        expected_node_name="dbt_orders",
+        expected_status="success",
+        expected_total=1,
+    ),
 ]
 
 

@@ -10,6 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryBuildE2ETestCase,
     BigQueryCliTestCase,
     BigQueryCloneE2ETestCase,
+    BigQueryDbtProfileE2ETestCase,
     BigQueryDiffE2ETestCase,
     BigQueryErrorE2ETestCase,
     BigQueryIntermediateDagStrategyE2ETestCase,
@@ -61,6 +62,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_profile_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -77,6 +79,74 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDbtProfileE2ETestCase(
+            description="dbt init generated project builds through BigQuery dbt profile",
+            schema_prefix="sqlbuild_dbt_profile",
+            expected_toml_fragments=(
+                'adapter = "bigquery"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+            ),
+        )
+    ],
+    ids=["dbt init generated project builds through BigQuery dbt profile"],
+)
+def test_given_bigquery_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
+    tmp_path: Path,
+    test_case: BigQueryDbtProfileE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix=test_case.schema_prefix)
+    config: dict[str, object] = build_bigquery_connection_config(schema=dataset_name)
+    project_id: str = str(config["project"])
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        assert_dbt_profile_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: bigquery\n"
+                "      method: oauth\n"
+                f"      project: {project_id}\n"
+                f"      dataset: {dataset_name}\n"
+                f"      location: {config['location']}\n"
+            ),
+            env=None,
+            fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dataset_name, sql=sql),
+            no_profile_tables_exist=lambda: (
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        "SELECT table_name FROM "
+                        f"`{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES` "
+                        "WHERE table_name IN ('dbt_orders', 'downstream_orders') "
+                        "ORDER BY table_name"
+                    ),
+                )
+                == ()
+            ),
+            dbt_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(dataset_name=dataset_name, name='dbt_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(dataset_name=dataset_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_toml_fragments=test_case.expected_toml_fragments,
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
 
 
 @pytest.mark.parametrize(

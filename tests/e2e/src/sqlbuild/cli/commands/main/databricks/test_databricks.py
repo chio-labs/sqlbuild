@@ -9,6 +9,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksBuildE2ETestCase,
     DatabricksCliTestCase,
     DatabricksCloneE2ETestCase,
+    DatabricksDbtProfileE2ETestCase,
     DatabricksDiffE2ETestCase,
     DatabricksErrorE2ETestCase,
     DatabricksIntermediateDagStrategyE2ETestCase,
@@ -53,6 +54,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_profile_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -69,6 +71,74 @@ from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
     build_databricks_connection_config,
     build_unique_schema_name,
 )
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksDbtProfileE2ETestCase(
+            description="dbt init generated project builds through Databricks dbt profile",
+            schema_prefix="sqlbuild_dbt_profile",
+            expected_toml_fragments=(
+                'adapter = "databricks"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+            ),
+        )
+    ],
+    ids=["dbt init generated project builds through Databricks dbt profile"],
+)
+def test_given_databricks_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
+    tmp_path: Path,
+    test_case: DatabricksDbtProfileE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix=test_case.schema_prefix)
+    config: dict[str, object] = build_databricks_connection_config(schema=schema_name)
+    catalog_name: str = str(config["catalog"])
+    try:
+        ensure_databricks_schema_ready(schema_name=schema_name)
+        assert_dbt_profile_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: databricks\n"
+                f"      host: {config['server_hostname']}\n"
+                f"      http_path: {config['http_path']}\n"
+                f"      token: {config['token']}\n"
+                f"      catalog: {catalog_name}\n"
+                f"      schema: {schema_name}\n"
+            ),
+            env=None,
+            fetch_rows=lambda sql: fetch_databricks_rows(schema_name=schema_name, sql=sql),
+            no_profile_tables_exist=lambda: (
+                fetch_databricks_rows(
+                    schema_name=schema_name,
+                    sql=(
+                        f"SELECT table_name FROM `{catalog_name}`.information_schema.tables "
+                        f"WHERE table_schema = '{schema_name}' "
+                        "AND table_name IN ('dbt_orders', 'downstream_orders') ORDER BY table_name"
+                    ),
+                )
+                == ()
+            ),
+            dbt_orders_sql=(
+                f"SELECT order_id FROM {relation_name(schema_name=schema_name, name='dbt_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(schema_name=schema_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_toml_fragments=test_case.expected_toml_fragments,
+            unexpected_toml_fragments=(str(config["token"]),),
+        )
+    finally:
+        cleanup_databricks_schema(schema_name=schema_name)
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtExecutionCliTestCase,
     DbtExecutionFailureCliTestCase,
     DbtExecutionQueryAssertion,
+    DbtExistingRelationGuardE2ETestCase,
+    DbtMissingRelationGuardE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
@@ -18,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     skip_unless_dbt_is_runnable,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    execute_duckdb,
     query_duckdb,
     row_count,
     run_sqb,
@@ -39,7 +42,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
         expected_stdout_fragments=(
             "Plan ready",
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution",
             "Completed successfully.",
         ),
@@ -68,7 +71,6 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         expected_row_counts=(("local_only", 1),),
         unexpected_relations=("dbt_only",),
         expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
-        expected_absent_stdout_fragments=("test_local_only",),
         expected_query_assertions=(
             DbtExecutionQueryAssertion(
                 description="sqlbuild only run materializes local row",
@@ -89,7 +91,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
         expected_stdout_fragments=(
             "Plan ready",
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution",
             "Completed successfully.",
         ),
@@ -107,13 +109,13 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
         expected_planned_sqlbuild_models=(
             "downstream_orders",
-            "event_time_orders",
+            "+event_time_orders",
             "mart_orders",
         ),
     ),
     DbtExecutionCliTestCase(
-        description="build executes direct mixed tag selector with required dbt upstream",
-        command=("dbt", "build", "--select", "tag:nightly"),
+        description="build executes explicit upstream mixed tag selector",
+        command=("dbt", "build", "--select", "+tag:nightly"),
         expected_row_counts=(
             ("stg_orders", 1),
             ("fact_orders", 1),
@@ -121,8 +123,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
         unexpected_relations=("mart_orders",),
         expected_stdout_fragments=(
-            "selectors: +fact_orders",
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution",
             "Completed successfully.",
         ),
@@ -138,7 +139,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
                 expected_rows=((1,),),
             ),
         ),
-        expected_planned_sqlbuild_models=("downstream_orders",),
+        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
     ),
     DbtExecutionCliTestCase(
         description="build executes dbt only work",
@@ -158,7 +159,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         command=("dbt", "build", "--select", "local_only"),
         expected_row_counts=(("local_only", 1),),
         unexpected_relations=("dbt_only",),
-        expected_stdout_fragments=("Skipping dbt: no dbt work selected.", "test_local_only"),
+        expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
         expected_query_assertions=(
             DbtExecutionQueryAssertion(
                 description="sqlbuild only build materializes local row",
@@ -174,7 +175,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
             "dbt",
             "run",
             "--select",
-            "event_time_orders",
+            "+event_time_orders",
             "--event-time-start",
             "2025-12-31",
             "--event-time-end",
@@ -203,7 +204,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
     ),
     DbtExecutionCliTestCase(
         description="run executes full refresh sqlbuild work",
-        command=("dbt", "run", "--full-refresh", "--select", "event_time_orders"),
+        command=("dbt", "run", "--full-refresh", "--select", "+event_time_orders"),
         expected_row_counts=(
             ("stg_orders", 1),
             ("fact_orders", 1),
@@ -224,16 +225,15 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
     ),
     DbtExecutionCliTestCase(
-        description="run executes direct sqlbuild model with package qualified dbt ref",
-        command=("dbt", "run", "--select", "downstream_orders"),
+        description="run executes explicit upstream sqlbuild model with package qualified dbt ref",
+        command=("dbt", "run", "--select", "+downstream_orders"),
         expected_row_counts=(
             ("fact_orders", 1),
             ("downstream_orders", 1),
         ),
         unexpected_relations=("mart_orders",),
         expected_stdout_fragments=(
-            "selectors: +fact_orders",
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution",
             "Completed successfully.",
         ),
@@ -244,7 +244,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
                 expected_rows=((1,),),
             ),
         ),
-        expected_planned_sqlbuild_models=("downstream_orders",),
+        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
     ),
     DbtExecutionCliTestCase(
         description="build executes path translation scope",
@@ -252,7 +252,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
             "dbt",
             "build",
             "--select",
-            "path:models/marts",
+            "+path:models/marts",
             "--exclude",
             "deprecated_orders",
             "mart_orders",
@@ -264,7 +264,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
         unexpected_relations=("deprecated_orders", "mart_orders", "event_time_orders"),
         expected_stdout_fragments=(
-            "path:models/marts",
+            "downstream_orders",
             "downstream_orders",
             "Completed successfully.",
         ),
@@ -275,7 +275,7 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
                 expected_rows=((1,),),
             ),
         ),
-        expected_planned_sqlbuild_models=("downstream_orders",),
+        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
     ),
     DbtExecutionCliTestCase(
         description="build executes exclude scope correctly",
@@ -323,8 +323,8 @@ PLAN_CONSISTENCY_TEST_CASES: list[DbtExecutionCliTestCase] = [
         ),
     ),
     DbtExecutionCliTestCase(
-        description="plan consistency for direct mixed tag case",
-        command=("dbt", "build", "--select", "tag:nightly"),
+        description="plan consistency for explicit upstream mixed tag case",
+        command=("dbt", "build", "--select", "+tag:nightly"),
         expected_row_counts=(),
         expected_planned_sqlbuild_models=("downstream_orders",),
     ),
@@ -344,8 +344,8 @@ PLAN_CONSISTENCY_TEST_CASES: list[DbtExecutionCliTestCase] = [
         expected_planned_sqlbuild_models=("event_time_orders",),
     ),
     DbtExecutionCliTestCase(
-        description="plan consistency for package qualified ref case",
-        command=("dbt", "run", "--select", "downstream_orders"),
+        description="plan consistency for explicit upstream package qualified ref case",
+        command=("dbt", "run", "--select", "+downstream_orders"),
         expected_row_counts=(),
         expected_planned_sqlbuild_models=("downstream_orders",),
     ),
@@ -355,14 +355,14 @@ PLAN_CONSISTENCY_TEST_CASES: list[DbtExecutionCliTestCase] = [
             "dbt",
             "build",
             "--select",
-            "path:models/marts",
+            "+path:models/marts",
             "--exclude",
             "deprecated_orders",
             "mart_orders",
             "event_time_orders",
         ),
         expected_row_counts=(),
-        expected_planned_sqlbuild_models=("downstream_orders",),
+        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
     ),
     DbtExecutionCliTestCase(
         description="plan consistency for exclude case",
@@ -413,6 +413,91 @@ def test_given_dbt_interop_project_when_running_execution_command_then_outputs_e
         assert query_duckdb(db_path=db_path, sql=query_assertion.sql) == list(
             query_assertion.expected_rows
         ), query_assertion.description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtMissingRelationGuardE2ETestCase(
+            description="plain SQLBuild selection blocks when dbt upstream relation is missing",
+            command=("dbt", "build", "--select", "downstream_orders"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "Skipping dbt: no dbt work selected.",
+                "depends on missing dbt relation(s):",
+                "fact_orders",
+                "Use --select +downstream_orders",
+            ),
+            expected_absent_relations=("fact_orders", "downstream_orders"),
+        )
+    ],
+    ids=["plain SQLBuild selection blocks when dbt upstream relation is missing"],
+)
+def test_given_plain_sqlbuild_selection_with_missing_dbt_ref_when_running_then_blocks_before_build(
+    tmp_path: Path,
+    test_case: DbtMissingRelationGuardE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    db_path: Path = project_dir / "dbt_interop.duckdb"
+    assert result.returncode == test_case.expected_returncode, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    absent_relation: str
+    for absent_relation in test_case.expected_absent_relations:
+        assert not table_exists(db_path=db_path, table_name=absent_relation)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExistingRelationGuardE2ETestCase(
+            description="plain SQLBuild selection builds when dbt upstream relation already exists",
+            command=("dbt", "build", "--select", "downstream_orders"),
+            setup_sql="CREATE TABLE main.fact_orders AS SELECT 1 AS order_id, 100 AS amount",
+            expected_returncode=0,
+            expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
+            unexpected_stdout_fragments=("depends on missing dbt relation",),
+            expected_rows=((1,),),
+        )
+    ],
+    ids=["plain SQLBuild selection builds when dbt upstream relation already exists"],
+)
+def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_builds_downstream(
+    tmp_path: Path,
+    test_case: DbtExistingRelationGuardE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_interop.duckdb"
+    execute_duckdb(
+        db_path=db_path,
+        sql=test_case.setup_sql,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    unexpected_stdout_fragment: str
+    for unexpected_stdout_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_stdout_fragment not in result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
+    ) == list(test_case.expected_rows)
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_profile_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -33,6 +34,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeBuildE2ETestCase,
     SnowflakeCliTestCase,
     SnowflakeCloneE2ETestCase,
+    SnowflakeDbtProfileE2ETestCase,
     SnowflakeDiffE2ETestCase,
     SnowflakeIntermediateDagStrategyE2ETestCase,
     SnowflakeJanitorDetachedVdeE2ETestCase,
@@ -74,6 +76,78 @@ from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
     build_unique_schema_name,
 )
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeDbtProfileE2ETestCase(
+            description="dbt init generated project builds through Snowflake PAT dbt profile",
+            schema_prefix="sqlbuild_dbt_profile",
+            expected_toml_fragments=(
+                'adapter = "snowflake"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+            ),
+        )
+    ],
+    ids=["dbt init generated project builds through Snowflake PAT dbt profile"],
+)
+def test_given_snowflake_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
+    tmp_path: Path,
+    test_case: SnowflakeDbtProfileE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix=test_case.schema_prefix)
+    config: dict[str, object] = build_snowflake_connection_config(schema=schema_name)
+    database_name: str = str(config["database"])
+    try:
+        ensure_query_schema_ready(schema_name=schema_name)
+        assert_dbt_profile_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: snowflake\n"
+                f"      account: {config['account']}\n"
+                f"      user: {config['user']}\n"
+                "      authenticator: programmatic_access_token\n"
+                f"      token: {config['token']}\n"
+                f"      role: {config['role']}\n"
+                f"      warehouse: {config['warehouse']}\n"
+                f"      database: {database_name}\n"
+                f"      schema: {schema_name}\n"
+            ),
+            env=None,
+            fetch_rows=lambda sql: fetch_snowflake_rows(schema_name=schema_name, sql=sql),
+            no_profile_tables_exist=lambda: (
+                fetch_snowflake_rows(
+                    schema_name=schema_name,
+                    sql=(
+                        f"SELECT LOWER(table_name) FROM {database_name}.information_schema.tables "
+                        f"WHERE UPPER(table_schema) = UPPER('{schema_name}') "
+                        "AND LOWER(table_name) IN ('dbt_orders', 'downstream_orders') "
+                        "ORDER BY LOWER(table_name)"
+                    ),
+                )
+                == ()
+            ),
+            dbt_orders_sql=(
+                f"SELECT order_id FROM {relation_name(schema_name=schema_name, name='dbt_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(schema_name=schema_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_toml_fragments=test_case.expected_toml_fragments,
+            unexpected_toml_fragments=(str(config["token"]),),
+        )
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
 
 
 @pytest.mark.parametrize(

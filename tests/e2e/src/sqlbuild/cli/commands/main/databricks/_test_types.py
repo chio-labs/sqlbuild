@@ -10,6 +10,13 @@ class DatabricksCliTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksDbtProfileE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_toml_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DatabricksNodeResultE2ETestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]

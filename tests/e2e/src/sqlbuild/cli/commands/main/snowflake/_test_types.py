@@ -11,6 +11,13 @@ class SnowflakeCliTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeDbtProfileE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_toml_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SnowflakeNodeResultE2ETestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]

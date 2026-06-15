@@ -10,6 +10,13 @@ class BigQueryCliTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryDbtProfileE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_toml_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BigQueryNodeResultE2ETestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]
