@@ -271,6 +271,9 @@ def execute_dbt_interop_from_project(
     dbt_fingerprint_warnings: list[str] = []
     buffered_dbt_results: list[DbtNodeExecutionResult] = []
     dbt_state_connection: object | None = None
+    dbt_query_sql_by_unique_id: dict[str, str] = {
+        unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
+    }
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
         project_dir=project_dir,
@@ -297,6 +300,7 @@ def execute_dbt_interop_from_project(
             fingerprint_schema=project.effective_target_schema,
             target_name=project.effective_target_name,
             warnings=dbt_fingerprint_warnings,
+            query_sql=dbt_query_sql_by_unique_id.get(result.unique_id),
         )
 
     try:
@@ -328,6 +332,7 @@ def execute_dbt_interop_from_project(
                     fingerprint_schema=project.effective_target_schema,
                     target_name=project.effective_target_name,
                     warnings=dbt_fingerprint_warnings,
+                    query_sql=dbt_query_sql_by_unique_id.get(dbt_result.unique_id),
                 )
         finally:
             adapter.close(duckdb_connection)

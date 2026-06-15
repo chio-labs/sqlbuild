@@ -252,6 +252,7 @@ def build_manifest_model_node(
     alias: str | None = None,
     checksum: str | None = None,
     fqn: tuple[str, ...] = (),
+    raw_code: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
@@ -261,6 +262,7 @@ def build_manifest_model_node(
         "resource_type": "model",
         "package_name": package_name,
         "name": name,
+        "raw_code": raw_code if raw_code is not None else f"select * from {name}",
     }
     if relation_name is not None:
         node["relation_name"] = relation_name
@@ -412,7 +414,12 @@ def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
 
 
 def write_dbt_test_fingerprint(
-    *, adapter: Any, connection: Any, unique_id: str, version_hash: str
+    *,
+    adapter: Any,
+    connection: Any,
+    unique_id: str,
+    version_hash: str,
+    definition: str = "select * from orders",
 ) -> None:
     """Write one dbt fingerprint row for planning tests."""
 
@@ -426,7 +433,7 @@ def write_dbt_test_fingerprint(
         definition_hash=version_hash,
         version_hash=version_hash,
         schema_fingerprint=hashlib.sha256(b"").hexdigest(),
-        definition="{}",
+        definition=definition,
         metadata_json="{}",
         ts=datetime.now(tz=UTC),
     )

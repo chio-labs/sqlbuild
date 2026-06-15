@@ -25,6 +25,7 @@ from sqlbuild.integrations.dbt.types import (
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
+from sqlbuild.shared.helpers.query_diff import format_query_diff
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
 
@@ -246,23 +247,13 @@ def _format_dbt_model_plan(
     name_column_width: int = resolve_name_column_width(
         tuple(entry.unique_id for entry in plan.dbt_model_plan.entries)
     )
-    lines.append(f"    {style.plan_section(f'Run ({len(run_ids)})')}")
     if run_ids:
-        visible_run: Sequence[DbtModelPlanEntry] = visible_entries(
-            entries_by_action[DbtModelPlanAction.RUN], options=display_options
-        )
-        for entry in visible_run:
-            lines.append(
-                _format_dbt_model_plan_entry(
-                    entry, style=style, name_column_width=name_column_width
-                )
-            )
-        _append_dbt_overflow_line(
+        _format_dbt_run_reason_sections(
             lines,
-            total_count=len(run_ids),
-            visible_count=len(visible_run),
-            indent="      ",
-            options=display_options,
+            entries_by_action[DbtModelPlanAction.RUN],
+            style=style,
+            name_column_width=name_column_width,
+            display_options=display_options,
         )
     lines.append(f"    {style.plan_section(f'Current ({len(current_ids)})')}")
     if current_ids:
@@ -270,10 +261,11 @@ def _format_dbt_model_plan(
             entries_by_action[DbtModelPlanAction.CURRENT], options=display_options
         )
         for entry in visible_current:
-            lines.append(
-                _format_dbt_model_plan_entry(
-                    entry, style=style, name_column_width=name_column_width
-                )
+            _append_dbt_model_plan_entry(
+                lines,
+                entry,
+                style=style,
+                name_column_width=name_column_width,
             )
         _append_dbt_overflow_line(
             lines,
@@ -288,10 +280,11 @@ def _format_dbt_model_plan(
             entries_by_action[DbtModelPlanAction.BLOCKED], options=display_options
         )
         for entry in visible_blocked:
-            lines.append(
-                _format_dbt_model_plan_entry(
-                    entry, style=style, name_column_width=name_column_width
-                )
+            _append_dbt_model_plan_entry(
+                lines,
+                entry,
+                style=style,
+                name_column_width=name_column_width,
             )
         _append_dbt_overflow_line(
             lines,
@@ -309,6 +302,50 @@ def _format_dbt_model_plan(
             lines,
             total_count=len(blocked_sqlbuild),
             visible_count=len(visible_sqlbuild),
+            indent="      ",
+            options=display_options,
+        )
+
+
+def _format_dbt_run_reason_sections(
+    lines: list[str],
+    run_entries: tuple[DbtModelPlanEntry, ...],
+    *,
+    style: CliStyle,
+    name_column_width: int,
+    display_options: DisplayOptions,
+) -> None:
+    reason_order: tuple[DbtModelPlanReason, ...] = (
+        DbtModelPlanReason.CHECKSUM_CHANGED,
+        DbtModelPlanReason.UPSTREAM_CHANGED,
+        DbtModelPlanReason.RELATION_MISSING,
+        DbtModelPlanReason.FIRST_RUN,
+        DbtModelPlanReason.FULL_REFRESH,
+        DbtModelPlanReason.SOURCE_FRESHNESS_ERROR,
+    )
+    reason: DbtModelPlanReason
+    for reason in reason_order:
+        reason_entries: tuple[DbtModelPlanEntry, ...] = tuple(
+            entry for entry in run_entries if entry.reason == reason
+        )
+        if not reason_entries:
+            continue
+        reason_label: str = _dbt_model_plan_reason_section_label(reason)
+        lines.append(f"    {style.plan_section(f'{reason_label} ({len(reason_entries)})')}")
+        visible_entries_for_reason: Sequence[DbtModelPlanEntry] = visible_entries(
+            reason_entries, options=display_options
+        )
+        for entry in visible_entries_for_reason:
+            _append_dbt_model_plan_entry(
+                lines,
+                entry,
+                style=style,
+                name_column_width=name_column_width,
+            )
+        _append_dbt_overflow_line(
+            lines,
+            total_count=len(reason_entries),
+            visible_count=len(visible_entries_for_reason),
             indent="      ",
             options=display_options,
         )
@@ -404,15 +441,30 @@ def _pluralize(label: str, count: int) -> str:
     return f"{label}s"
 
 
-def _format_dbt_model_plan_entry(
-    entry: DbtModelPlanEntry, *, style: CliStyle, name_column_width: int
-) -> str:
-    return "    " + format_aligned_name_value(
-        plain_name=entry.unique_id,
-        styled_name=style.dbt_object_name(entry.unique_id),
-        value=style.muted(_dbt_model_plan_reason_label(entry.reason)),
-        name_column_width=name_column_width,
+def _append_dbt_model_plan_entry(
+    lines: list[str], entry: DbtModelPlanEntry, *, style: CliStyle, name_column_width: int
+) -> None:
+    lines.append(
+        "    "
+        + format_aligned_name_value(
+            plain_name=entry.unique_id,
+            styled_name=style.dbt_object_name(entry.unique_id),
+            value=style.muted(_dbt_model_plan_reason_label(entry.reason)),
+            name_column_width=name_column_width,
+        )
     )
+    _append_dbt_query_diff(lines, entry, style=style)
+
+
+def _append_dbt_query_diff(lines: list[str], entry: DbtModelPlanEntry, *, style: CliStyle) -> None:
+    if entry.reason != DbtModelPlanReason.CHECKSUM_CHANGED:
+        return
+    if entry.previous_query_sql is None or entry.fingerprint_query_sql is None:
+        return
+    if entry.previous_query_sql == entry.fingerprint_query_sql:
+        return
+    lines.append(style.label("      query diff:"))
+    lines.extend(format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
 
 
 def _dbt_model_plan_reason_label(reason: DbtModelPlanReason) -> str:
@@ -424,6 +476,19 @@ def _dbt_model_plan_reason_label(reason: DbtModelPlanReason) -> str:
         DbtModelPlanReason.UPSTREAM_CHANGED: "upstream changed",
         DbtModelPlanReason.NO_CHANGE: "no change",
         DbtModelPlanReason.SOURCE_FRESHNESS_ERROR: "source freshness error",
+    }
+    return labels[reason]
+
+
+def _dbt_model_plan_reason_section_label(reason: DbtModelPlanReason) -> str:
+    labels: dict[DbtModelPlanReason, str] = {
+        DbtModelPlanReason.FIRST_RUN: "First run",
+        DbtModelPlanReason.FULL_REFRESH: "Full refresh",
+        DbtModelPlanReason.RELATION_MISSING: "Relation missing",
+        DbtModelPlanReason.CHECKSUM_CHANGED: "Checksum changed",
+        DbtModelPlanReason.UPSTREAM_CHANGED: "Upstream changed",
+        DbtModelPlanReason.NO_CHANGE: "Current",
+        DbtModelPlanReason.SOURCE_FRESHNESS_ERROR: "Source freshness error",
     }
     return labels[reason]
 

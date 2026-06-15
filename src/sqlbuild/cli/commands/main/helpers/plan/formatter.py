@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import json
 import re
 from collections import Counter
@@ -34,6 +33,7 @@ from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 from sqlbuild.shared.helpers.materialization_labels import model_materialization_label
+from sqlbuild.shared.helpers.query_diff import format_query_diff
 from sqlbuild.shared.types import ExecutionResourceKind
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
@@ -546,7 +546,7 @@ def _format_python_source_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_definition_source_text(entry.current_definition_json)
     if previous is None or current is None or previous == current:
         return []
-    return _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+    return _indent_diff(format_query_diff(previous, current), extra_indent="  ")
 
 
 def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
@@ -555,7 +555,7 @@ def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
     if previous is None or current is None or previous == current:
         return []
     return _dim_python_dependency_headers(
-        _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+        _indent_diff(format_query_diff(previous, current), extra_indent="  ")
     )
 
 
@@ -902,7 +902,7 @@ def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
         return
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    query diff:"))
-    lines.extend(_format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
+    lines.extend(format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
 
 
 def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
@@ -918,7 +918,7 @@ def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
         return
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    config diff:"))
-    lines.extend(_format_query_diff(previous_config, current_config))
+    lines.extend(format_query_diff(previous_config, current_config))
 
 
 def _format_config_json(metadata_json: str) -> str:
@@ -1223,7 +1223,7 @@ def _format_function_entry(
             style: CliStyle = CliStyle(use_color=True)
             lines.append(style.label("    query diff:"))
             lines.extend(
-                _format_query_diff(
+                format_query_diff(
                     function_entry.previous_query_sql, function_entry.fingerprint_query_sql
                 )
             )
@@ -1637,31 +1637,6 @@ def _schema_kind_label(kind: SchemaChangeKind) -> str:
     if kind == SchemaChangeKind.COLUMN_TYPE_CHANGED:
         return "type changed"
     return str(kind)
-
-
-def _format_query_diff(previous: str, current: str) -> list[str]:
-    """Format a unified diff between previous and current SQL."""
-
-    style: CliStyle = CliStyle(use_color=True)
-    previous_lines: list[str] = previous.splitlines(keepends=True)
-    current_lines: list[str] = current.splitlines(keepends=True)
-    diff_lines: list[str] = list(
-        difflib.unified_diff(previous_lines, current_lines, fromfile="previous", tofile="current")
-    )
-    result: list[str] = []
-    line: str
-    for line in diff_lines:
-        stripped: str = line.rstrip("\n")
-        formatted: str = f"      {stripped}"
-        if stripped.startswith("+") and not stripped.startswith("+++"):
-            result.append(style.success(formatted))
-        elif stripped.startswith("-") and not stripped.startswith("---"):
-            result.append(style.error(formatted))
-        elif stripped.startswith(("---", "+++", "@@")):
-            result.append(style.muted(formatted))
-        else:
-            result.append(formatted)
-    return result
 
 
 def _strip_ansi(text: str) -> str:

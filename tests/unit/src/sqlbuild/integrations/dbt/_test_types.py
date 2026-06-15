@@ -185,6 +185,16 @@ class DbtModelPlanningTestCase:
 
 
 @dataclass(frozen=True)
+class DbtFingerprintWriteTestCase:
+    description: str
+    query_sql: str
+    node_checksum: str
+    expected_definition: str
+    expected_version_hash: str
+    expected_metadata_fragment: str
+
+
+@dataclass(frozen=True)
 class DbtModelSourceBlockingTestCase:
     description: str
     expected_blocked_unique_ids: tuple[str, ...]

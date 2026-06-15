@@ -25,6 +25,7 @@ def try_write_dbt_node_fingerprint(
     fingerprint_schema: str | None,
     target_name: str | None,
     warnings: list[str],
+    query_sql: str | None = None,
 ) -> None:
     """Best-effort append of one successful dbt node fingerprint."""
 
@@ -36,7 +37,7 @@ def try_write_dbt_node_fingerprint(
         )
         return
     try:
-        definition: str = json.dumps(
+        metadata: str = json.dumps(
             {
                 "unique_id": result.unique_id,
                 "resource_type": result.resource_type,
@@ -46,6 +47,16 @@ def try_write_dbt_node_fingerprint(
             sort_keys=True,
             separators=(",", ":"),
         )
+        if result.resource_type == "model":
+            if query_sql is None:
+                warnings.append(
+                    f"dbt fingerprint write skipped for '{result.unique_id}': "
+                    "dbt model SQL is missing"
+                )
+                return
+            definition: str = query_sql
+        else:
+            definition = metadata
         definition_hash: str = result.node_checksum or compute_query_hash(definition)
         fingerprint: Fingerprint = Fingerprint(
             node_type=NODE_TYPE_DBT,
