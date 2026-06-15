@@ -74,3 +74,37 @@ class DbtModelOutcomeState(StrEnum):
     CHANGED = "changed"
     CURRENT = "current"
     BLOCKING = "blocking"
+
+
+class DbtReuseCandidateSkipReason(StrEnum):
+    """Reason a scoped dbt node is not a physical reuse candidate."""
+
+    CURRENT_MANIFEST_MISSING = "current_manifest_missing"
+    REUSE_MANIFEST_MISSING = "reuse_manifest_missing"
+    VIEW = "view"
+    EPHEMERAL = "ephemeral"
+    UNSUPPORTED_MATERIALIZATION = "unsupported_materialization"
+
+
+class DbtReusePlanAction(StrEnum):
+    """Planned dbt reuse_from action for one scoped dbt node."""
+
+    CURRENT = "current"
+    COMPLETE_REUSE = "complete_reuse"
+    SEEDED_REUSE = "seeded_reuse"
+    REBUILD = "rebuild"
+    BLOCKED = "blocked"
+    SKIPPED = "skipped"
+
+
+class DbtReusePlanReason(StrEnum):
+    """Reason for one dbt reuse_from plan action."""
+
+    TARGET_CURRENT = "target_current"
+    TARGET_MISSING = "target_missing"
+    FINGERPRINT_MISSING = "fingerprint_missing"
+    FINGERPRINT_CHANGED = "fingerprint_changed"
+    FULL_REFRESH = "full_refresh"
+    SOURCE_FRESHNESS_BLOCK = "source_freshness_block"
+    NON_PHYSICAL_RESOURCE = "non_physical_resource"
+    MANIFEST_NODE_MISSING = "manifest_node_missing"

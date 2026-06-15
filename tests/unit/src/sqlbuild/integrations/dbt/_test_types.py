@@ -8,6 +8,9 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
+    DbtReuseCandidateSkipReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
 )
 from sqlbuild.spec.models.project import DbtConfig
 
@@ -185,6 +188,37 @@ class DbtModelPlanningTestCase:
     fingerprint_hash: str | None
     expected_action: DbtModelPlanAction
     expected_reason: DbtModelPlanReason
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidateResolutionTestCase:
+    description: str
+    scoped_unique_ids: tuple[str, ...]
+    current_nodes: tuple[dict[str, object], ...]
+    reuse_nodes: tuple[dict[str, object], ...]
+    expected_candidate_unique_ids: tuple[str, ...]
+    expected_candidate_materializations: tuple[str, ...]
+    expected_reuse_relation_names: tuple[str, ...]
+    expected_skipped: tuple[tuple[str, DbtReuseCandidateSkipReason], ...]
+
+
+@dataclass(frozen=True)
+class DbtReuseScopeFromPlanTestCase:
+    description: str
+    dbt_selected_unique_ids: tuple[str, ...]
+    dbt_required_unique_ids: tuple[str, ...]
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]]
+    expected_candidate_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtReusePlanningTestCase:
+    description: str
+    candidate_materialization: str
+    dbt_plan_action: DbtModelPlanAction
+    dbt_plan_reason: DbtModelPlanReason
+    expected_action: DbtReusePlanAction
+    expected_reason: DbtReusePlanReason
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtModelPlanEntry,
     DbtModelPlanningResult,
+    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
@@ -42,6 +43,7 @@ def build_dbt_interop_plan(
     warnings: Sequence[str] = (),
     sqlbuild_plan_output: PlanOutput | None = None,
     dbt_model_plan: DbtModelPlanningResult | None = None,
+    dbt_reuse_plan: DbtReusePlanningResult | None = None,
 ) -> DbtInteropPlan:
     """Build a display-ready plan from dbt preflight and SQLBuild selection results."""
 
@@ -70,6 +72,7 @@ def build_dbt_interop_plan(
         selection=selection,
         sqlbuild_plan_output=sqlbuild_plan_output,
         dbt_model_plan=dbt_model_plan,
+        dbt_reuse_plan=dbt_reuse_plan,
         dbt_required_selector_terms=tuple(dbt_required_selector_terms),
         supplemental_dbt_command_argvs=tuple(
             tuple(argv) for argv in supplemental_dbt_command_argvs

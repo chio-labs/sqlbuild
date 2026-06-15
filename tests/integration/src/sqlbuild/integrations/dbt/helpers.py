@@ -118,6 +118,13 @@ def run_git_command(*, repo_dir: Path, args: tuple[str, ...]) -> None:
         raise RuntimeError(result.stderr or result.stdout)
 
 
+def set_git_identity(*, repo_dir: Path) -> None:
+    """Configure repo-local git identity for test commits."""
+
+    run_git_command(repo_dir=repo_dir, args=("config", "user.email", "test@example.com"))
+    run_git_command(repo_dir=repo_dir, args=("config", "user.name", "Test User"))
+
+
 def build_local_reuse_from_git_project(*, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     """Create a local git repo with SQLBuild and dbt projects for reuse_from tests."""
 
@@ -180,8 +187,7 @@ def build_local_reuse_from_git_project(*, tmp_path: Path) -> tuple[Path, Path, P
         encoding="utf-8",
     )
     run_git_command(repo_dir=repo_dir, args=("init", "--initial-branch", "main"))
-    run_git_command(repo_dir=repo_dir, args=("config", "user.email", "test@example.com"))
-    run_git_command(repo_dir=repo_dir, args=("config", "user.name", "Test User"))
+    set_git_identity(repo_dir=repo_dir)
     run_git_command(repo_dir=repo_dir, args=("add", "."))
     run_git_command(repo_dir=repo_dir, args=("commit", "-m", "prod dbt project"))
     run_git_command(repo_dir=repo_dir, args=("branch", "prod"))
