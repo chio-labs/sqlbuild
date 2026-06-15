@@ -13,10 +13,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtExecutionQueryAssertion,
     DbtExistingRelationGuardE2ETestCase,
     DbtMissingRelationGuardE2ETestCase,
+    DbtReuseFromE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
     prepare_dbt_interop_project,
+    prepare_dbt_reuse_from_project,
     skip_unless_dbt_is_runnable,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -498,6 +500,71 @@ def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_
         db_path=db_path,
         sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
     ) == list(test_case.expected_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseFromE2ETestCase(
+            description="plain SQLBuild selection reuses missing dbt upstream from prod ref",
+            command=("dbt", "build", "--select", "downstream_orders"),
+            expected_source_rows=((1, 900),),
+            expected_downstream_rows=((1, 900),),
+            expected_fingerprint_rows=(("dbt", "model.analytics.fact_orders"),),
+            expected_stdout_fragments=("Reused dbt relation: model.analytics.fact_orders",),
+            expected_absent_relations=(("main", "unrelated_model"),),
+            expected_absent_stdout_fragments=(
+                "depends on missing dbt relation",
+                "dbt execution",
+            ),
+        )
+    ],
+    ids=["plain SQLBuild selection reuses missing dbt upstream from prod ref"],
+)
+def test_given_plain_sqlbuild_selection_with_reuse_from_when_dbt_ref_missing_then_reuses_prod_table(
+    tmp_path: Path,
+    test_case: DbtReuseFromE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_reuse_from_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_reuse_from.duckdb"
+    assert table_exists(db_path=db_path, table_name="fact_orders", schema="prod")
+    assert not table_exists(db_path=db_path, table_name="fact_orders", schema="main")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_absent_stdout_fragments:
+        assert absent_stdout_fragment not in result.stdout
+    assert table_exists(db_path=db_path, table_name="fact_orders", schema="prod")
+    assert table_exists(db_path=db_path, table_name="fact_orders", schema="main")
+    assert table_exists(db_path=db_path, table_name="downstream_orders", schema="main")
+    absent_schema: str
+    absent_relation: str
+    for absent_schema, absent_relation in test_case.expected_absent_relations:
+        assert not table_exists(db_path=db_path, table_name=absent_relation, schema=absent_schema)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_source_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id",
+    ) == list(test_case.expected_downstream_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_type, node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'dbt' AND node_name = 'model.analytics.fact_orders'"
+        ),
+    ) == list(test_case.expected_fingerprint_rows)
 
 
 @pytest.mark.parametrize(

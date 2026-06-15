@@ -85,6 +85,18 @@ class DbtExistingRelationGuardE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseFromE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_source_rows: tuple[tuple[object, ...], ...]
+    expected_downstream_rows: tuple[tuple[object, ...], ...]
+    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[tuple[str, str], ...]
+    expected_absent_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtTestCliTestCase:
     description: str
     command: tuple[str, ...]

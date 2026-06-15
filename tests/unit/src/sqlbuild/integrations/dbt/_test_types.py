@@ -222,6 +222,27 @@ class DbtReusePlanningTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReusePlanOutputTestCase:
+    description: str
+    configure_reuse_from: bool
+    include_model_plan: bool
+    expected_is_none: bool
+    expected_complete_reuse_unique_ids: tuple[str, ...]
+    expected_seeded_reuse_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtReuseExecuteTestCase:
+    description: str
+    create_reuse_relation: bool
+    existing_target_amount: int | None
+    expected_reused_unique_ids: tuple[str, ...]
+    expected_target_rows: tuple[tuple[object, ...], ...]
+    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
+    expected_error: bool = False
+
+
+@dataclass(frozen=True)
 class DbtFingerprintWriteTestCase:
     description: str
     query_sql: str

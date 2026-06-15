@@ -74,6 +74,31 @@ def find_sqlbuild_models_with_missing_dbt_relations(
     return {name: tuple(models) for name, models in blocked.items()}
 
 
+def find_direct_dbt_dependency_unique_ids(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    selected_model_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return direct dbt refs needed by selected SQLBuild models."""
+
+    selected_names: frozenset[str] = frozenset(selected_model_names)
+    unique_ids: set[str] = set()
+    for model in project.models:
+        if model.name not in selected_names:
+            continue
+        for reference in model.references:
+            if reference.ref_kind != SqlReferenceKind.DBT_REF:
+                continue
+            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
+                manifest=manifest,
+                package_name=reference.ref_package,
+                name=reference.ref_name,
+            )
+            unique_ids.add(dbt_model.unique_id)
+    return tuple(sorted(unique_ids))
+
+
 def build_sqlbuild_plan_output(
     *,
     project_dir: Path,
