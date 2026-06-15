@@ -15,24 +15,27 @@ from sqlbuild.shared.helpers.colors import supports_color
 
 def ensure_sqlbuild_project_for_dbt_command(
     *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
-) -> Path:
+) -> tuple[Path, tuple[str, ...]]:
     """Create or resolve the SQLBuild twin project for a dbt interop command."""
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     if (effective_project_dir / PROJECT_CONFIG_FILENAME).exists():
-        return effective_project_dir
+        return effective_project_dir, args
 
     dbt_project_dir: Path = _resolve_dbt_project_dir(
         effective_project_dir=effective_project_dir,
         args=args,
     )
     twin_project_dir: Path = dbt_project_dir.parent / "sqlbuild_project"
+    forwarded_args: tuple[str, ...] = _normalize_forwarded_path_args(
+        args=args,
+        original_project_dir=effective_project_dir,
+    )
     if (twin_project_dir / PROJECT_CONFIG_FILENAME).exists():
-        return twin_project_dir
+        return twin_project_dir, forwarded_args
 
-    json_output: bool = "--json" in args
-    use_color: bool = not no_color and not json_output and supports_color()
-    progress_stream: TextIO = sys.stderr if json_output else sys.stdout
+    use_color: bool = not no_color and "--json" not in args and supports_color()
+    progress_stream: TextIO = sys.stderr
     progress: DbtInitProgressReporter = DbtInitProgressReporter(
         stream=progress_stream,
         use_color=use_color,
@@ -54,7 +57,7 @@ def ensure_sqlbuild_project_for_dbt_command(
             ),
         )
     )
-    return result.output_dir
+    return result.output_dir, forwarded_args
 
 
 def _resolve_dbt_project_dir(*, effective_project_dir: Path, args: tuple[str, ...]) -> Path:
@@ -72,6 +75,39 @@ def _optional_path_arg(*, args: tuple[str, ...], flag: str) -> Path | None:
     if raw_value is None:
         return None
     return Path(raw_value)
+
+
+def _normalize_forwarded_path_args(
+    *, args: tuple[str, ...], original_project_dir: Path
+) -> tuple[str, ...]:
+    value_path_flags: frozenset[str] = frozenset(
+        {"--project-dir", "--profiles-dir", "--target-path"}
+    )
+    normalized: list[str] = []
+    skip_next: bool = False
+    index: int
+    arg: str
+    for index, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        normalized.append(arg)
+        if arg not in value_path_flags:
+            continue
+        if index + 1 >= len(args):
+            continue
+        normalized.append(
+            _resolve_forwarded_path_arg(raw_value=args[index + 1], root=original_project_dir)
+        )
+        skip_next = True
+    return tuple(normalized)
+
+
+def _resolve_forwarded_path_arg(*, raw_value: str, root: Path) -> str:
+    path: Path = Path(raw_value).expanduser()
+    if path.is_absolute():
+        return path.resolve().as_posix()
+    return (root / path).resolve().as_posix()
 
 
 def _value_arg(*, args: tuple[str, ...], flag: str) -> str | None:

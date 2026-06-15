@@ -203,6 +203,23 @@ class DbtExecutionOutcomeTestCase:
     expected_states_by_unique_id: tuple[tuple[str, DbtModelOutcomeState], ...]
     expected_stale_sqlbuild_model_names: tuple[str, ...]
     expected_blocked_sqlbuild_model_names: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtRunResultsFallbackRenderTestCase:
+    description: str
+    unique_id: str
+    status: str
+    message: str
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtExecutionTotalRenderTestCase:
+    description: str
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

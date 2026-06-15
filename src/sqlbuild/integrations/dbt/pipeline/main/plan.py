@@ -37,7 +37,12 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropRoutedArgs,
     DbtModelPlanningResult,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.execute import build_unblocked_sqlbuild_model_names
+from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    build_dbt_non_model_run_unique_ids,
+    build_dbt_pruned_seed_unique_ids,
+    build_dbt_pruned_test_unique_ids,
+    build_unblocked_sqlbuild_model_names,
+)
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
@@ -165,6 +170,21 @@ def plan_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
+    plan = replace(
+        plan,
+        dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+        dbt_pruned_seed_unique_ids=build_dbt_pruned_seed_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+        dbt_pruned_test_unique_ids=build_dbt_pruned_test_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+    )
     sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,

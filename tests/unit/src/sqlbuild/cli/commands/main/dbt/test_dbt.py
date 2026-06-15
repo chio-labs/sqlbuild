@@ -145,7 +145,8 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt.ensure_sqlbuild_project_for_dbt_command",
         lambda *, project_dir, args, no_color: (
-            project_dir if project_dir is not None else Path.cwd()
+            project_dir if project_dir is not None else Path.cwd(),
+            args,
         ),
     )
     args: tuple[str, ...] = ("--json",) if test_case.json_output else ()
@@ -199,7 +200,8 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt.ensure_sqlbuild_project_for_dbt_command",
         lambda *, project_dir, args, no_color: (
-            project_dir if project_dir is not None else Path.cwd()
+            project_dir if project_dir is not None else Path.cwd(),
+            args,
         ),
     )
 
@@ -258,7 +260,8 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt.ensure_sqlbuild_project_for_dbt_command",
         lambda *, project_dir, args, no_color: (
-            project_dir if project_dir is not None else Path.cwd()
+            project_dir if project_dir is not None else Path.cwd(),
+            args,
         ),
     )
 
@@ -371,13 +374,17 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     test_case: DbtAutoInitTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     dbt_project_dir: Path = prepare_dbt_auto_init_dirs(test_case=test_case, tmp_path=tmp_path)
     forwarded_project_dirs: list[Path] = []
+    forwarded_args: list[tuple[str, ...]] = []
     init_requests: list[DbtInitRequest] = []
 
     def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
         init_requests.append(request)
+        assert request.progress_callbacks.start is not None
+        request.progress_callbacks.start("Inspecting dbt project and profile...")
         output_dir: Path | None = request.sqb_output_dir
         assert output_dir is not None
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -400,8 +407,9 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
         progress_stream: object,
         use_color: bool,
     ) -> DbtInteropPlan:
-        del args, on_progress, progress_stream, use_color
+        del on_progress, progress_stream, use_color
         forwarded_project_dirs.append(project_dir)
+        forwarded_args.append(args)
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
@@ -421,7 +429,12 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     )
 
     assert exit_code == 0
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert "Inspecting dbt project and profile..." in captured.err
+    assert "Inspecting dbt project and profile..." not in captured.out
     assert forwarded_project_dirs[0].name == test_case.expected_forwarded_project_dir_name
+    assert Path(forwarded_args[0][forwarded_args[0].index("--project-dir") + 1]).is_absolute()
+    assert Path(forwarded_args[0][forwarded_args[0].index("--profiles-dir") + 1]).is_absolute()
     assert bool(init_requests) is test_case.expected_init_called
     request: DbtInitRequest = init_requests[0]
     assert request.dbt_project_dir.name == test_case.expected_request_dbt_project_dir_name

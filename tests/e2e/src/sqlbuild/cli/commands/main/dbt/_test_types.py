@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -26,7 +25,6 @@ class DbtPlanCliTestCase:
 class DbtPlanRelativeProjectDirTestCase:
     description: str
     command: tuple[str, ...]
-    expected_project_dir: Path
     expected_selected_models: tuple[str, ...]
 
 

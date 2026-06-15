@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
+from sqlbuild.shared.helpers.alignment import format_aligned_name_value
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 
 _RESULT_EVENT_NAMES: frozenset[str] = frozenset(
     {
@@ -44,6 +44,7 @@ def execute_dbt_json_event_stream(
     stream: TextIO,
     use_color: bool,
     target_path: Path | None,
+    display_total: int | None = None,
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
 ) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
     """Run dbt and render SQLBuild-styled rows from JSON events."""
@@ -51,7 +52,11 @@ def execute_dbt_json_event_stream(
     style: CliStyle = CliStyle(use_color=use_color)
     pending_messages: dict[str, list[DbtNodeMessage]] = {}
     results: list[DbtNodeExecutionResult] = []
-    spinner: _DbtSpinner | None = _start_dbt_spinner(stream=stream, style=style)
+    display_index: int = 0
+    status: TransientStatusReporter | None = _start_dbt_status(
+        stream=stream,
+        use_color=use_color,
+    )
     try:
         process: subprocess.Popen[str] = subprocess.Popen(
             argv,
@@ -86,53 +91,36 @@ def execute_dbt_json_event_stream(
                 )
                 if result is None:
                     continue
-                if spinner is not None:
-                    spinner.stop()
-                    spinner = None
+                if status is not None:
+                    status.close()
+                    status = None
                 results.append(result)
                 if on_node_result is not None:
                     on_node_result(result)
-                _render_dbt_node_result(stream=stream, style=style, result=result)
+                display_index += 1
+                render_dbt_node_result(
+                    stream=stream,
+                    style=style,
+                    result=result,
+                    display_index=display_index,
+                    display_total=display_total,
+                )
 
     returncode: int = process.wait()
-    if spinner is not None:
-        spinner.stop()
+    if status is not None:
+        status.close()
     return returncode, tuple(results)
 
 
-class _DbtSpinner:
-    def __init__(self, *, stream: TextIO, style: CliStyle) -> None:
-        self.stream: TextIO = stream
-        self.style: CliStyle = style
-        self.stop_event: threading.Event = threading.Event()
-        self.thread: threading.Thread = threading.Thread(target=self._run, daemon=True)
-
-    def start(self) -> None:
-        self.thread.start()
-
-    def stop(self) -> None:
-        self.stop_event.set()
-        self.thread.join(timeout=1)
-        self.stream.write("\r\033[K")
-        self.stream.flush()
-
-    def _run(self) -> None:
-        frames: tuple[str, ...] = ("-", "\\", "|", "/")
-        index: int = 0
-        while not self.stop_event.is_set():
-            frame: str = frames[index % len(frames)]
-            self.stream.write(f"\r{self.style.muted(f'  {frame} waiting for dbt node output...')}")
-            self.stream.flush()
-            index += 1
-            time.sleep(0.12)
-
-
-def _start_dbt_spinner(*, stream: TextIO, style: CliStyle) -> _DbtSpinner | None:
+def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusReporter | None:
     if not stream.isatty():
         return None
-    spinner: _DbtSpinner = _DbtSpinner(stream=stream, style=style)
-    spinner.start()
-    return spinner
+    status: TransientStatusReporter = TransientStatusReporter(
+        stream=stream,
+        use_color=use_color,
+    )
+    status.start("Waiting for dbt node output...")
+    return status
 
 
 def parse_dbt_json_event(*, line: str) -> dict[str, object] | None:
@@ -222,12 +210,21 @@ def _event_unique_id(event: dict[str, object]) -> str | None:
     return _str_value(node_info.get("unique_id"))
 
 
-def _render_dbt_node_result(
-    *, stream: TextIO, style: CliStyle, result: DbtNodeExecutionResult
+def render_dbt_node_result(
+    *,
+    stream: TextIO,
+    style: CliStyle,
+    result: DbtNodeExecutionResult,
+    display_index: int | None = None,
+    display_total: int | None = None,
 ) -> None:
     ctr: str = (
-        f"{result.index}/{result.total}"
+        f"{display_index}/{display_total}"
+        if display_index is not None and display_total is not None
+        else f"{result.index}/{result.total}"
         if result.index is not None and result.total is not None
+        else str(display_index)
+        if display_index is not None
         else "-"
     )
     resource_type: str = result.resource_type[:9]
@@ -235,8 +232,15 @@ def _render_dbt_node_result(
     status: str = _display_status(result.status)
     duration: str = f"{result.execution_time:.2f}s" if result.execution_time is not None else ""
     stream.write(
-        f"  {ctr:<5} {resource_type:<9} {style.dbt_object_name(name):<30} "
-        f"{style.status(status):<6} {duration}\n"
+        f"  {ctr:<5} {resource_type:<9}"
+        + format_aligned_name_value(
+            plain_name=name,
+            styled_name=style.dbt_object_name(name),
+            value=f"{style.status(status)} {duration}".rstrip(),
+            name_column_width=30,
+            prefix=" ",
+        )
+        + "\n"
     )
     for message in result.messages:
         message_status: str = "warn" if message.level == "warn" else "error"

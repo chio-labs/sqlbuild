@@ -27,21 +27,25 @@ def run_dbt_command(
 ) -> int:
     """Execute one `sqb dbt` interop command."""
 
-    effective_project_dir: Path = ensure_sqlbuild_project_for_dbt_command(
+    effective_project_dir: Path
+    forwarded_args: tuple[str, ...]
+    effective_project_dir, forwarded_args = ensure_sqlbuild_project_for_dbt_command(
         project_dir=project_dir,
         args=args,
         no_color=no_color,
     )
     if command == DbtInteropCommand.PLAN:
-        return _run_dbt_plan(project_dir=effective_project_dir, args=args, no_color=no_color)
+        return _run_dbt_plan(
+            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
+        )
     if command == DbtInteropCommand.DEBUG:
         return run_dbt_debug_command(
-            project_dir=effective_project_dir, args=args, no_color=no_color
+            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
         )
     return _run_dbt_execution_command(
         command=command,
         project_dir=effective_project_dir,
-        args=args,
+        args=forwarded_args,
         no_color=no_color,
     )
 
