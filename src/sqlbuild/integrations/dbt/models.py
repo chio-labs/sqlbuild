@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
@@ -262,8 +263,13 @@ class DbtLsNode:
     resource_type: str | None = None
     package_name: str | None = None
     name: str | None = None
+    fqn: tuple[str, ...] = field(default_factory=tuple)
     original_file_path: str | None = None
     payload: dict[str, object] = field(default_factory=dict)
+
+    @property
+    def selector_term(self) -> str:
+        return dbt_fqn_selector_term(fqn=self.fqn, fallback=self.name or self.unique_id)
 
 
 @dataclass(frozen=True)
@@ -343,9 +349,14 @@ class DbtModelPlanEntry:
     action: DbtModelPlanAction
     reason: DbtModelPlanReason
     relation_name: str
+    fqn: tuple[str, ...] = field(default_factory=tuple)
     previous_version_hash: str | None = None
     expected_version_hash: str | None = None
     blocked_source_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def selector_term(self) -> str:
+        return dbt_fqn_selector_term(fqn=self.fqn, fallback=self.name)
 
 
 @dataclass(frozen=True)
@@ -364,7 +375,9 @@ class DbtModelPlanningResult:
 
     @property
     def run_selector_terms(self) -> tuple[str, ...]:
-        return tuple(entry.name for entry in self.entries if entry.action == DbtModelPlanAction.RUN)
+        return tuple(
+            entry.selector_term for entry in self.entries if entry.action == DbtModelPlanAction.RUN
+        )
 
     @property
     def current_unique_ids(self) -> tuple[str, ...]:

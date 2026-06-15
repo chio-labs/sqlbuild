@@ -338,6 +338,7 @@ def _entry(
         action=action,
         reason=reason,
         relation_name=model.relation_name,
+        fqn=model.fqn,
         previous_version_hash=fingerprint.version_hash if fingerprint is not None else None,
         expected_version_hash=expected_version_hash,
     )

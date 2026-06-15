@@ -562,7 +562,7 @@ def _selector_terms_for_unique_ids(
     unique_id_set: frozenset[str] = frozenset(unique_ids)
     return tuple(
         sorted(
-            node.name or node.unique_id
+            node.selector_term
             for node in plan.dbt_selected_nodes
             if node.unique_id in unique_id_set
         )

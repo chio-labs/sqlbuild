@@ -52,6 +52,7 @@ class DbtLsParseTestCase:
     stdout: str
     expected_unique_ids: tuple[str, ...]
     expected_resource_types: tuple[str | None, ...]
+    expected_selector_terms: tuple[str, ...]
 
 
 @dataclass(frozen=True)

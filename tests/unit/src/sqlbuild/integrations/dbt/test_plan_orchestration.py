@@ -54,6 +54,7 @@ _MANIFEST_DATA: dict[str, object] = build_manifest_data(
             package_name="analytics",
             name="int_orders",
             relation_name="analytics.int_orders",
+            fqn=("analytics", "intermediate", "int_orders"),
             depends_on_nodes=("model.analytics.stg_orders",),
         ),
         build_manifest_model_node(
@@ -177,7 +178,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
             "model.analytics.int_orders",
             "model.analytics.stg_orders",
         ),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -187,7 +188,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -212,7 +213,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("state:modified", "fact_orders+"),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -222,7 +223,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -291,7 +292,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("path:models/marts",),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -301,7 +302,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -327,7 +328,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("path:models\\marts",),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -337,7 +338,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -363,7 +364,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("state:modified", "path:models/marts+"),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -373,7 +374,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -439,7 +440,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("tag:nightly",),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -449,7 +450,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -474,7 +475,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("tag:nightly+",),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -484,7 +485,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -509,7 +510,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("state:modified", "tag:nightly+"),),
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -519,7 +520,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "--target",
                 "dev",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -639,7 +640,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
             "model.analytics.int_orders",
             "model.analytics.stg_orders",
         ),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -658,7 +659,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
                 "/repo/state",
                 "--defer",
                 "--select",
-                "+int_orders",
+                "+fqn:analytics.intermediate.int_orders",
             ),
         ),
         expected_sqlbuild_command_argvs=(
@@ -709,7 +710,7 @@ PLAN_ORCHESTRATION_TEST_CASES: list[DbtPlanOrchestrationTestCase] = [
         expected_dbt_ls_selects=(("fact_orders",),),
         expected_sqlbuild_model_names=("fact_orders",),
         expected_dbt_required_unique_ids=("model.analytics.int_orders",),
-        expected_dbt_required_selector_terms=("+int_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.intermediate.int_orders",),
         expected_supplemental_dbt_command_argvs=(),
         expected_sqlbuild_command_argvs=(
             ("sqb", "test", "--select", "fact_orders"),
