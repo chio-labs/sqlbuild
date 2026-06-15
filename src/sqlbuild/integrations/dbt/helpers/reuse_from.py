@@ -41,6 +41,7 @@ def compile_reuse_from_manifest(
         )
 
     git_root: Path = _git_root(path=sqlbuild_project_dir)
+    _raise_if_current_branch(git_root=git_root, git_ref=reuse_from.git_ref)
     dbt_relative_dir: Path = _relative_to_git_root(
         path=dbt_options.project_dir,
         git_root=git_root,
@@ -51,7 +52,11 @@ def compile_reuse_from_manifest(
         temp_dir: Path = Path(raw_temp_dir)
         checkout_dir: Path = temp_dir / "checkout"
         checkout_dir.mkdir()
-        _extract_git_ref(git_root=git_root, git_ref=reuse_from.git_ref, destination=checkout_dir)
+        archive_ref: str = _refresh_git_ref_for_archive(
+            git_root=git_root,
+            git_ref=reuse_from.git_ref,
+        )
+        _extract_git_ref(git_root=git_root, git_ref=archive_ref, destination=checkout_dir)
 
         temp_dbt_project_dir: Path = checkout_dir / dbt_relative_dir
         _inject_generate_schema_name_override(
@@ -90,11 +95,8 @@ def compile_reuse_from_manifest(
 
 
 def _git_root(*, path: Path) -> Path:
-    result: subprocess.CompletedProcess[str] = subprocess.run(
-        ("git", "-C", str(path), "rev-parse", "--show-toplevel"),
-        capture_output=True,
-        check=False,
-        text=True,
+    result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C", str(path), "rev-parse", "--show-toplevel"
     )
     if result.returncode != 0:
         raise DbtInteropConfigError(
@@ -115,11 +117,68 @@ def _relative_to_git_root(*, path: Path, git_root: Path, label: str) -> Path:
         ) from error
 
 
+def _raise_if_current_branch(*, git_root: Path, git_ref: str) -> None:
+    result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C", str(git_root), "branch", "--show-current"
+    )
+    if result.returncode != 0:
+        return
+    current_branch: str = result.stdout.strip()
+    if current_branch and current_branch == git_ref:
+        raise DbtInteropConfigError(
+            "dbt reuse_from git_ref must not be the current branch",
+            help=(
+                "Choose a production-shaped branch or tag that differs from the active "
+                "worktree branch."
+            ),
+        )
+
+
+def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
+    tracking_ref: tuple[str, str, str] | None = _remote_tracking_ref(
+        git_root=git_root,
+        git_ref=git_ref,
+    )
+    if tracking_ref is None:
+        return git_ref
+    remote, branch, remote_ref = tracking_ref
+
+    result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C", str(git_root), "fetch", remote, branch
+    )
+    if result.returncode != 0:
+        raise DbtInteropConfigError(
+            "dbt reuse_from git_ref could not be refreshed from its remote",
+            help=result.stderr or result.stdout or None,
+        )
+    return remote_ref
+
+
+def _remote_tracking_ref(*, git_root: Path, git_ref: str) -> tuple[str, str, str] | None:
+    remote_result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C", str(git_root), "config", "--get", f"branch.{git_ref}.remote"
+    )
+    if remote_result.returncode != 0:
+        return None
+    remote: str = remote_result.stdout.strip()
+    if not remote or remote == ".":
+        return None
+
+    merge_result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C", str(git_root), "config", "--get", f"branch.{git_ref}.merge"
+    )
+    if merge_result.returncode != 0:
+        return None
+    merge_ref: str = merge_result.stdout.strip()
+    branch: str = merge_ref.removeprefix("refs/heads/")
+    if not branch or branch == merge_ref:
+        return None
+    return remote, branch, f"refs/remotes/{remote}/{branch}"
+
+
 def _extract_git_ref(*, git_root: Path, git_ref: str, destination: Path) -> None:
-    result: subprocess.CompletedProcess[bytes] = subprocess.run(
-        ("git", "-C", str(git_root), "archive", git_ref),
-        capture_output=True,
-        check=False,
+    result: subprocess.CompletedProcess[bytes] = _run_git_bytes(
+        "-C", str(git_root), "archive", git_ref
     )
     if result.returncode != 0:
         stderr: str = result.stderr.decode(errors="replace")
@@ -130,6 +189,35 @@ def _extract_git_ref(*, git_root: Path, git_ref: str, destination: Path) -> None
         )
     with tarfile.open(fileobj=io.BytesIO(result.stdout), mode="r|") as archive:
         archive.extractall(path=destination, filter="data")
+
+
+def _run_git_text(*args: str) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ("git", *args),
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise DbtInteropConfigError(
+            "dbt reuse_from requires git to be installed and available on PATH",
+            help=str(error),
+        ) from error
+
+
+def _run_git_bytes(*args: str) -> subprocess.CompletedProcess[bytes]:
+    try:
+        return subprocess.run(
+            ("git", *args),
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise DbtInteropConfigError(
+            "dbt reuse_from requires git to be installed and available on PATH",
+            help=str(error),
+        ) from error
 
 
 def _inject_generate_schema_name_override(

@@ -17,12 +17,16 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtModelPlanEntry,
     DbtModelPlanningResult,
+    DbtReusePlanEntry,
+    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
     DbtModelPlanAction,
     DbtModelPlanReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
 )
 from sqlbuild.shared.helpers.display import DisplayOptions
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
@@ -362,6 +366,61 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
         assert fragment in human_output
     for fragment in test_case.expected_json_fragments:
         assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
+            description="preserves dbt reuse plan on built interop plan",
+            command="build",
+            dbt_command_argv=("dbt", "build"),
+            dbt_ls_unique_ids=("model.analytics.orders",),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=(),
+            expected_json_fragments=(),
+        )
+    ],
+    ids=["preserves dbt reuse plan on built interop plan"],
+)
+def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
+    test_case: DbtPlanTestCase,
+) -> None:
+    expected_reuse_plan: DbtReusePlanningResult = DbtReusePlanningResult(
+        entries=(
+            DbtReusePlanEntry(
+                unique_id="model.analytics.orders",
+                action=DbtReusePlanAction.COMPLETE_REUSE,
+                reason=DbtReusePlanReason.TARGET_MISSING,
+            ),
+        )
+    )
+
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=tuple(
+            DbtLsNode(unique_id=unique_id) for unique_id in test_case.dbt_ls_unique_ids
+        ),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=DbtInteropSelectionResult(
+            sqlbuild_model_names=test_case.selection_sqlbuild_model_names,
+        ),
+        dbt_reuse_plan=expected_reuse_plan,
+    )
+
+    assert plan.dbt_reuse_plan == expected_reuse_plan
+    assert plan.dbt_reuse_plan is not None
+    assert (plan.sqlbuild_skip_reason is not None) == test_case.expected_sqlbuild_skipped
+    assert tuple(plan.dbt_reuse_plan.complete_reuse_unique_ids) == test_case.dbt_ls_unique_ids
 
 
 @pytest.mark.parametrize(

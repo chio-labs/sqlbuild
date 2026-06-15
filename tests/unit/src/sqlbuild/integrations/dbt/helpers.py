@@ -40,8 +40,17 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraphKey,
     DbtCommandResult,
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtModelPlanEntry,
 )
-from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
+from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
+    DbtInteropCommand,
+    DbtModelPlanAction,
+    DbtModelPlanReason,
+)
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -73,6 +82,46 @@ def build_dbt_cli_options(project_root: Path) -> DbtCliOptions:
         vars='{"run_date":"2026-01-01"}',
         state=project_root / "state",
         defer=True,
+    )
+
+
+def build_dbt_interop_plan_for_reuse_scope(
+    *,
+    dbt_selected_unique_ids: tuple[str, ...],
+    dbt_required_unique_ids: tuple[str, ...] = (),
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None,
+) -> DbtInteropPlan:
+    """Build a minimal interop plan for reuse scope tests."""
+
+    return DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=dbt_selected_unique_ids,
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(
+            dbt_required_unique_ids=dbt_required_unique_ids,
+            dbt_anchor_unique_ids_by_term=dbt_anchor_unique_ids_by_term or {},
+        ),
+    )
+
+
+def build_dbt_model_plan_entry(
+    *,
+    unique_id: str,
+    action: DbtModelPlanAction,
+    reason: DbtModelPlanReason,
+) -> DbtModelPlanEntry:
+    """Build a minimal dbt model plan entry for reuse planning tests."""
+
+    name: str = unique_id.rsplit(".", maxsplit=1)[-1]
+    return DbtModelPlanEntry(
+        unique_id=unique_id,
+        package_name="analytics",
+        name=name,
+        action=action,
+        reason=reason,
+        relation_name=f"dev.{name}",
     )
 
 
@@ -254,6 +303,8 @@ def build_manifest_model_node(
     fqn: tuple[str, ...] = (),
     raw_code: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
+    materialized: str | None = "view",
+    incremental_strategy: str | None = None,
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
 
@@ -278,6 +329,11 @@ def build_manifest_model_node(
         node["fqn"] = list(fqn)
     if depends_on_nodes:
         node["depends_on"] = {"nodes": list(depends_on_nodes)}
+    if materialized is not None:
+        config: dict[str, object] = {"materialized": materialized}
+        if incremental_strategy is not None:
+            config["incremental_strategy"] = incremental_strategy
+        node["config"] = config
     return node
 
 

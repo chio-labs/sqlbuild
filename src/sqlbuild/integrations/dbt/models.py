@@ -16,6 +16,9 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
+    DbtReuseCandidateSkipReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
 )
 
 
@@ -185,6 +188,81 @@ class DbtReuseFromCompileResult:
     git_ref: str
     manifest_contents: str
     command: DbtCommandResult
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidate:
+    """One scoped dbt node eligible for physical reuse consideration."""
+
+    unique_id: str
+    materialization: str
+    current_relation_name: str
+    reuse_relation_name: str
+    package_name: str
+    name: str
+    fqn: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidateSkip:
+    """One scoped dbt node excluded from physical reuse consideration."""
+
+    unique_id: str
+    reason: DbtReuseCandidateSkipReason
+    materialization: str | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidateResolution:
+    """Selection-scoped dbt reuse candidate resolution result."""
+
+    candidates: tuple[DbtReuseCandidate, ...] = field(default_factory=tuple)
+    skipped: tuple[DbtReuseCandidateSkip, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtReusePlanEntry:
+    """Planned reuse_from action for one scoped dbt node."""
+
+    unique_id: str
+    action: DbtReusePlanAction
+    reason: DbtReusePlanReason
+    materialization: str | None = None
+    current_relation_name: str | None = None
+    reuse_relation_name: str | None = None
+    dbt_plan_action: DbtModelPlanAction | None = None
+    dbt_plan_reason: DbtModelPlanReason | None = None
+    skip_reason: DbtReuseCandidateSkipReason | None = None
+
+
+@dataclass(frozen=True)
+class DbtReusePlanningResult:
+    """dbt reuse_from planning result for scoped dbt nodes."""
+
+    entries: tuple[DbtReusePlanEntry, ...] = field(default_factory=tuple)
+
+    @property
+    def complete_reuse_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.entries
+            if entry.action == DbtReusePlanAction.COMPLETE_REUSE
+        )
+
+    @property
+    def seeded_reuse_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.entries
+            if entry.action == DbtReusePlanAction.SEEDED_REUSE
+        )
+
+    @property
+    def rebuild_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtReusePlanAction.REBUILD
+        )
 
 
 @dataclass(frozen=True)
@@ -415,6 +493,7 @@ class DbtInteropPlan:
     selection: DbtInteropSelectionResult
     sqlbuild_plan_output: PlanOutput | None = None
     dbt_model_plan: DbtModelPlanningResult | None = None
+    dbt_reuse_plan: DbtReusePlanningResult | None = None
     dbt_non_model_run_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_pruned_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_pruned_test_unique_ids: tuple[str, ...] = field(default_factory=tuple)
