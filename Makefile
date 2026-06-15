@@ -22,6 +22,11 @@ test-all:
 	uv run pytest tests -m "not real_warehouse and not dbt" -vv
 
 
+test-e2e-duckdb:
+	uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv -n auto --dist loadfile
+	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
+
+
 skills:
 	uv run sqb skills update --global --target opencode
 	uv run python -m scripts.skills.update_structure_skill
@@ -108,7 +113,9 @@ verify:
 		uv run ruff format .; \
 		uv run ruff check --fix .; \
 		uv run ty check src tests; \
-		PYTHONUNBUFFERED=1 uv run pytest tests -m "not real_warehouse and not dbt" -vv --color=yes; \
+		PYTHONUNBUFFERED=1 uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes; \
+		PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
+		PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
 		uv run check-test-conventions tests; \
 		uv run check-structure-conventions src/sqlbuild scripts; \
 		uv run check-type-annotation-conventions src tests; \
@@ -154,7 +161,9 @@ verify-ci:
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
-	uv run pytest tests -m "not real_warehouse and not dbt" -vv
+	uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv
+	uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv -n auto --dist loadfile
+	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
 	uv run check-test-conventions tests
 	uv run check-structure-conventions src/sqlbuild scripts
 	uv run check-type-annotation-conventions src tests
