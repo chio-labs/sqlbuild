@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_profile_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -29,6 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
+    SqlServerDbtProfileE2ETestCase,
     SqlServerIntermediateDagStrategyE2ETestCase,
     SqlServerJanitorDetachedVdeE2ETestCase,
     SqlServerLoaderWaffleShopE2ETestCase,
@@ -63,6 +65,78 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     prepare_sqlserver_waffle_shop,
     relation_name,
 )
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerDbtProfileE2ETestCase(
+            description="dbt init generated project builds through SQL Server dbt profile",
+            schema_prefix="sqlbuild_dbt_profile",
+            expected_toml_fragments=(
+                'adapter = "sqlserver"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+            ),
+        )
+    ],
+    ids=["dbt init generated project builds through SQL Server dbt profile"],
+)
+def test_given_sqlserver_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
+    tmp_path: Path,
+    test_case: SqlServerDbtProfileE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix=test_case.schema_prefix)
+    config: dict[str, object] = build_sqlserver_config()
+    escaped_schema_name: str = schema_name.replace("'", "''")
+    try:
+        ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
+        assert_dbt_profile_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: sqlserver\n"
+                "      driver: ODBC Driver 18 for SQL Server\n"
+                f"      server: {config['host']}\n"
+                f"      port: {config['port']}\n"
+                f"      database: {config['database']}\n"
+                f"      user: {config['user']}\n"
+                f"      password: {config['password']}\n"
+                f"      schema: {schema_name}\n"
+                "      trust_cert: true\n"
+            ),
+            env=None,
+            fetch_rows=lambda sql: fetch_sqlserver_rows(config=config, sql=sql),
+            no_profile_tables_exist=lambda: (
+                fetch_sqlserver_rows(
+                    config=config,
+                    sql=(
+                        "SELECT t.name FROM sys.tables t "
+                        "JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                        f"WHERE s.name = '{escaped_schema_name}' "
+                        "AND t.name IN ('dbt_orders', 'downstream_orders') ORDER BY t.name"
+                    ),
+                )
+                == ()
+            ),
+            dbt_orders_sql=(
+                f"SELECT order_id FROM {relation_name(schema_name=schema_name, name='dbt_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(schema_name=schema_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_toml_fragments=test_case.expected_toml_fragments,
+            unexpected_toml_fragments=(str(config["password"]),),
+        )
+    finally:
+        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
 @pytest.mark.parametrize(

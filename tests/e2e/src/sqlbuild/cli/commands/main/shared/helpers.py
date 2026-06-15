@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from shutil import copytree
 from typing import Any
@@ -66,6 +66,141 @@ def prepare_inline_project(
         file_path.write_text(contents, encoding="utf-8")
 
     return project_dir
+
+
+def prepare_dbt_profile_workspace(*, tmp_path: Path, profiles_yml: str) -> Path:
+    """Write a minimal dbt project/profiles pair for dbt-profile E2Es."""
+
+    workspace: Path = tmp_path / "workspace"
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    (dbt_project_dir / "models").mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "target-path: target\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (profiles_dir / "profiles.yml").write_text(profiles_yml, encoding="utf-8")
+    write_dbt_profile_orders_model(workspace=workspace, order_id=1)
+    return workspace
+
+
+def write_dbt_profile_orders_model(*, workspace: Path, order_id: int) -> None:
+    """Write the mutable dbt model used by adapter dbt-profile E2Es."""
+
+    (workspace / "dbt_project" / "models" / "dbt_orders.sql").write_text(
+        f"select {order_id} as order_id\n",
+        encoding="utf-8",
+    )
+
+
+def add_dbt_profile_downstream_model(*, sqlbuild_project_dir: Path) -> None:
+    """Add a SQLBuild model downstream of the dbt profile E2E model."""
+
+    models_dir: Path = sqlbuild_project_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    (models_dir / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT order_id FROM __dbt_ref("analytics", "dbt_orders")\n',
+        encoding="utf-8",
+    )
+
+
+def assert_dbt_profile_lifecycle(
+    *,
+    tmp_path: Path,
+    profiles_yml: str,
+    env: Mapping[str, str] | None,
+    fetch_rows: Callable[[str], tuple[tuple[object, ...], ...]],
+    no_profile_tables_exist: Callable[[], bool],
+    dbt_orders_sql: str,
+    downstream_orders_sql: str,
+    expected_toml_fragments: tuple[str, ...],
+    unexpected_toml_fragments: tuple[str, ...] = (),
+) -> None:
+    """Assert the common dbt-profile init/build lifecycle against a real warehouse."""
+
+    workspace: Path = prepare_dbt_profile_workspace(
+        tmp_path=tmp_path,
+        profiles_yml=profiles_yml,
+    )
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "dbt",
+            "init",
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--skip-dbt-debug",
+        ),
+        project_dir=workspace,
+        env=env,
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+    generated_toml: str = (sqlbuild_project_dir / "sqlbuild_project.toml").read_text(
+        encoding="utf-8"
+    )
+    for fragment in expected_toml_fragments:
+        assert fragment in generated_toml
+    for fragment in unexpected_toml_fragments:
+        assert fragment not in generated_toml
+
+    add_dbt_profile_downstream_model(sqlbuild_project_dir=sqlbuild_project_dir)
+
+    plain_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        project_dir=sqlbuild_project_dir,
+        env=env,
+    )
+    assert plain_result.returncode != 0, plain_result.stdout + plain_result.stderr
+    assert "Skipping dbt: no dbt work selected." in plain_result.stdout, (
+        plain_result.stdout + plain_result.stderr
+    )
+    assert "depends on missing dbt relation(s)" in plain_result.stdout, (
+        plain_result.stdout + plain_result.stderr
+    )
+    assert "Use --select +downstream_orders" in plain_result.stdout, (
+        plain_result.stdout + plain_result.stderr
+    )
+    assert no_profile_tables_exist()
+
+    first_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
+        project_dir=sqlbuild_project_dir,
+        env=env,
+    )
+    assert first_result.returncode == 0, first_result.stdout + first_result.stderr
+    assert fetch_rows(dbt_orders_sql) == ((1,),)
+    assert fetch_rows(downstream_orders_sql) == ((1,),)
+
+    noop_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
+        project_dir=sqlbuild_project_dir,
+        env=env,
+    )
+    assert noop_result.returncode == 0, noop_result.stdout + noop_result.stderr
+    assert "Skipping dbt" in noop_result.stdout, noop_result.stdout + noop_result.stderr
+    assert "Skipping SQLBuild" in noop_result.stdout, noop_result.stdout + noop_result.stderr
+
+    write_dbt_profile_orders_model(workspace=workspace, order_id=2)
+    changed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
+        project_dir=sqlbuild_project_dir,
+        env=env,
+    )
+    assert changed_result.returncode == 0, changed_result.stdout + changed_result.stderr
+    assert fetch_rows(dbt_orders_sql) == ((2,),)
+    assert fetch_rows(downstream_orders_sql) == ((2,),)
 
 
 def run_sqb(

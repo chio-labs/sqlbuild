@@ -386,15 +386,45 @@ class SqlServerAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+        from sqlbuild.compiler.fingerprints.constants import (
+            COLUMN_DEFINITION_B64,
+            COLUMN_DEFINITION_HASH,
+            COLUMN_METADATA_JSON_B64,
+            COLUMN_NODE_NAME,
+            COLUMN_NODE_TYPE,
+            COLUMN_RUN_ID,
+            COLUMN_SCHEMA_FINGERPRINT,
+            COLUMN_TARGET_DATABASE,
+            COLUMN_TARGET_NAME,
+            COLUMN_TARGET_SCHEMA,
+            COLUMN_TIMESTAMP,
+            COLUMN_VERSION_HASH,
+            FINGERPRINT_TABLE_NAME,
+        )
 
-        create_sql: str = build_create_table_sql(
+        table_name: str | None = self.render_qualified_name(
             database=database,
             schema=schema,
-            render_qualified_name=self.render_qualified_name,
-            render_framework_type=self.render_framework_type,
-        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        create_sql: str = (
+            f"CREATE TABLE {table_name} ("
+            f"{COLUMN_NODE_TYPE} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_NODE_NAME} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_TARGET_DATABASE} NVARCHAR(450), "
+            f"{COLUMN_TARGET_SCHEMA} NVARCHAR(450), "
+            f"{COLUMN_TARGET_NAME} NVARCHAR(450), "
+            f"{COLUMN_RUN_ID} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_DEFINITION_HASH} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_VERSION_HASH} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_SCHEMA_FINGERPRINT} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_DEFINITION_B64} NVARCHAR(MAX) NOT NULL, "
+            f"{COLUMN_METADATA_JSON_B64} NVARCHAR(MAX) NOT NULL, "
+            f"{COLUMN_TIMESTAMP} DATETIME2 NOT NULL"
+            f")"
+        )
         escaped_schema: str = schema.replace("'", "''")
         escaped_table: str = FINGERPRINT_TABLE_NAME.replace("'", "''")
         exists_sql: str = (

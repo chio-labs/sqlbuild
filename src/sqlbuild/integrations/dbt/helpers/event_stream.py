@@ -36,6 +36,22 @@ _NODE_MESSAGE_EVENT_NAMES: frozenset[str] = frozenset(
     }
 )
 
+_DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
+    {
+        "error",
+        "fail",
+        "failed",
+        "ok",
+        "pass",
+        "passed",
+        "skip",
+        "skipped",
+        "success",
+        "warn",
+        "warning",
+    }
+)
+
 
 def execute_dbt_json_event_stream(
     *,
@@ -169,10 +185,13 @@ def parse_dbt_node_result(
     unique_id: str | None = _str_value(node_info.get("unique_id"))
     if unique_id is None or unique_id.startswith("unit_test"):
         return None
-    status: str | None = _str_value(data.get("status")) or _str_value(node_info.get("node_status"))
-    if status is None and event_name == "NodeFinished":
+    if event_name == "NodeFinished":
         run_result: dict[str, object] = _dict_value(data.get("run_result"))
-        status = _str_value(run_result.get("status"))
+        status: str | None = _str_value(run_result.get("status")) or _str_value(
+            node_info.get("node_status")
+        )
+    else:
+        status = _trusted_status(data.get("status")) or _str_value(node_info.get("node_status"))
     relation: dict[str, object] = _dict_value(node_info.get("node_relation"))
     messages: tuple[DbtNodeMessage, ...] = tuple((messages_by_unique_id or {}).pop(unique_id, []))
     return DbtNodeExecutionResult(
@@ -261,6 +280,13 @@ def _display_status(status: str) -> str:
     if normalized in {"error", "fail", "failed"}:
         return "FAIL"
     return status.upper()
+
+
+def _trusted_status(value: object | None) -> str | None:
+    status: str | None = _str_value(value)
+    if status is None:
+        return None
+    return status if status.lower() in _DBT_OUTCOME_STATUSES else None
 
 
 def _dict_value(value: object | None) -> dict[str, object]:

@@ -65,6 +65,26 @@ class DbtExecutionFailureCliTestCase:
 
 
 @dataclass(frozen=True)
+class DbtMissingRelationGuardE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtExistingRelationGuardE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    setup_sql: str
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DbtTestCliTestCase:
     description: str
     command: tuple[str, ...]

@@ -257,6 +257,43 @@ def test_given_node_result_table_when_rendering_create_then_sqlserver_guards_mis
 @pytest.mark.parametrize(
     "test_case",
     [
+        SqlServerLatestReadSqlTestCase(
+            description="renders bounded fingerprint key columns",
+            database=None,
+            schema="analytics",
+            expected_fragments=(
+                "IF NOT EXISTS (SELECT 1 FROM information_schema.tables ",
+                "WHERE table_schema = 'analytics' AND table_name = '_sqlbuild_fingerprints')",
+                "CREATE TABLE analytics._sqlbuild_fingerprints (",
+                "node_type NVARCHAR(450) NOT NULL",
+                "node_name NVARCHAR(450) NOT NULL",
+                "run_id NVARCHAR(450) NOT NULL",
+                "definition_hash NVARCHAR(450) NOT NULL",
+                "definition_b64 NVARCHAR(MAX) NOT NULL",
+                "metadata_json_b64 NVARCHAR(MAX) NOT NULL",
+            ),
+        )
+    ],
+    ids=["renders bounded fingerprint key columns"],
+)
+def test_given_fingerprint_table_when_rendering_create_then_sqlserver_uses_indexable_keys(
+    test_case: SqlServerLatestReadSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statement: str = adapter.render_create_fingerprint_table_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in statement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlServerIndexSqlTestCase(
             description="renders guarded lookup indexes for node result table",
             database=None,

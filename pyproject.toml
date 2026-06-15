@@ -56,8 +56,13 @@ check-type-annotation-conventions = "scripts.type_annotations.check_type_annotat
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
-  "dbt-core>=1.9.0,<1.11",
+  "dbt-core>=1.11.6,<1.12",
+  "dbt-bigquery>=1.9.0,<1.11",
+  "dbt-databricks>=1.9.0,<1.11",
   "dbt-duckdb>=1.9.0,<1.11",
+  "dbt-postgres>=1.9.0,<1.11",
+  "dbt-snowflake==1.12.0b1",
+  "dbt-sqlserver>=1.9.0,<1.11",
   "ingestr>=1.0.0",
   "jsonschema>=4.23.0",
   "pre-commit>=4.3.0",

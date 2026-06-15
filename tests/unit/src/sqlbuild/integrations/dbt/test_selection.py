@@ -63,7 +63,7 @@ _SQLBUILD_PATHS: dict[str, str] = {
 
 SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
     DbtSelectionTestCase(
-        description="selects bare SQLBuild model without upstream dbt",
+        description="selects bare SQLBuild model without running upstream dbt",
         manifest_data=_MANIFEST_DATA,
         sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
         sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
@@ -72,7 +72,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders",),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
     ),
     DbtSelectionTestCase(
         description="selects SQLBuild leading plus upstream dbt and SQLBuild deps",
@@ -111,7 +111,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
     ),
     DbtSelectionTestCase(
         description="selects SQLBuild both plus upstream dbt and downstream SQLBuild",
@@ -129,7 +129,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         ),
     ),
     DbtSelectionTestCase(
-        description="selects SQLBuild tag directly",
+        description="selects SQLBuild tag directly without running upstream dbt",
         manifest_data=_MANIFEST_DATA,
         sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
         sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
@@ -138,7 +138,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
     ),
     DbtSelectionTestCase(
         description="selects SQLBuild tag upstream expansion",
@@ -165,7 +165,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
     ),
     DbtSelectionTestCase(
         description="does not select SQLBuild for dbt leading plus only",
@@ -289,7 +289,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={"state:modified": ("model.analytics.int_orders",)},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
     ),
     DbtSelectionTestCase(
         description="treats comma expression as one trailing-plus dbt anchor term",
@@ -319,7 +319,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
         expected_path_translations=(),
     ),
     DbtSelectionTestCase(
@@ -332,7 +332,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
         expected_path_translations=(("path:models\\marts", "path:models/marts"),),
     ),
     DbtSelectionTestCase(
@@ -361,7 +361,7 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         exclude=(),
         dbt_anchor_unique_ids_by_term={},
         expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        expected_dbt_required_unique_ids=("model.analytics.int_orders",),
+        expected_dbt_required_unique_ids=(),
         expected_path_translations=(),
     ),
     DbtSelectionTestCase(
