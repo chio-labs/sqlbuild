@@ -179,6 +179,15 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
+class DbtReuseFromCompileResult:
+    """Manifest produced by compiling a dbt project at a reuse git ref."""
+
+    git_ref: str
+    manifest_contents: str
+    command: DbtCommandResult
+
+
+@dataclass(frozen=True)
 class DbtNodeMessage:
     """One dbt log message attached to a dbt node."""
 

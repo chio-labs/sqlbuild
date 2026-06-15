@@ -21,6 +21,7 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DbtConfig,
+    DbtReuseFromConfig,
     DefaultsConfig,
     JanitorConfig,
     LocalClonePolicy,
@@ -663,7 +664,14 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
     _validate_allowed_keys(
         mapping=mapping,
         allowed_keys=frozenset(
-            {"project_dir", "profiles_dir", "target", "target_path", "replay_on_change"}
+            {
+                "project_dir",
+                "profiles_dir",
+                "target",
+                "target_path",
+                "replay_on_change",
+                "reuse_from",
+            }
         ),
         label="dbt",
         file_path=file_path,
@@ -674,7 +682,61 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         target=_optional_str(payload=mapping, key="target"),
         target_path=_optional_str(payload=mapping, key="target_path"),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
+        reuse_from=_load_dbt_reuse_from(
+            payload=mapping.get("reuse_from"),
+            file_path=file_path,
+        ),
     )
+
+
+def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload,
+        label="dbt.reuse_from",
+        file_path=file_path,
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"git_ref", "generate_schema_name_override"}),
+        label="dbt.reuse_from",
+        file_path=file_path,
+    )
+    if not mapping:
+        return DbtReuseFromConfig()
+
+    git_ref: str = _require_str(payload=mapping, key="git_ref", file_path=file_path)
+    generate_schema_name_override: str = _require_str(
+        payload=mapping,
+        key="generate_schema_name_override",
+        file_path=file_path,
+    )
+    _validate_dbt_reuse_macro_path(
+        value=generate_schema_name_override,
+        file_path=file_path,
+    )
+    return DbtReuseFromConfig(
+        git_ref=git_ref,
+        generate_schema_name_override=generate_schema_name_override,
+    )
+
+
+def _validate_dbt_reuse_macro_path(*, value: str, file_path: Path) -> None:
+    macro_path: Path = Path(value)
+    if macro_path.is_absolute() or ".." in macro_path.parts:
+        raise ProjectConfigError(
+            f"{file_path} dbt.reuse_from.generate_schema_name_override must be a relative "
+            "path under dbt/macros/"
+        )
+    if len(macro_path.parts) < 3 or macro_path.parts[:2] != ("dbt", "macros"):
+        raise ProjectConfigError(
+            f"{file_path} dbt.reuse_from.generate_schema_name_override must be under dbt/macros/"
+        )
+    resolved_macro_path: Path = file_path.parent / macro_path
+    if not resolved_macro_path.is_file():
+        raise ProjectConfigError(
+            f"{file_path} dbt.reuse_from.generate_schema_name_override file not found: "
+            f"{resolved_macro_path}"
+        )
 
 
 def _load_scenario_snapshot_limits(

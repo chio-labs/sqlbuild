@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
@@ -101,3 +102,91 @@ def resolve_expected_dbt_argvs(
         )
         for argv in argvs
     )
+
+
+def run_git_command(*, repo_dir: Path, args: tuple[str, ...]) -> None:
+    """Run one git command for local integration-test repositories."""
+
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ("git", *args),
+        cwd=repo_dir,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr or result.stdout)
+
+
+def build_local_reuse_from_git_project(*, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """Create a local git repo with SQLBuild and dbt projects for reuse_from tests."""
+
+    repo_dir: Path = tmp_path / "repo"
+    sqlbuild_project_dir: Path = repo_dir / "sqlbuild_project"
+    dbt_project_dir: Path = repo_dir / "dbt_project"
+    profiles_dir: Path = tmp_path / "profiles"
+    macro_relative_path: Path = Path("dbt/macros/prod_generate_schema_name.sql")
+    macro_path: Path = sqlbuild_project_dir / macro_relative_path
+    dbt_models_dir: Path = dbt_project_dir / "models"
+
+    repo_dir.mkdir()
+    macro_path.parent.mkdir(parents=True)
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir()
+    sqlbuild_project_dir.joinpath("sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n',
+        encoding="utf-8",
+    )
+    macro_path.write_text(
+        "\n".join(
+            (
+                "{% macro generate_schema_name(custom_schema_name, node) %}",
+                "{{ 'prod_' ~ target.schema }}",
+                "{% endmacro %}",
+            )
+        ),
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("dbt_project.yml").write_text(
+        "\n".join(
+            (
+                'name: "analytics"',
+                'version: "1.0"',
+                'profile: "analytics"',
+                'model-paths: ["models"]',
+                "models:",
+                "  analytics:",
+                "    +materialized: view",
+            )
+        ),
+        encoding="utf-8",
+    )
+    dbt_models_dir.joinpath("stg_orders.sql").write_text(
+        "select 1 as order_id\n",
+        encoding="utf-8",
+    )
+    profiles_dir.joinpath("profiles.yml").write_text(
+        "\n".join(
+            (
+                "analytics:",
+                "  target: dev",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: ':memory:'",
+                "      schema: dev",
+            )
+        ),
+        encoding="utf-8",
+    )
+    run_git_command(repo_dir=repo_dir, args=("init", "--initial-branch", "main"))
+    run_git_command(repo_dir=repo_dir, args=("config", "user.email", "test@example.com"))
+    run_git_command(repo_dir=repo_dir, args=("config", "user.name", "Test User"))
+    run_git_command(repo_dir=repo_dir, args=("add", "."))
+    run_git_command(repo_dir=repo_dir, args=("commit", "-m", "prod dbt project"))
+    run_git_command(repo_dir=repo_dir, args=("branch", "prod"))
+    dbt_models_dir.joinpath("stg_orders.sql").write_text(
+        "select 2 as order_id\n",
+        encoding="utf-8",
+    )
+    return sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path

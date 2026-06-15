@@ -50,6 +50,8 @@ class LoadProjectConfigTestCase:
     expected_dbt_profiles_dir: str | None = None
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
+    expected_dbt_reuse_from_git_ref: str | None = None
+    expected_dbt_reuse_from_generate_schema_name_override: str | None = None
     expected_auto_load_sources: bool = True
     expected_virtual_environments: bool = False
 
