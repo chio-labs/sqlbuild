@@ -251,6 +251,7 @@ def build_manifest_model_node(
     schema: str | None = None,
     alias: str | None = None,
     checksum: str | None = None,
+    fqn: tuple[str, ...] = (),
     depends_on_nodes: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
@@ -271,6 +272,8 @@ def build_manifest_model_node(
         node["alias"] = alias
     if checksum is not None:
         node["checksum"] = {"checksum": checksum}
+    if fqn:
+        node["fqn"] = list(fqn)
     if depends_on_nodes:
         node["depends_on"] = {"nodes": list(depends_on_nodes)}
     return node

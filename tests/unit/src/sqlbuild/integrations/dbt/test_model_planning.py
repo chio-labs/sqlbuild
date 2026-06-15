@@ -218,6 +218,97 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
+            description="pruned execution argv uses exact fqn selectors",
+            expected_argv=(
+                "dbt",
+                "build",
+                "--select",
+                "fqn:analytics.marts.orders",
+                "fqn:analytics.orders_seed",
+                "fqn:analytics.staging.not_null_orders_id",
+            ),
+        )
+    ],
+    ids=["pruned execution argv uses exact fqn selectors"],
+)
+def test_given_dbt_model_plan_with_fqn_when_building_execution_argv_then_selects_exact_nodes(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(
+            DbtLsNode(
+                unique_id="model.analytics.orders",
+                resource_type="model",
+                name="orders",
+                fqn=("analytics", "marts", "orders"),
+            ),
+            DbtLsNode(
+                unique_id="model.stripe.orders",
+                resource_type="model",
+                name="orders",
+                fqn=("stripe", "orders"),
+            ),
+            DbtLsNode(
+                unique_id="seed.analytics.orders_seed",
+                resource_type="seed",
+                name="orders_seed",
+                fqn=("analytics", "orders_seed"),
+            ),
+            DbtLsNode(
+                unique_id="test.analytics.not_null_orders_id.abc123",
+                resource_type="test",
+                name="not_null_orders_id",
+                fqn=("analytics", "staging", "not_null_orders_id"),
+            ),
+        ),
+        dbt_selected_unique_ids=(
+            "model.analytics.orders",
+            "model.stripe.orders",
+            "seed.analytics.orders_seed",
+            "test.analytics.not_null_orders_id.abc123",
+        ),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.orders",
+                    package_name="analytics",
+                    name="orders",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.orders",
+                    fqn=("analytics", "marts", "orders"),
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.stripe.orders",
+                    package_name="stripe",
+                    name="orders",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="stripe.orders",
+                    fqn=("stripe", "orders"),
+                ),
+            )
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=DbtCliOptions(),
+        routed_args=("--select", "orders"),
+        plan=plan,
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
             description="current model plan skips dbt build when only selected tests remain",
             expected_argv=None,
         )

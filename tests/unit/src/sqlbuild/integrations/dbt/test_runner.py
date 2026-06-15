@@ -77,18 +77,21 @@ LS_PARSE_TEST_CASES: list[DbtLsParseTestCase] = [
             "10:00:00 Running with dbt=1.9.0\n"
             '{"unique_id":"model.analytics.orders","resource_type":"model",'
             '"package_name":"analytics","name":"orders",'
+            '"fqn":["analytics","marts","orders"],'
             '"original_file_path":"models/orders.sql"}\n'
             "not json\n"
             '{"unique_id":"source.analytics.raw.orders","resource_type":"source"}\n'
         ),
         expected_unique_ids=("model.analytics.orders", "source.analytics.raw.orders"),
         expected_resource_types=("model", "source"),
+        expected_selector_terms=("fqn:analytics.marts.orders", "source.analytics.raw.orders"),
     ),
     DbtLsParseTestCase(
         description="ignores json objects without unique id",
         stdout='{"name":"orders"}\n{"unique_id":"model.analytics.orders"}\n',
         expected_unique_ids=("model.analytics.orders",),
         expected_resource_types=(None,),
+        expected_selector_terms=("model.analytics.orders",),
     ),
 ]
 
@@ -172,6 +175,7 @@ def test_given_dbt_ls_output_when_parsing_then_returns_unique_id_nodes(
 
     assert tuple(node.unique_id for node in result) == test_case.expected_unique_ids
     assert tuple(node.resource_type for node in result) == test_case.expected_resource_types
+    assert tuple(node.selector_term for node in result) == test_case.expected_selector_terms
 
 
 @pytest.mark.parametrize(
