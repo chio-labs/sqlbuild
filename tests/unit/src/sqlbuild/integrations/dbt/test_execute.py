@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -31,8 +32,14 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
         DbtExecutionSpacingTestCase(
             description="keeps one blank line between connection and plan output",
             expected_spacing_fragment="Connected to duckdb. (0.00s)\n\nPlan ready",
+            expected_no_work_spacing_fragment="Skipping dbt: no dbt work selected.\n\n"
+            "No SQLBuild work selected.",
             unexpected_no_blank_fragment="Connected to duckdb. (0.00s)\nPlan ready",
+            unexpected_no_work_no_blank_fragment="Skipping dbt: no dbt work selected.\n"
+            "No SQLBuild work selected.",
             unexpected_extra_blank_fragment="Connected to duckdb. (0.00s)\n\n\nPlan ready",
+            unexpected_no_work_extra_blank_fragment="Skipping dbt: no dbt work selected.\n\n\n"
+            "No SQLBuild work selected.",
         )
     ],
     ids=["keeps one blank line between connection and plan output"],
@@ -71,7 +78,9 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
         execute_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
     )
     monkeypatch.setattr(
-        execute_module, "load_dbt_manifest_index", lambda *, manifest_path: object()
+        execute_module,
+        "load_dbt_manifest_index",
+        lambda *, manifest_path: SimpleNamespace(models_by_unique_id={}),
     )
     monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
     monkeypatch.setattr(
@@ -97,22 +106,28 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
     monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
     monkeypatch.setattr(execute_module, "build_effective_connection_config", lambda **kwargs: {})
     monkeypatch.setattr(execute_module, "resolve_connection_config", lambda **kwargs: {})
-    monkeypatch.setattr(
-        execute_module,
-        "execute_dbt_commands",
-        lambda **kwargs: DbtCommandExecutionResult(returncode=0),
-    )
+
+    def execute_no_dbt_work(**kwargs: object) -> DbtCommandExecutionResult:
+        output: StringIO = cast(StringIO, kwargs["progress_stream"])
+        output.write("Skipping dbt: no dbt work selected.\n")
+        return DbtCommandExecutionResult(returncode=0)
+
+    monkeypatch.setattr(execute_module, "execute_dbt_commands", execute_no_dbt_work)
     monkeypatch.setattr(
         execute_module,
         "build_dbt_execution_outcome",
         lambda **kwargs: DbtExecutionOutcome(),
     )
 
+    def write_progress(message: str) -> None:
+        output_stream.write(f"{message}\n")
+
     exit_code: int = execute_module.execute_dbt_interop_from_project(
         command=DbtInteropCommand.BUILD,
         project_dir=Path("/sqlbuild_project"),
         args=("--select", "missing"),
         dbt_runner=CompileOnlyDbtRunner(),
+        on_progress=write_progress,
         progress_stream=output_stream,
         dbt_stdout_stream=output_stream,
         use_color=False,
@@ -121,5 +136,8 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
     rendered: str = output_stream.getvalue()
     assert exit_code == 0
     assert test_case.expected_spacing_fragment in rendered
+    assert test_case.expected_no_work_spacing_fragment in rendered
     assert test_case.unexpected_no_blank_fragment not in rendered
+    assert test_case.unexpected_no_work_no_blank_fragment not in rendered
     assert test_case.unexpected_extra_blank_fragment not in rendered
+    assert test_case.unexpected_no_work_extra_blank_fragment not in rendered

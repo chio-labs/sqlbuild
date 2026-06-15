@@ -370,6 +370,8 @@ def execute_dbt_interop_from_project(
     if dbt_execution.returncode != 0 and not dbt_outcome.blocking_unique_ids:
         return dbt_execution.returncode
     if plan.sqlbuild_skip_reason is not None:
+        output_stream.write("\n")
+        output_stream.flush()
         _report_progress(on_progress, "No SQLBuild work selected.")
         return max(
             dbt_execution.returncode,

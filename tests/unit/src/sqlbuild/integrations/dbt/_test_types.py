@@ -82,8 +82,11 @@ class DbtModeGuardTestCase:
 class DbtExecutionSpacingTestCase:
     description: str
     expected_spacing_fragment: str
+    expected_no_work_spacing_fragment: str
     unexpected_no_blank_fragment: str
+    unexpected_no_work_no_blank_fragment: str
     unexpected_extra_blank_fragment: str
+    unexpected_no_work_extra_blank_fragment: str
 
 
 @dataclass(frozen=True)
