@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlbuild.compiler.lineage.types import InferredNullability
 
@@ -77,3 +78,17 @@ class DatabricksPruneSqlTestCase:
     schema: str
     retain_versions: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksTableFreshnessBatchTestCase:
+    description: str
+    expected_data_versions: tuple[datetime, ...]
+    expected_query_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksTableFreshnessFallbackTestCase:
+    description: str
+    expected_data_versions: tuple[datetime, ...]
+    expected_query_fragments: tuple[str, ...]

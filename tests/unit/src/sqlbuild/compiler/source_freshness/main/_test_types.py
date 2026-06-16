@@ -107,6 +107,7 @@ class StandardSourceFreshnessAdapterDefaultTestCase:
     description: str
     expected_changed_count: int
     expected_observed_count: int
+    expected_batch_call_count: int
 
 
 @dataclass(frozen=True)

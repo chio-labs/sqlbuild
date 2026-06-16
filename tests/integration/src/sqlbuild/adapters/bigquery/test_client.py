@@ -17,6 +17,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
@@ -416,12 +417,23 @@ def test_given_table_dml_when_getting_freshness_metadata_then_modified_time_adva
         name=table_name,
         previous_data_version=initial_data_version,
     )
+    batch_request: TableFreshnessRequest = TableFreshnessRequest(
+        database=bigquery_project,
+        schema=bigquery_dataset,
+        name=table_name,
+    )
+    batch_metadata: TableFreshnessMetadata = adapter.get_tables_freshness_metadata(
+        connection,
+        requests=(batch_request,),
+    )[batch_request]
 
     assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
     assert initial_metadata.value_kind == test_case.expected_value_kind
     assert changed_metadata.value_kind == test_case.expected_value_kind
+    assert batch_metadata.value_kind == test_case.expected_value_kind
     changed_data_version: object = changed_metadata.data_version
     assert isinstance(changed_data_version, test_case.expected_data_version_type)
+    assert isinstance(batch_metadata.data_version, test_case.expected_data_version_type)
     assert changed_data_version > initial_data_version
     initial_hash: str = source_freshness_record_from_observation(
         SourceFreshnessObservation(

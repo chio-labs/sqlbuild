@@ -23,6 +23,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import (
     CursorKind,
@@ -101,6 +102,23 @@ class BaseAdapter(StrictAdapter):
         raise AdapterUserError(
             f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        request: TableFreshnessRequest
+        for request in requests:
+            results[request] = self.get_table_freshness_metadata(
+                connection,
+                database=request.database,
+                schema=request.schema,
+                name=request.name,
+            )
+        return results
 
     def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query without materializing full rows."""

@@ -12,6 +12,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
@@ -33,6 +34,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeRenderPythonFunctionTestCase,
     SnowflakeRenderTableFunctionTestCase,
     SnowflakeSchemaDiffTestCase,
+    SnowflakeTableFreshnessBatchTestCase,
     SnowflakeTableFreshnessMetadataErrorTestCase,
     SnowflakeTableFreshnessMetadataTestCase,
 )
@@ -347,6 +349,55 @@ def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_
     assert "information_schema.tables" in cursor.executed_sql
     assert "last_altered" in cursor.executed_sql
     assert cursor.executed_params == ("ORDERS", "RAW", "ANALYTICS")
+    assert cursor.closed is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTableFreshnessBatchTestCase(
+            description="returns last altered for multiple physical tables",
+            expected_data_versions=(
+                datetime(2026, 1, 2, 3, 4, 5),
+                datetime(2026, 1, 3, 4, 5, 6),
+            ),
+            expected_query_fragments=(
+                "SELECT table_catalog, table_schema, table_name, table_type, last_altered",
+                " OR ",
+            ),
+        )
+    ],
+    ids=["returns last altered for multiple physical tables"],
+)
+def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last_altered(
+    test_case: SnowflakeTableFreshnessBatchTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    requests: tuple[TableFreshnessRequest, ...] = (
+        TableFreshnessRequest(database="ANALYTICS", schema="RAW", name="ORDERS"),
+        TableFreshnessRequest(database="ANALYTICS", schema="RAW", name="CUSTOMERS"),
+    )
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
+        rows=[
+            ("ANALYTICS", "RAW", "ORDERS", "BASE TABLE", test_case.expected_data_versions[0]),
+            ("ANALYTICS", "RAW", "CUSTOMERS", "BASE TABLE", test_case.expected_data_versions[1]),
+        ]
+    )
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+
+    metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
+        adapter.get_tables_freshness_metadata(connection, requests=requests)
+    )
+
+    assert (
+        tuple(metadata_by_request[request].data_version for request in requests)
+        == test_case.expected_data_versions
+    )
+    assert all(metadata.value_kind == "timestamp" for metadata in metadata_by_request.values())
+    assert cursor.executed_sql is not None
+    for fragment in test_case.expected_query_fragments:
+        assert fragment in cursor.executed_sql
+    assert cursor.executed_params == ("ORDERS", "RAW", "ANALYTICS", "CUSTOMERS", "RAW", "ANALYTICS")
     assert cursor.closed is True
 
 

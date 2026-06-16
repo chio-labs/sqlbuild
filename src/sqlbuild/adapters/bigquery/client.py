@@ -31,6 +31,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -252,41 +253,136 @@ class BigQueryAdapter(BaseAdapter):
 
     def get_table_freshness_metadata(
         self,
-        connection: Any,
+        connection: _BigQueryConnection,
         *,
         database: str | None,
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
-        if schema is None:
-            raise AdapterUserError("BigQuery table freshness metadata requires a dataset")
-        try:
-            table: Any = connection.client.get_table(
-                self._build_table_id(database=database, schema=schema, name=name)
-            )
-        except Exception as error:
-            if self._is_google_not_found(error):
-                raise AdapterUserError(
-                    f"BigQuery table freshness metadata not found for {name}"
-                ) from error
-            raise
-        table_type: str = str(getattr(table, "table_type", "TABLE")).upper()
-        if table_type != "TABLE":
-            raise AdapterUserError(
-                f"BigQuery table freshness metadata only supports native tables; found {table_type}"
-            )
-        data_version: object | None = getattr(table, "modified", None)
-        if data_version is None:
-            data_version = getattr(table, "updated", None)
-        if data_version is None:
-            raise AdapterUserError(
-                f"BigQuery table freshness metadata is missing modified time for {name}"
-            )
-        return TableFreshnessMetadata(
-            data_version=data_version,
-            value_kind="timestamp",
-            observed_at=data_version if isinstance(data_version, datetime) else None,
+        request: TableFreshnessRequest = TableFreshnessRequest(
+            database=database,
+            schema=schema,
+            name=name,
         )
+        return self.get_tables_freshness_metadata(
+            connection,
+            requests=(request,),
+        )[request]
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: _BigQueryConnection,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        if not requests:
+            return {}
+        request: TableFreshnessRequest
+        for request in requests:
+            if request.schema is None:
+                raise AdapterUserError("BigQuery table freshness metadata requires a dataset")
+            if "*" in request.name:
+                raise AdapterUserError(
+                    "BigQuery metadata freshness does not support wildcard tables; "
+                    "configure a freshness column or query instead"
+                )
+
+        requests_by_location_project: dict[tuple[str, str | None], list[TableFreshnessRequest]] = {}
+        for request in requests:
+            location: str = self._metadata_location(connection=connection, request=request)
+            requests_by_location_project.setdefault((location, request.database), []).append(
+                request
+            )
+
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        grouped_requests: list[TableFreshnessRequest]
+        for (location, database), grouped_requests in requests_by_location_project.items():
+            clauses: str = " OR ".join(
+                "(UPPER(table_schema) = UPPER('"
+                + self._escape_sql_string(str(request.schema))
+                + "') AND UPPER(table_name) = UPPER('"
+                + self._escape_sql_string(request.name)
+                + "'))"
+                for request in grouped_requests
+            )
+            information_schema: str = self._table_storage_information_schema(
+                database=database,
+                location=location,
+            )
+            try:
+                cursor: _BigQueryCursor = self.execute(
+                    connection,
+                    "SELECT table_schema, table_name, storage_last_modified_time "
+                    f"FROM {information_schema} WHERE {clauses}",
+                )
+                rows: list[tuple[object, ...]] = cursor.fetchall()
+            except AdapterUserError:
+                rows = self._legacy_tables_freshness_rows(
+                    connection=connection,
+                    database=database,
+                    requests=grouped_requests,
+                )
+            requests_by_key: dict[tuple[str, str], TableFreshnessRequest] = {
+                (str(request.schema).lower(), request.name.lower()): request
+                for request in grouped_requests
+            }
+            row: tuple[object, ...]
+            for row in rows:
+                matched_request: TableFreshnessRequest | None = requests_by_key.get(
+                    (str(row[0]).lower(), str(row[1]).lower())
+                )
+                if matched_request is None:
+                    continue
+                if row[2] is None:
+                    raise AdapterUserError(
+                        "BigQuery table freshness metadata is missing "
+                        f"storage_last_modified_time for {matched_request.name}"
+                    )
+                results[matched_request] = TableFreshnessMetadata(
+                    data_version=row[2],
+                    value_kind="timestamp",
+                    observed_at=row[2] if isinstance(row[2], datetime) else None,
+                )
+        missing_requests: list[TableFreshnessRequest] = [
+            request for request in requests if request not in results
+        ]
+        if missing_requests:
+            missing_names: str = ", ".join(request.name for request in missing_requests)
+            raise AdapterUserError(
+                f"BigQuery table freshness metadata not found for {missing_names}"
+            )
+        return results
+
+    def _legacy_tables_freshness_rows(
+        self,
+        *,
+        connection: _BigQueryConnection,
+        database: str | None,
+        requests: list[TableFreshnessRequest],
+    ) -> list[tuple[object, ...]]:
+        rows: list[tuple[object, ...]] = []
+        requests_by_schema: dict[str, list[TableFreshnessRequest]] = {}
+        request: TableFreshnessRequest
+        for request in requests:
+            requests_by_schema.setdefault(str(request.schema), []).append(request)
+        schema: str
+        schema_requests: list[TableFreshnessRequest]
+        for schema, schema_requests in requests_by_schema.items():
+            dataset_id: str = self._build_dataset_id(database=database, schema=schema)
+            table_clauses: str = " OR ".join(
+                "UPPER(table_id) = UPPER('" + self._escape_sql_string(request.name) + "')"
+                for request in schema_requests
+            )
+            cursor: _BigQueryCursor = self.execute(
+                connection,
+                "SELECT '"
+                + self._escape_sql_string(schema)
+                + "' AS table_schema, table_id AS table_name, "
+                f"TIMESTAMP_MILLIS(last_modified_time) AS storage_last_modified_time "
+                f"FROM `{dataset_id}.__TABLES__` WHERE {table_clauses}",
+            )
+            rows.extend(cursor.fetchall())
+        return rows
 
     def persists_python_functions(self) -> bool:
         return True
@@ -2377,6 +2473,41 @@ class BigQueryAdapter(BaseAdapter):
             f"{cls._build_dataset_id(database=database, schema=schema)}."
             f"{cls._strip_identifier_quotes(name)}"
         )
+
+    def _metadata_location(
+        self, *, connection: _BigQueryConnection, request: TableFreshnessRequest
+    ) -> str:
+        if connection.location is not None:
+            return connection.location
+        if request.schema is None:
+            raise AdapterUserError("BigQuery table freshness metadata requires a dataset")
+        dataset: Any = connection.client.get_dataset(
+            self._build_dataset_id(database=request.database, schema=request.schema)
+        )
+        location: object | None = getattr(dataset, "location", None)
+        if location is None:
+            raise AdapterUserError(
+                "BigQuery table freshness metadata could not determine location "
+                f"for {request.schema}"
+            )
+        return str(location)
+
+    @classmethod
+    def _table_storage_information_schema(cls, *, database: str | None, location: str) -> str:
+        normalized_location: str = location.strip().lower()
+        region_name: str = (
+            normalized_location
+            if normalized_location.startswith("region-")
+            else f"region-{normalized_location}"
+        )
+        if database is None:
+            return f"`{region_name}`.INFORMATION_SCHEMA.TABLE_STORAGE"
+        project_name: str = cls._strip_identifier_quotes(database)
+        return f"`{project_name}.{region_name}`.INFORMATION_SCHEMA.TABLE_STORAGE"
+
+    @staticmethod
+    def _escape_sql_string(value: str) -> str:
+        return value.replace("'", "''")
 
     @staticmethod
     def _strip_identifier_quotes(value: str) -> str:

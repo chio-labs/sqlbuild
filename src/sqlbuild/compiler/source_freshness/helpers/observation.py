@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.shared.models import QueryResult, TableFreshnessMetadata
+from sqlbuild.adapter.shared.models import (
+    QueryResult,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
+)
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
@@ -110,6 +114,62 @@ def _observe_adapter_freshness(
         value_kind=SourceFreshnessValueKind(metadata.value_kind),
         observed_at=metadata.observed_at or observed_at,
     )
+
+
+def observe_adapter_sources_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    sources: tuple[SourceEntry, ...],
+    observed_at: datetime,
+) -> dict[str, SourceFreshnessObservation]:
+    """Observe adapter metadata freshness for physical table sources in one batch."""
+
+    if not sources:
+        return {}
+    if not adapter.supports_table_freshness_metadata():
+        raise SourceFreshnessObservationError(
+            f"adapter '{adapter.adapter_name}' does not support table freshness metadata"
+        )
+    requests_by_source_name: dict[str, TableFreshnessRequest] = {}
+    source: SourceEntry
+    for source in sources:
+        if source.expression is not None or source.table is None:
+            raise SourceFreshnessObservationError(
+                f"source '{source.name}' adapter freshness requires a physical table source"
+            )
+        requests_by_source_name[source.name] = TableFreshnessRequest(
+            database=source.database,
+            schema=source.schema,
+            name=source.table,
+        )
+
+    metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
+        adapter.get_tables_freshness_metadata(
+            connection,
+            requests=tuple(requests_by_source_name.values()),
+        )
+    )
+    observations: dict[str, SourceFreshnessObservation] = {}
+    for source in sources:
+        request: TableFreshnessRequest = requests_by_source_name[source.name]
+        metadata: TableFreshnessMetadata | None = metadata_by_request.get(request)
+        if metadata is None:
+            raise SourceFreshnessObservationError(
+                f"source '{source.name}' freshness metadata was not returned"
+            )
+        if metadata.data_version is None:
+            raise SourceFreshnessObservationError(
+                f"source '{source.name}' freshness data_version cannot be null"
+            )
+        observations[source.name] = SourceFreshnessObservation(
+            source_name=source.name,
+            strategy=SourceFreshnessStrategy.ADAPTER,
+            data_version=metadata.data_version,
+            value_kind=SourceFreshnessValueKind(metadata.value_kind),
+            observed_at=metadata.observed_at or observed_at,
+        )
+    return observations
 
 
 def _query_single_data_version(

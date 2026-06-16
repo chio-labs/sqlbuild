@@ -15,6 +15,8 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleCell,
     RowDiffSampleRow,
     SchemaDiffResult,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter, _BigQueryConnection
@@ -43,6 +45,8 @@ from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQuerySampleRowsTestCase,
     BigQuerySchemaDiffTestCase,
     BigQuerySchemaExistsTestCase,
+    BigQueryTableFreshnessBatchTestCase,
+    BigQueryTableFreshnessWildcardTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
     FakeBigQueryBadRequest,
@@ -167,6 +171,93 @@ def test_given_source_freshness_table_when_rendering_prune_then_bigquery_uses_hi
 
     for fragment in test_case.expected_fragments:
         assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryTableFreshnessBatchTestCase(
+            description="uses table storage metadata for multiple tables",
+            location="US",
+            expected_data_versions=(
+                datetime(2026, 1, 2, 3, 4, 5),
+                datetime(2026, 1, 3, 4, 5, 6),
+            ),
+            expected_query_fragments=(
+                "FROM `example-project.region-us`.INFORMATION_SCHEMA.TABLE_STORAGE",
+                "storage_last_modified_time",
+                "ORDERS",
+                "CUSTOMERS",
+            ),
+        )
+    ],
+    ids=["uses table storage metadata for multiple tables"],
+)
+def test_given_physical_tables_when_getting_freshness_metadata_then_bigquery_uses_table_storage(
+    test_case: BigQueryTableFreshnessBatchTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    requests: tuple[TableFreshnessRequest, ...] = (
+        TableFreshnessRequest(database="example-project", schema="raw", name="ORDERS"),
+        TableFreshnessRequest(database="example-project", schema="raw", name="CUSTOMERS"),
+    )
+    client: FakeBigQueryClient = FakeBigQueryClient(
+        rows=FakeBigQueryRows(
+            columns=("table_schema", "table_name", "storage_last_modified_time"),
+            rows=(
+                ("raw", "ORDERS", test_case.expected_data_versions[0]),
+                ("raw", "CUSTOMERS", test_case.expected_data_versions[1]),
+            ),
+        )
+    )
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=client,
+        location=test_case.location,
+    )
+
+    metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
+        adapter.get_tables_freshness_metadata(connection, requests=requests)
+    )
+
+    assert (
+        tuple(metadata_by_request[request].data_version for request in requests)
+        == test_case.expected_data_versions
+    )
+    assert all(metadata.value_kind == "timestamp" for metadata in metadata_by_request.values())
+    assert len(client.queries) == 1
+    sql, location = client.queries[0]
+    assert location == test_case.location
+    for fragment in test_case.expected_query_fragments:
+        assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryTableFreshnessWildcardTestCase(
+            description="rejects wildcard table metadata freshness",
+            table_name="events_*",
+            expected_error_fragment="does not support wildcard tables",
+        )
+    ],
+    ids=["rejects wildcard table metadata freshness"],
+)
+def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_raises_clear_error(
+    test_case: BigQueryTableFreshnessWildcardTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    request: TableFreshnessRequest = TableFreshnessRequest(
+        database="example-project",
+        schema="raw",
+        name=test_case.table_name,
+    )
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=FakeBigQueryClient(),
+        location="US",
+    )
+
+    with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
+        adapter.get_tables_freshness_metadata(connection, requests=(request,))
 
 
 BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [

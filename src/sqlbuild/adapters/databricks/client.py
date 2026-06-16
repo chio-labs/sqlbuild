@@ -33,6 +33,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -226,37 +227,176 @@ class DatabricksAdapter(BaseAdapter):
             raise AdapterUserError(
                 "Databricks table freshness metadata requires catalog and schema"
             )
-        table_type: str = self._get_table_type(
-            connection,
+        request: TableFreshnessRequest = TableFreshnessRequest(
             database=database,
             schema=schema,
             name=name,
         )
-        if self._normalize_relation_type(table_type) != "table":
-            raise AdapterUserError(
-                "Databricks table freshness metadata only supports Delta tables; "
-                f"found {table_type}"
+        return self.get_tables_freshness_metadata(connection, requests=(request,))[request]
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        if not requests:
+            return {}
+        request: TableFreshnessRequest
+        for request in requests:
+            if request.database is None or request.schema is None:
+                raise AdapterUserError(
+                    "Databricks table freshness metadata requires catalog and schema"
+                )
+        try:
+            return self._get_delta_history_freshness_metadata(
+                connection=connection,
+                requests=requests,
             )
-        target: str = f"`{database}`.`{schema}`.`{name}`"
+        except Exception:
+            return self._get_unity_catalog_freshness_metadata(
+                connection=connection,
+                requests=requests,
+            )
+
+    def _get_unity_catalog_freshness_metadata(
+        self,
+        *,
+        connection: Any,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        clauses: str = " OR ".join(
+            "(table_catalog = "
+            + self._string_literal(str(request.database).lower())
+            + " AND table_schema = "
+            + self._string_literal(str(request.schema).lower())
+            + " AND table_name = "
+            + self._string_literal(request.name.lower())
+            + ")"
+            for request in requests
+        )
+        query: str = (
+            "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
+            "FROM `system`.`information_schema`.`tables` WHERE "
+            f"{clauses}"
+        )
         cursor: Any = connection.cursor()
         try:
-            cursor.execute(f"DESCRIBE HISTORY {target} LIMIT 1")
-            row: tuple[Any, ...] | None = cursor.fetchone()
+            cursor.execute(query)
+            rows: list[tuple[Any, ...]] = list(cursor.fetchall())
+        finally:
+            cursor.close()
+
+        requests_by_key: dict[tuple[str, str, str], TableFreshnessRequest] = {
+            (
+                str(request.database).lower(),
+                str(request.schema).lower(),
+                request.name.lower(),
+            ): request
+            for request in requests
+        }
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        row: tuple[Any, ...]
+        for row in rows:
+            matched_request: TableFreshnessRequest | None = requests_by_key.get(
+                (str(row[0]).lower(), str(row[1]).lower(), str(row[2]).lower())
+            )
+            if matched_request is None:
+                continue
+            table_type: str = str(row[3])
+            if self._normalize_relation_type(table_type) != "table":
+                raise AdapterUserError(
+                    "Databricks table freshness metadata only supports Delta tables; "
+                    f"found {table_type}"
+                )
+            if row[4] is None:
+                raise AdapterUserError(
+                    "Databricks table freshness metadata is missing LAST_ALTERED "
+                    f"for {matched_request.name}"
+                )
+            results[matched_request] = TableFreshnessMetadata(
+                data_version=row[4],
+                value_kind="timestamp",
+                observed_at=row[4] if isinstance(row[4], datetime) else None,
+            )
+        missing_requests: list[TableFreshnessRequest] = [
+            request for request in requests if request not in results
+        ]
+        if missing_requests:
+            missing_names: str = ", ".join(request.name for request in missing_requests)
+            raise AdapterUserError(
+                f"Databricks table freshness metadata not found for {missing_names}"
+            )
+        return results
+
+    def _get_delta_history_freshness_metadata(
+        self,
+        *,
+        connection: Any,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        selects: list[str] = []
+        request: TableFreshnessRequest
+        for request in requests:
+            target: str | None = self.render_qualified_name(
+                database=request.database,
+                schema=request.schema,
+                name=request.name,
+            )
+            if target is None:
+                raise AdapterUserError(
+                    "Databricks table freshness metadata requires catalog and schema"
+                )
+            selects.append(
+                "SELECT "
+                + self._string_literal(str(request.database))
+                + " AS catalog, "
+                + self._string_literal(str(request.schema))
+                + " AS schema, "
+                + self._string_literal(request.name)
+                + " AS identifier, max(timestamp) AS last_modified "
+                f"FROM (DESCRIBE HISTORY {target})"
+            )
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(" UNION ALL ".join(selects))
+            rows: list[tuple[Any, ...]] = list(cursor.fetchall())
         except Exception as error:
             raise AdapterUserError(
-                f"Databricks table freshness metadata requires Delta history for {target}"
+                "Databricks table freshness metadata requires Unity Catalog table metadata "
+                "or Delta history"
             ) from error
         finally:
             cursor.close()
-        if row is None:
-            raise AdapterUserError(f"Databricks Delta history not found for {target}")
-        try:
-            data_version: int = int(row[0])
-        except (TypeError, ValueError) as error:
-            raise AdapterUserError(
-                f"Databricks Delta history returned invalid version for {target}: {row[0]}"
-            ) from error
-        return TableFreshnessMetadata(data_version=data_version, value_kind="integer")
+
+        requests_by_key: dict[tuple[str, str, str], TableFreshnessRequest] = {
+            (str(request.database), str(request.schema), request.name): request
+            for request in requests
+        }
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        row: tuple[Any, ...]
+        for row in rows:
+            matched_request: TableFreshnessRequest | None = requests_by_key.get(
+                (str(row[0]), str(row[1]), str(row[2]))
+            )
+            if matched_request is None:
+                continue
+            if row[3] is None:
+                raise AdapterUserError(
+                    f"Databricks Delta history not found for {matched_request.name}"
+                )
+            results[matched_request] = TableFreshnessMetadata(
+                data_version=row[3],
+                value_kind="timestamp",
+                observed_at=row[3] if isinstance(row[3], datetime) else None,
+            )
+        missing_requests: list[TableFreshnessRequest] = [
+            request for request in requests if request not in results
+        ]
+        if missing_requests:
+            missing_names: str = ", ".join(request.name for request in missing_requests)
+            raise AdapterUserError(f"Databricks Delta history not found for {missing_names}")
+        return results
 
     def _get_table_type(
         self,
