@@ -5,6 +5,25 @@ from __future__ import annotations
 import json
 from typing import cast
 
+from sqlbuild.integrations.dbt.constants import (
+    DBT_MANIFEST_CONFIG_KEY,
+    DBT_MANIFEST_INCREMENTAL_STRATEGY_KEY,
+    DBT_MANIFEST_MATERIALIZED_KEY,
+    DBT_MANIFEST_META_KEY,
+    DBT_MANIFEST_REUSE_CURSOR_KEY,
+    DBT_MANIFEST_SQLBUILD_META_KEY,
+    DBT_MATERIALIZATION_EPHEMERAL,
+    DBT_MATERIALIZATION_INCREMENTAL,
+    DBT_MATERIALIZATION_MICROBATCH,
+    DBT_MATERIALIZATION_SNAPSHOT,
+    DBT_MATERIALIZATION_TABLE,
+    DBT_MATERIALIZATION_VIEW,
+    DBT_REUSE_METADATA_CURSOR_COLUMN_KEY,
+    DBT_REUSE_METADATA_DESTINATION_RELATION_KEY,
+    DBT_REUSE_METADATA_EXECUTION_MODE_KEY,
+    DBT_REUSE_METADATA_ORIGIN_RELATION_KEY,
+    DBT_REUSE_METADATA_REUSE_MODE_KEY,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
@@ -20,12 +39,19 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
     DbtReuseCandidateSkipReason,
+    DbtReuseExecutionMode,
+    DbtReuseMode,
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
 
 _SUPPORTED_PHYSICAL_MATERIALIZATIONS: frozenset[str] = frozenset(
-    {"table", "incremental", "microbatch", "snapshot"}
+    {
+        DBT_MATERIALIZATION_TABLE,
+        DBT_MATERIALIZATION_INCREMENTAL,
+        DBT_MATERIALIZATION_MICROBATCH,
+        DBT_MATERIALIZATION_SNAPSHOT,
+    }
 )
 
 
@@ -87,6 +113,7 @@ def resolve_dbt_reuse_candidates(
                 package_name=current_model.package_name,
                 name=current_model.name,
                 fqn=current_model.fqn,
+                cursor_column=_model_reuse_cursor(model=current_model),
             )
         )
     return DbtReuseCandidateResolution(candidates=tuple(candidates), skipped=tuple(skipped))
@@ -162,6 +189,7 @@ def _plan_reuse_candidate(
             materialization=candidate.materialization,
             destination_relation_name=candidate.destination_relation_name,
             origin_relation_name=candidate.origin_relation_name,
+            cursor_column=candidate.cursor_column,
         )
     if dbt_plan_entry.action == DbtModelPlanAction.BLOCKED:
         return _candidate_entry(
@@ -177,7 +205,7 @@ def _plan_reuse_candidate(
                 dbt_plan_entry=dbt_plan_entry,
                 action=(
                     DbtReusePlanAction.COMPLETE_REUSE
-                    if candidate.materialization == "table"
+                    if candidate.materialization == DBT_MATERIALIZATION_TABLE
                     else DbtReusePlanAction.SEEDED_REUSE
                 ),
                 reason=DbtReusePlanReason.REUSE_METADATA_INVALID,
@@ -197,7 +225,7 @@ def _plan_reuse_candidate(
         )
     reuse_action: DbtReusePlanAction = (
         DbtReusePlanAction.COMPLETE_REUSE
-        if candidate.materialization == "table"
+        if candidate.materialization == DBT_MATERIALIZATION_TABLE
         else DbtReusePlanAction.SEEDED_REUSE
     )
     return _candidate_entry(
@@ -224,6 +252,7 @@ def _candidate_entry(
         origin_relation_name=candidate.origin_relation_name,
         dbt_plan_action=dbt_plan_entry.action,
         dbt_plan_reason=dbt_plan_entry.reason,
+        cursor_column=candidate.cursor_column,
     )
 
 
@@ -240,14 +269,28 @@ def _reuse_resume_metadata_invalid(
     if not isinstance(payload, dict):
         return False
     metadata: dict[str, object] = cast(dict[str, object], payload)
-    if metadata.get("materialization_mode") != "reuse_clone":
+    if metadata.get(DBT_REUSE_METADATA_EXECUTION_MODE_KEY) != DbtReuseExecutionMode.REUSE:
         return False
-    expected_reuse_mode: str = "complete" if candidate.materialization == "table" else "seeded"
-    return (
-        metadata.get("reuse_mode") != expected_reuse_mode
-        or metadata.get("origin_relation") != candidate.origin_relation_name
-        or metadata.get("destination_relation") != candidate.destination_relation_name
+    expected_reuse_mode: DbtReuseMode = _reuse_mode_for_materialization(
+        materialization=candidate.materialization
     )
+    relations_changed: bool = (
+        metadata.get(DBT_REUSE_METADATA_REUSE_MODE_KEY) != expected_reuse_mode
+        or metadata.get(DBT_REUSE_METADATA_ORIGIN_RELATION_KEY) != candidate.origin_relation_name
+        or metadata.get(DBT_REUSE_METADATA_DESTINATION_RELATION_KEY)
+        != candidate.destination_relation_name
+    )
+    if relations_changed:
+        return True
+    if expected_reuse_mode == DbtReuseMode.SEEDED:
+        return metadata.get(DBT_REUSE_METADATA_CURSOR_COLUMN_KEY) != candidate.cursor_column
+    return False
+
+
+def _reuse_mode_for_materialization(*, materialization: str) -> DbtReuseMode:
+    if materialization == DBT_MATERIALIZATION_TABLE:
+        return DbtReuseMode.COMPLETE
+    return DbtReuseMode.SEEDED
 
 
 def _skipped_entry(*, skip: DbtReuseCandidateSkip) -> DbtReusePlanEntry:
@@ -280,26 +323,48 @@ def _reason_from_skip_reason(*, reason: DbtReuseCandidateSkipReason) -> DbtReuse
 
 
 def _model_materialization(*, model: DbtManifestModel) -> str | None:
-    config: object | None = model.payload.get("config")
+    config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
     if not isinstance(config, dict):
         return None
     config_mapping: dict[str, object] = cast(dict[str, object], config)
-    materialized: object | None = config_mapping.get("materialized")
+    materialized: object | None = config_mapping.get(DBT_MANIFEST_MATERIALIZED_KEY)
     if not isinstance(materialized, str) or not materialized.strip():
         return None
     materialization: str = materialized.strip().lower()
-    incremental_strategy: object | None = config_mapping.get("incremental_strategy")
-    if materialization == "incremental" and incremental_strategy == "microbatch":
-        return "microbatch"
+    incremental_strategy: object | None = config_mapping.get(DBT_MANIFEST_INCREMENTAL_STRATEGY_KEY)
+    if (
+        materialization == DBT_MATERIALIZATION_INCREMENTAL
+        and incremental_strategy == DBT_MATERIALIZATION_MICROBATCH
+    ):
+        return DBT_MATERIALIZATION_MICROBATCH
     return materialization
+
+
+def _model_reuse_cursor(*, model: DbtManifestModel) -> str | None:
+    config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
+    if not isinstance(config, dict):
+        return None
+    config_mapping: dict[str, object] = cast(dict[str, object], config)
+    meta: object | None = config_mapping.get(DBT_MANIFEST_META_KEY)
+    if not isinstance(meta, dict):
+        return None
+    meta_mapping: dict[str, object] = cast(dict[str, object], meta)
+    sqlbuild_meta: object | None = meta_mapping.get(DBT_MANIFEST_SQLBUILD_META_KEY)
+    if not isinstance(sqlbuild_meta, dict):
+        return None
+    sqlbuild_mapping: dict[str, object] = cast(dict[str, object], sqlbuild_meta)
+    cursor: object | None = sqlbuild_mapping.get(DBT_MANIFEST_REUSE_CURSOR_KEY)
+    if not isinstance(cursor, str) or not cursor.strip():
+        return None
+    return cursor.strip()
 
 
 def _skip_reason_for_materialization(
     *, materialization: str | None
 ) -> DbtReuseCandidateSkipReason | None:
-    if materialization == "view":
+    if materialization == DBT_MATERIALIZATION_VIEW:
         return DbtReuseCandidateSkipReason.VIEW
-    if materialization == "ephemeral":
+    if materialization == DBT_MATERIALIZATION_EPHEMERAL:
         return DbtReuseCandidateSkipReason.EPHEMERAL
     if materialization not in _SUPPORTED_PHYSICAL_MATERIALIZATIONS:
         return DbtReuseCandidateSkipReason.UNSUPPORTED_MATERIALIZATION

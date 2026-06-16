@@ -290,6 +290,111 @@ def prepare_dbt_reuse_from_project(*, tmp_path: Path) -> Path:
     return sqlbuild_project_dir
 
 
+def prepare_dbt_seeded_reuse_from_project(*, tmp_path: Path) -> Path:
+    """Write a focused DuckDB dbt reuse_from project for seeded incremental reuse."""
+
+    root_dir: Path = tmp_path / "dbt_seeded_reuse_from"
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_models_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_seeded_reuse_from.duckdb"
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\nversion: '1.0'\nprofile: analytics\nmodel-paths: ['models']\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "fact_orders.sql").write_text(
+        "{{ config(materialized='incremental', "
+        "meta={'sqlbuild': {'reuse_cursor': 'event_time'}}) }}\n"
+        "select order_id, amount, event_time from main.raw_orders\n"
+        "{% if is_incremental() %}\n"
+        "where event_time > (select max(event_time) from {{ this }})\n"
+        "{% endif %}\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_models_dir / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT order_id, amount AS downstream_amount FROM __dbt_ref("analytics", "fact_orders")\n',
+        encoding="utf-8",
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dbt_seeded_reuse_from"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n'
+        "[connection]\n"
+        'database = "dbt_seeded_reuse_from.duckdb"\n'
+        "[targets.dev]\n"
+        'schema = "main"\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n'
+        "[dbt.reuse_from]\n"
+        'git_ref = "prod"\n'
+        'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n',
+        encoding="utf-8",
+    )
+    (macro_dir / "prod_generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE TABLE main.raw_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time"
+        ),
+    )
+    _run_git(args=("init",), cwd=root_dir)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=root_dir)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=root_dir)
+    _run_git(args=("add", "."), cwd=root_dir)
+    _run_git(args=("commit", "-m", "prod seeded baseline"), cwd=root_dir)
+    _run_git(args=("branch", "prod"), cwd=root_dir)
+    subprocess.run(
+        (
+            "dbt",
+            "run",
+            "--project-dir",
+            dbt_project_dir.as_posix(),
+            "--profiles-dir",
+            profiles_dir.as_posix(),
+            "--target",
+            "prod",
+        ),
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    execute_duckdb(
+        db_path=db_path,
+        sql=("INSERT INTO main.raw_orders VALUES (2, 901, TIMESTAMP '2026-01-02')"),
+    )
+    return sqlbuild_project_dir
+
+
 def write_dbt_reuse_from_fact_orders_model(*, project_dir: Path, amount: int) -> None:
     """Write the mutable dbt model used by reuse_from E2Es."""
 

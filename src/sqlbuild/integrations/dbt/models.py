@@ -201,6 +201,7 @@ class DbtReuseCandidate:
     package_name: str
     name: str
     fqn: tuple[str, ...] = field(default_factory=tuple)
+    cursor_column: str | None = None
 
 
 @dataclass(frozen=True)
@@ -234,6 +235,7 @@ class DbtReusePlanEntry:
     dbt_plan_action: DbtModelPlanAction | None = None
     dbt_plan_reason: DbtModelPlanReason | None = None
     skip_reason: DbtReuseCandidateSkipReason | None = None
+    cursor_column: str | None = None
 
 
 @dataclass(frozen=True)

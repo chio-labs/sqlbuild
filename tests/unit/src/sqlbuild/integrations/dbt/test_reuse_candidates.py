@@ -4,6 +4,15 @@ import json
 
 import pytest
 
+from sqlbuild.integrations.dbt.constants import (
+    DBT_MANIFEST_REUSE_CURSOR_KEY,
+    DBT_MANIFEST_SQLBUILD_META_KEY,
+    DBT_REUSE_METADATA_CURSOR_COLUMN_KEY,
+    DBT_REUSE_METADATA_DESTINATION_RELATION_KEY,
+    DBT_REUSE_METADATA_EXECUTION_MODE_KEY,
+    DBT_REUSE_METADATA_ORIGIN_RELATION_KEY,
+    DBT_REUSE_METADATA_REUSE_MODE_KEY,
+)
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.reuse_candidates import (
     build_dbt_reuse_planning_result,
@@ -20,6 +29,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
     DbtReuseCandidateSkipReason,
+    DbtReuseExecutionMode,
+    DbtReuseMode,
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
@@ -136,6 +147,9 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
                 relation_name="dev.events",
                 materialized="incremental",
                 incremental_strategy="microbatch",
+                meta={
+                    DBT_MANIFEST_SQLBUILD_META_KEY: {DBT_MANIFEST_REUSE_CURSOR_KEY: "event_time"}
+                },
             ),
         ),
         reuse_nodes=(
@@ -152,6 +166,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
         expected_candidate_materializations=("microbatch",),
         expected_origin_relation_names=("prod.events",),
         expected_skipped=(),
+        expected_cursor_columns=("event_time",),
     ),
     DbtReuseCandidateResolutionTestCase(
         description="skips missing reuse manifest node",
@@ -374,6 +389,26 @@ REUSE_METADATA_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         expected_action=DbtReusePlanAction.COMPLETE_REUSE,
         expected_reason=DbtReusePlanReason.REUSE_METADATA_INVALID,
     ),
+    DbtReusePlanningTestCase(
+        description="keeps current seeded reuse when cursor metadata still matches",
+        candidate_materialization="microbatch",
+        dbt_plan_action=DbtModelPlanAction.CURRENT,
+        dbt_plan_reason=DbtModelPlanReason.NO_CHANGE,
+        expected_action=DbtReusePlanAction.CURRENT,
+        expected_reason=DbtReusePlanReason.DESTINATION_CURRENT,
+        cursor_column="event_time",
+        previous_cursor_column="event_time",
+    ),
+    DbtReusePlanningTestCase(
+        description="reuses seeded model again when cursor metadata changed",
+        candidate_materialization="microbatch",
+        dbt_plan_action=DbtModelPlanAction.CURRENT,
+        dbt_plan_reason=DbtModelPlanReason.NO_CHANGE,
+        expected_action=DbtReusePlanAction.SEEDED_REUSE,
+        expected_reason=DbtReusePlanReason.REUSE_METADATA_INVALID,
+        cursor_column="updated_at",
+        previous_cursor_column="event_time",
+    ),
 )
 
 
@@ -406,6 +441,12 @@ def test_given_scoped_dbt_nodes_when_resolving_reuse_candidates_then_returns_exp
     )
     assert tuple(candidate.origin_relation_name for candidate in result.candidates) == (
         test_case.expected_origin_relation_names
+    )
+    expected_cursor_columns: tuple[str | None, ...] = test_case.expected_cursor_columns or tuple(
+        None for _candidate in result.candidates
+    )
+    assert (
+        tuple(candidate.cursor_column for candidate in result.candidates) == expected_cursor_columns
     )
     assert tuple((skip.unique_id, skip.reason) for skip in result.skipped) == (
         test_case.expected_skipped
@@ -498,6 +539,13 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
                             if test_case.candidate_materialization == "microbatch"
                             else None
                         ),
+                        meta={
+                            DBT_MANIFEST_SQLBUILD_META_KEY: {
+                                DBT_MANIFEST_REUSE_CURSOR_KEY: test_case.cursor_column
+                            }
+                        }
+                        if test_case.cursor_column is not None
+                        else None,
                     ),
                 )
             )
@@ -543,6 +591,7 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
     assert tuple(entry.action for entry in result.entries) == (test_case.expected_action,)
     assert tuple(entry.reason for entry in result.entries) == (test_case.expected_reason,)
     assert result.entries[0].materialization == test_case.candidate_materialization
+    assert result.entries[0].cursor_column == test_case.cursor_column
 
 
 @pytest.mark.parametrize(
@@ -559,6 +608,14 @@ def test_given_current_reuse_fingerprint_metadata_when_planning_then_validates_r
         if test_case.expected_reason == DbtReusePlanReason.REUSE_METADATA_INVALID
         else "prod.orders"
     )
+    materialized: str = (
+        "incremental"
+        if test_case.candidate_materialization == "microbatch"
+        else test_case.candidate_materialization
+    )
+    incremental_strategy: str | None = (
+        "microbatch" if test_case.candidate_materialization == "microbatch" else None
+    )
     candidate_resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
         current_manifest=build_dbt_manifest_index(
             raw_data=build_manifest_data(
@@ -568,7 +625,15 @@ def test_given_current_reuse_fingerprint_metadata_when_planning_then_validates_r
                         package_name="analytics",
                         name="orders",
                         relation_name="dev.orders",
-                        materialized="table",
+                        materialized=materialized,
+                        incremental_strategy=incremental_strategy,
+                        meta={
+                            DBT_MANIFEST_SQLBUILD_META_KEY: {
+                                DBT_MANIFEST_REUSE_CURSOR_KEY: test_case.cursor_column
+                            }
+                        }
+                        if test_case.cursor_column is not None
+                        else None,
                     ),
                 )
             )
@@ -581,7 +646,8 @@ def test_given_current_reuse_fingerprint_metadata_when_planning_then_validates_r
                         package_name="analytics",
                         name="orders",
                         relation_name="prod.orders",
-                        materialized="table",
+                        materialized=materialized,
+                        incremental_strategy=incremental_strategy,
                     ),
                 )
             )
@@ -599,10 +665,23 @@ def test_given_current_reuse_fingerprint_metadata_when_planning_then_validates_r
                     reason=test_case.dbt_plan_reason,
                     previous_metadata_json=json.dumps(
                         {
-                            "materialization_mode": "reuse_clone",
-                            "reuse_mode": "complete",
-                            "origin_relation": origin_relation_name,
-                            "destination_relation": "dev.orders",
+                            DBT_REUSE_METADATA_EXECUTION_MODE_KEY: DbtReuseExecutionMode.REUSE,
+                            DBT_REUSE_METADATA_REUSE_MODE_KEY: (
+                                DbtReuseMode.COMPLETE
+                                if test_case.candidate_materialization == "table"
+                                else DbtReuseMode.SEEDED
+                            ),
+                            DBT_REUSE_METADATA_ORIGIN_RELATION_KEY: origin_relation_name,
+                            DBT_REUSE_METADATA_DESTINATION_RELATION_KEY: "dev.orders",
+                            **(
+                                {
+                                    DBT_REUSE_METADATA_CURSOR_COLUMN_KEY: (
+                                        test_case.previous_cursor_column
+                                    )
+                                }
+                                if test_case.previous_cursor_column is not None
+                                else {}
+                            ),
                         }
                     ),
                 ),

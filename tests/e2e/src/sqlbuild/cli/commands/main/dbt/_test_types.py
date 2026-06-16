@@ -100,6 +100,16 @@ class DbtReuseFromE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtSeededReuseFromE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_destination_rows: tuple[tuple[object, ...], ...]
+    expected_downstream_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rerun_absent_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtTestCliTestCase:
     description: str
     command: tuple[str, ...]

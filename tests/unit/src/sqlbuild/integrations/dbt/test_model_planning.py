@@ -30,6 +30,8 @@ from sqlbuild.integrations.dbt.models import (
     DbtModelPlanEntry,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
+    DbtReusePlanEntry,
+    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_execution_outcome,
@@ -41,6 +43,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtExecutionArgvPruningTestCase,
@@ -281,6 +285,84 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
         command=DbtInteropCommand.BUILD,
         options=DbtCliOptions(),
         routed_args=("--select", "tag:daily", "--exclude", "tag:slow", "--full-refresh"),
+        plan=plan,
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
+            description="prunes complete reuse but keeps seeded reuse runnable",
+            expected_argv=(
+                "dbt",
+                "build",
+                "--select",
+                "seeded_incremental",
+            ),
+        )
+    ],
+    ids=["prunes complete reuse but keeps seeded reuse runnable"],
+)
+def test_given_complete_and_seeded_reuse_when_building_execution_argv_then_keeps_seeded_model(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(
+            DbtLsNode(unique_id="model.analytics.reused_table", resource_type="model"),
+            DbtLsNode(unique_id="model.analytics.seeded_incremental", resource_type="model"),
+        ),
+        dbt_selected_unique_ids=(
+            "model.analytics.reused_table",
+            "model.analytics.seeded_incremental",
+        ),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.reused_table",
+                    package_name="analytics",
+                    name="reused_table",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.RELATION_MISSING,
+                    relation_name="main.reused_table",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.seeded_incremental",
+                    package_name="analytics",
+                    name="seeded_incremental",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.RELATION_MISSING,
+                    relation_name="main.seeded_incremental",
+                ),
+            )
+        ),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.reused_table",
+                    action=DbtReusePlanAction.COMPLETE_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                ),
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.seeded_incremental",
+                    action=DbtReusePlanAction.SEEDED_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    cursor_column="event_time",
+                ),
+            )
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=DbtCliOptions(),
+        routed_args=("--select", "tag:daily"),
         plan=plan,
     )
 
