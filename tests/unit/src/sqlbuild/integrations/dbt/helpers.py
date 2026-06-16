@@ -238,6 +238,31 @@ def build_reuse_execute_plan() -> DbtInteropPlan:
     )
 
 
+def build_seeded_reuse_execute_plan(*, cursor_column: str | None) -> DbtInteropPlan:
+    """Build a dbt interop plan with one seeded reuse entry."""
+
+    return build_dbt_interop_plan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(("sqb", "build", "--select", "downstream_events"),),
+        selection=DbtInteropSelectionResult(sqlbuild_model_names=("downstream_events",)),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.fact_orders",
+                    action=DbtReusePlanAction.SEEDED_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    materialization="incremental",
+                    destination_relation_name="main.fact_orders",
+                    origin_relation_name="prod.fact_orders",
+                    cursor_column=cursor_column,
+                ),
+            )
+        ),
+    )
+
+
 class RecordingDbtInvoker:
     """Record dbt invocations and return a fixed result."""
 
@@ -418,6 +443,7 @@ def build_manifest_model_node(
     depends_on_nodes: tuple[str, ...] = (),
     materialized: str | None = "view",
     incremental_strategy: str | None = None,
+    meta: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
 
@@ -446,6 +472,8 @@ def build_manifest_model_node(
         config: dict[str, object] = {"materialized": materialized}
         if incremental_strategy is not None:
             config["incremental_strategy"] = incremental_strategy
+        if meta is not None:
+            config["meta"] = meta
         node["config"] = config
     return node
 

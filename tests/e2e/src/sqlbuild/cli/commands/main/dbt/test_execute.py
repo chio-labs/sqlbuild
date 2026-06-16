@@ -15,11 +15,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtExistingRelationGuardE2ETestCase,
     DbtMissingRelationGuardE2ETestCase,
     DbtReuseFromE2ETestCase,
+    DbtSeededReuseFromE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
     prepare_dbt_interop_project,
     prepare_dbt_reuse_from_project,
+    prepare_dbt_seeded_reuse_from_project,
     skip_unless_dbt_is_runnable,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -516,7 +518,7 @@ def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_
             expected_metadata_json=(
                 '{"dbt_target_name":"dev",'
                 '"destination_relation":"\\"dbt_reuse_from\\".\\"main\\".\\"fact_orders\\"",'
-                '"materialization":"table","materialization_mode":"reuse_clone",'
+                '"execution_mode":"reuse","materialization":"table",'
                 '"origin_relation":"\\"dbt_reuse_from\\".\\"prod\\".\\"fact_orders\\"",'
                 '"reuse_mode":"complete",'
                 '"status":"success"}'
@@ -608,6 +610,69 @@ def test_given_plain_sqlbuild_selection_with_reuse_from_when_dbt_ref_missing_the
         db_path=db_path,
         sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
     ) == list(test_case.expected_rerun_destination_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSeededReuseFromE2ETestCase(
+            description="seeded reuse pre-seeds incremental relation before dbt catch-up",
+            command=("dbt", "build", "--select", "downstream_orders"),
+            expected_destination_rows=((1, 900), (2, 901)),
+            expected_downstream_rows=((1, 900), (2, 901)),
+            expected_stdout_fragments=(
+                "Seeded dbt relation: model.analytics.fact_orders",
+                "dbt execution",
+                "SQLBuild execution",
+            ),
+            expected_rerun_absent_stdout_fragments=(
+                "Seeded dbt relation: model.analytics.fact_orders",
+            ),
+        )
+    ],
+    ids=["seeded reuse pre-seeds incremental relation before dbt catch-up"],
+)
+def test_given_seeded_reuse_from_when_incremental_model_runs_then_dbt_catches_up(
+    tmp_path: Path,
+    test_case: DbtSeededReuseFromE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_seeded_reuse_from_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_seeded_reuse_from.duckdb"
+    assert table_exists(db_path=db_path, table_name="fact_orders", schema="prod")
+    assert not table_exists(db_path=db_path, table_name="fact_orders", schema="main")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_destination_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id",
+    ) == list(test_case.expected_downstream_rows)
+
+    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
+        assert absent_stdout_fragment not in rerun_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_destination_rows)
 
 
 @pytest.mark.parametrize(

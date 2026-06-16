@@ -4,18 +4,33 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.executor.run.main.promote import promote_run_relation_to_destination
+from sqlbuild.integrations.dbt.constants import (
+    DBT_REUSE_METADATA_DBT_TARGET_NAME_KEY,
+    DBT_REUSE_METADATA_DESTINATION_RELATION_KEY,
+    DBT_REUSE_METADATA_EXECUTION_MODE_KEY,
+    DBT_REUSE_METADATA_MATERIALIZATION_KEY,
+    DBT_REUSE_METADATA_ORIGIN_RELATION_KEY,
+    DBT_REUSE_METADATA_REUSE_MODE_KEY,
+    DBT_REUSE_METADATA_STATUS_KEY,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtReusePlanEntry
-from sqlbuild.integrations.dbt.types import DbtReusePlanAction
+from sqlbuild.integrations.dbt.types import (
+    DbtReuseExecutionMode,
+    DbtReuseMetadataStatus,
+    DbtReuseMode,
+    DbtReusePlanAction,
+)
 
 
 def execute_dbt_complete_reuse_plan(
@@ -57,6 +72,112 @@ def execute_dbt_complete_reuse_plan(
         )
         reused_unique_ids.append(entry.unique_id)
     return tuple(reused_unique_ids)
+
+
+def execute_dbt_seeded_reuse_plan(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    manifest: DbtManifestIndex,
+    plan: DbtInteropPlan,
+) -> tuple[str, ...]:
+    """Pre-seed incremental dbt reuse entries and return seeded dbt unique IDs."""
+
+    if plan.dbt_reuse_plan is None:
+        return ()
+    seeded_unique_ids: list[str] = []
+    entry: DbtReusePlanEntry
+    for entry in plan.dbt_reuse_plan.entries:
+        if entry.action != DbtReusePlanAction.SEEDED_REUSE:
+            continue
+        if entry.destination_relation_name is None or entry.origin_relation_name is None:
+            continue
+        model: DbtManifestModel | None = manifest.models_by_unique_id.get(entry.unique_id)
+        if model is None:
+            continue
+        if _execute_seeded_reuse_entry(
+            adapter=adapter,
+            connection=connection,
+            entry=entry,
+            model=model,
+        ):
+            seeded_unique_ids.append(entry.unique_id)
+    return tuple(seeded_unique_ids)
+
+
+def _execute_seeded_reuse_entry(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: DbtReusePlanEntry,
+    model: DbtManifestModel,
+) -> bool:
+    if entry.origin_relation_name is None or entry.destination_relation_name is None:
+        return False
+    origin_relation: str = entry.origin_relation_name
+    destination_relation: str = entry.destination_relation_name or model.relation_name
+    destination_database, destination_schema, destination_name = _relation_parts(
+        relation_name=destination_relation
+    )
+    recorder: StatementRecorder = StatementRecorder()
+    adapter.ensure_schema(
+        connection,
+        database=destination_database,
+        schema=destination_schema,
+        statement_recorder=recorder,
+    )
+    destination_exists: bool = adapter.relation_exists(
+        connection,
+        database=destination_database,
+        schema=destination_schema,
+        name=destination_name,
+    )
+    if not destination_exists:
+        adapter.create_table_as(
+            connection,
+            destination=destination_relation,
+            sql=f"SELECT * FROM {origin_relation}",
+            statement_recorder=recorder,
+        )
+        return True
+    if entry.cursor_column is None:
+        return False
+    origin_max_cursor: object | None = adapter.get_relation_max_cursor(
+        connection,
+        relation=origin_relation,
+        cursor_column=entry.cursor_column,
+    )
+    if origin_max_cursor is None:
+        return False
+    destination_max_cursor: object | None = adapter.get_relation_max_cursor(
+        connection,
+        relation=destination_relation,
+        cursor_column=entry.cursor_column,
+    )
+    if destination_max_cursor is None:
+        adapter.append(
+            connection,
+            destination=destination_relation,
+            sql=f"SELECT * FROM {origin_relation}",
+            statement_recorder=recorder,
+        )
+        return True
+    if not _cursor_value_is_less_than(destination_max_cursor, origin_max_cursor):
+        return False
+    cursor_type: str | None = _cursor_type_for_value(destination_max_cursor)
+    seed_sql: str = adapter.render_seed_select_after_cursor(
+        origin=origin_relation,
+        cursor_column=entry.cursor_column,
+        cursor_start_exclusive=_cursor_literal_value(destination_max_cursor),
+        cursor_type=cursor_type,
+    )
+    adapter.append(
+        connection,
+        destination=destination_relation,
+        sql=seed_sql,
+        statement_recorder=recorder,
+    )
+    return True
 
 
 def _execute_complete_reuse_entry(
@@ -155,13 +276,13 @@ def _write_reuse_fingerprint(
         definition=model.query_sql,
         metadata_json=json.dumps(
             {
-                "materialization_mode": "reuse_clone",
-                "reuse_mode": "complete",
-                "origin_relation": entry.origin_relation_name,
-                "destination_relation": entry.destination_relation_name,
-                "materialization": entry.materialization,
-                "dbt_target_name": target_name,
-                "status": "success",
+                DBT_REUSE_METADATA_EXECUTION_MODE_KEY: DbtReuseExecutionMode.REUSE,
+                DBT_REUSE_METADATA_REUSE_MODE_KEY: DbtReuseMode.COMPLETE,
+                DBT_REUSE_METADATA_ORIGIN_RELATION_KEY: entry.origin_relation_name,
+                DBT_REUSE_METADATA_DESTINATION_RELATION_KEY: entry.destination_relation_name,
+                DBT_REUSE_METADATA_MATERIALIZATION_KEY: entry.materialization,
+                DBT_REUSE_METADATA_DBT_TARGET_NAME_KEY: target_name,
+                DBT_REUSE_METADATA_STATUS_KEY: DbtReuseMetadataStatus.SUCCESS,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -188,6 +309,38 @@ def _relation_parts(*, relation_name: str) -> tuple[str | None, str | None, str]
     if len(parts) == 2:
         return None, parts[0], parts[1]
     return None, None, parts[0]
+
+
+def _cursor_value_is_less_than(left: object, right: object) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
+        return False
+    if isinstance(left, int) and isinstance(right, int):
+        return left < right
+    if isinstance(left, datetime) and isinstance(right, datetime):
+        return left < right
+    if isinstance(left, date) and isinstance(right, date):
+        return left < right
+    if isinstance(left, str) and isinstance(right, str):
+        return left < right
+    return False
+
+
+def _cursor_type_for_value(value: object) -> str | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return CursorKind.INTEGER.value
+    if isinstance(value, date | datetime):
+        return CursorKind.TIMESTAMP.value
+    return None
+
+
+def _cursor_literal_value(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ")
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
 
 
 def _staging_relation_name(*, database: str | None, schema: str | None, name: str) -> str:

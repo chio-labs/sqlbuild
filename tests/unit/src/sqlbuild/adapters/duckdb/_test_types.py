@@ -41,6 +41,13 @@ class DuckDbMetadataSqlTestCase:
 
 
 @dataclass(frozen=True)
+class DuckDbRelationMaxCursorTestCase:
+    description: str
+    expected_populated_value: object
+    expected_empty_value: object | None
+
+
+@dataclass(frozen=True)
 class DuckDbPruneSqlTestCase:
     description: str
     database: str | None

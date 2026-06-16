@@ -72,6 +72,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
+    execute_dbt_seeded_reuse_plan,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
@@ -235,7 +236,7 @@ def execute_dbt_interop_from_project(
         discovered_inputs=discovered_inputs,
     )
     dbt_fingerprint_warnings: list[str] = []
-    if _has_complete_dbt_reuse_work(plan):
+    if _has_physical_dbt_reuse_work(plan):
         reuse_connection: object = adapter.connect(connection_config)
         try:
             reused_dbt_unique_ids: tuple[str, ...] = execute_dbt_complete_reuse_plan(
@@ -249,9 +250,17 @@ def execute_dbt_interop_from_project(
                 target_name=project.effective_target_name,
                 warnings=dbt_fingerprint_warnings,
             )
+            seeded_dbt_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+                adapter=adapter,
+                connection=reuse_connection,
+                manifest=manifest,
+                plan=plan,
+            )
             for reused_dbt_unique_id in reused_dbt_unique_ids:
                 output_stream.write(f"Reused dbt relation: {reused_dbt_unique_id}\n")
-            if reused_dbt_unique_ids:
+            for seeded_dbt_unique_id in seeded_dbt_unique_ids:
+                output_stream.write(f"Seeded dbt relation: {seeded_dbt_unique_id}\n")
+            if reused_dbt_unique_ids or seeded_dbt_unique_ids:
                 output_stream.flush()
         finally:
             adapter.close(reuse_connection)
@@ -519,9 +528,10 @@ def _report_progress(on_progress: Callable[[str], None] | None, message: str) ->
         on_progress(message)
 
 
-def _has_complete_dbt_reuse_work(plan: DbtInteropPlan) -> bool:
+def _has_physical_dbt_reuse_work(plan: DbtInteropPlan) -> bool:
     if plan.dbt_reuse_plan is None:
         return False
     return any(
-        entry.action == DbtReusePlanAction.COMPLETE_REUSE for entry in plan.dbt_reuse_plan.entries
+        entry.action in {DbtReusePlanAction.COMPLETE_REUSE, DbtReusePlanAction.SEEDED_REUSE}
+        for entry in plan.dbt_reuse_plan.entries
     )

@@ -363,6 +363,22 @@ class SqlServerAdapter(BaseAdapter):
         )
         return tuple(str(row[2]) for row in cursor.fetchall() if row[2] is not None)
 
+    def get_relation_max_cursor(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str,
+    ) -> object | None:
+        """Return the maximum cursor value currently present in a relation."""
+
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        row: Any | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
+
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         if limit is not None:
             column_names: tuple[str, ...] = self.query_column_names(connection, sql)
@@ -1697,6 +1713,21 @@ class SqlServerAdapter(BaseAdapter):
             origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_after_cursor(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_after_cursor_impl(
+            origin=origin,
+            cursor_column=cursor_column,
+            cursor_start_exclusive=cursor_start_exclusive,
             cursor_type=cursor_type,
         )
 

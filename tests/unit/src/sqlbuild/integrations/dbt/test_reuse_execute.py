@@ -11,11 +11,38 @@ from duckdb import CatalogException
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
+    execute_dbt_seeded_reuse_plan,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtReuseExecuteTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_reuse_execute_manifest,
     build_reuse_execute_plan,
+    build_seeded_reuse_execute_plan,
+)
+
+SEEDED_REUSE_SKIP_TEST_CASES: tuple[DbtReuseExecuteTestCase, ...] = (
+    DbtReuseExecuteTestCase(
+        description="quietly skips when active destination cursor is ahead of origin",
+        create_origin_relation=True,
+        existing_destination_amount=902,
+        expected_reused_unique_ids=(),
+        expected_destination_rows=((3, 902),),
+        expected_fingerprint_rows=(),
+        cursor_column="event_time",
+        destination_event_time="2026-01-03",
+        destination_order_id=3,
+    ),
+    DbtReuseExecuteTestCase(
+        description="quietly skips existing destination when cursor metadata is missing",
+        create_origin_relation=True,
+        existing_destination_amount=900,
+        expected_reused_unique_ids=(),
+        expected_destination_rows=((1, 900),),
+        expected_fingerprint_rows=(),
+        cursor_column=None,
+        destination_event_time="2026-01-01",
+        destination_order_id=1,
+    ),
 )
 
 
@@ -34,8 +61,8 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_metadata={
                 "dbt_target_name": "dev",
                 "destination_relation": "main.fact_orders",
+                "execution_mode": "reuse",
                 "materialization": "table",
-                "materialization_mode": "reuse_clone",
                 "origin_relation": "prod.fact_orders",
                 "reuse_mode": "complete",
                 "status": "success",
@@ -145,5 +172,302 @@ def test_given_complete_reuse_copy_failure_when_executing_then_preserves_existin
             name="_sqlbuild_fingerprints",
         )
         assert warnings == []
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseExecuteTestCase(
+            description="seeds missing destination from origin relation",
+            create_origin_relation=True,
+            existing_destination_amount=None,
+            expected_reused_unique_ids=("model.analytics.fact_orders",),
+            expected_destination_rows=((1, 900), (2, 901)),
+            expected_fingerprint_rows=(),
+        )
+    ],
+    ids=["seeds missing destination from origin relation"],
+)
+def test_given_seeded_reuse_missing_destination_when_executing_then_copies_origin_relation(
+    tmp_path: Path,
+    test_case: DbtReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "seeded_reuse_execute.duckdb")})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS prod")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time "
+            "UNION ALL "
+            "SELECT 2 AS order_id, 901 AS amount, TIMESTAMP '2026-01-02' AS event_time",
+        )
+
+        seeded_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_reuse_execute_manifest(),
+            plan=build_seeded_reuse_execute_plan(cursor_column="event_time"),
+        )
+
+        assert seeded_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
+        assert not adapter.relation_exists(
+            connection,
+            database=None,
+            schema="main",
+            name="_sqlbuild_fingerprints",
+        )
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseExecuteTestCase(
+            description="appends origin rows after active destination cursor",
+            create_origin_relation=True,
+            existing_destination_amount=900,
+            expected_reused_unique_ids=("model.analytics.fact_orders",),
+            expected_destination_rows=((1, 900), (2, 901)),
+            expected_fingerprint_rows=(),
+        )
+    ],
+    ids=["appends origin rows after active destination cursor"],
+)
+def test_given_seeded_reuse_destination_behind_when_executing_then_appends_origin_delta(
+    tmp_path: Path,
+    test_case: DbtReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "seeded_reuse_execute.duckdb")})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS prod")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time "
+            "UNION ALL "
+            "SELECT 2 AS order_id, 901 AS amount, TIMESTAMP '2026-01-02' AS event_time",
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE main.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time",
+        )
+
+        seeded_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_reuse_execute_manifest(),
+            plan=build_seeded_reuse_execute_plan(cursor_column="event_time"),
+        )
+
+        assert seeded_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseExecuteTestCase(
+            description="appends full origin relation when destination cursor is null",
+            create_origin_relation=True,
+            existing_destination_amount=None,
+            expected_reused_unique_ids=("model.analytics.fact_orders",),
+            expected_destination_rows=((1, 900), (2, 901), (99, 0)),
+            expected_fingerprint_rows=(),
+        )
+    ],
+    ids=["appends full origin relation when destination cursor is null"],
+)
+def test_given_seeded_reuse_empty_destination_when_executing_then_appends_full_origin(
+    tmp_path: Path,
+    test_case: DbtReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "seeded_reuse_execute.duckdb")})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS prod")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time "
+            "UNION ALL "
+            "SELECT 2 AS order_id, 901 AS amount, TIMESTAMP '2026-01-02' AS event_time",
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE main.fact_orders AS "
+            "SELECT 99 AS order_id, 0 AS amount, CAST(NULL AS TIMESTAMP) AS event_time",
+        )
+
+        seeded_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_reuse_execute_manifest(),
+            plan=build_seeded_reuse_execute_plan(cursor_column="event_time"),
+        )
+
+        assert seeded_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseExecuteTestCase(
+            description="quietly skips when origin cursor is null",
+            create_origin_relation=True,
+            existing_destination_amount=900,
+            expected_reused_unique_ids=(),
+            expected_destination_rows=((1, 900),),
+            expected_fingerprint_rows=(),
+        )
+    ],
+    ids=["quietly skips when origin cursor is null"],
+)
+def test_given_seeded_reuse_origin_cursor_missing_when_executing_then_preserves_destination(
+    tmp_path: Path,
+    test_case: DbtReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "seeded_reuse_execute.duckdb")})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS prod")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.fact_orders AS "
+            "SELECT 2 AS order_id, 901 AS amount, CAST(NULL AS TIMESTAMP) AS event_time",
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE main.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time",
+        )
+
+        seeded_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_reuse_execute_manifest(),
+            plan=build_seeded_reuse_execute_plan(cursor_column="event_time"),
+        )
+
+        assert seeded_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseExecuteTestCase(
+            description="appends integer cursor delta",
+            create_origin_relation=True,
+            existing_destination_amount=900,
+            expected_reused_unique_ids=("model.analytics.fact_orders",),
+            expected_destination_rows=((1, 900), (2, 901)),
+            expected_fingerprint_rows=(),
+        )
+    ],
+    ids=["appends integer cursor delta"],
+)
+def test_given_seeded_reuse_integer_cursor_when_executing_then_appends_origin_delta(
+    tmp_path: Path,
+    test_case: DbtReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "seeded_reuse_execute.duckdb")})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS prod")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, 10 AS event_index "
+            "UNION ALL SELECT 2 AS order_id, 901 AS amount, 11 AS event_index",
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE main.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, 10 AS event_index",
+        )
+
+        seeded_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_reuse_execute_manifest(),
+            plan=build_seeded_reuse_execute_plan(cursor_column="event_index"),
+        )
+
+        assert seeded_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SEEDED_REUSE_SKIP_TEST_CASES,
+    ids=[case.description for case in SEEDED_REUSE_SKIP_TEST_CASES],
+)
+def test_given_seeded_reuse_skip_condition_when_executing_then_preserves_destination(
+    tmp_path: Path,
+    test_case: DbtReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "seeded_reuse_execute.duckdb")})
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS prod")
+        adapter.execute(
+            connection,
+            "CREATE TABLE prod.fact_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time "
+            "UNION ALL "
+            "SELECT 2 AS order_id, 901 AS amount, TIMESTAMP '2026-01-02' AS event_time",
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE main.fact_orders AS "
+            f"SELECT {test_case.destination_order_id} AS order_id, "
+            f"{test_case.existing_destination_amount} AS amount, "
+            f"TIMESTAMP '{test_case.destination_event_time}' AS event_time",
+        )
+
+        seeded_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_reuse_execute_manifest(),
+            plan=build_seeded_reuse_execute_plan(cursor_column=test_case.cursor_column),
+        )
+
+        assert seeded_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
     finally:
         adapter.close(connection)

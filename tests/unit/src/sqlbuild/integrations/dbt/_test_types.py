@@ -200,6 +200,7 @@ class DbtReuseCandidateResolutionTestCase:
     expected_candidate_materializations: tuple[str, ...]
     expected_origin_relation_names: tuple[str, ...]
     expected_skipped: tuple[tuple[str, DbtReuseCandidateSkipReason], ...]
+    expected_cursor_columns: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -219,6 +220,8 @@ class DbtReusePlanningTestCase:
     dbt_plan_reason: DbtModelPlanReason
     expected_action: DbtReusePlanAction
     expected_reason: DbtReusePlanReason
+    cursor_column: str | None = None
+    previous_cursor_column: str | None = None
 
 
 @dataclass(frozen=True)
@@ -241,6 +244,9 @@ class DbtReuseExecuteTestCase:
     expected_fingerprint_rows: tuple[tuple[object, ...], ...]
     expected_metadata: dict[str, object] | None = None
     expected_error: bool = False
+    cursor_column: str | None = None
+    destination_event_time: str | None = None
+    destination_order_id: int | None = None
 
 
 @dataclass(frozen=True)

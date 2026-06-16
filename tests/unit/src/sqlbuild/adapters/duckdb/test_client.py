@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbExpressionInferenceProfileTestCase,
     DuckDbMetadataSqlTestCase,
     DuckDbPruneSqlTestCase,
+    DuckDbRelationMaxCursorTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
     DuckDbRenderIdentifierTestCase,
     DuckDbRenderTableFunctionTestCase,
@@ -103,6 +104,44 @@ def test_given_cursor_bounds_when_rendering_then_duckdb_returns_expected_literal
     result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
 
     assert result == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbRelationMaxCursorTestCase(
+            description="returns max cursor from populated relation and none from empty relation",
+            expected_populated_value=7,
+            expected_empty_value=None,
+        )
+    ],
+    ids=["returns max cursor from populated relation and none from empty relation"],
+)
+def test_given_duckdb_relation_when_getting_max_cursor_then_returns_relation_max(
+    test_case: DuckDbRelationMaxCursorTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: object = adapter.connect({"database": ":memory:"})
+    try:
+        adapter.execute(connection, 'CREATE TABLE events ("event""time" INTEGER)')
+        adapter.execute(connection, "INSERT INTO events VALUES (1), (7), (3)")
+        adapter.execute(connection, 'CREATE TABLE empty_events ("event""time" INTEGER)')
+
+        populated_value: object | None = adapter.get_relation_max_cursor(
+            connection,
+            relation="events",
+            cursor_column='event"time',
+        )
+        empty_value: object | None = adapter.get_relation_max_cursor(
+            connection,
+            relation="empty_events",
+            cursor_column='event"time',
+        )
+    finally:
+        adapter.close(connection)
+
+    assert populated_value == test_case.expected_populated_value
+    assert empty_value == test_case.expected_empty_value
 
 
 @pytest.mark.parametrize(
