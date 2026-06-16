@@ -120,7 +120,7 @@ class PythonHookInvocationTestCase:
     expected_hook_name: str
     expected_hook_index: int
     expected_run_id: str
-    expected_environment: str
+    expected_target: str
     expected_vars: dict[str, object]
     expected_destination_name: str
     expected_destination_schema: str
