@@ -198,7 +198,7 @@ class DbtReuseCandidateResolutionTestCase:
     reuse_nodes: tuple[dict[str, object], ...]
     expected_candidate_unique_ids: tuple[str, ...]
     expected_candidate_materializations: tuple[str, ...]
-    expected_reuse_relation_names: tuple[str, ...]
+    expected_origin_relation_names: tuple[str, ...]
     expected_skipped: tuple[tuple[str, DbtReuseCandidateSkipReason], ...]
 
 
@@ -234,11 +234,12 @@ class DbtReusePlanOutputTestCase:
 @dataclass(frozen=True)
 class DbtReuseExecuteTestCase:
     description: str
-    create_reuse_relation: bool
-    existing_target_amount: int | None
+    create_origin_relation: bool
+    existing_destination_amount: int | None
     expected_reused_unique_ids: tuple[str, ...]
-    expected_target_rows: tuple[tuple[object, ...], ...]
+    expected_destination_rows: tuple[tuple[object, ...], ...]
     expected_fingerprint_rows: tuple[tuple[object, ...], ...]
+    expected_metadata: dict[str, object] | None = None
     expected_error: bool = False
 
 

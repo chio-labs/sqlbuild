@@ -342,5 +342,6 @@ def _entry(
         fingerprint_query_sql=model.query_sql,
         previous_query_sql=fingerprint.definition if fingerprint is not None else None,
         previous_version_hash=fingerprint.version_hash if fingerprint is not None else None,
+        previous_metadata_json=fingerprint.metadata_json if fingerprint is not None else None,
         expected_version_hash=expected_version_hash,
     )

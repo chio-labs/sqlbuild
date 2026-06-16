@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import cast
 
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
@@ -81,8 +82,8 @@ def resolve_dbt_reuse_candidates(
             DbtReuseCandidate(
                 unique_id=unique_id,
                 materialization=materialization or "",
-                current_relation_name=current_model.relation_name,
-                reuse_relation_name=reuse_model.relation_name,
+                destination_relation_name=current_model.relation_name,
+                origin_relation_name=reuse_model.relation_name,
                 package_name=current_model.package_name,
                 name=current_model.name,
                 fqn=current_model.fqn,
@@ -159,8 +160,8 @@ def _plan_reuse_candidate(
             action=DbtReusePlanAction.BLOCKED,
             reason=DbtReusePlanReason.MANIFEST_NODE_MISSING,
             materialization=candidate.materialization,
-            current_relation_name=candidate.current_relation_name,
-            reuse_relation_name=candidate.reuse_relation_name,
+            destination_relation_name=candidate.destination_relation_name,
+            origin_relation_name=candidate.origin_relation_name,
         )
     if dbt_plan_entry.action == DbtModelPlanAction.BLOCKED:
         return _candidate_entry(
@@ -170,11 +171,22 @@ def _plan_reuse_candidate(
             reason=DbtReusePlanReason.SOURCE_FRESHNESS_BLOCK,
         )
     if dbt_plan_entry.action == DbtModelPlanAction.CURRENT:
+        if _reuse_resume_metadata_invalid(candidate=candidate, dbt_plan_entry=dbt_plan_entry):
+            return _candidate_entry(
+                candidate=candidate,
+                dbt_plan_entry=dbt_plan_entry,
+                action=(
+                    DbtReusePlanAction.COMPLETE_REUSE
+                    if candidate.materialization == "table"
+                    else DbtReusePlanAction.SEEDED_REUSE
+                ),
+                reason=DbtReusePlanReason.REUSE_METADATA_INVALID,
+            )
         return _candidate_entry(
             candidate=candidate,
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.CURRENT,
-            reason=DbtReusePlanReason.TARGET_CURRENT,
+            reason=DbtReusePlanReason.DESTINATION_CURRENT,
         )
     if dbt_plan_entry.reason == DbtModelPlanReason.FULL_REFRESH:
         return _candidate_entry(
@@ -208,10 +220,33 @@ def _candidate_entry(
         action=action,
         reason=reason,
         materialization=candidate.materialization,
-        current_relation_name=candidate.current_relation_name,
-        reuse_relation_name=candidate.reuse_relation_name,
+        destination_relation_name=candidate.destination_relation_name,
+        origin_relation_name=candidate.origin_relation_name,
         dbt_plan_action=dbt_plan_entry.action,
         dbt_plan_reason=dbt_plan_entry.reason,
+    )
+
+
+def _reuse_resume_metadata_invalid(
+    *, candidate: DbtReuseCandidate, dbt_plan_entry: DbtModelPlanEntry
+) -> bool:
+    metadata_json: str | None = dbt_plan_entry.previous_metadata_json
+    if metadata_json is None:
+        return False
+    try:
+        payload: object = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    metadata: dict[str, object] = cast(dict[str, object], payload)
+    if metadata.get("materialization_mode") != "reuse_clone":
+        return False
+    expected_reuse_mode: str = "complete" if candidate.materialization == "table" else "seeded"
+    return (
+        metadata.get("reuse_mode") != expected_reuse_mode
+        or metadata.get("origin_relation") != candidate.origin_relation_name
+        or metadata.get("destination_relation") != candidate.destination_relation_name
     )
 
 
@@ -229,7 +264,7 @@ def _reason_from_dbt_plan_reason(*, reason: DbtModelPlanReason) -> DbtReusePlanR
     if reason == DbtModelPlanReason.FIRST_RUN:
         return DbtReusePlanReason.FINGERPRINT_MISSING
     if reason == DbtModelPlanReason.RELATION_MISSING:
-        return DbtReusePlanReason.TARGET_MISSING
+        return DbtReusePlanReason.DESTINATION_MISSING
     if reason in {DbtModelPlanReason.CHECKSUM_CHANGED, DbtModelPlanReason.UPSTREAM_CHANGED}:
         return DbtReusePlanReason.FINGERPRINT_CHANGED
     return DbtReusePlanReason.FINGERPRINT_CHANGED

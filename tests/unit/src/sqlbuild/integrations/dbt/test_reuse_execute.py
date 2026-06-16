@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 from typing import Any
 
@@ -22,13 +24,22 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     [
         DbtReuseExecuteTestCase(
             description="copies prod table into dev and writes dbt fingerprint",
-            create_reuse_relation=True,
-            existing_target_amount=None,
+            create_origin_relation=True,
+            existing_destination_amount=None,
             expected_reused_unique_ids=("model.analytics.fact_orders",),
-            expected_target_rows=((1, 900),),
+            expected_destination_rows=((1, 900),),
             expected_fingerprint_rows=(
                 ("dbt", "model.analytics.fact_orders", "main", "fact_orders"),
             ),
+            expected_metadata={
+                "dbt_target_name": "dev",
+                "destination_relation": "main.fact_orders",
+                "materialization": "table",
+                "materialization_mode": "reuse_clone",
+                "origin_relation": "prod.fact_orders",
+                "reuse_mode": "complete",
+                "status": "success",
+            },
         )
     ],
     ids=["copies prod table into dev and writes dbt fingerprint"],
@@ -63,12 +74,18 @@ def test_given_complete_reuse_plan_when_executing_then_copies_table_and_writes_f
         assert adapter.execute(
             connection,
             "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
-        ).fetchall() == list(test_case.expected_target_rows)
+        ).fetchall() == list(test_case.expected_destination_rows)
         assert adapter.execute(
             connection,
             "SELECT node_type, node_name, target_schema, target_name "
             "FROM main._sqlbuild_fingerprints ORDER BY node_name",
         ).fetchall() == list(test_case.expected_fingerprint_rows)
+        metadata_row: tuple[str] = adapter.execute(
+            connection,
+            "SELECT metadata_json_b64 FROM main._sqlbuild_fingerprints ORDER BY node_name",
+        ).fetchone()
+        decoded_metadata: object = json.loads(base64.b64decode(metadata_row[0]).decode("utf-8"))
+        assert decoded_metadata == test_case.expected_metadata
         assert warnings == []
     finally:
         adapter.close(connection)
@@ -79,17 +96,17 @@ def test_given_complete_reuse_plan_when_executing_then_copies_table_and_writes_f
     [
         DbtReuseExecuteTestCase(
             description="preserves existing dev table when staging copy fails",
-            create_reuse_relation=False,
-            existing_target_amount=5,
+            create_origin_relation=False,
+            existing_destination_amount=5,
             expected_reused_unique_ids=(),
-            expected_target_rows=((1, 5),),
+            expected_destination_rows=((1, 5),),
             expected_fingerprint_rows=(),
             expected_error=True,
         )
     ],
     ids=["preserves existing dev table when staging copy fails"],
 )
-def test_given_complete_reuse_copy_failure_when_executing_then_preserves_existing_target(
+def test_given_complete_reuse_copy_failure_when_executing_then_preserves_existing_destination(
     tmp_path: Path,
     test_case: DbtReuseExecuteTestCase,
 ) -> None:
@@ -101,7 +118,7 @@ def test_given_complete_reuse_copy_failure_when_executing_then_preserves_existin
         adapter.execute(
             connection,
             "CREATE TABLE main.fact_orders AS "
-            f"SELECT 1 AS order_id, {test_case.existing_target_amount} AS amount",
+            f"SELECT 1 AS order_id, {test_case.existing_destination_amount} AS amount",
         )
 
         with pytest.raises(CatalogException):
@@ -120,7 +137,7 @@ def test_given_complete_reuse_copy_failure_when_executing_then_preserves_existin
         assert adapter.execute(
             connection,
             "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
-        ).fetchall() == list(test_case.expected_target_rows)
+        ).fetchall() == list(test_case.expected_destination_rows)
         assert not adapter.relation_exists(
             connection,
             database=None,

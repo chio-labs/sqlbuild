@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -508,13 +509,26 @@ def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_
         DbtReuseFromE2ETestCase(
             description="plain SQLBuild selection reuses missing dbt upstream from prod ref",
             command=("dbt", "build", "--select", "downstream_orders"),
-            expected_source_rows=((1, 900),),
+            expected_destination_rows=((1, 900),),
             expected_downstream_rows=((1, 900),),
+            expected_rerun_destination_rows=((1, 900),),
             expected_fingerprint_rows=(("dbt", "model.analytics.fact_orders"),),
+            expected_metadata_json=(
+                '{"dbt_target_name":"dev",'
+                '"destination_relation":"\\"dbt_reuse_from\\".\\"main\\".\\"fact_orders\\"",'
+                '"materialization":"table","materialization_mode":"reuse_clone",'
+                '"origin_relation":"\\"dbt_reuse_from\\".\\"prod\\".\\"fact_orders\\"",'
+                '"reuse_mode":"complete",'
+                '"status":"success"}'
+            ),
             expected_stdout_fragments=("Reused dbt relation: model.analytics.fact_orders",),
             expected_absent_relations=(("main", "unrelated_model"),),
             expected_absent_stdout_fragments=(
                 "depends on missing dbt relation",
+                "dbt execution",
+            ),
+            expected_rerun_absent_stdout_fragments=(
+                "Reused dbt relation: model.analytics.fact_orders",
                 "dbt execution",
             ),
         )
@@ -553,7 +567,7 @@ def test_given_plain_sqlbuild_selection_with_reuse_from_when_dbt_ref_missing_the
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
-    ) == list(test_case.expected_source_rows)
+    ) == list(test_case.expected_destination_rows)
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id",
@@ -565,6 +579,35 @@ def test_given_plain_sqlbuild_selection_with_reuse_from_when_dbt_ref_missing_the
             "WHERE node_type = 'dbt' AND node_name = 'model.analytics.fact_orders'"
         ),
     ) == list(test_case.expected_fingerprint_rows)
+    metadata_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT metadata_json_b64 "
+            "FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'dbt' AND node_name = 'model.analytics.fact_orders'"
+        ),
+    )
+    assert base64.b64decode(str(metadata_rows[0][0])).decode("utf-8") == (
+        test_case.expected_metadata_json
+    )
+
+    execute_duckdb(
+        db_path=db_path,
+        sql="UPDATE prod.fact_orders SET amount = 901 WHERE order_id = 1",
+    )
+    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    rerun_absent_stdout_fragment: str
+    for rerun_absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
+        assert rerun_absent_stdout_fragment not in rerun_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_rerun_destination_rows)
 
 
 @pytest.mark.parametrize(

@@ -39,7 +39,7 @@ def execute_dbt_complete_reuse_plan(
     for entry in plan.dbt_reuse_plan.entries:
         if entry.action != DbtReusePlanAction.COMPLETE_REUSE:
             continue
-        if entry.current_relation_name is None or entry.reuse_relation_name is None:
+        if entry.destination_relation_name is None or entry.origin_relation_name is None:
             continue
         model: DbtManifestModel | None = manifest.models_by_unique_id.get(entry.unique_id)
         if model is None:
@@ -72,7 +72,7 @@ def _execute_complete_reuse_entry(
     warnings: list[str],
 ) -> None:
     destination_database, destination_schema, destination_name = _relation_parts(
-        relation_name=entry.current_relation_name or model.relation_name
+        relation_name=entry.destination_relation_name or model.relation_name
     )
     staging_relation: str = _staging_relation_name(
         database=destination_database,
@@ -92,14 +92,14 @@ def _execute_complete_reuse_entry(
     adapter.create_table_as(
         connection,
         destination=staging_relation,
-        sql=f"SELECT * FROM {entry.reuse_relation_name}",
+        sql=f"SELECT * FROM {entry.origin_relation_name}",
         statement_recorder=recorder,
     )
     promote_run_relation_to_destination(
         adapter=adapter,
         connection=connection,
         origin_relation=staging_relation,
-        destination_relation=entry.current_relation_name or model.relation_name,
+        destination_relation=entry.destination_relation_name or model.relation_name,
         destination_database=destination_database,
         destination_schema=destination_schema,
         destination_name=destination_name,
@@ -139,15 +139,15 @@ def _write_reuse_fingerprint(
     definition_hash: str = (
         model.node_checksum or hashlib.sha256(model.query_sql.encode("utf-8")).hexdigest()
     )
-    target_database, target_schema, target_relation_name = _relation_parts(
-        relation_name=entry.current_relation_name or model.relation_name
+    target_database, target_schema, destination_relation_name = _relation_parts(
+        relation_name=entry.destination_relation_name or model.relation_name
     )
     fingerprint: Fingerprint = Fingerprint(
         node_type=NODE_TYPE_DBT,
         node_name=entry.unique_id,
         target_database=target_database,
         target_schema=target_schema,
-        target_name=target_relation_name,
+        target_name=destination_relation_name,
         run_id=run_id,
         definition_hash=definition_hash,
         version_hash=definition_hash,
@@ -157,10 +157,10 @@ def _write_reuse_fingerprint(
             {
                 "materialization_mode": "reuse_clone",
                 "reuse_mode": "complete",
-                "source_relation": entry.reuse_relation_name,
-                "target_relation": entry.current_relation_name,
+                "origin_relation": entry.origin_relation_name,
+                "destination_relation": entry.destination_relation_name,
                 "materialization": entry.materialization,
-                "target_name": target_name,
+                "dbt_target_name": target_name,
                 "status": "success",
             },
             sort_keys=True,

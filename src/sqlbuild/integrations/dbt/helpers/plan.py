@@ -571,14 +571,15 @@ def _dbt_reuse_plan_action_label(action: DbtReusePlanAction) -> str:
 
 def _dbt_reuse_plan_reason_label(reason: DbtReusePlanReason) -> str:
     labels: dict[DbtReusePlanReason, str] = {
-        DbtReusePlanReason.TARGET_CURRENT: "target current",
-        DbtReusePlanReason.TARGET_MISSING: "target missing",
+        DbtReusePlanReason.DESTINATION_CURRENT: "destination current",
+        DbtReusePlanReason.DESTINATION_MISSING: "destination missing",
         DbtReusePlanReason.FINGERPRINT_MISSING: "fingerprint missing",
         DbtReusePlanReason.FINGERPRINT_CHANGED: "fingerprint changed",
         DbtReusePlanReason.FULL_REFRESH: "full refresh",
         DbtReusePlanReason.SOURCE_FRESHNESS_BLOCK: "source freshness block",
         DbtReusePlanReason.NON_PHYSICAL_RESOURCE: "non-physical resource",
         DbtReusePlanReason.MANIFEST_NODE_MISSING: "manifest node missing",
+        DbtReusePlanReason.REUSE_METADATA_INVALID: "reuse metadata invalid",
     }
     return labels[reason]
 
@@ -772,8 +773,8 @@ def _format_dbt_reuse_plan_json(plan: DbtInteropPlan) -> dict[str, object] | Non
                 "action": entry.action.value,
                 "reason": entry.reason.value,
                 "materialization": entry.materialization,
-                "current_relation_name": entry.current_relation_name,
-                "reuse_relation_name": entry.reuse_relation_name,
+                "destination_relation_name": entry.destination_relation_name,
+                "origin_relation_name": entry.origin_relation_name,
                 "dbt_plan_action": entry.dbt_plan_action.value
                 if entry.dbt_plan_action is not None
                 else None,

@@ -88,12 +88,15 @@ class DbtExistingRelationGuardE2ETestCase:
 class DbtReuseFromE2ETestCase:
     description: str
     command: tuple[str, ...]
-    expected_source_rows: tuple[tuple[object, ...], ...]
+    expected_destination_rows: tuple[tuple[object, ...], ...]
     expected_downstream_rows: tuple[tuple[object, ...], ...]
+    expected_rerun_destination_rows: tuple[tuple[object, ...], ...]
     expected_fingerprint_rows: tuple[tuple[object, ...], ...]
+    expected_metadata_json: str
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_relations: tuple[tuple[str, str], ...]
     expected_absent_stdout_fragments: tuple[str, ...]
+    expected_rerun_absent_stdout_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

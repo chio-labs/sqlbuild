@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
@@ -73,7 +75,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
         ),
         expected_candidate_unique_ids=("model.analytics.orders",),
         expected_candidate_materializations=("table",),
-        expected_reuse_relation_names=("prod.orders",),
+        expected_origin_relation_names=("prod.orders",),
         expected_skipped=(),
     ),
     DbtReuseCandidateResolutionTestCase(
@@ -120,7 +122,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
             "model.analytics.fact_orders",
         ),
         expected_candidate_materializations=("table", "incremental"),
-        expected_reuse_relation_names=("prod.stg_orders", "prod.fact_orders"),
+        expected_origin_relation_names=("prod.stg_orders", "prod.fact_orders"),
         expected_skipped=(),
     ),
     DbtReuseCandidateResolutionTestCase(
@@ -148,7 +150,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
         ),
         expected_candidate_unique_ids=("model.analytics.events",),
         expected_candidate_materializations=("microbatch",),
-        expected_reuse_relation_names=("prod.events",),
+        expected_origin_relation_names=("prod.events",),
         expected_skipped=(),
     ),
     DbtReuseCandidateResolutionTestCase(
@@ -165,7 +167,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
         reuse_nodes=(),
         expected_candidate_unique_ids=(),
         expected_candidate_materializations=(),
-        expected_reuse_relation_names=(),
+        expected_origin_relation_names=(),
         expected_skipped=(
             ("model.analytics.orders", DbtReuseCandidateSkipReason.REUSE_MANIFEST_MISSING),
         ),
@@ -184,7 +186,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
         ),
         expected_candidate_unique_ids=(),
         expected_candidate_materializations=(),
-        expected_reuse_relation_names=(),
+        expected_origin_relation_names=(),
         expected_skipped=(
             ("model.analytics.orders", DbtReuseCandidateSkipReason.CURRENT_MANIFEST_MISSING),
         ),
@@ -238,7 +240,7 @@ REUSE_CANDIDATE_RESOLUTION_TEST_CASES: tuple[DbtReuseCandidateResolutionTestCase
         ),
         expected_candidate_unique_ids=(),
         expected_candidate_materializations=(),
-        expected_reuse_relation_names=(),
+        expected_origin_relation_names=(),
         expected_skipped=(
             ("model.analytics.orders_view", DbtReuseCandidateSkipReason.VIEW),
             ("model.analytics.temp_orders", DbtReuseCandidateSkipReason.EPHEMERAL),
@@ -295,7 +297,7 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         dbt_plan_action=DbtModelPlanAction.RUN,
         dbt_plan_reason=DbtModelPlanReason.RELATION_MISSING,
         expected_action=DbtReusePlanAction.COMPLETE_REUSE,
-        expected_reason=DbtReusePlanReason.TARGET_MISSING,
+        expected_reason=DbtReusePlanReason.DESTINATION_MISSING,
     ),
     DbtReusePlanningTestCase(
         description="plans table checksum changed as complete reuse",
@@ -319,7 +321,7 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         dbt_plan_action=DbtModelPlanAction.RUN,
         dbt_plan_reason=DbtModelPlanReason.RELATION_MISSING,
         expected_action=DbtReusePlanAction.SEEDED_REUSE,
-        expected_reason=DbtReusePlanReason.TARGET_MISSING,
+        expected_reason=DbtReusePlanReason.DESTINATION_MISSING,
     ),
     DbtReusePlanningTestCase(
         description="plans snapshot checksum changed as seeded reuse",
@@ -330,12 +332,12 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         expected_reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
     ),
     DbtReusePlanningTestCase(
-        description="plans current target as current",
+        description="plans current destination as current",
         candidate_materialization="table",
         dbt_plan_action=DbtModelPlanAction.CURRENT,
         dbt_plan_reason=DbtModelPlanReason.NO_CHANGE,
         expected_action=DbtReusePlanAction.CURRENT,
-        expected_reason=DbtReusePlanReason.TARGET_CURRENT,
+        expected_reason=DbtReusePlanReason.DESTINATION_CURRENT,
     ),
     DbtReusePlanningTestCase(
         description="plans full refresh as rebuild",
@@ -352,6 +354,25 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         dbt_plan_reason=DbtModelPlanReason.SOURCE_FRESHNESS_ERROR,
         expected_action=DbtReusePlanAction.BLOCKED,
         expected_reason=DbtReusePlanReason.SOURCE_FRESHNESS_BLOCK,
+    ),
+)
+
+REUSE_METADATA_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
+    DbtReusePlanningTestCase(
+        description="keeps current when reuse metadata still matches candidate relations",
+        candidate_materialization="table",
+        dbt_plan_action=DbtModelPlanAction.CURRENT,
+        dbt_plan_reason=DbtModelPlanReason.NO_CHANGE,
+        expected_action=DbtReusePlanAction.CURRENT,
+        expected_reason=DbtReusePlanReason.DESTINATION_CURRENT,
+    ),
+    DbtReusePlanningTestCase(
+        description="reuses again when reuse metadata origin relation changed",
+        candidate_materialization="table",
+        dbt_plan_action=DbtModelPlanAction.CURRENT,
+        dbt_plan_reason=DbtModelPlanReason.NO_CHANGE,
+        expected_action=DbtReusePlanAction.COMPLETE_REUSE,
+        expected_reason=DbtReusePlanReason.REUSE_METADATA_INVALID,
     ),
 )
 
@@ -383,8 +404,8 @@ def test_given_scoped_dbt_nodes_when_resolving_reuse_candidates_then_returns_exp
     assert tuple(candidate.materialization for candidate in result.candidates) == (
         test_case.expected_candidate_materializations
     )
-    assert tuple(candidate.reuse_relation_name for candidate in result.candidates) == (
-        test_case.expected_reuse_relation_names
+    assert tuple(candidate.origin_relation_name for candidate in result.candidates) == (
+        test_case.expected_origin_relation_names
     )
     assert tuple((skip.unique_id, skip.reason) for skip in result.skipped) == (
         test_case.expected_skipped
@@ -526,6 +547,75 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
 
 @pytest.mark.parametrize(
     "test_case",
+    REUSE_METADATA_PLANNING_TEST_CASES,
+    ids=[case.description for case in REUSE_METADATA_PLANNING_TEST_CASES],
+)
+def test_given_current_reuse_fingerprint_metadata_when_planning_then_validates_resume_state(
+    test_case: DbtReusePlanningTestCase,
+) -> None:
+    unique_id: str = "model.analytics.orders"
+    origin_relation_name: str = (
+        "other.orders"
+        if test_case.expected_reason == DbtReusePlanReason.REUSE_METADATA_INVALID
+        else "prod.orders"
+    )
+    candidate_resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
+        current_manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name="orders",
+                        relation_name="dev.orders",
+                        materialized="table",
+                    ),
+                )
+            )
+        ),
+        reuse_manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name="orders",
+                        relation_name="prod.orders",
+                        materialized="table",
+                    ),
+                )
+            )
+        ),
+        scoped_unique_ids=(unique_id,),
+    )
+
+    result: DbtReusePlanningResult = build_dbt_reuse_planning_result(
+        candidate_resolution=candidate_resolution,
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                build_dbt_model_plan_entry(
+                    unique_id=unique_id,
+                    action=test_case.dbt_plan_action,
+                    reason=test_case.dbt_plan_reason,
+                    previous_metadata_json=json.dumps(
+                        {
+                            "materialization_mode": "reuse_clone",
+                            "reuse_mode": "complete",
+                            "origin_relation": origin_relation_name,
+                            "destination_relation": "dev.orders",
+                        }
+                    ),
+                ),
+            )
+        ),
+    )
+
+    assert tuple(entry.action for entry in result.entries) == (test_case.expected_action,)
+    assert tuple(entry.reason for entry in result.entries) == (test_case.expected_reason,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         DbtReuseCandidateResolutionTestCase(
             description="plans skipped view as skipped non physical resource",
@@ -548,7 +638,7 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
             ),
             expected_candidate_unique_ids=(),
             expected_candidate_materializations=(),
-            expected_reuse_relation_names=(),
+            expected_origin_relation_names=(),
             expected_skipped=(("model.analytics.orders_view", DbtReuseCandidateSkipReason.VIEW),),
         )
     ],
