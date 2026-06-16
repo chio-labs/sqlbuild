@@ -58,11 +58,19 @@ def build_dbt_model_planning_result(
         adapter=adapter,
         connection=connection,
     )
-    blocked_source_unique_ids: frozenset[str] = _blocked_source_unique_ids(
+    source_freshness: StandardSourceFreshnessPlanningResult = _source_freshness_result(
         manifest=manifest,
         project=project,
         adapter=adapter,
         connection=connection,
+    )
+    blocked_source_unique_ids: frozenset[str] = frozenset(
+        identity.source_name
+        for identity, status in source_freshness.age_statuses.items()
+        if status == SourceFreshnessAgeStatus.ERROR
+    )
+    changed_source_unique_ids: frozenset[str] = frozenset(
+        identity.source_name for identity in source_freshness.changed_identities
     )
     entries_by_unique_id: dict[str, DbtModelPlanEntry] = {}
     unique_id: str
@@ -86,6 +94,7 @@ def build_dbt_model_planning_result(
             entries_by_unique_id=entries_by_unique_id,
             graph=graph,
             blocked_source_unique_ids=blocked_source_unique_ids,
+            changed_source_unique_ids=changed_source_unique_ids,
         )
     return DbtModelPlanningResult(
         entries=tuple(
@@ -107,6 +116,7 @@ def build_dbt_model_planning_result(
                 if entry.action == DbtModelPlanAction.BLOCKED
             ),
         ),
+        source_freshness=source_freshness,
     )
 
 
@@ -139,19 +149,19 @@ def _expand_candidate_unique_ids(
     return tuple(sorted(unique_ids))
 
 
-def _blocked_source_unique_ids(
+def _source_freshness_result(
     *,
     manifest: DbtManifestIndex,
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
-) -> frozenset[str]:
+) -> StandardSourceFreshnessPlanningResult:
     sources: tuple[SourceEntry, ...] = translate_manifest_sources_to_sqlbuild_sources(
         manifest=manifest
     )
     if not sources:
-        return frozenset()
-    result: StandardSourceFreshnessPlanningResult = build_standard_source_freshness_planning_result(
+        return StandardSourceFreshnessPlanningResult()
+    return build_standard_source_freshness_planning_result(
         adapter=adapter,
         connection=connection,
         sources=sources,
@@ -161,11 +171,6 @@ def _blocked_source_unique_ids(
         run_id="dbt-planning",
         render_qualified_name=adapter.render_qualified_name,
     )
-    return frozenset(
-        identity.source_name
-        for identity, status in result.age_statuses.items()
-        if status == SourceFreshnessAgeStatus.ERROR
-    )
 
 
 def _apply_graph_propagation(
@@ -173,6 +178,7 @@ def _apply_graph_propagation(
     entries_by_unique_id: dict[str, DbtModelPlanEntry],
     graph: DbtCombinedGraph,
     blocked_source_unique_ids: frozenset[str],
+    changed_source_unique_ids: frozenset[str],
 ) -> dict[str, DbtModelPlanEntry]:
     propagated: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
     for unique_id, entry in entries_by_unique_id.items():
@@ -194,6 +200,22 @@ def _apply_graph_propagation(
                 action=DbtModelPlanAction.BLOCKED,
                 reason=DbtModelPlanReason.SOURCE_FRESHNESS_ERROR,
                 blocked_source_unique_ids=blocked_sources,
+            )
+            continue
+        changed_sources: tuple[str, ...] = tuple(
+            sorted(
+                key.name
+                for key in upstream
+                if key.owner == DbtCombinedGraphOwner.DBT
+                and key.resource_type == DbtCombinedGraphResourceType.SOURCE
+                and key.name in changed_source_unique_ids
+            )
+        )
+        if changed_sources and entry.action == DbtModelPlanAction.CURRENT:
+            propagated[unique_id] = replace(
+                entry,
+                action=DbtModelPlanAction.RUN,
+                reason=DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
             )
             continue
         upstream_run: bool = any(

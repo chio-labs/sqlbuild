@@ -179,7 +179,12 @@ def _query_single_data_version(
     source_name: str,
     sql: str,
 ) -> object:
-    result: QueryResult = adapter.query(connection, sql, limit=None)
+    try:
+        result: QueryResult = adapter.query(connection, sql, limit=None)
+    except Exception as exc:
+        raise SourceFreshnessObservationError(
+            f"source '{source_name}' freshness query failed: {exc}"
+        ) from exc
     if len(result.columns) != 1:
         raise SourceFreshnessObservationError(
             f"source '{source_name}' freshness query must return exactly one column"

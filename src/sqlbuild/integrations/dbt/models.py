@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
@@ -458,6 +459,7 @@ class DbtModelPlanningResult:
     entries: tuple[DbtModelPlanEntry, ...] = field(default_factory=tuple)
     stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
     blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
 
     @property
     def run_unique_ids(self) -> tuple[str, ...]:

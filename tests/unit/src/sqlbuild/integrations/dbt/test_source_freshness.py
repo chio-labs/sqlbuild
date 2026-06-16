@@ -47,6 +47,31 @@ TRANSLATION_TEST_CASES: tuple[DbtSourceFreshnessTranslationTestCase, ...] = (
         expected_table="orders_table",
     ),
     DbtSourceFreshnessTranslationTestCase(
+        description="manifest freshness filter translates to column freshness filter",
+        manifest_data=build_manifest_data(
+            nodes=(),
+            sources=(
+                build_manifest_source_node(
+                    unique_id="source.analytics.raw.filtered_orders",
+                    database="warehouse",
+                    schema="raw",
+                    identifier="filtered_orders_table",
+                    loaded_at_field="loaded_at",
+                    freshness={
+                        "error_after": {"count": 1, "period": "day"},
+                        "filter": "include_in_freshness",
+                    },
+                ),
+            ),
+        ),
+        expected_source_name="source.analytics.raw.filtered_orders",
+        expected_strategy="column",
+        expected_column="loaded_at",
+        expected_filter="include_in_freshness",
+        expected_error_after="1d",
+        expected_table="filtered_orders_table",
+    ),
+    DbtSourceFreshnessTranslationTestCase(
         description="expression loaded_at_field translates to generated SQL with filter",
         manifest_data=build_manifest_data(
             nodes=(),
