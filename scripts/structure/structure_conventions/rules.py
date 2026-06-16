@@ -18,17 +18,25 @@ from scripts.structure.structure_conventions.models import Violation
 
 _TARGET_REUSE_PATH_MARKERS: tuple[str, ...] = (
     "standard_reuse",
+    "reuse_candidates.py",
+    "reuse_execute.py",
+    "reuse_plan.py",
     "reuse.py",
 )
-_TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
-    "source_relation",
-    "source_cursor",
+_GLOBAL_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "source_fingerprint",
-    "source_version",
-    "target_relation",
     "target_cursor",
     "REUSE_RELATION",
     "reuse_relation",
+)
+_TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
+    "source_relation",
+    "source relation",
+    "source/target",
+    "source_cursor",
+    "target_relation",
+    "target relation",
+    "target_cursor",
 )
 
 
@@ -58,11 +66,12 @@ def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Viola
 
 
 def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
-    """Reject ambiguous source/target wording in target-reuse implementation modules."""
+    """Reject ambiguous source/target wording in reuse implementation modules."""
 
     path_text: str = file_path.as_posix()
-    if not any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS):
+    if path_text.endswith("scripts/structure/structure_conventions/rules.py"):
         return []
+    check_scoped_terms: bool = any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS)
 
     violations: list[Violation] = []
     lines: list[str] = file_path.read_text(encoding="utf-8").splitlines()
@@ -70,7 +79,10 @@ def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
     line: str
     for line_number, line in enumerate(lines, start=1):
         term: str
-        for term in _TARGET_REUSE_FORBIDDEN_TERMS:
+        terms: tuple[str, ...] = _GLOBAL_REUSE_FORBIDDEN_TERMS
+        if check_scoped_terms:
+            terms = (*terms, *_TARGET_REUSE_FORBIDDEN_TERMS)
+        for term in terms:
             if term in line:
                 violations.append(
                     Violation(
@@ -78,7 +90,7 @@ def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
                         path=file_path,
                         line=line_number,
                         message=(
-                            f"target-reuse modules must not use ambiguous term '{term}'; "
+                            f"reuse code must not use ambiguous term '{term}'; "
                             "use origin/destination/reuse_from terminology unless this is real "
                             "SQLBuild source logic"
                         ),

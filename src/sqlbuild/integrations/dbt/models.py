@@ -196,8 +196,8 @@ class DbtReuseCandidate:
 
     unique_id: str
     materialization: str
-    current_relation_name: str
-    reuse_relation_name: str
+    destination_relation_name: str
+    origin_relation_name: str
     package_name: str
     name: str
     fqn: tuple[str, ...] = field(default_factory=tuple)
@@ -229,8 +229,8 @@ class DbtReusePlanEntry:
     action: DbtReusePlanAction
     reason: DbtReusePlanReason
     materialization: str | None = None
-    current_relation_name: str | None = None
-    reuse_relation_name: str | None = None
+    destination_relation_name: str | None = None
+    origin_relation_name: str | None = None
     dbt_plan_action: DbtModelPlanAction | None = None
     dbt_plan_reason: DbtModelPlanReason | None = None
     skip_reason: DbtReuseCandidateSkipReason | None = None
@@ -440,6 +440,7 @@ class DbtModelPlanEntry:
     fingerprint_query_sql: str | None = None
     previous_query_sql: str | None = None
     previous_version_hash: str | None = None
+    previous_metadata_json: str | None = None
     expected_version_hash: str | None = None
     blocked_source_unique_ids: tuple[str, ...] = field(default_factory=tuple)
 

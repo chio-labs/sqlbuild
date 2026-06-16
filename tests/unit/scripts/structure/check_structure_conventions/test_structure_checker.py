@@ -156,6 +156,40 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC045", "SC045"),
     ),
     CheckPathsTestCase(
+        description="reports ambiguous dbt reuse source terminology",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/dbt/helpers/reuse_candidates.py": (
+                "def build_origin() -> str:\n"
+                "    source_relation = 'prod.orders'\n"
+                "    return source_relation\n"
+            )
+        },
+        expected_violation_codes=("SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
+        description="reports globally banned reuse source terminology",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/planning.py": (
+                "def build_origin() -> str:\n"
+                "    source_fingerprint = 'abc'\n"
+                "    return source_fingerprint\n"
+            )
+        },
+        expected_violation_codes=("SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
+        description="allows real adapter source relation terminology outside reuse modules",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/planning.py": (
+                "def render(source_relation: str) -> str:\n    return source_relation\n"
+            )
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="reports flat runtime main module under nested package",
         repo_files=compliant_repo_files()
         | {

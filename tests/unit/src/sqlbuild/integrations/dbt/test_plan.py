@@ -399,7 +399,7 @@ def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
             DbtReusePlanEntry(
                 unique_id="model.analytics.orders",
                 action=DbtReusePlanAction.COMPLETE_REUSE,
-                reason=DbtReusePlanReason.TARGET_MISSING,
+                reason=DbtReusePlanReason.DESTINATION_MISSING,
             ),
         )
     )
@@ -449,7 +449,7 @@ def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
                 '"reuse_plan"',
                 '"complete_reuse_unique_ids"',
                 '"seeded_reuse_unique_ids"',
-                '"reuse_relation_name": "prod.events"',
+                '"origin_relation_name": "prod.events"',
             ),
         )
     ],
@@ -471,18 +471,18 @@ def test_given_dbt_reuse_plan_when_formatting_then_outputs_reuse_sections(
                 DbtReusePlanEntry(
                     unique_id="model.analytics.orders",
                     action=DbtReusePlanAction.COMPLETE_REUSE,
-                    reason=DbtReusePlanReason.TARGET_MISSING,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
                     materialization="table",
-                    current_relation_name="dev.orders",
-                    reuse_relation_name="prod.orders",
+                    destination_relation_name="dev.orders",
+                    origin_relation_name="prod.orders",
                 ),
                 DbtReusePlanEntry(
                     unique_id="model.analytics.events",
                     action=DbtReusePlanAction.SEEDED_REUSE,
                     reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
                     materialization="microbatch",
-                    current_relation_name="dev.events",
-                    reuse_relation_name="prod.events",
+                    destination_relation_name="dev.events",
+                    origin_relation_name="prod.events",
                 ),
             )
         ),

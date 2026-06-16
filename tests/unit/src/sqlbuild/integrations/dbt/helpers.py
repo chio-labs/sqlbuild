@@ -117,6 +117,7 @@ def build_dbt_model_plan_entry(
     unique_id: str,
     action: DbtModelPlanAction,
     reason: DbtModelPlanReason,
+    previous_metadata_json: str | None = None,
 ) -> DbtModelPlanEntry:
     """Build a minimal dbt model plan entry for reuse planning tests."""
 
@@ -128,6 +129,7 @@ def build_dbt_model_plan_entry(
         action=action,
         reason=reason,
         relation_name=f"dev.{name}",
+        previous_metadata_json=previous_metadata_json,
     )
 
 
@@ -226,10 +228,10 @@ def build_reuse_execute_plan() -> DbtInteropPlan:
                 DbtReusePlanEntry(
                     unique_id="model.analytics.fact_orders",
                     action=DbtReusePlanAction.COMPLETE_REUSE,
-                    reason=DbtReusePlanReason.TARGET_MISSING,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
                     materialization="table",
-                    current_relation_name="main.fact_orders",
-                    reuse_relation_name="prod.fact_orders",
+                    destination_relation_name="main.fact_orders",
+                    origin_relation_name="prod.fact_orders",
                 ),
             )
         ),

@@ -100,11 +100,12 @@ class DbtReusePlanAction(StrEnum):
 class DbtReusePlanReason(StrEnum):
     """Reason for one dbt reuse_from plan action."""
 
-    TARGET_CURRENT = "target_current"
-    TARGET_MISSING = "target_missing"
+    DESTINATION_CURRENT = "destination_current"
+    DESTINATION_MISSING = "destination_missing"
     FINGERPRINT_MISSING = "fingerprint_missing"
     FINGERPRINT_CHANGED = "fingerprint_changed"
     FULL_REFRESH = "full_refresh"
     SOURCE_FRESHNESS_BLOCK = "source_freshness_block"
     NON_PHYSICAL_RESOURCE = "non_physical_resource"
     MANIFEST_NODE_MISSING = "manifest_node_missing"
+    REUSE_METADATA_INVALID = "reuse_metadata_invalid"
