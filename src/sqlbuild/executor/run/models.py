@@ -39,9 +39,8 @@ class HookContext:
     hook_name: str
     hook_index: int
     run_id: str
-    environment: str | None
+    target: str | None
     vars: Mapping[str, object]
-    target: HookRelation
     destination: HookRelation
     adapter_name: str
     adapter: BaseAdapter = field(repr=False)
