@@ -8,8 +8,12 @@ from typing import Any
 
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.helpers.age_policy import (
     evaluate_source_freshness_age_policy,
+)
+from sqlbuild.compiler.source_freshness.main.adapter_observation import (
+    observe_adapter_sources_freshness,
 )
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
@@ -59,6 +63,8 @@ def build_standard_source_freshness_planning_result(
     changed_identities: set[SourceFreshnessIdentity] = set()
     unchanged_identities: set[SourceFreshnessIdentity] = set()
     age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = {}
+    observation_sources_by_name: dict[str, SourceEntry] = {}
+    adapter_observation_sources: list[SourceEntry] = []
 
     source: SourceEntry
     for source in sources:
@@ -71,17 +77,42 @@ def build_standard_source_freshness_planning_result(
         if observation_source is None:
             unknown_source_names.append(source.name)
             continue
+        observation_sources_by_name[source.name] = observation_source
+        if observation_source.freshness is not None and (
+            observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
+        ):
+            adapter_observation_sources.append(observation_source)
 
+    adapter_observations: dict[str, SourceFreshnessObservation] = {}
+    if adapter_observation_sources:
         try:
-            observation: SourceFreshnessObservation = observe_configured_source_freshness(
+            adapter_observations = observe_adapter_sources_freshness(
                 adapter=adapter,
                 connection=connection,
-                source=observation_source,
+                sources=tuple(adapter_observation_sources),
                 observed_at=observed_at,
             )
-        except AdapterUserError:
-            unknown_source_names.append(source.name)
-            continue
+        except (AdapterUserError, SourceFreshnessObservationError):
+            unknown_source_names.extend(source.name for source in adapter_observation_sources)
+
+    for source_name, observation_source in observation_sources_by_name.items():
+        if observation_source.freshness is not None and (
+            observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
+        ):
+            observation: SourceFreshnessObservation | None = adapter_observations.get(source_name)
+            if observation is None:
+                continue
+        else:
+            try:
+                observation = observe_configured_source_freshness(
+                    adapter=adapter,
+                    connection=connection,
+                    source=observation_source,
+                    observed_at=observed_at,
+                )
+            except AdapterUserError:
+                unknown_source_names.append(source_name)
+                continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(
             observation=observation,
             source=observation_source,

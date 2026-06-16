@@ -35,6 +35,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import (
     BuiltinAdapter,
@@ -85,6 +86,16 @@ class SqlServerAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         raise AdapterUserError(
             f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )

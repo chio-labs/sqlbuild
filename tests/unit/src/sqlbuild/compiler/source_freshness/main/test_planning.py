@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import TableFreshnessMetadata
+from sqlbuild.adapter.shared.models import TableFreshnessMetadata, TableFreshnessRequest
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
@@ -48,6 +48,7 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         super().__init__()
         self.data_version: object = data_version
         self.value_kind: str = value_kind
+        self.batch_requests: list[tuple[TableFreshnessRequest, ...]] = []
 
     def supports_table_freshness_metadata(self) -> bool:
         return True
@@ -65,6 +66,23 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
             value_kind=self.value_kind,
             observed_at=datetime(2026, 1, 15, 12, 0, 0),
         )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        del connection
+        self.batch_requests.append(requests)
+        return {
+            request: TableFreshnessMetadata(
+                data_version=self.data_version,
+                value_kind=self.value_kind,
+                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            )
+            for request in requests
+        }
 
 
 PLANNING_COMPARISON_TEST_CASES: list[StandardSourceFreshnessPlanningTestCase] = [
@@ -459,12 +477,13 @@ def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear
     "test_case",
     [
         StandardSourceFreshnessAdapterDefaultTestCase(
-            description="adapter default freshness observes unconfigured physical source",
-            expected_changed_count=1,
-            expected_observed_count=1,
+            description="adapter default freshness observes unconfigured physical sources in batch",
+            expected_changed_count=2,
+            expected_observed_count=2,
+            expected_batch_call_count=1,
         )
     ],
-    ids=["adapter default freshness observes unconfigured physical source"],
+    ids=["adapter default freshness observes unconfigured physical sources in batch"],
 )
 def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_observes_default(
     test_case: StandardSourceFreshnessAdapterDefaultTestCase,
@@ -476,7 +495,10 @@ def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_o
             build_standard_source_freshness_planning_result(
                 adapter=adapter,
                 connection=connection,
-                sources=(SourceEntry(name="raw.orders", schema="raw", table="orders"),),
+                sources=(
+                    SourceEntry(name="raw.orders", schema="raw", table="orders"),
+                    SourceEntry(name="raw.customers", schema="raw", table="customers"),
+                ),
                 state_database=None,
                 state_schemas=("state_schema",),
                 observed_at=datetime(2026, 1, 15, 12, 5, 0),
@@ -489,6 +511,8 @@ def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_o
 
     assert len(result.changed_identities) == test_case.expected_changed_count
     assert len(result.observed_records) == test_case.expected_observed_count
+    assert len(adapter.batch_requests) == test_case.expected_batch_call_count
+    assert tuple(request.name for request in adapter.batch_requests[0]) == ("orders", "customers")
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,9 @@ from sqlbuild.cli.commands.main.helpers.freshness.models import (
     FreshnessSourceResult,
 )
 from sqlbuild.cli.commands.main.helpers.freshness.types import FreshnessSourceStatus
+from sqlbuild.compiler.source_freshness.main.adapter_observation import (
+    observe_adapter_sources_freshness,
+)
 from sqlbuild.compiler.source_freshness.main.age_policy import evaluate_source_freshness_age_policy
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
@@ -60,6 +63,8 @@ def observe_source_freshness_for_command(
     compare_state: bool = (
         previous_records is not None or previous_records_by_source_name is not None
     )
+    observation_sources_by_name: dict[str, SourceEntry] = {}
+    adapter_observation_sources: list[SourceEntry] = []
     source: SourceEntry
     for source in selected_sources:
         observation_source: SourceEntry | None = _source_for_observation(
@@ -78,25 +83,74 @@ def observe_source_freshness_for_command(
                 )
             )
             continue
+        observation_sources_by_name[source.name] = observation_source
+        if observation_source.freshness is not None and (
+            observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
+        ):
+            adapter_observation_sources.append(observation_source)
+
+    adapter_observations: dict[str, SourceFreshnessObservation] = {}
+    adapter_observation_error: Exception | None = None
+    if adapter_observation_sources:
         try:
-            observation: SourceFreshnessObservation = observe_configured_source_freshness(
+            adapter_observations = observe_adapter_sources_freshness(
                 adapter=adapter,
                 connection=connection,
-                source=observation_source,
+                sources=tuple(adapter_observation_sources),
                 observed_at=observed_at,
             )
         except Exception as exc:
-            results.append(
-                FreshnessSourceResult(
-                    name=source.name,
-                    status=FreshnessSourceStatus.ERROR,
-                    target_database=source.database,
-                    target_schema=source.schema,
-                    target_name=source.table,
-                    message=str(exc),
+            adapter_observation_error = exc
+
+    for source_name, observation_source in observation_sources_by_name.items():
+        if observation_source.freshness is not None and (
+            observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
+        ):
+            if adapter_observation_error is not None:
+                results.append(
+                    FreshnessSourceResult(
+                        name=source_name,
+                        status=FreshnessSourceStatus.ERROR,
+                        target_database=observation_source.database,
+                        target_schema=observation_source.schema,
+                        target_name=observation_source.table,
+                        message=str(adapter_observation_error),
+                    )
                 )
-            )
-            continue
+                continue
+            observation: SourceFreshnessObservation | None = adapter_observations.get(source_name)
+            if observation is None:
+                results.append(
+                    FreshnessSourceResult(
+                        name=source_name,
+                        status=FreshnessSourceStatus.ERROR,
+                        target_database=observation_source.database,
+                        target_schema=observation_source.schema,
+                        target_name=observation_source.table,
+                        message="freshness metadata was not returned",
+                    )
+                )
+                continue
+        else:
+            try:
+                observation = observe_configured_source_freshness(
+                    adapter=adapter,
+                    connection=connection,
+                    source=observation_source,
+                    observed_at=observed_at,
+                )
+            except Exception as exc:
+                results.append(
+                    FreshnessSourceResult(
+                        name=source_name,
+                        status=FreshnessSourceStatus.ERROR,
+                        target_database=observation_source.database,
+                        target_schema=observation_source.schema,
+                        target_name=observation_source.table,
+                        message=str(exc),
+                    )
+                )
+                continue
         record: SourceFreshnessRecord = _record_from_observation(
             observation=observation,
             source=observation_source,
@@ -104,7 +158,7 @@ def observe_source_freshness_for_command(
         )
         results.append(
             _source_result_from_record(
-                name=source.name,
+                name=source_name,
                 current_record=record,
                 previous_record=previous_by_identity.get(record.identity)
                 or previous_by_source_name.get(record.source_name),

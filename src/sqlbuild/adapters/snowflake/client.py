@@ -30,6 +30,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -258,6 +259,106 @@ class SnowflakeAdapter(BaseAdapter):
             value_kind="timestamp",
             observed_at=row[1] if isinstance(row[1], datetime) else None,
         )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        if not requests:
+            return {}
+        clauses: list[str] = []
+        params: list[str] = []
+        request: TableFreshnessRequest
+        for request in requests:
+            request_clauses: list[str] = ["UPPER(table_name) = UPPER(%s)"]
+            params.append(request.name)
+            if request.schema is not None:
+                request_clauses.append("UPPER(table_schema) = UPPER(%s)")
+                params.append(request.schema)
+            if request.database is not None:
+                request_clauses.append("UPPER(table_catalog) = UPPER(%s)")
+                params.append(request.database)
+            clauses.append("(" + " AND ".join(request_clauses) + ")")
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
+                "FROM information_schema.tables WHERE " + " OR ".join(clauses),
+                tuple(params),
+            )
+            rows: list[tuple[Any, ...]] = list(cursor.fetchall())
+        finally:
+            cursor.close()
+
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        row: tuple[Any, ...]
+        for row in rows:
+            row_database: str | None = str(row[0]) if row[0] is not None else None
+            row_schema: str | None = str(row[1]) if row[1] is not None else None
+            row_name: str = str(row[2])
+            matched_request: TableFreshnessRequest | None = next(
+                (
+                    request
+                    for request in requests
+                    if request not in results
+                    and self._freshness_request_matches(
+                        request=request,
+                        database=row_database,
+                        schema=row_schema,
+                        name=row_name,
+                    )
+                ),
+                None,
+            )
+            if matched_request is None:
+                continue
+            table_type: str = str(row[3]).upper()
+            if table_type != "BASE TABLE":
+                raise AdapterUserError(
+                    "Snowflake table freshness metadata only supports physical tables; "
+                    f"found {table_type}"
+                )
+            if row[4] is None:
+                raise AdapterUserError(
+                    "Snowflake table freshness metadata is missing LAST_ALTERED "
+                    f"for {matched_request.name}"
+                )
+            results[matched_request] = TableFreshnessMetadata(
+                data_version=row[4],
+                value_kind="timestamp",
+                observed_at=row[4] if isinstance(row[4], datetime) else None,
+            )
+        missing_requests: list[TableFreshnessRequest] = [
+            request for request in requests if request not in results
+        ]
+        if missing_requests:
+            missing_names: str = ", ".join(request.name for request in missing_requests)
+            raise AdapterUserError(
+                f"Snowflake table freshness metadata not found for {missing_names}"
+            )
+        return results
+
+    @staticmethod
+    def _freshness_request_matches(
+        *,
+        request: TableFreshnessRequest,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        if request.name.upper() != name.upper():
+            return False
+        if request.schema is not None and (
+            schema is None or request.schema.upper() != schema.upper()
+        ):
+            return False
+        if request.database is not None and (
+            database is None or request.database.upper() != database.upper()
+        ):
+            return False
+        return True
 
     def persists_python_functions(self) -> bool:
         return True

@@ -18,6 +18,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import (
     FrameworkType,
@@ -113,6 +114,16 @@ class StrictAdapter(
         name: str,
     ) -> TableFreshnessMetadata:
         """Return comparable freshness metadata for one physical table."""
+        ...
+
+    @abstractmethod
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        """Return comparable freshness metadata for physical tables in batch."""
         ...
 
     @abstractmethod
