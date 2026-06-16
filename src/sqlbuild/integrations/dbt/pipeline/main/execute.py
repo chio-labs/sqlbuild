@@ -75,6 +75,9 @@ from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_seeded_reuse_plan,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
+from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
+    append_dbt_source_freshness_records,
+)
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
@@ -430,11 +433,19 @@ def execute_dbt_interop_from_project(
         output_stream.write("\n")
         output_stream.flush()
         _report_progress(on_progress, "No SQLBuild work selected.")
-        return max(
+        exit_code: int = max(
             dbt_execution.returncode,
             dbt_blocked_exit_code(plan),
             missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
         )
+        if exit_code == 0:
+            append_dbt_source_freshness_records(
+                plan=plan,
+                adapter=adapter,
+                connection_config=connection_config,
+                project=project,
+            )
+        return exit_code
     output_stream.write("\n")
     output_stream.flush()
 
@@ -480,22 +491,38 @@ def execute_dbt_interop_from_project(
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
         )
     if plan_output is None:
-        return max(
+        exit_code: int = max(
             dbt_execution.returncode,
             dbt_blocked_exit_code(plan),
             missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
         )
+        if exit_code == 0:
+            append_dbt_source_freshness_records(
+                plan=plan,
+                adapter=adapter,
+                connection_config=connection_config,
+                project=project,
+            )
+        return exit_code
     if not plan_has_executable_work(plan_output):
         style: CliStyle = CliStyle(use_color=use_color)
         output_stream.write(
             style.muted("Skipping SQLBuild: selected models are already current.") + "\n"
         )
         output_stream.flush()
-        return max(
+        exit_code = max(
             dbt_execution.returncode,
             dbt_blocked_exit_code(plan),
             missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
         )
+        if exit_code == 0:
+            append_dbt_source_freshness_records(
+                plan=plan,
+                adapter=adapter,
+                connection_config=connection_config,
+                project=project,
+            )
+        return exit_code
 
     actions: tuple[DbtInteropSqlbuildTestAction, ...] = ()
     if command == DbtInteropCommand.TEST:
@@ -516,6 +543,12 @@ def execute_dbt_interop_from_project(
     )
     if sqlbuild_exit_code != 0:
         return sqlbuild_exit_code
+    append_dbt_source_freshness_records(
+        plan=plan,
+        adapter=adapter,
+        connection_config=connection_config,
+        project=project,
+    )
     return max(
         dbt_execution.returncode,
         dbt_blocked_exit_code(plan),

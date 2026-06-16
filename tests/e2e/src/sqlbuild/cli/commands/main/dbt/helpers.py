@@ -80,6 +80,124 @@ def load_json_stdout(stdout: str) -> dict[str, object]:
     return payload
 
 
+def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
+    """Return dbt Phase 11 source freshness state rows when the state table exists."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, table_exists
+
+    db_path: Path = project_dir / "dbt_phase11.duckdb"
+    if not table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness"):
+        return []
+    return query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
+            "ORDER BY source_name, data_version"
+        ),
+    )
+
+
+def query_dbt_phase11_schema_source_freshness_rows(
+    *, project_dir: Path, schema: str
+) -> list[tuple[object, ...]]:
+    """Return dbt Phase 11 source freshness state rows for a specific schema."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, table_exists
+
+    db_path: Path = project_dir / "dbt_phase11.duckdb"
+    if not table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness", schema=schema):
+        return []
+    return query_duckdb(
+        db_path=db_path,
+        sql=(
+            f"SELECT source_name, data_version FROM {schema}._sqlbuild_source_freshness "
+            "ORDER BY source_name, data_version"
+        ),
+    )
+
+
+def set_dbt_phase11_sqlbuild_target_schema(*, project_dir: Path, schema: str) -> None:
+    """Change the focused Phase 11 SQLBuild target schema."""
+
+    project_file: Path = project_dir / "sqlbuild_project.toml"
+    project_file.write_text(
+        project_file.read_text(encoding="utf-8").replace('schema = "main"', f'schema = "{schema}"'),
+        encoding="utf-8",
+    )
+
+
+def write_dbt_phase11_invalid_downstream_model(*, project_dir: Path) -> None:
+    """Make the downstream SQLBuild model fail during warehouse execution."""
+
+    (project_dir / "models" / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT missing_column FROM __dbt_ref("analytics", "fact_orders")\n',
+        encoding="utf-8",
+    )
+
+
+def add_dbt_phase11_payments_branch(*, project_dir: Path) -> None:
+    """Add a dbt model that depends on orders and payments sources."""
+
+    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
+    sqlbuild_models_dir: Path = project_dir / "models"
+    sources_path: Path = dbt_models_dir / "sources.yml"
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8")
+        + "      - name: payments\n"
+        + "        identifier: raw_payments\n"
+        + "        loaded_at_field: loaded_at\n"
+        + "        freshness:\n"
+        + "          error_after: {count: 1, period: day}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "order_payments.sql").write_text(
+        "select o.order_id, o.amount as order_amount, p.payment_amount "
+        "from {{ source('raw', 'orders') }} o "
+        "join {{ source('raw', 'payments') }} p using (order_id)\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_models_dir / "payment_summary.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT order_id, payment_amount FROM __dbt_ref("analytics", "order_payments")\n',
+        encoding="utf-8",
+    )
+
+
+def add_dbt_phase11_query_filter_branch(*, project_dir: Path) -> None:
+    """Add dbt sources that exercise loaded_at_query and freshness filter translation."""
+
+    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
+    sqlbuild_models_dir: Path = project_dir / "models"
+    sources_path: Path = dbt_models_dir / "sources.yml"
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8")
+        + "      - name: query_events\n"
+        + "        identifier: raw_query_events\n"
+        + "        loaded_at_query: SELECT MAX(loaded_at) AS loaded_at FROM main.raw_query_events\n"
+        + "        freshness:\n"
+        + "          error_after: {count: 1, period: day}\n"
+        + "      - name: filtered_events\n"
+        + "        identifier: raw_filtered_events\n"
+        + "        loaded_at_field: loaded_at\n"
+        + "        freshness:\n"
+        + "          error_after: {count: 1, period: day}\n"
+        + "          filter: include_in_freshness\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "event_rollup.sql").write_text(
+        "select event_id, event_amount from {{ source('raw', 'query_events') }}\n"
+        "union all\n"
+        "select event_id, event_amount from {{ source('raw', 'filtered_events') }}\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_models_dir / "event_summary.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT event_id, event_amount FROM __dbt_ref("analytics", "event_rollup")\n',
+        encoding="utf-8",
+    )
+
+
 def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None = None) -> Path:
     """Write a focused dbt interop project for model-planning E2Es."""
 

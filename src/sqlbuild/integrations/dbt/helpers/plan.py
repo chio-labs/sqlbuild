@@ -385,6 +385,7 @@ def _format_dbt_run_reason_sections(
 ) -> None:
     reason_order: tuple[DbtModelPlanReason, ...] = (
         DbtModelPlanReason.CHECKSUM_CHANGED,
+        DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
         DbtModelPlanReason.UPSTREAM_CHANGED,
         DbtModelPlanReason.RELATION_MISSING,
         DbtModelPlanReason.FIRST_RUN,
@@ -541,6 +542,7 @@ def _dbt_model_plan_reason_label(reason: DbtModelPlanReason) -> str:
         DbtModelPlanReason.FULL_REFRESH: "full refresh",
         DbtModelPlanReason.RELATION_MISSING: "relation missing",
         DbtModelPlanReason.CHECKSUM_CHANGED: "checksum changed",
+        DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED: "source freshness changed",
         DbtModelPlanReason.UPSTREAM_CHANGED: "upstream changed",
         DbtModelPlanReason.NO_CHANGE: "no change",
         DbtModelPlanReason.SOURCE_FRESHNESS_ERROR: "source freshness error",
@@ -554,6 +556,7 @@ def _dbt_model_plan_reason_section_label(reason: DbtModelPlanReason) -> str:
         DbtModelPlanReason.FULL_REFRESH: "Full refresh",
         DbtModelPlanReason.RELATION_MISSING: "Relation missing",
         DbtModelPlanReason.CHECKSUM_CHANGED: "Checksum changed",
+        DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED: "Source freshness changed",
         DbtModelPlanReason.UPSTREAM_CHANGED: "Upstream changed",
         DbtModelPlanReason.NO_CHANGE: "Current",
         DbtModelPlanReason.SOURCE_FRESHNESS_ERROR: "Source freshness error",

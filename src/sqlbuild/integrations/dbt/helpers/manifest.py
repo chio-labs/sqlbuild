@@ -166,6 +166,7 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
             schema=schema,
             name=identifier or name,
         )
+    freshness: dict[str, object] | None = _optional_dict(raw_node.get("freshness"))
     return DbtManifestSource(
         unique_id=unique_id,
         package_name=package_name,
@@ -177,10 +178,21 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
         relation_name=relation_name,
         loaded_at_field=_optional_str(raw_node.get("loaded_at_field")),
         loaded_at_query=_optional_str(raw_node.get("loaded_at_query")),
-        freshness=_optional_dict(raw_node.get("freshness")),
-        freshness_filter=_optional_str(raw_node.get("filter")),
+        freshness=freshness,
+        freshness_filter=_source_freshness_filter(raw_node=raw_node, freshness=freshness),
         payload={str(key): value for key, value in raw_node.items()},
     )
+
+
+def _source_freshness_filter(
+    *, raw_node: dict[object, object], freshness: dict[str, object] | None
+) -> str | None:
+    filter_value: str | None = _optional_str(raw_node.get("filter"))
+    if filter_value is not None:
+        return filter_value
+    if freshness is None:
+        return None
+    return _optional_str(freshness.get("filter"))
 
 
 def _render_relation_name(*, database: str | None, schema: str | None, name: str) -> str:

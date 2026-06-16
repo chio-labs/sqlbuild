@@ -64,6 +64,7 @@ class DbtModelPlanReason(StrEnum):
     RELATION_MISSING = "relation_missing"
     CHECKSUM_CHANGED = "checksum_changed"
     UPSTREAM_CHANGED = "upstream_changed"
+    SOURCE_FRESHNESS_CHANGED = "source_freshness_changed"
     NO_CHANGE = "no_change"
     SOURCE_FRESHNESS_ERROR = "source_freshness_error"
 

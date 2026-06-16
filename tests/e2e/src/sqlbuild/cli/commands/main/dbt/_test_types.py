@@ -163,6 +163,70 @@ class DbtPhase11SourceBlockingTestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_relations: tuple[str, ...]
     expected_customer_rows: tuple[tuple[object, ...], ...]
+    expected_source_freshness_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11SourceFreshnessChangeTestCase:
+    description: str
+    expected_current_stdout_fragments: tuple[str, ...]
+    expected_plan_run_unique_ids: tuple[str, ...]
+    expected_plan_reasons: tuple[str, ...]
+    expected_plan_stale_sqlbuild_model_names: tuple[str, ...]
+    expected_plan_current_unique_ids: tuple[str, ...]
+    expected_source_freshness_rows: tuple[tuple[object, ...], ...]
+    expected_changed_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11DbtOnlySourceFreshnessTestCase:
+    description: str
+    expected_current_stdout_fragments: tuple[str, ...]
+    expected_plan_run_unique_ids: tuple[str, ...]
+    expected_plan_reasons: tuple[str, ...]
+    expected_plan_stale_sqlbuild_model_names: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11SourceObservationErrorTestCase:
+    description: str
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_relations: tuple[str, ...]
+    expected_source_freshness_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11MultiSourceFreshnessTestCase:
+    description: str
+    expected_run_unique_ids: tuple[str, ...]
+    expected_run_reasons: tuple[str, ...]
+    expected_stale_sqlbuild_model_names: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11QueryFilterFreshnessTestCase:
+    description: str
+    expected_run_unique_ids: tuple[str, ...]
+    expected_run_reasons: tuple[str, ...]
+    expected_stale_sqlbuild_model_names: tuple[str, ...]
+    expected_source_freshness_rows: tuple[tuple[object, ...], ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtPhase11FreshnessEdgeCaseTestCase:
+    description: str
+    expected_run_unique_ids: tuple[str, ...] = ()
+    expected_run_reasons: tuple[str, ...] = ()
+    expected_stale_sqlbuild_model_names: tuple[str, ...] = ()
+    expected_rows: tuple[tuple[object, ...], ...] = ()
+    expected_returncode: int = 0
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_source_freshness_rows: tuple[tuple[object, ...], ...] = ()
 
 
 @dataclass(frozen=True)

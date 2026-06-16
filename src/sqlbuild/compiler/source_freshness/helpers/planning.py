@@ -110,7 +110,7 @@ def build_standard_source_freshness_planning_result(
                     source=observation_source,
                     observed_at=observed_at,
                 )
-            except AdapterUserError:
+            except (AdapterUserError, SourceFreshnessObservationError):
                 unknown_source_names.append(source_name)
                 continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(

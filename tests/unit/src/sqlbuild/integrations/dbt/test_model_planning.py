@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
@@ -1135,4 +1138,137 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     )
     assert all(
         entry.reason == DbtModelPlanReason.SOURCE_FRESHNESS_ERROR for entry in result.entries
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtModelSourceBlockingTestCase(
+            description="changed source freshness reruns downstream dbt and SQLBuild models",
+            expected_blocked_unique_ids=(),
+            expected_blocked_sqlbuild_model_names=(),
+            expected_blocked_source_unique_ids=(),
+        )
+    ],
+    ids=["changed source freshness reruns downstream dbt and SQLBuild models"],
+)
+def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstream_models(
+    test_case: DbtModelSourceBlockingTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_source_changed.duckdb")})
+    project: CompiledProject = replace(
+        build_compiled_project_with_models(
+            {"downstream_orders": 'select * from __dbt_ref("fact_orders")'}
+        ),
+        effective_target_schema="main",
+        effective_target_database=None,
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.stg_orders",
+                    package_name="analytics",
+                    name="stg_orders",
+                    schema="main",
+                    alias="stg_orders",
+                    checksum="same_hash",
+                    depends_on_nodes=("source.analytics.raw.orders",),
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    schema="main",
+                    alias="fact_orders",
+                    checksum="same_hash",
+                    depends_on_nodes=("model.analytics.stg_orders",),
+                ),
+            ),
+            sources=(
+                build_manifest_source_node(
+                    unique_id="source.analytics.raw.orders",
+                    source_name="raw",
+                    name="orders",
+                    schema="main",
+                    identifier="raw_orders",
+                    loaded_at_field="loaded_at",
+                    freshness={},
+                ),
+            ),
+        )
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    try:
+        write_source_freshness_record(
+            connection=connection,
+            execute=adapter.execute,
+            database=None,
+            schema="main",
+            record=SourceFreshnessRecord(
+                source_name="source.analytics.raw.orders",
+                target_database=None,
+                target_schema="main",
+                target_name="raw_orders",
+                run_id="previous",
+                strategy="column",
+                value_kind="timestamp",
+                data_version="2026-01-01T00:00:00",
+                data_version_hash="previous-hash",
+                observed_at=datetime(2026, 1, 1, tzinfo=UTC),
+            ),
+            render_qualified_name=adapter.render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
+        )
+        adapter.execute(
+            connection,
+            "CREATE TABLE main.raw_orders AS SELECT TIMESTAMP '2026-01-02 00:00:00' AS loaded_at",
+        )
+        adapter.execute(connection, "CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        write_dbt_test_fingerprint(
+            adapter=adapter,
+            connection=connection,
+            unique_id="model.analytics.stg_orders",
+            version_hash="same_hash",
+        )
+        write_dbt_test_fingerprint(
+            adapter=adapter,
+            connection=connection,
+            unique_id="model.analytics.fact_orders",
+            version_hash="same_hash",
+        )
+
+        result: DbtModelPlanningResult = build_dbt_model_planning_result(
+            manifest=manifest,
+            candidate_unique_ids=(
+                "model.analytics.fact_orders",
+                "model.analytics.stg_orders",
+            ),
+            project=project,
+            graph=graph,
+            adapter=adapter,
+            connection=connection,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert result.blocked_unique_ids == test_case.expected_blocked_unique_ids
+    assert result.blocked_sqlbuild_model_names == test_case.expected_blocked_sqlbuild_model_names
+    assert result.stale_sqlbuild_model_names == ("downstream_orders",)
+    entries_by_unique_id: dict[str, DbtModelPlanEntry] = {
+        entry.unique_id: entry for entry in result.entries
+    }
+    assert entries_by_unique_id["model.analytics.stg_orders"].action == DbtModelPlanAction.RUN
+    assert (
+        entries_by_unique_id["model.analytics.stg_orders"].reason
+        == DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED
+    )
+    assert entries_by_unique_id["model.analytics.fact_orders"].action == DbtModelPlanAction.RUN
+    assert (
+        entries_by_unique_id["model.analytics.fact_orders"].reason
+        == DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED
     )
