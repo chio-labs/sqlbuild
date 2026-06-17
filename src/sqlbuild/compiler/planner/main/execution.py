@@ -16,8 +16,15 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.buildability import check_buildability
 from sqlbuild.compiler.planner.helpers.cascade import resolve_cascades
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
+from sqlbuild.compiler.planner.helpers.dependency_baseline import (
+    build_dependency_baseline_candidate_keys,
+    build_dependency_baseline_entries,
+    with_dependency_baseline_candidates,
+)
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
@@ -44,12 +51,14 @@ from sqlbuild.compiler.planner.helpers.version_identity import (
     StandardModelVersionIdentities,
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
+from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.main.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result,
 )
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
+    DependencyBaselinePlanEntry,
+    MissingUpstream,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
@@ -60,7 +69,7 @@ from sqlbuild.compiler.planner.models import (
     StandardReusePlanningResult,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import StandardScopePruning
+from sqlbuild.compiler.planner.types import StandardReuseDecisionKind, StandardScopePruning
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
@@ -92,12 +101,19 @@ def build_execution_plan(
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
 ) -> PlanOutput:
-    scope: PlannerScope = build_planner_scope(
+    selected_scope: PlannerScope = build_planner_scope(
         project=project,
         select=select,
         exclude=exclude,
         auto_load_sources=auto_load_sources,
         selected_keys=selected_keys,
+    )
+    dependency_baseline_candidate_keys: frozenset[CompiledObjectKey] = (
+        build_dependency_baseline_candidate_keys(selected_scope)
+    )
+    scope: PlannerScope = with_dependency_baseline_candidates(
+        scope=selected_scope,
+        candidate_keys=dependency_baseline_candidate_keys,
     )
     enforce_standard_reuse_from_source_deferral_conflict(
         project=project,
@@ -110,17 +126,17 @@ def build_execution_plan(
     warehouse_start: float = time.monotonic()
     if on_progress is not None:
         on_progress("Inspecting warehouse state...")
-    snapshot: WarehouseSnapshot = build_warehouse_snapshot(
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
         project=project,
         adapter=adapter,
         connection=connection,
-        scope=scope,
+        execute=adapter.execute,
+        selected_keys=scope.selected_keys,
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         on_progress=on_progress,
         deferred_locations=deferred_locations,
-        deferred_relations=deferred_relations,
     )
     relations: PlannerRelationsContext = build_planner_relations_context(
         project=project,
@@ -156,6 +172,27 @@ def build_execution_plan(
         full_refresh=full_refresh,
         custom_prepare_version_materializations=custom_prepare_version_materializations,
     )
+    reusable_dependency_baseline_keys: frozenset[CompiledObjectKey] = frozenset(
+        key
+        for key in dependency_baseline_candidate_keys
+        if standard_reuse is not None
+        and standard_reuse.decisions.models.get(key.name) is not None
+        and standard_reuse.decisions.models[key.name].decision
+        == StandardReuseDecisionKind.REUSE_ELIGIBLE.value
+    )
+    missing: tuple[MissingUpstream, ...] = check_buildability(
+        selected_keys=selected_scope.selected_keys,
+        upstream_deps=selected_scope.upstream_deps,
+        snapshot=snapshot,
+        deferred_relations=deferred_relations,
+        satisfied_keys=reusable_dependency_baseline_keys,
+    )
+    if missing:
+        names: str = ", ".join(m.key.name for m in missing[:5])
+        raise PlannerInputError(
+            f"cannot build selected scope: {len(missing)} missing upstream dependencies ({names})",
+            code="S301",
+        )
 
     changes: PlannerChangeResults = detect_changes(
         project=project,
@@ -250,10 +287,41 @@ def build_execution_plan(
     else:
         standard_identity_stale_model_names = frozenset()
         run_despite_unchanged = RunDespiteUnchangedPlanningResult()
+    execution_scope: PlannerScope = replace(
+        scope,
+        selected_keys=scope.selected_keys - dependency_baseline_candidate_keys,
+    )
+    dependency_baseline_scope: PlannerScope = replace(
+        scope,
+        selected_keys=scope.selected_keys & reusable_dependency_baseline_keys,
+    )
+    dependency_baseline_entry_results: PlannerModelEntryResults = build_plan_entries(
+        project=project,
+        adapter=adapter,
+        scope=dependency_baseline_scope,
+        snapshot=snapshot,
+        relations=relations,
+        resolved_actions=resolved_actions,
+        cursor_overrides=cursor_overrides,
+        full_refresh=full_refresh,
+        standard_reuse_decisions=(standard_reuse.decisions if standard_reuse is not None else None),
+        run_despite_unchanged=RunDespiteUnchangedPlanningResult(),
+        source_freshness_blocked_model_names=frozenset(),
+        external_blocked_model_names=frozenset(),
+        custom_prepare_version_materializations=custom_prepare_version_materializations,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+    )
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
+        build_dependency_baseline_entries(
+            entries=dependency_baseline_entry_results.entries,
+            candidate_keys=reusable_dependency_baseline_keys,
+        )
+    )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
-        scope=scope,
+        scope=execution_scope,
         snapshot=snapshot,
         relations=relations,
         resolved_actions=resolved_actions,
@@ -274,11 +342,12 @@ def build_execution_plan(
     plan_output: PlanOutput = build_plan_output(
         project=project,
         adapter=adapter,
-        scope=scope,
+        scope=execution_scope,
         snapshot=snapshot,
         relations=relations,
         changes=changes,
         model_entry_results=model_entry_results,
+        dependency_baseline_entries=dependency_baseline_entries,
         reload_sources=reload_sources,
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,

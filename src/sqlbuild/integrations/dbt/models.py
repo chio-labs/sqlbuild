@@ -499,6 +499,7 @@ class DbtInteropPlan:
     sqlbuild_plan_output: PlanOutput | None = None
     dbt_model_plan: DbtModelPlanningResult | None = None
     dbt_reuse_plan: DbtReusePlanningResult | None = None
+    dbt_dependency_baseline_plan: DbtReusePlanningResult | None = None
     dbt_non_model_run_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_pruned_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_pruned_test_unique_ids: tuple[str, ...] = field(default_factory=tuple)

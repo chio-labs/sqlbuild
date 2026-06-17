@@ -18,7 +18,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry, PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
@@ -49,6 +49,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
     DbtReusePlanningResult,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
+    build_dbt_native_dependency_baseline_entries,
+    dependency_baseline_unique_ids,
+)
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_execution_outcome,
     build_dbt_non_model_run_unique_ids,
@@ -72,11 +76,15 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
     execute_dbt_seeded_reuse_plan,
+    has_physical_dbt_reuse_work,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_output import (
     format_dbt_reuse_execution_output,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import (
+    build_dbt_dependency_baseline_plan_output,
+    build_dbt_reuse_plan_output,
+)
 from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
     append_dbt_source_freshness_records,
 )
@@ -85,7 +93,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
     DbtInteropSqlbuildTestAction,
-    DbtReusePlanAction,
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions
@@ -251,6 +258,46 @@ def execute_dbt_interop_from_project(
         )
     if dbt_reuse_plan is not None:
         plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
+    dependency_baseline_ids: tuple[str, ...] = dependency_baseline_unique_ids(
+        project=project,
+        manifest=manifest,
+        plan=plan,
+    )
+    dependency_baseline_model_plan: DbtModelPlanningResult | None = None
+    if dependency_baseline_ids:
+        dependency_baseline_model_plan = build_dbt_model_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            project=project,
+            adapter=adapter,
+            adapter_name=adapter_name,
+            manifest=manifest,
+            graph=graph,
+            candidate_unique_ids=dependency_baseline_ids,
+            full_refresh="--full-refresh" in routed.dbt_args,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        )
+    dbt_dependency_baseline_plan: DbtReusePlanningResult | None = (
+        build_dbt_dependency_baseline_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            current_manifest=manifest,
+            dbt_model_plan=dependency_baseline_model_plan,
+            scoped_unique_ids=dependency_baseline_ids,
+            dbt_options=dbt_options,
+            runner=runner,
+        )
+    )
+    if dbt_dependency_baseline_plan is not None:
+        plan = replace(plan, dbt_dependency_baseline_plan=dbt_dependency_baseline_plan)
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
+        build_dbt_native_dependency_baseline_entries(
+            plan=dbt_dependency_baseline_plan,
+            destination_target_name=project.effective_target_name,
+        )
+    )
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
         project_dir=project_dir,
@@ -260,7 +307,7 @@ def execute_dbt_interop_from_project(
     dbt_fingerprint_warnings: list[str] = []
     reused_dbt_unique_ids: tuple[str, ...] = ()
     baseline_reused_dbt_unique_ids: tuple[str, ...] = ()
-    if _has_physical_dbt_reuse_work(plan):
+    if has_physical_dbt_reuse_work(plan):
         reuse_status: TransientStatusReporter | None = None
         if hasattr(output_stream, "isatty") and output_stream.isatty():
             reuse_status = TransientStatusReporter(stream=output_stream, use_color=use_color)
@@ -322,6 +369,7 @@ def execute_dbt_interop_from_project(
             selected_model_names=plan.selection.sqlbuild_model_names,
             dbt_unique_ids_selected_for_execution=frozenset(
                 (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
+                + tuple(dependency_baseline_ids)
             ),
             output_stream=output_stream,
         )
@@ -347,6 +395,7 @@ def execute_dbt_interop_from_project(
             on_connection_complete=connection_progress.on_connection_complete,
             on_connection_error=connection_progress.on_connection_error,
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
+            dependency_baseline_entries=dependency_baseline_entries,
         )
         if sqlbuild_plan_output is not None:
             plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
@@ -493,7 +542,11 @@ def execute_dbt_interop_from_project(
             adapter_name=adapter_name,
             selected_model_names=plan.selection.sqlbuild_model_names,
             dbt_unique_ids_selected_for_execution=frozenset(
-                (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
+                (
+                    *plan.dbt_selected_unique_ids,
+                    *plan.selection.dbt_required_unique_ids,
+                    *dependency_baseline_ids,
+                )
             ),
             output_stream=output_stream,
         )
@@ -522,6 +575,7 @@ def execute_dbt_interop_from_project(
             on_connection_complete=execution_plan_connection_progress.on_connection_complete,
             on_connection_error=execution_plan_connection_progress.on_connection_error,
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
+            dependency_baseline_entries=dependency_baseline_entries,
         )
     if plan_output is None:
         exit_code: int = max(
@@ -592,12 +646,3 @@ def execute_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
-
-
-def _has_physical_dbt_reuse_work(plan: DbtInteropPlan) -> bool:
-    if plan.dbt_reuse_plan is None:
-        return False
-    return any(
-        entry.action in {DbtReusePlanAction.COMPLETE_REUSE, DbtReusePlanAction.SEEDED_REUSE}
-        for entry in plan.dbt_reuse_plan.entries
-    )
