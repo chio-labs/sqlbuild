@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RelationInfo
+from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RelationInfo, RowDiffResult
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
@@ -32,6 +34,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.graph import (
     build_dbt_combined_graph,
     dbt_model_graph_key,
@@ -53,9 +56,14 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLineageGraph,
+    DbtLsNode,
     DbtModelPlanEntry,
     DbtReusePlanEntry,
     DbtReusePlanningResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
+    DbtDiffOptions,
+    parse_dbt_diff_options,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
@@ -1086,3 +1094,207 @@ def setup_dbt_model_planning_state(
             unique_id=unique_id,
             version_hash=fingerprint_hash,
         )
+
+
+def build_dbt_diff_manifest_model_node(
+    *,
+    unique_id: str,
+    name: str,
+    schema: str,
+    relation_name: str,
+    unique_key: object | None = None,
+    node_meta: dict[str, object] | None = None,
+    config_meta: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build a dbt manifest model node with diff-relevant config and meta."""
+
+    config: dict[str, object] = {"materialized": "table"}
+    if unique_key is not None:
+        config["unique_key"] = unique_key
+    if config_meta is not None:
+        config["meta"] = config_meta
+    node: dict[str, object] = {
+        "unique_id": unique_id,
+        "resource_type": "model",
+        "package_name": "analytics",
+        "name": name,
+        "schema": schema,
+        "alias": name,
+        "relation_name": relation_name,
+        "raw_code": f"select * from {name}",
+        "config": config,
+    }
+    if node_meta is not None:
+        node["meta"] = node_meta
+    return node
+
+
+def build_dbt_diff_manifest_index(
+    *,
+    schema: str,
+    relation_name: str,
+    config: dict[str, object],
+    unique_id: str = "model.analytics.dbt_orders",
+    name: str = "dbt_orders",
+    node_meta: dict[str, object] | None = None,
+    config_meta: dict[str, object] | None = None,
+) -> DbtManifestIndex:
+    """Build a single-model dbt manifest index for diff executor tests."""
+
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_dbt_diff_manifest_model_node(
+                    unique_id=unique_id,
+                    name=name,
+                    schema=schema,
+                    relation_name=relation_name,
+                    unique_key=config.get("unique_key"),
+                    node_meta=node_meta,
+                    config_meta=config_meta,
+                ),
+            )
+        )
+    )
+
+
+def build_dbt_diff_ls_node(
+    *,
+    unique_id: str = "model.analytics.dbt_orders",
+    name: str = "dbt_orders",
+    resource_type: str = "model",
+) -> DbtLsNode:
+    """Build a dbt ls node for diff executor tests."""
+
+    return DbtLsNode(
+        unique_id=unique_id,
+        resource_type=resource_type,
+        package_name="analytics",
+        name=name,
+        fqn=("analytics", name),
+    )
+
+
+def create_dbt_diff_relation(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    name: str,
+    rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Create a dbt diff order table from literal rows in a real DuckDB schema."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    union_sql: str = " UNION ALL ".join(
+        f"SELECT {order_id} AS order_id, {amount} AS amount_cents" for order_id, amount in rows
+    )
+    adapter.execute(connection, f"CREATE TABLE {schema}.{name} AS {union_sql}")
+
+
+def build_dbt_diff_schema_only_options() -> DbtDiffOptions:
+    """Build parsed schema-only dbt diff options for executor tests."""
+
+    return parse_dbt_diff_options(("--select", "dbt_orders", "--schema-only"))
+
+
+def build_dbt_diff_full_options() -> DbtDiffOptions:
+    """Build parsed full dbt diff options for executor tests."""
+
+    return parse_dbt_diff_options(("--select", "dbt_orders", "--full"))
+
+
+def build_dbt_diff_bounded_options(bounded: str) -> DbtDiffOptions:
+    """Build parsed bounded dbt diff options for executor tests."""
+
+    return parse_dbt_diff_options(("--select", "dbt_orders", "--bounded", bounded))
+
+
+def assert_dbt_diff_execution_result(
+    *,
+    result: DiffExecutionResult,
+    expected_model_names: tuple[str, ...],
+    expected_has_row_result: bool,
+    expected_unequal_count: int,
+    expected_left_only_count: int,
+    expected_right_only_count: int,
+    expected_has_failures: bool,
+) -> None:
+    """Assert dbt diff execution result shape, row counts, and failure flag."""
+
+    assert tuple(item.name for item in result.model_results) == expected_model_names
+    row_result: RowDiffResult | None = (
+        result.model_results[0].row_result if result.model_results else None
+    )
+    assert (row_result is not None) == expected_has_row_result
+    unequal: int = row_result.unequal_count if row_result is not None else 0
+    left_only: int = row_result.left_only_count if row_result is not None else 0
+    right_only: int = row_result.right_only_count if row_result is not None else 0
+    assert unequal == expected_unequal_count
+    assert left_only == expected_left_only_count
+    assert right_only == expected_right_only_count
+    assert has_diff_failures(result) == expected_has_failures
+
+
+def create_dbt_diff_unique_key_relation(
+    *, adapter: DuckDbAdapter, connection: object, schema: str, amount_cents: int
+) -> None:
+    """Create a two-column-key dbt diff relation for unique key tests."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(
+        connection,
+        f"CREATE TABLE {schema}.dbt_orders AS "
+        f"SELECT 1 AS order_id, 1 AS line_id, {amount_cents} AS amount_cents",
+    )
+
+
+def create_dbt_diff_relation_with_columns(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    column_sql: str,
+) -> None:
+    """Create a dbt diff relation from an explicit column projection."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}")
+
+
+def create_dbt_diff_cursor_relation(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    cursor_column: str,
+    cursor_kind: str,
+) -> None:
+    """Create a dbt diff relation that carries a bounded cursor column."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    cursor_value: str = (
+        "cast('2026-06-17 00:00:00' as timestamp)" if cursor_kind == "timestamp" else "10"
+    )
+    adapter.execute(
+        connection,
+        f"CREATE TABLE {schema}.dbt_orders AS "
+        f"SELECT 1 AS order_id, 100 AS amount_cents, {cursor_value} AS {cursor_column}",
+    )
+
+
+def create_dbt_diff_relation_when_requested(
+    *, adapter: DuckDbAdapter, connection: object, schema: str, create: bool
+) -> None:
+    """Create a dbt diff relation only when requested, else just the schema."""
+
+    if not create:
+        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+        return
+    create_dbt_diff_relation(
+        adapter=adapter,
+        connection=connection,
+        schema=schema,
+        name="dbt_orders",
+        rows=((1, 1),),
+    )

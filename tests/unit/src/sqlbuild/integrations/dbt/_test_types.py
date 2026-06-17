@@ -543,3 +543,87 @@ class DbtPlanOrchestrationErrorTestCase:
     expected_error_fragment: str
     expected_code: str
     expected_help_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtDiffOptionsTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_select: tuple[str, ...]
+    expected_exclude: tuple[str, ...]
+    expected_full: bool
+    expected_schema_only: bool
+    expected_bounded: str | None
+    expected_verbose: bool
+    expected_max_column_examples: int
+    expected_max_row_only_examples: int
+    expected_dbt_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDiffOptionsErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtDiffUniqueKeyTestCase:
+    description: str
+    config: dict[str, object]
+    expected_unique_key: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDiffUniqueKeyErrorTestCase:
+    description: str
+    config: dict[str, object]
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtDiffBoundedCursorTestCase:
+    description: str
+    node_meta: dict[str, object] | None
+    config_meta: dict[str, object] | None
+    bounded: str
+    expected_cursor_column: str
+    expected_cursor_kind: str
+    expected_has_end_cursor: bool
+
+
+@dataclass(frozen=True)
+class DbtDiffBoundedCursorErrorTestCase:
+    description: str
+    node_meta: dict[str, object] | None
+    config_meta: dict[str, object] | None
+    bounded: str
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtDiffExecuteTestCase:
+    description: str
+    options_args: tuple[str, ...]
+    current_rows: tuple[tuple[object, ...], ...]
+    reuse_rows: tuple[tuple[object, ...], ...]
+    node_resource_type: str
+    expected_model_names: tuple[str, ...]
+    expected_has_row_result: bool
+    expected_unequal_count: int
+    expected_left_only_count: int
+    expected_right_only_count: int
+    expected_has_failures: bool
+
+
+@dataclass(frozen=True)
+class DbtDiffExecuteErrorTestCase:
+    description: str
+    schema_only: bool
+    create_current_relation: bool
+    create_reuse_relation: bool
+    expected_error_fragment: str
+    expected_code: str

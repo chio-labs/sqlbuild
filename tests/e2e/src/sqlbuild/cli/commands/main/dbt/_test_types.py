@@ -270,6 +270,45 @@ class DbtCliFlagAmbiguityE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtDiffE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_absent_stdout_fragments: tuple[str, ...] = ()
+    expected_stderr_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtDiffErrorE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    include_unique_key: bool
+    include_cursor_meta: bool
+    expected_returncode: int
+    expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDiffConfigErrorE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    include_reuse_from: bool
+    reuse_git_ref: str
+    expected_returncode: int
+    expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDiffSelectionE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_stdout_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class DbtInitGeneratedReuseE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
