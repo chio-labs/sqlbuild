@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.dbt_debug import run_dbt_debug_command
+from sqlbuild.cli.commands.main.helpers.dbt_auto_init import (
+    ensure_sqlbuild_project_for_dbt_command,
+)
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project
@@ -24,14 +27,25 @@ def run_dbt_command(
 ) -> int:
     """Execute one `sqb dbt` interop command."""
 
-    if command == DbtInteropCommand.PLAN:
-        return _run_dbt_plan(project_dir=project_dir, args=args, no_color=no_color)
-    if command == DbtInteropCommand.DEBUG:
-        return run_dbt_debug_command(project_dir=project_dir, args=args, no_color=no_color)
-    return _run_dbt_execution_command(
-        command=command,
+    effective_project_dir: Path
+    forwarded_args: tuple[str, ...]
+    effective_project_dir, forwarded_args = ensure_sqlbuild_project_for_dbt_command(
         project_dir=project_dir,
         args=args,
+        no_color=no_color,
+    )
+    if command == DbtInteropCommand.PLAN:
+        return _run_dbt_plan(
+            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
+        )
+    if command == DbtInteropCommand.DEBUG:
+        return run_dbt_debug_command(
+            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
+        )
+    return _run_dbt_execution_command(
+        command=command,
+        project_dir=effective_project_dir,
+        args=forwarded_args,
         no_color=no_color,
     )
 
@@ -66,7 +80,7 @@ def _run_dbt_plan(
         use_color=use_color,
     )
     display_options: DisplayOptions = DisplayOptions(
-        max_entries_per_section=None if verbose else 50
+        max_entries_per_section=None if verbose else 10
     )
     print(
         render_dbt_interop_plan(

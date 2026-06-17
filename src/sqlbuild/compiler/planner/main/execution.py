@@ -62,6 +62,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
 
@@ -79,6 +80,8 @@ def build_execution_plan(
     cursor_overrides: CursorOverrides | None = None,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
+    forced_stale_model_names: tuple[str, ...] = (),
+    external_blocked_model_names: tuple[str, ...] = (),
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
@@ -175,7 +178,13 @@ def build_execution_plan(
             relations=relations,
         )
     )
+    pruned_standard_model_names: tuple[str, ...] = ()
     if standard_scope_pruning == StandardScopePruning.PRUNE_UNCHANGED and not full_refresh:
+        original_selected_model_names: frozenset[str] = frozenset(
+            key.name
+            for key in scope.selected_keys
+            if key.resource_type == CompiledResourceType.MODEL
+        )
         standard_identity_stale_model_names: frozenset[str] = (
             build_standard_identity_stale_model_names(
                 scope=scope,
@@ -184,6 +193,7 @@ def build_execution_plan(
                     model_name: fingerprint.version_hash
                     for model_name, fingerprint in snapshot.fingerprints.models.items()
                 },
+                forced_stale_model_names=forced_stale_model_names,
             )
         )
         source_stale_model_names: frozenset[str] = (
@@ -211,14 +221,26 @@ def build_execution_plan(
             resolved_actions=resolved_actions,
             source_freshness=source_freshness,
             run_despite_unchanged=run_despite_unchanged,
+            forced_stale_model_names=forced_stale_model_names,
             expected_version_hashes=version_identities.model_version_hashes,
             expected_seed_version_hashes=version_identities.seed_version_hashes,
             built_seed_fingerprints=snapshot.fingerprints.seeds,
+        )
+        pruned_standard_model_names = tuple(
+            sorted(
+                original_selected_model_names
+                - frozenset(
+                    key.name
+                    for key in scope.selected_keys
+                    if key.resource_type == CompiledResourceType.MODEL
+                )
+            )
         )
         resolved_actions = mark_version_identity_stale_actions(
             scope=scope,
             resolved_actions=resolved_actions,
             expected_version_hashes=version_identities.model_version_hashes,
+            forced_stale_model_names=forced_stale_model_names,
         )
         resolved_actions = mark_run_despite_unchanged_actions(
             scope=scope,
@@ -239,6 +261,12 @@ def build_execution_plan(
         full_refresh=full_refresh,
         standard_reuse_decisions=(standard_reuse.decisions if standard_reuse is not None else None),
         run_despite_unchanged=run_despite_unchanged,
+        source_freshness_blocked_model_names=(
+            source_freshness.propagation.blocked_model_names
+            if source_freshness is not None and source_freshness.propagation is not None
+            else frozenset()
+        ),
+        external_blocked_model_names=frozenset(external_blocked_model_names),
         custom_prepare_version_materializations=custom_prepare_version_materializations,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -255,6 +283,14 @@ def build_execution_plan(
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,
     )
+    if pruned_standard_model_names:
+        plan_output = replace(
+            plan_output,
+            metadata={
+                **plan_output.metadata,
+                "standard_pruned_model_names": pruned_standard_model_names,
+            },
+        )
     if source_freshness is not None:
         standard_remaining_stale_model_names: tuple[str, ...] = tuple(
             sorted(
@@ -307,6 +343,25 @@ def _serialize_standard_source_freshness_metadata(
         if source_freshness.propagation is not None
         else ()
     )
+    blocked_model_names: tuple[str, ...] = (
+        tuple(sorted(source_freshness.propagation.blocked_model_names))
+        if source_freshness.propagation is not None
+        else ()
+    )
+    age_warning_source_names: tuple[str, ...] = tuple(
+        sorted(
+            identity.source_name
+            for identity, status in source_freshness.age_statuses.items()
+            if status == SourceFreshnessAgeStatus.WARN
+        )
+    )
+    age_error_source_names: tuple[str, ...] = tuple(
+        sorted(
+            identity.source_name
+            for identity, status in source_freshness.age_statuses.items()
+            if status == SourceFreshnessAgeStatus.ERROR
+        )
+    )
     return {
         "observed_source_names": tuple(
             sorted(record.source_name for record in source_freshness.observed_records)
@@ -314,7 +369,10 @@ def _serialize_standard_source_freshness_metadata(
         "changed_source_names": changed_source_names,
         "unchanged_source_names": unchanged_source_names,
         "unknown_source_names": tuple(sorted(source_freshness.unknown_source_names)),
+        "age_warning_source_names": age_warning_source_names,
+        "age_error_source_names": age_error_source_names,
         "stale_model_names": stale_model_names,
+        "blocked_model_names": blocked_model_names,
     }
 
 

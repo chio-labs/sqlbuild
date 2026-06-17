@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
-from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
+from sqlbuild.adapter.shared.models import (
+    ExpressionInferenceProfile,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
+)
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule, LoaderLogicalType
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
 from sqlbuild.compiler.compile.models.core import (
@@ -21,6 +27,12 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksRenderPythonFunctionTestCase,
     DatabricksRenderTableFunctionTestCase,
     DatabricksStringTypeCastRenderingTestCase,
+    DatabricksTableFreshnessBatchTestCase,
+    DatabricksTableFreshnessFallbackTestCase,
+)
+from tests.unit.src.sqlbuild.adapters.databricks.helpers import (
+    FakeDatabricksMetadataConnection,
+    FakeDatabricksMetadataCursor,
 )
 
 
@@ -170,6 +182,110 @@ def test_given_source_freshness_table_when_rendering_prune_then_databricks_uses_
 
     for fragment in test_case.expected_fragments:
         assert fragment in sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksTableFreshnessBatchTestCase(
+            description="uses delta history timestamps for multiple tables",
+            expected_data_versions=(
+                datetime(2026, 1, 2, 3, 4, 5),
+                datetime(2026, 1, 3, 4, 5, 6),
+            ),
+            expected_query_fragments=(
+                "DESCRIBE HISTORY `main`.`raw`.`orders`",
+                "UNION ALL",
+                "max(timestamp) AS last_modified",
+            ),
+        )
+    ],
+    ids=["uses delta history timestamps for multiple tables"],
+)
+def test_given_physical_tables_when_getting_freshness_metadata_then_databricks_uses_delta_history(
+    test_case: DatabricksTableFreshnessBatchTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+    requests: tuple[TableFreshnessRequest, ...] = (
+        TableFreshnessRequest(database="main", schema="raw", name="orders"),
+        TableFreshnessRequest(database="main", schema="raw", name="customers"),
+    )
+    cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(
+        rows=[
+            ("main", "raw", "orders", test_case.expected_data_versions[0]),
+            ("main", "raw", "customers", test_case.expected_data_versions[1]),
+        ]
+    )
+    connection: FakeDatabricksMetadataConnection = FakeDatabricksMetadataConnection((cursor,))
+
+    metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
+        adapter.get_tables_freshness_metadata(connection, requests=requests)
+    )
+
+    assert (
+        tuple(metadata_by_request[request].data_version for request in requests)
+        == test_case.expected_data_versions
+    )
+    assert all(metadata.value_kind == "timestamp" for metadata in metadata_by_request.values())
+    assert cursor.executed_sql is not None
+    for fragment in test_case.expected_query_fragments:
+        assert fragment in cursor.executed_sql
+    assert cursor.closed is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksTableFreshnessFallbackTestCase(
+            description="falls back to unity catalog last altered",
+            expected_data_versions=(
+                datetime(2026, 1, 4, 3, 4, 5),
+                datetime(2026, 1, 5, 4, 5, 6),
+            ),
+            expected_query_fragments=(
+                "FROM `system`.`information_schema`.`tables`",
+                "last_altered",
+                "orders",
+            ),
+        )
+    ],
+    ids=["falls back to unity catalog last altered"],
+)
+def test_given_delta_history_unavailable_when_getting_metadata_then_databricks_uses_uc_last_altered(
+    test_case: DatabricksTableFreshnessFallbackTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+    requests: tuple[TableFreshnessRequest, ...] = (
+        TableFreshnessRequest(database="hive_metastore", schema="raw", name="orders"),
+        TableFreshnessRequest(database="hive_metastore", schema="raw", name="customers"),
+    )
+    history_cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(
+        execute_error=RuntimeError("system catalog unavailable")
+    )
+    uc_cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(
+        rows=[
+            ("hive_metastore", "raw", "orders", "MANAGED", test_case.expected_data_versions[0]),
+            ("hive_metastore", "raw", "customers", "EXTERNAL", test_case.expected_data_versions[1]),
+        ]
+    )
+    connection: FakeDatabricksMetadataConnection = FakeDatabricksMetadataConnection(
+        (history_cursor, uc_cursor)
+    )
+
+    metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
+        adapter.get_tables_freshness_metadata(connection, requests=requests)
+    )
+
+    assert (
+        tuple(metadata_by_request[request].data_version for request in requests)
+        == test_case.expected_data_versions
+    )
+    assert all(metadata.value_kind == "timestamp" for metadata in metadata_by_request.values())
+    assert uc_cursor.executed_sql is not None
+    for fragment in test_case.expected_query_fragments:
+        assert fragment in uc_cursor.executed_sql
+    assert history_cursor.closed is True
+    assert uc_cursor.closed is True
 
 
 TEST_CASES: list[DatabricksRenderDeleteInsertCursorTestCase] = [

@@ -41,6 +41,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -110,6 +111,16 @@ class PostgresAdapter(BaseAdapter):
             f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
 
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
+
     def supports_python_functions(self) -> bool:
         return False
 
@@ -145,6 +156,22 @@ class PostgresAdapter(BaseAdapter):
         if description is None:
             return ()
         return tuple(str(column[0]) for column in description)
+
+    def get_relation_max_cursor(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str,
+    ) -> object | None:
+        """Return the maximum cursor value currently present in a relation."""
+
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        row: Any | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
 
     def build_cursor_filter(
         self,
@@ -318,8 +345,8 @@ class PostgresAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> tuple[str, ...]:
-        target: str = f"{database}.{schema}" if database is not None else schema
-        return (f"CREATE SCHEMA IF NOT EXISTS {target}",)
+        del database
+        return (f"CREATE SCHEMA IF NOT EXISTS {schema}",)
 
     def ensure_schema(
         self,
@@ -491,6 +518,21 @@ class PostgresAdapter(BaseAdapter):
             origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
+            cursor_type=cursor_type,
+        )
+
+    def render_seed_select_after_cursor(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_after_cursor_impl(
+            origin=origin,
+            cursor_column=cursor_column,
+            cursor_start_exclusive=cursor_start_exclusive,
             cursor_type=cursor_type,
         )
 
@@ -1281,13 +1323,9 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             name=FINGERPRINT_TABLE_NAME,
         )
-        index_name: str | None = self.render_qualified_name(
-            database=None,
-            schema=schema,
-            name="_sqlbuild_fingerprints_latest_idx",
-        )
-        if table_name is None or index_name is None:
+        if table_name is None:
             return ()
+        index_name: str = "_sqlbuild_fingerprints_latest_idx"
         return (
             "CREATE INDEX IF NOT EXISTS "
             f"{index_name} ON {table_name} (node_type, node_name, ts DESC, run_id DESC)",
@@ -1348,13 +1386,9 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
         )
-        index_name: str | None = self.render_qualified_name(
-            database=None,
-            schema=schema,
-            name="_sqlbuild_source_freshness_latest_idx",
-        )
-        if table_name is None or index_name is None:
+        if table_name is None:
             return ()
+        index_name: str = "_sqlbuild_source_freshness_latest_idx"
         return (
             "CREATE INDEX IF NOT EXISTS "
             f"{index_name} ON {table_name} ("

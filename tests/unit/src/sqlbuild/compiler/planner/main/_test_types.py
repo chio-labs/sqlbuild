@@ -17,6 +17,12 @@ class HookFunctionPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class ExternalBlockedPlanOutputTestCase:
+    description: str
+    expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class StandardReuseFromTargetPlanOutputTestCase:
     description: str
     expected_reuse_from_target_name: str

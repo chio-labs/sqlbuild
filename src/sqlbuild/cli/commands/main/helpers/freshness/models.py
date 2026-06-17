@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.cli.commands.main.helpers.freshness.types import FreshnessSourceStatus
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class FreshnessSourceResult:
     target_schema: str | None = None
     target_name: str | None = None
     message: str | None = None
+    age_status: SourceFreshnessAgeStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -53,3 +55,27 @@ class FreshnessCommandResult:
     @property
     def error_count(self) -> int:
         return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.ERROR)
+
+    @property
+    def age_pass_count(self) -> int:
+        return sum(
+            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.PASS
+        )
+
+    @property
+    def age_warn_count(self) -> int:
+        return sum(
+            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.WARN
+        )
+
+    @property
+    def age_error_count(self) -> int:
+        return sum(
+            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.ERROR
+        )
+
+    @property
+    def age_unknown_count(self) -> int:
+        return sum(
+            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.UNKNOWN
+        )

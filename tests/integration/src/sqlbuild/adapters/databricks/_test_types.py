@@ -101,7 +101,7 @@ class DatabricksTableFreshnessMetadataTestCase:
     description: str
     expected_value_kind: str
     expected_supports_metadata: bool
-    expected_data_version_type: type[int]
+    expected_data_version_type: type[object]
 
 
 @dataclass(frozen=True)

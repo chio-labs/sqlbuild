@@ -18,17 +18,25 @@ from scripts.structure.structure_conventions.models import Violation
 
 _TARGET_REUSE_PATH_MARKERS: tuple[str, ...] = (
     "standard_reuse",
+    "reuse_candidates.py",
+    "reuse_execute.py",
+    "reuse_plan.py",
     "reuse.py",
 )
-_TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
-    "source_relation",
-    "source_cursor",
+_GLOBAL_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "source_fingerprint",
-    "source_version",
-    "target_relation",
     "target_cursor",
     "REUSE_RELATION",
     "reuse_relation",
+)
+_TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
+    "source_relation",
+    "source relation",
+    "source/target",
+    "source_cursor",
+    "target_relation",
+    "target relation",
+    "target_cursor",
 )
 
 
@@ -58,11 +66,12 @@ def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Viola
 
 
 def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
-    """Reject ambiguous source/target wording in target-reuse implementation modules."""
+    """Reject ambiguous source/target wording in reuse implementation modules."""
 
     path_text: str = file_path.as_posix()
-    if not any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS):
+    if path_text.endswith("scripts/structure/structure_conventions/rules.py"):
         return []
+    check_scoped_terms: bool = any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS)
 
     violations: list[Violation] = []
     lines: list[str] = file_path.read_text(encoding="utf-8").splitlines()
@@ -70,7 +79,10 @@ def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
     line: str
     for line_number, line in enumerate(lines, start=1):
         term: str
-        for term in _TARGET_REUSE_FORBIDDEN_TERMS:
+        terms: tuple[str, ...] = _GLOBAL_REUSE_FORBIDDEN_TERMS
+        if check_scoped_terms:
+            terms = (*terms, *_TARGET_REUSE_FORBIDDEN_TERMS)
+        for term in terms:
             if term in line:
                 violations.append(
                     Violation(
@@ -78,7 +90,7 @@ def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
                         path=file_path,
                         line=line_number,
                         message=(
-                            f"target-reuse modules must not use ambiguous term '{term}'; "
+                            f"reuse code must not use ambiguous term '{term}'; "
                             "use origin/destination/reuse_from terminology unless this is real "
                             "SQLBuild source logic"
                         ),
@@ -125,6 +137,60 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
                             ),
                         )
                     )
+    return violations
+
+
+def check_no_internal_reexport_modules(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Reject internal modules that only re-export imports from another module."""
+
+    if not _is_runtime_file(repo_root, file_path):
+        return []
+    if _is_allowed_reexport_surface(repo_root, file_path):
+        return []
+    if not _is_pure_reexport_module(module):
+        return []
+    return [
+        Violation(
+            code="SC046",
+            path=file_path,
+            line=1,
+            message=(
+                "runtime modules must not be pure re-export shims; import from the "
+                "implementation module directly or define a real public API surface"
+            ),
+        )
+    ]
+
+
+def check_no_internal_helper_exports(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Reject __all__ export surfaces inside internal helper packages."""
+
+    if not _is_runtime_file(repo_root, file_path):
+        return []
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if "helpers" not in relative_parts:
+        return []
+    if len(relative_parts) >= 4 and relative_parts[:3] == ("src", "sqlbuild", "integrations"):
+        return []
+
+    violations: list[Violation] = []
+    for node in module.body:
+        if _is_all_assignment(node):
+            violations.append(
+                Violation(
+                    code="SC047",
+                    path=file_path,
+                    line=getattr(node, "lineno", 1),
+                    message=(
+                        "internal helper modules must not define __all__; expose public APIs "
+                        "from an approved public surface instead"
+                    ),
+                )
+            )
     return violations
 
 
@@ -1396,6 +1462,68 @@ def _has_deep_internal_segment(parts: tuple[str, ...], internal_segments: frozen
     """Check whether any segment in the import path is a deep internal boundary."""
 
     return any(seg in internal_segments for seg in parts)
+
+
+def _is_runtime_file(repo_root: Path, file_path: Path) -> bool:
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    return len(relative_parts) >= 3 and relative_parts[:2] == ("src", "sqlbuild")
+
+
+def _is_allowed_reexport_surface(repo_root: Path, file_path: Path) -> bool:
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    if file_path.name == "__init__.py":
+        return True
+    if len(relative_parts) == 3 and relative_parts[:2] == ("src", "sqlbuild"):
+        return True
+    if len(relative_parts) >= 4 and relative_parts[:3] == ("src", "sqlbuild", "integrations"):
+        return True
+    if len(relative_parts) == 4 and relative_parts[3] == "exceptions.py":
+        return True
+    return False
+
+
+def _is_pure_reexport_module(module: ast.Module) -> bool:
+    saw_import: bool = False
+    saw_all: bool = False
+    for node in module.body:
+        if _is_module_docstring(node) or _is_future_annotations_import(node):
+            continue
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            saw_import = True
+            continue
+        if _is_all_assignment(node):
+            saw_all = True
+            continue
+        return False
+    return saw_import and saw_all
+
+
+def _is_module_docstring(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
+
+
+def _is_future_annotations_import(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+    )
+
+
+def _is_all_assignment(node: ast.stmt) -> bool:
+    if isinstance(node, ast.Assign):
+        return any(
+            isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+        )
+    return (
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "__all__"
+    )
 
 
 def _adapter_contract_class_names(

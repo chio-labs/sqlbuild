@@ -31,6 +31,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
 from sqlbuild.adapter.shared.types import (
@@ -70,6 +71,16 @@ class DuckDbBackedAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         raise AdapterUserError(
             f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
@@ -972,6 +983,21 @@ class DuckDbBackedAdapter(BaseAdapter):
             return f"TIMESTAMP '{value}'"
         return f"'{value}'"
 
+    def render_seed_select_after_cursor(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_after_cursor_impl(
+            origin=origin,
+            cursor_column=cursor_column,
+            cursor_start_exclusive=cursor_start_exclusive,
+            cursor_type=cursor_type,
+        )
+
     def connect(self, config: dict[str, Any]) -> Any:
         """Open a DuckDB connection from the resolved connection config."""
 
@@ -1038,6 +1064,22 @@ class DuckDbBackedAdapter(BaseAdapter):
             connection, f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
         )
         return tuple(str(row[0]) for row in cursor.fetchall())
+
+    def get_relation_max_cursor(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str,
+    ) -> object | None:
+        """Return the maximum cursor value currently present in a relation."""
+
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        row: Any | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
 
     def build_cursor_filter(
         self,

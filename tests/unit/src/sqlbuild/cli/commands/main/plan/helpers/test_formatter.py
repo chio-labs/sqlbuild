@@ -45,6 +45,56 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
 
 TEST_CASES: list[FormatPlanTestCase] = [
     FormatPlanTestCase(
+        description="changes-only pruned models are visible as current skips",
+        plan_output=build_plan_output(
+            metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
+        ),
+        expected_fragments=(
+            "Plan ready (0 selected)",
+            "Skipped current models (1 already up to date)",
+        ),
+        unexpected_fragments=("customer_revenue_check", "changes-only", "Execution"),
+    ),
+    FormatPlanTestCase(
+        description="verbose changes-only pruned models show current model names",
+        plan_output=build_plan_output(
+            metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
+        ),
+        display_options=DisplayOptions(max_entries_per_section=None),
+        expected_fragments=(
+            "Skipped current models (1 already up to date)",
+            "customer_revenue_check",
+            "up to date",
+        ),
+        unexpected_fragments=("changes-only",),
+    ),
+    FormatPlanTestCase(
+        description="source freshness age warnings and errors are visible",
+        plan_output=build_plan_output(
+            metadata={
+                "standard_source_freshness": {
+                    "observed_source_names": ("raw.orders", "raw.payments"),
+                    "changed_source_names": (),
+                    "unchanged_source_names": ("raw.orders",),
+                    "unknown_source_names": (),
+                    "age_warning_source_names": ("raw.payments",),
+                    "age_error_source_names": ("raw.orders",),
+                    "stale_model_names": (),
+                    "blocked_model_names": ("fact_orders",),
+                }
+            }
+        ),
+        expected_fragments=(
+            "Source freshness",
+            "age warnings:",
+            "raw.payments",
+            "age errors:",
+            "raw.orders",
+            "source-blocked models:",
+            "fact_orders",
+        ),
+    ),
+    FormatPlanTestCase(
         description="routine models section shows names with strategy and cursor type",
         plan_output=build_plan_output(
             model_entries=(
@@ -860,7 +910,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "stale root set: root_a, root_b",
             "stale models: 55",
             "stale model set: model_00",
-            "... (+5 more; use --verbose to show all)",
+            "... (+35 more; use --verbose to show all)",
         ),
         expected_ordered_fragments=(
             "stale roots: 2",
@@ -920,7 +970,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "Remaining stale",
             "models outside selection: 55",
             "model set: model_00",
-            "... (+5 more; use --verbose to show all)",
+            "... (+35 more; use --verbose to show all)",
         ),
     ),
     FormatPlanTestCase(

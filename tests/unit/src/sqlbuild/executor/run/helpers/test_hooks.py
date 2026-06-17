@@ -167,7 +167,7 @@ def test_given_python_hook_without_runtime_registry_when_executing_then_it_fails
             expected_hook_name="notify",
             expected_hook_index=0,
             expected_run_id="run-1",
-            expected_environment="dev",
+            expected_target="dev",
             expected_vars={"channel": "alerts"},
             expected_destination_name="orders",
             expected_destination_schema="main",
@@ -216,7 +216,7 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
             qualified_name=None,
         ),
         run_id="run-1",
-        environment="dev",
+        target="dev",
         effective_vars={"channel": "alerts"},
         statement_recorder=statement_recorder,
     )
@@ -229,7 +229,7 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
     assert ctx.hook_name == test_case.expected_hook_name
     assert ctx.hook_index == test_case.expected_hook_index
     assert ctx.run_id == test_case.expected_run_id
-    assert ctx.environment == test_case.expected_environment
+    assert ctx.target == test_case.expected_target
     assert ctx.vars == test_case.expected_vars
     assert ctx.destination.name == test_case.expected_destination_name
     assert ctx.destination.schema == test_case.expected_destination_schema

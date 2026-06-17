@@ -10,6 +10,7 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
     StandardSourceFreshnessPropagationResult,
 )
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessPropagationTestCase,
 )
@@ -66,6 +67,21 @@ PROPAGATION_TEST_CASES: list[StandardSourceFreshnessPropagationTestCase] = [
         expected_changed_source_model_names={},
         expected_unknown_source_model_names={"raw.orders": frozenset({"orders"})},
     ),
+    StandardSourceFreshnessPropagationTestCase(
+        description="propagates source age errors to blocked downstream models",
+        changed_source_names=(),
+        unknown_source_names=(),
+        error_source_names=("raw.orders",),
+        downstream_edges={
+            "source:raw.orders": ("model:stg_orders",),
+            "model:stg_orders": ("model:fact_orders",),
+        },
+        expected_stale_model_names=frozenset(),
+        expected_blocked_model_names=frozenset({"stg_orders", "fact_orders"}),
+        expected_changed_source_model_names={},
+        expected_unknown_source_model_names={},
+        expected_error_source_model_names={"raw.orders": frozenset({"stg_orders", "fact_orders"})},
+    ),
 ]
 
 
@@ -85,6 +101,10 @@ def test_given_source_freshness_roots_when_propagating_then_returns_downstream_m
                     for source_name in test_case.changed_source_names
                 ),
                 unknown_source_names=test_case.unknown_source_names,
+                age_statuses={
+                    source_freshness_identity(source_name): SourceFreshnessAgeStatus.ERROR
+                    for source_name in test_case.error_source_names
+                },
             ),
             scope=PlannerScope(
                 upstream_deps={},
@@ -98,6 +118,7 @@ def test_given_source_freshness_roots_when_propagating_then_returns_downstream_m
     )
 
     assert propagation.stale_model_names == test_case.expected_stale_model_names
+    assert propagation.blocked_model_names == test_case.expected_blocked_model_names
     source_name: str
     expected_model_names: frozenset[str]
     for source_name, expected_model_names in test_case.expected_changed_source_model_names.items():
@@ -107,3 +128,10 @@ def test_given_source_freshness_roots_when_propagating_then_returns_downstream_m
         )
     for source_name, expected_model_names in test_case.expected_unknown_source_model_names.items():
         assert propagation.unknown_source_model_names[source_name] == expected_model_names
+    for source_name, expected_model_names in (
+        test_case.expected_error_source_model_names or {}
+    ).items():
+        assert (
+            propagation.error_source_model_names[source_freshness_identity(source_name)]
+            == expected_model_names
+        )

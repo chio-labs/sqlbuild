@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
@@ -15,6 +19,9 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -22,13 +29,33 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.integrations.dbt.helpers.graph import dbt_model_graph_key, sqlbuild_model_graph_key
-from sqlbuild.integrations.dbt.helpers.runner import build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.graph import (
+    dbt_model_graph_key,
+    dbt_source_graph_key,
+    sqlbuild_model_graph_key,
+)
+from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
+from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
     DbtCombinedGraphKey,
     DbtCommandResult,
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtModelPlanEntry,
+    DbtReusePlanEntry,
+    DbtReusePlanningResult,
+)
+from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
+    DbtInteropCommand,
+    DbtModelPlanAction,
+    DbtModelPlanReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
 )
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 
@@ -64,6 +91,178 @@ def build_dbt_cli_options(project_root: Path) -> DbtCliOptions:
     )
 
 
+def build_dbt_interop_plan_for_reuse_scope(
+    *,
+    dbt_selected_unique_ids: tuple[str, ...],
+    dbt_required_unique_ids: tuple[str, ...] = (),
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None,
+) -> DbtInteropPlan:
+    """Build a minimal interop plan for reuse scope tests."""
+
+    return DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=dbt_selected_unique_ids,
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(
+            dbt_required_unique_ids=dbt_required_unique_ids,
+            dbt_anchor_unique_ids_by_term=dbt_anchor_unique_ids_by_term or {},
+        ),
+    )
+
+
+def build_dbt_model_plan_entry(
+    *,
+    unique_id: str,
+    action: DbtModelPlanAction,
+    reason: DbtModelPlanReason,
+    previous_metadata_json: str | None = None,
+) -> DbtModelPlanEntry:
+    """Build a minimal dbt model plan entry for reuse planning tests."""
+
+    name: str = unique_id.rsplit(".", maxsplit=1)[-1]
+    return DbtModelPlanEntry(
+        unique_id=unique_id,
+        package_name="analytics",
+        name=name,
+        action=action,
+        reason=reason,
+        relation_name=f"dev.{name}",
+        previous_metadata_json=previous_metadata_json,
+    )
+
+
+def build_reuse_plan_current_manifest_nodes() -> tuple[dict[str, object], ...]:
+    """Build current manifest nodes for reuse plan pipeline tests."""
+
+    return (
+        build_manifest_model_node(
+            unique_id="model.analytics.orders",
+            package_name="analytics",
+            name="orders",
+            relation_name="dev.orders",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.events",
+            package_name="analytics",
+            name="events",
+            relation_name="dev.events",
+            materialized="incremental",
+            incremental_strategy="microbatch",
+        ),
+    )
+
+
+def build_reuse_plan_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
+    """Build reuse manifest nodes for reuse plan pipeline tests."""
+
+    return (
+        build_manifest_model_node(
+            unique_id="model.analytics.orders",
+            package_name="analytics",
+            name="orders",
+            relation_name="prod.orders",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.events",
+            package_name="analytics",
+            name="events",
+            relation_name="prod.events",
+            materialized="incremental",
+            incremental_strategy="microbatch",
+        ),
+    )
+
+
+def assert_reuse_plan_output_matches(
+    *,
+    result: DbtReusePlanningResult | None,
+    expected_is_none: bool,
+    expected_complete_reuse_unique_ids: tuple[str, ...],
+    expected_seeded_reuse_unique_ids: tuple[str, ...],
+) -> None:
+    """Assert reuse plan pipeline helper output matches expectations."""
+
+    assert (result is None) is expected_is_none
+    if result is None:
+        return
+    assert result.complete_reuse_unique_ids == expected_complete_reuse_unique_ids
+    assert result.seeded_reuse_unique_ids == expected_seeded_reuse_unique_ids
+
+
+def build_reuse_execute_manifest() -> DbtManifestIndex:
+    """Build a manifest for dbt complete reuse execution tests."""
+
+    model: DbtManifestModel = DbtManifestModel(
+        unique_id="model.analytics.fact_orders",
+        package_name="analytics",
+        name="fact_orders",
+        relation_name="main.fact_orders",
+        database=None,
+        schema="main",
+        alias="fact_orders",
+        node_checksum="checksum-1",
+        query_sql="select 1 as order_id, 111 as amount",
+    )
+    return DbtManifestIndex(
+        models_by_unique_id={model.unique_id: model},
+        models_by_name={model.name: (model,)},
+        models_by_package_and_name={(model.package_name, model.name): model},
+    )
+
+
+def build_reuse_execute_plan() -> DbtInteropPlan:
+    """Build a dbt interop plan with one complete reuse entry."""
+
+    return build_dbt_interop_plan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(("sqb", "build", "--select", "downstream_orders"),),
+        selection=DbtInteropSelectionResult(sqlbuild_model_names=("downstream_orders",)),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.fact_orders",
+                    action=DbtReusePlanAction.COMPLETE_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    materialization="table",
+                    destination_relation_name="main.fact_orders",
+                    origin_relation_name="prod.fact_orders",
+                ),
+            )
+        ),
+    )
+
+
+def build_seeded_reuse_execute_plan(*, cursor_column: str | None) -> DbtInteropPlan:
+    """Build a dbt interop plan with one seeded reuse entry."""
+
+    return build_dbt_interop_plan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(("sqb", "build", "--select", "downstream_events"),),
+        selection=DbtInteropSelectionResult(sqlbuild_model_names=("downstream_events",)),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.fact_orders",
+                    action=DbtReusePlanAction.SEEDED_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    materialization="incremental",
+                    destination_relation_name="main.fact_orders",
+                    origin_relation_name="prod.fact_orders",
+                    cursor_column=cursor_column,
+                ),
+            )
+        ),
+    )
+
+
 class RecordingDbtInvoker:
     """Record dbt invocations and return a fixed result."""
 
@@ -89,6 +288,27 @@ class MappingDbtInvoker:
         if result is not None:
             return result
         return DbtCommandResult(argv=argv, returncode=0, stdout="")
+
+
+class CompileOnlyDbtRunner(DbtRunner):
+    """Minimal dbt runner for execution-pipeline tests that only compile."""
+
+    def compile(self, *, options: DbtCliOptions) -> DbtCommandResult:
+        del options
+        return DbtCommandResult(argv=("dbt", "compile"), returncode=0)
+
+
+def emit_connection_progress(**kwargs: object) -> None:
+    """Emit one successful connection progress cycle from a mocked planner."""
+
+    start: object = kwargs["on_connection_start"]
+    complete: object = kwargs["on_connection_complete"]
+    assert callable(start)
+    assert callable(complete)
+    on_start: Callable[[int], None] = cast(Callable[[int], None], start)
+    on_complete: Callable[[int, float], None] = cast(Callable[[int, float], None], complete)
+    on_start(1)
+    on_complete(1, 0.0)
 
 
 def build_dbt_ls_command_result(
@@ -197,10 +417,15 @@ def extract_dbt_ls_excludes(argv: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def build_manifest_data(*, nodes: tuple[dict[str, object], ...]) -> dict[str, object]:
+def build_manifest_data(
+    *, nodes: tuple[dict[str, object], ...], sources: tuple[dict[str, object], ...] = ()
+) -> dict[str, object]:
     """Build a minimal dbt manifest payload for model lookup tests."""
 
-    return {"nodes": {str(node["unique_id"]): node for node in nodes}}
+    return {
+        "nodes": {str(node["unique_id"]): node for node in nodes},
+        "sources": {str(source["unique_id"]): source for source in sources},
+    }
 
 
 def build_manifest_model_node(
@@ -212,7 +437,13 @@ def build_manifest_model_node(
     database: str | None = None,
     schema: str | None = None,
     alias: str | None = None,
+    checksum: str | None = None,
+    fqn: tuple[str, ...] = (),
+    raw_code: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
+    materialized: str | None = "view",
+    incremental_strategy: str | None = None,
+    meta: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
 
@@ -221,6 +452,7 @@ def build_manifest_model_node(
         "resource_type": "model",
         "package_name": package_name,
         "name": name,
+        "raw_code": raw_code if raw_code is not None else f"select * from {name}",
     }
     if relation_name is not None:
         node["relation_name"] = relation_name
@@ -230,8 +462,62 @@ def build_manifest_model_node(
         node["schema"] = schema
     if alias is not None:
         node["alias"] = alias
+    if checksum is not None:
+        node["checksum"] = {"checksum": checksum}
+    if fqn:
+        node["fqn"] = list(fqn)
     if depends_on_nodes:
         node["depends_on"] = {"nodes": list(depends_on_nodes)}
+    if materialized is not None:
+        config: dict[str, object] = {"materialized": materialized}
+        if incremental_strategy is not None:
+            config["incremental_strategy"] = incremental_strategy
+        if meta is not None:
+            config["meta"] = meta
+        node["config"] = config
+    return node
+
+
+def build_manifest_source_node(
+    *,
+    unique_id: str,
+    package_name: str = "analytics",
+    source_name: str = "raw",
+    name: str = "orders",
+    relation_name: str | None = None,
+    database: str | None = None,
+    schema: str | None = None,
+    identifier: str | None = None,
+    loaded_at_field: str | None = None,
+    loaded_at_query: str | None = None,
+    freshness: dict[str, object] | None = None,
+    freshness_filter: str | None = None,
+) -> dict[str, object]:
+    """Build a minimal dbt manifest source node."""
+
+    node: dict[str, object] = {
+        "unique_id": unique_id,
+        "resource_type": "source",
+        "package_name": package_name,
+        "source_name": source_name,
+        "name": name,
+    }
+    if relation_name is not None:
+        node["relation_name"] = relation_name
+    if database is not None:
+        node["database"] = database
+    if schema is not None:
+        node["schema"] = schema
+    if identifier is not None:
+        node["identifier"] = identifier
+    if loaded_at_field is not None:
+        node["loaded_at_field"] = loaded_at_field
+    if loaded_at_query is not None:
+        node["loaded_at_query"] = loaded_at_query
+    if freshness is not None:
+        node["freshness"] = freshness
+    if freshness_filter is not None:
+        node["filter"] = freshness_filter
     return node
 
 
@@ -311,7 +597,72 @@ def graph_key_stable_ids(keys: frozenset[DbtCombinedGraphKey]) -> tuple[str, ...
 def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
     """Build a graph key from its stable string form."""
 
-    owner, _resource_type, name = stable_id.split(":", maxsplit=2)
-    if owner == "dbt":
+    owner, resource_type, name = stable_id.split(":", maxsplit=2)
+    owner_enum: DbtCombinedGraphOwner = DbtCombinedGraphOwner(owner)
+    resource_type_enum: DbtCombinedGraphResourceType = DbtCombinedGraphResourceType(resource_type)
+    if (
+        owner_enum == DbtCombinedGraphOwner.DBT
+        and resource_type_enum == DbtCombinedGraphResourceType.SOURCE
+    ):
+        return dbt_source_graph_key(name)
+    if owner_enum == DbtCombinedGraphOwner.DBT:
         return dbt_model_graph_key(name)
     return sqlbuild_model_graph_key(name)
+
+
+def write_dbt_test_fingerprint(
+    *,
+    adapter: Any,
+    connection: Any,
+    unique_id: str,
+    version_hash: str,
+    definition: str = "select * from orders",
+) -> None:
+    """Write one dbt fingerprint row for planning tests."""
+
+    fingerprint: Fingerprint = Fingerprint(
+        node_type=NODE_TYPE_DBT,
+        node_name=unique_id,
+        target_database=None,
+        target_schema="main",
+        target_name="orders",
+        run_id="test",
+        definition_hash=version_hash,
+        version_hash=version_hash,
+        schema_fingerprint=hashlib.sha256(b"").hexdigest(),
+        definition=definition,
+        metadata_json="{}",
+        ts=datetime.now(tz=UTC),
+    )
+    write_fingerprint(
+        connection=connection,
+        execute=adapter.execute,
+        database=None,
+        schema="main",
+        fingerprint=fingerprint,
+        render_qualified_name=adapter.render_qualified_name,
+        render_framework_type=adapter.render_framework_type,
+        render_create_table_sql=adapter.render_create_fingerprint_table_sql,
+        render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
+    )
+
+
+def setup_dbt_model_planning_state(
+    *,
+    adapter: Any,
+    connection: Any,
+    unique_id: str,
+    create_relation: bool,
+    fingerprint_hash: str | None,
+) -> None:
+    """Create optional relation and fingerprint state for dbt model planning tests."""
+
+    if create_relation:
+        adapter.execute(connection, "CREATE TABLE main.orders AS SELECT 1 AS id")
+    if fingerprint_hash is not None:
+        write_dbt_test_fingerprint(
+            adapter=adapter,
+            connection=connection,
+            unique_id=unique_id,
+            version_hash=fingerprint_hash,
+        )

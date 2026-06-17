@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import QueryResult, TableFreshnessMetadata
+from sqlbuild.adapter.shared.models import (
+    QueryResult,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
+)
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessAgePolicy, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -37,6 +41,22 @@ class FreshnessRecordingAdapter:
             observed_at=datetime(2026, 1, 2, 3, 5, 0),
         )
 
+    def get_tables_freshness_metadata(
+        self,
+        connection: object,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        return {
+            request: self.get_table_freshness_metadata(
+                connection,
+                database=request.database,
+                schema=request.schema,
+                name=request.name,
+            )
+            for request in requests
+        }
+
     def query(self, _connection: object, sql: str, *, limit: int | None = None) -> QueryResult:
         del limit
         self.queries.append(sql)
@@ -51,6 +71,23 @@ class FreshnessRecordingAdapter:
                 columns=("data_version",),
                 rows=((datetime(2026, 1, 1, 0, 5, 0),),),
             )
+        if "raw_age_error" in sql:
+            return QueryResult(
+                columns=("data_version",),
+                rows=((datetime(2025, 12, 31, 21, 0, 0),),),
+            )
+        if "raw_age_warn" in sql:
+            return QueryResult(
+                columns=("data_version",),
+                rows=((datetime(2025, 12, 31, 22, 30, 0),),),
+            )
+        if "raw_age_pass" in sql:
+            return QueryResult(
+                columns=("data_version",),
+                rows=((datetime(2025, 12, 31, 23, 30, 0),),),
+            )
+        if "raw_age_unknown" in sql:
+            return QueryResult(columns=("data_version",), rows=((42,),))
         return QueryResult(columns=("data_version",), rows=((0,),))
 
 
@@ -92,6 +129,46 @@ def freshness_sources() -> tuple[SourceEntry, ...]:
                 value_kind=SourceFreshnessValueKind.TIMESTAMP,
                 query="SELECT TIMESTAMP '2026-01-01 00:05:00' AS data_version FROM raw_lag",
                 lag_tolerance="10m",
+            ),
+        ),
+        SourceEntry(
+            name="raw_age_error",
+            expression="SELECT 6 AS event_id",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                query="SELECT TIMESTAMP '2025-12-31 21:00:00' AS data_version FROM raw_age_error",
+                age_policy=SourceFreshnessAgePolicy(warn_after="1h", error_after="2h"),
+            ),
+        ),
+        SourceEntry(
+            name="raw_age_warn",
+            expression="SELECT 7 AS event_id",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                query="SELECT TIMESTAMP '2025-12-31 22:30:00' AS data_version FROM raw_age_warn",
+                age_policy=SourceFreshnessAgePolicy(warn_after="1h", error_after="2h"),
+            ),
+        ),
+        SourceEntry(
+            name="raw_age_pass",
+            expression="SELECT 8 AS event_id",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                query="SELECT TIMESTAMP '2025-12-31 23:30:00' AS data_version FROM raw_age_pass",
+                age_policy=SourceFreshnessAgePolicy(warn_after="1h", error_after="2h"),
+            ),
+        ),
+        SourceEntry(
+            name="raw_age_unknown",
+            expression="SELECT 9 AS event_id",
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.SQL,
+                value_kind=SourceFreshnessValueKind.INTEGER,
+                query="SELECT 42 AS data_version FROM raw_age_unknown",
+                age_policy=SourceFreshnessAgePolicy(warn_after="1h", error_after="2h"),
             ),
         ),
     )

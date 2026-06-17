@@ -31,3 +31,9 @@ class DbtInteropArgumentError(DbtInteropError):
     """Raised when `sqb dbt` arguments cannot be routed safely."""
 
     code: str = "C230"
+
+
+class DbtProfileError(DbtInteropConfigError):
+    """Raised when a dbt profile cannot be resolved for SQLBuild."""
+
+    code: str = "C242"

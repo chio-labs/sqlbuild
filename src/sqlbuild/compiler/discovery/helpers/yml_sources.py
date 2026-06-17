@@ -25,6 +25,7 @@ from sqlbuild.spec.models.source import (
     IntegrationLoaderConfig,
     SourceColumnEntry,
     SourceEntry,
+    SourceFreshnessAgePolicy,
     SourceFreshnessConfig,
 )
 from sqlbuild.spec.models.types import (
@@ -381,6 +382,13 @@ def _optional_freshness_config(
         label="source freshness",
         error_class=SourceParseError,
     )
+    freshness_filter: str | None = optional_non_empty_string(
+        entry=freshness,
+        key="filter",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
     lag_tolerance: str | None = optional_non_empty_string(
         entry=freshness,
         key="lag_tolerance",
@@ -388,12 +396,18 @@ def _optional_freshness_config(
         label="source freshness",
         error_class=SourceParseError,
     )
+    age_policy: SourceFreshnessAgePolicy | None = _optional_freshness_age_policy(
+        freshness=freshness,
+        file_path=file_path,
+    )
     config: SourceFreshnessConfig = SourceFreshnessConfig(
         strategy=strategy,
         value_kind=value_kind,
         column=column,
         query=query,
+        filter=freshness_filter,
         lag_tolerance=lag_tolerance,
+        age_policy=age_policy,
     )
     _validate_freshness_config(config=config, file_path=file_path)
     return config
@@ -402,11 +416,18 @@ def _optional_freshness_config(
 def _validate_freshness_config(*, config: SourceFreshnessConfig, file_path: Path) -> None:
     if config.lag_tolerance is not None:
         _validate_source_freshness_lag_tolerance(config=config, file_path=file_path)
+    if config.age_policy is not None:
+        _validate_source_freshness_age_policy(config=config, file_path=file_path)
     if config.strategy == SourceFreshnessStrategy.ADAPTER:
-        if config.value_kind is not None or config.column is not None or config.query is not None:
+        if (
+            config.value_kind is not None
+            or config.column is not None
+            or config.query is not None
+            or config.filter is not None
+        ):
             raise SourceParseError(
                 f"{file_path} source freshness strategy adapter does not support type, "
-                "column, or query"
+                "column, query, or filter"
             )
         return
     if config.strategy == SourceFreshnessStrategy.COLUMN:
@@ -430,6 +451,41 @@ def _validate_freshness_config(*, config: SourceFreshnessConfig, file_path: Path
         raise SourceParseError(f"{file_path} source freshness strategy sql requires type")
     if config.column is not None:
         raise SourceParseError(f"{file_path} source freshness strategy sql does not support column")
+    if config.filter is not None:
+        raise SourceParseError(f"{file_path} source freshness strategy sql does not support filter")
+
+
+def _optional_freshness_age_policy(
+    *, freshness: dict[str, object], file_path: Path
+) -> SourceFreshnessAgePolicy | None:
+    if "age_policy" not in freshness:
+        return None
+    age_policy: dict[str, object] = optional_mapping(
+        entry=freshness,
+        key="age_policy",
+        file_path=file_path,
+        label="source freshness",
+        error_class=SourceParseError,
+    )
+    warn_after: str | None = optional_non_empty_string(
+        entry=age_policy,
+        key="warn_after",
+        file_path=file_path,
+        label="source freshness age_policy",
+        error_class=SourceParseError,
+    )
+    error_after: str | None = optional_non_empty_string(
+        entry=age_policy,
+        key="error_after",
+        file_path=file_path,
+        label="source freshness age_policy",
+        error_class=SourceParseError,
+    )
+    if warn_after is None and error_after is None:
+        raise SourceParseError(
+            f"{file_path} source freshness age_policy requires warn_after or error_after"
+        )
+    return SourceFreshnessAgePolicy(warn_after=warn_after, error_after=error_after)
 
 
 def _validate_source_freshness_lag_tolerance(
@@ -447,12 +503,49 @@ def _validate_source_freshness_lag_tolerance(
         )
 
 
+def _validate_source_freshness_age_policy(
+    *, config: SourceFreshnessConfig, file_path: Path
+) -> None:
+    if (
+        config.strategy != SourceFreshnessStrategy.ADAPTER
+        and config.value_kind is not SourceFreshnessValueKind.TIMESTAMP
+    ):
+        raise SourceParseError(f"{file_path} source freshness age_policy requires type timestamp")
+    policy: SourceFreshnessAgePolicy = config.age_policy or SourceFreshnessAgePolicy()
+    warn_after: str | None = policy.warn_after
+    error_after: str | None = policy.error_after
+    for raw in (warn_after, error_after):
+        if raw is not None and not _is_valid_source_freshness_duration(raw):
+            raise SourceParseError(
+                f"{file_path} source freshness age_policy values must be positive durations like "
+                "15m, 2h, or 1d"
+            )
+    if warn_after is not None and error_after is not None:
+        if _source_freshness_duration_minutes(warn_after) > _source_freshness_duration_minutes(
+            error_after
+        ):
+            raise SourceParseError(
+                f"{file_path} source freshness age_policy warn_after must be less than or "
+                "equal to error_after"
+            )
+
+
 def _is_valid_source_freshness_duration(value: str) -> bool:
     if len(value) < 2:
         return False
     unit: str = value[-1]
     amount: str = value[:-1]
     return unit in {"m", "h", "d"} and amount.isdigit() and int(amount) > 0
+
+
+def _source_freshness_duration_minutes(value: str) -> int:
+    amount: int = int(value[:-1])
+    unit: str = value[-1]
+    if unit == "d":
+        return amount * 24 * 60
+    if unit == "h":
+        return amount * 60
+    return amount
 
 
 def _optional_positive_int(*, entry: dict[str, object], key: str, file_path: Path) -> int | None:

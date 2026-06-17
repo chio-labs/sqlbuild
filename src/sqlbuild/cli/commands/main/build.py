@@ -61,6 +61,7 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
@@ -237,6 +238,10 @@ def run_build(
             plan_output=plan_output,
             manifest=pipeline_result.manifest,
         )
+        if not plan_has_executable_work(
+            plan_output, python_plan_entries=pipeline_result.python_plan_entries
+        ):
+            return 0
 
         callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
             plan=plan_output, use_color=use_color, verbose=verbose, debug=debug or json_output

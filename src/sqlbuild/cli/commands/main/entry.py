@@ -406,6 +406,19 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers.add_parser("build")
     dbt_subparsers.add_parser("test")
     dbt_subparsers.add_parser("debug")
+    dbt_init_parser: argparse.ArgumentParser = dbt_subparsers.add_parser("init")
+    dbt_init_parser.add_argument("--project-dir", dest="dbt_project_dir", default=None)
+    dbt_init_parser.add_argument("--profiles-dir", dest="dbt_profiles_dir", default=None)
+    dbt_init_parser.add_argument("--profile", dest="dbt_profile", default=None)
+    dbt_init_parser.add_argument("--target", dest="dbt_target", default=None)
+    dbt_init_parser.add_argument("--sqb-output-dir", dest="sqb_output_dir", default=None)
+    dbt_init_parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False)
+    dbt_init_parser.add_argument(
+        "--overwrite", dest="overwrite", action="store_true", default=False
+    )
+    dbt_init_parser.add_argument(
+        "--skip-dbt-debug", dest="skip_dbt_debug", action="store_true", default=False
+    )
     skills_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SKILLS)
     skills_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
@@ -432,6 +445,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.compile import run_compile
     from sqlbuild.cli.commands.main.dag import run_dag
     from sqlbuild.cli.commands.main.dbt import run_dbt_command
+    from sqlbuild.cli.commands.main.dbt_init import run_dbt_init_command
     from sqlbuild.cli.commands.main.debug import run_debug
     from sqlbuild.cli.commands.main.diff import run_diff
     from sqlbuild.cli.commands.main.freshness import run_freshness
@@ -451,6 +465,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.skills import run_skills_update
     from sqlbuild.cli.commands.main.state import run_state
     from sqlbuild.cli.commands.main.test import run_test
+
+    def run_dbt_init_positional(
+        cwd: Path,
+        dbt_project_dir: str | None,
+        profiles_dir: str | None,
+        profile_name: str | None,
+        target_name: str | None,
+        sqb_output_dir: str | None,
+        dry_run: bool,
+        overwrite: bool,
+        skip_dbt_debug: bool,
+    ) -> int:
+        return run_dbt_init_command(
+            cwd=cwd,
+            dbt_project_dir=dbt_project_dir,
+            profiles_dir=profiles_dir,
+            profile_name=profile_name,
+            target_name=target_name,
+            sqb_output_dir=sqb_output_dir,
+            dry_run=dry_run,
+            overwrite=overwrite,
+            skip_dbt_debug=skip_dbt_debug,
+        )
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,
@@ -486,6 +523,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=args,
             no_color=no_color,
         ),
+        run_dbt_init=run_dbt_init_positional,
         run_build=run_build,
         run_freshness=run_freshness,
         run_test=run_test,
@@ -603,6 +641,18 @@ def _main_with_dependencies(
                 args.force,
             )
         if args.command == CliCommand.DBT:
+            if args.dbt_command == "init":
+                return handlers.run_dbt_init(
+                    effective_project_dir,
+                    args.dbt_project_dir,
+                    args.dbt_profiles_dir,
+                    args.dbt_profile,
+                    args.dbt_target,
+                    args.sqb_output_dir,
+                    args.dry_run,
+                    args.overwrite,
+                    args.skip_dbt_debug,
+                )
             if args.dbt_command == "plan":
                 return handlers.run_dbt_plan(project_dir, tuple(args.dbt_args), args.no_color)
             if args.dbt_command == "run":

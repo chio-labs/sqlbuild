@@ -21,6 +21,11 @@ class CliNamespace:
     dbt_profiles_dir: str | None = None
     dbt_target: str | None = None
     dbt_target_path: str | None = None
+    dbt_profile: str | None = None
+    sqb_output_dir: str | None = None
+    dry_run: bool = False
+    overwrite: bool = False
+    skip_dbt_debug: bool = False
     no_sql_validation: bool = False
     defer_to: str | None = None
     defer_sources_to: str | None = None
@@ -168,6 +173,9 @@ class CliEntrypointHandlers:
     run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_test: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_init: Callable[
+        [Path, str | None, str | None, str | None, str | None, str | None, bool, bool, bool], int
+    ]
     run_build: Callable[
         [
             Path | None,

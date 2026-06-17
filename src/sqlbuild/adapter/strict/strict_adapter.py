@@ -18,6 +18,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import (
     FrameworkType,
@@ -116,8 +117,29 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        """Return comparable freshness metadata for physical tables in batch."""
+        ...
+
+    @abstractmethod
     def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query."""
+        ...
+
+    @abstractmethod
+    def get_relation_max_cursor(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str,
+    ) -> object | None:
+        """Return the maximum cursor value currently present in a relation."""
         ...
 
     @abstractmethod
@@ -293,6 +315,18 @@ class StrictAdapter(
         cursor_type: str | None,
     ) -> str:
         """Render a seed-select query that keeps rows before a cursor bound."""
+        ...
+
+    @abstractmethod
+    def render_seed_select_after_cursor(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        """Render a seed-select query that keeps rows after a cursor bound."""
         ...
 
     @abstractmethod

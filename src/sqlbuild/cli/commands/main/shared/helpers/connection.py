@@ -8,6 +8,9 @@ from pathlib import Path
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.exceptions import DbtProfileError
+from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
+from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 _DUCKDB_SNOWFLAKE_LIKE_WARNING_KEYS: frozenset[str] = frozenset(
@@ -20,10 +23,28 @@ def resolve_connection_config(
     raw_config: dict[str, object],
     project_dir: Path,
     adapter_name: str,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    cli_vars: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Resolve relative database paths in connection config against the project directory."""
 
     config: dict[str, object] = dict(raw_config)
+    if discovered_inputs is not None:
+        resolved_dbt_profile: NormalizedDbtProfileConnection | None = (
+            resolve_raw_dbt_profile_connection(
+                raw_config=config,
+                project_dir=project_dir,
+                adapter_name=adapter_name,
+                project_config=discovered_inputs.project_config,
+                cli_vars=cli_vars,
+            )
+        )
+        if resolved_dbt_profile is not None:
+            for warning in resolved_dbt_profile.warnings:
+                print(f"Warning: {warning}", file=sys.stderr)
+            config = resolved_dbt_profile.connection
+    elif config.get("source") == "dbt_profile":
+        raise DbtProfileError("connection.source = 'dbt_profile' requires project configuration")
     _warn_if_duckdb_has_snowflake_like_keys(adapter_name=adapter_name, config=config)
     database: object | None = config.get("database")
     if (
@@ -73,6 +94,8 @@ def resolve_project_connection_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
+        discovered_inputs=discovered_inputs,
+        cli_vars=cli_vars,
     )
 
 
@@ -96,4 +119,6 @@ def resolve_target_connection_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
+        discovered_inputs=discovered_inputs,
+        cli_vars=cli_vars,
     )

@@ -213,7 +213,11 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               strategy: column
               column: updated_at
               type: timestamp
+              filter: "updated_at >= current_date - interval '2 days'"
               lag_tolerance: 15m
+              age_policy:
+                warn_after: 12h
+                error_after: 24h
           - name: raw_customers
             schema: public
             table: customers
@@ -221,19 +225,58 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               strategy: sql
               query: SELECT MAX(version) FROM raw.public.customers
               type: integer
+          - name: raw_clicks
+            schema: public
+            table: clicks
+            freshness:
+              strategy: column
+              column: loaded_at
+              type: timestamp
+              age_policy:
+                warn_after: 6h
+          - name: raw_shipments
+            schema: public
+            table: shipments
+            freshness:
+              strategy: column
+              column: loaded_at
+              type: timestamp
+              age_policy:
+                error_after: 1d
         """,
-        expected_source_names=("raw_orders", "raw_events", "raw_customers"),
-        expected_column_names=((), (), ()),
-        expected_type_enforcement_values=(None, None, None),
-        expected_contract_values=(None, None, None),
-        expected_expressions=(None, None, None),
-        expected_source_audit_names=((), (), ()),
-        expected_column_audit_names=((), (), ()),
-        expected_freshness_strategies=("adapter", "column", "sql"),
-        expected_freshness_value_kinds=(None, "timestamp", "integer"),
-        expected_freshness_columns=(None, "updated_at", None),
-        expected_freshness_queries=(None, None, "SELECT MAX(version) FROM raw.public.customers"),
-        expected_freshness_lag_tolerances=(None, "15m", None),
+        expected_source_names=(
+            "raw_orders",
+            "raw_events",
+            "raw_customers",
+            "raw_clicks",
+            "raw_shipments",
+        ),
+        expected_column_names=((), (), (), (), ()),
+        expected_type_enforcement_values=(None, None, None, None, None),
+        expected_contract_values=(None, None, None, None, None),
+        expected_expressions=(None, None, None, None, None),
+        expected_source_audit_names=((), (), (), (), ()),
+        expected_column_audit_names=((), (), (), (), ()),
+        expected_freshness_strategies=("adapter", "column", "sql", "column", "column"),
+        expected_freshness_value_kinds=(None, "timestamp", "integer", "timestamp", "timestamp"),
+        expected_freshness_columns=(None, "updated_at", None, "loaded_at", "loaded_at"),
+        expected_freshness_queries=(
+            None,
+            None,
+            "SELECT MAX(version) FROM raw.public.customers",
+            None,
+            None,
+        ),
+        expected_freshness_filters=(
+            None,
+            "updated_at >= current_date - interval '2 days'",
+            None,
+            None,
+            None,
+        ),
+        expected_freshness_lag_tolerances=(None, "15m", None, None, None),
+        expected_freshness_age_policy_warn_afters=(None, "12h", None, "6h", None),
+        expected_freshness_age_policy_error_afters=(None, "24h", None, None, "1d"),
     ),
     ParseSourcesYamlTestCase(
         description="allows empty sources files with no declarations",
@@ -332,12 +375,38 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     assert actual_freshness_queries == expected_or_actual(
         test_case.expected_freshness_queries, actual_freshness_queries
     )
+    actual_freshness_filters: tuple[str | None, ...] = tuple(
+        None if entry.freshness is None else entry.freshness.filter for entry in source_entries
+    )
+    assert actual_freshness_filters == expected_or_actual(
+        test_case.expected_freshness_filters, actual_freshness_filters
+    )
     actual_freshness_lag_tolerances: tuple[str | None, ...] = tuple(
         None if entry.freshness is None else entry.freshness.lag_tolerance
         for entry in source_entries
     )
     assert actual_freshness_lag_tolerances == expected_or_actual(
         test_case.expected_freshness_lag_tolerances, actual_freshness_lag_tolerances
+    )
+    actual_freshness_age_policy_warn_afters: tuple[str | None, ...] = tuple(
+        None
+        if entry.freshness is None or entry.freshness.age_policy is None
+        else entry.freshness.age_policy.warn_after
+        for entry in source_entries
+    )
+    assert actual_freshness_age_policy_warn_afters == expected_or_actual(
+        test_case.expected_freshness_age_policy_warn_afters,
+        actual_freshness_age_policy_warn_afters,
+    )
+    actual_freshness_age_policy_error_afters: tuple[str | None, ...] = tuple(
+        None
+        if entry.freshness is None or entry.freshness.age_policy is None
+        else entry.freshness.age_policy.error_after
+        for entry in source_entries
+    )
+    assert actual_freshness_age_policy_error_afters == expected_or_actual(
+        test_case.expected_freshness_age_policy_error_afters,
+        actual_freshness_age_policy_error_afters,
     )
     assert (
         tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
@@ -722,7 +791,7 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               column: updated_at
         """,
         expected_error_fragment=(
-            "source freshness strategy adapter does not support type, column, or query"
+            "source freshness strategy adapter does not support type, column, query, or filter"
         ),
     ),
     ParseSourcesYamlErrorTestCase(
@@ -795,6 +864,32 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
         expected_error_fragment="source freshness strategy sql does not support column",
     ),
     ParseSourcesYamlErrorTestCase(
+        description="raises when sql freshness has filter",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: sql
+              query: SELECT MAX(version) FROM raw.orders
+              type: integer
+              filter: version > 10
+        """,
+        expected_error_fragment="source freshness strategy sql does not support filter",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when adapter freshness has filter",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: adapter
+              filter: updated_at > current_date
+        """,
+        expected_error_fragment=(
+            "source freshness strategy adapter does not support type, column, query, or filter"
+        ),
+    ),
+    ParseSourcesYamlErrorTestCase(
         description="raises when source freshness lag tolerance has non-timestamp type",
         contents="""
         sources:
@@ -819,6 +914,64 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               lag_tolerance: soon
         """,
         expected_error_fragment="source freshness lag_tolerance must be a positive duration",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness age policy has non-timestamp type",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: batch_id
+              type: integer
+              age_policy:
+                error_after: 1d
+        """,
+        expected_error_fragment="source freshness age_policy requires type timestamp",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness age policy duration is invalid",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: updated_at
+              type: timestamp
+              age_policy:
+                warn_after: soon
+        """,
+        expected_error_fragment="source freshness age_policy values must be positive durations",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness age policy warning exceeds error",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: updated_at
+              type: timestamp
+              age_policy:
+                warn_after: 2d
+                error_after: 12h
+        """,
+        expected_error_fragment=(
+            "source freshness age_policy warn_after must be less than or equal to error_after"
+        ),
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when source freshness age policy is empty",
+        contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: updated_at
+              type: timestamp
+              age_policy: {}
+        """,
+        expected_error_fragment="source freshness age_policy requires warn_after or error_after",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when source freshness lag tolerance uses seconds",
