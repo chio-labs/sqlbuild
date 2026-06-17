@@ -129,6 +129,13 @@ class PostgresDbtProfileE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresDbtReuseFromE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class PostgresStateLifecycleE2ETestCase:
     description: str
     expected_exit_code: int

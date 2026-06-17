@@ -345,8 +345,8 @@ class PostgresAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> tuple[str, ...]:
-        target: str = f"{database}.{schema}" if database is not None else schema
-        return (f"CREATE SCHEMA IF NOT EXISTS {target}",)
+        del database
+        return (f"CREATE SCHEMA IF NOT EXISTS {schema}",)
 
     def ensure_schema(
         self,
@@ -1323,9 +1323,9 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             name=FINGERPRINT_TABLE_NAME,
         )
-        index_name: str = "_sqlbuild_fingerprints_latest_idx"
         if table_name is None:
             return ()
+        index_name: str = "_sqlbuild_fingerprints_latest_idx"
         return (
             "CREATE INDEX IF NOT EXISTS "
             f"{index_name} ON {table_name} (node_type, node_name, ts DESC, run_id DESC)",
@@ -1386,9 +1386,9 @@ class PostgresAdapter(BaseAdapter):
             schema=schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
         )
-        index_name: str = "_sqlbuild_source_freshness_latest_idx"
         if table_name is None:
             return ()
+        index_name: str = "_sqlbuild_source_freshness_latest_idx"
         return (
             "CREATE INDEX IF NOT EXISTS "
             f"{index_name} ON {table_name} ("

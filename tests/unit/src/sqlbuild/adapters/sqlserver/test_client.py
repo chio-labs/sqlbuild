@@ -15,6 +15,8 @@ from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerRenderCreateSchemaTestCase,
     SqlServerRenderCreateTableAsTestCase,
     SqlServerRenderIdentifierTestCase,
+    SqlServerRenderQualifiedNameTestCase,
+    SqlServerRenderRenameTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.sqlserver.helpers import FakeSqlServerConnection
 
@@ -70,6 +72,71 @@ def test_given_identifier_when_rendering_then_sqlserver_bracket_quotes_identifie
     identifier: str = adapter.render_identifier(test_case.name)
 
     assert identifier == test_case.expected_identifier
+
+
+SQLSERVER_RENDER_QUALIFIED_NAME_TEST_CASES: list[SqlServerRenderQualifiedNameTestCase] = [
+    SqlServerRenderQualifiedNameTestCase(
+        description="renders three part qualified name",
+        database="tempdb",
+        schema="analytics_dev",
+        name="fact_orders",
+        expected_name="tempdb.analytics_dev.fact_orders",
+    ),
+    SqlServerRenderQualifiedNameTestCase(
+        description="renders schema qualified name",
+        database=None,
+        schema="analytics_dev",
+        name="fact_orders",
+        expected_name="analytics_dev.fact_orders",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SQLSERVER_RENDER_QUALIFIED_NAME_TEST_CASES,
+    ids=[case.description for case in SQLSERVER_RENDER_QUALIFIED_NAME_TEST_CASES],
+)
+def test_given_relation_parts_when_rendering_qualified_name_then_sqlserver_joins_parts(
+    test_case: SqlServerRenderQualifiedNameTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    qualified_name: str | None = adapter.render_qualified_name(
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+    )
+
+    assert qualified_name == test_case.expected_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerRenderRenameTestCase(
+            description="renders sp_rename without database and without quoted destination name",
+            origin="[tempdb].[analytics_dev].[fact_orders__sqlbuild_reuse_stage]",
+            destination='"tempdb"."analytics_dev"."fact_orders"',
+            expected_statements=(
+                "EXEC sp_rename '[analytics_dev].[fact_orders__sqlbuild_reuse_stage]', "
+                "'fact_orders'",
+            ),
+        )
+    ],
+    ids=["renders sp_rename without database and without quoted destination name"],
+)
+def test_given_quoted_dbt_relation_when_rendering_rename_then_sqlserver_normalizes_names(
+    test_case: SqlServerRenderRenameTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statements: tuple[str, ...] = adapter.render_rename(
+        origin=test_case.origin,
+        destination=test_case.destination,
+    )
+
+    assert statements == test_case.expected_statements
 
 
 @pytest.mark.parametrize(

@@ -726,8 +726,9 @@ class SqlServerAdapter(BaseAdapter):
         return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        destination_name: str = destination.split(".")[-1].strip("[]")
-        return (f"EXEC sp_rename '{origin}', '{destination_name}'",)
+        origin_name: str = self._sp_rename_relation_name(origin)
+        destination_name: str = self._unquote_relation_part(destination.split(".")[-1])
+        return (f"EXEC sp_rename '{origin_name}', '{destination_name}'",)
 
     def render_add_columns(
         self, *, destination: str, columns: tuple[ColumnInfo, ...]
@@ -2105,12 +2106,21 @@ class SqlServerAdapter(BaseAdapter):
         )
 
     def _relation_name(self, relation: str) -> str:
-        return relation.split(".")[-1].strip("[]")
+        return self._unquote_relation_part(relation.split(".")[-1])
 
     def _with_replaced_relation_name(self, relation: str, name: str) -> str:
         parts: list[str] = relation.split(".")
         parts[-1] = self.render_identifier(name)
         return ".".join(parts)
+
+    def _sp_rename_relation_name(self, relation: str) -> str:
+        parts: list[str] = relation.split(".")
+        if len(parts) >= 2:
+            return ".".join(parts[-2:])
+        return relation
+
+    def _unquote_relation_part(self, part: str) -> str:
+        return part.strip().strip('"').strip("`").removeprefix("[").removesuffix("]")
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"

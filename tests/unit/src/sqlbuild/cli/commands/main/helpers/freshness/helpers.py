@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import QueryResult, TableFreshnessMetadata
+from sqlbuild.adapter.shared.models import (
+    QueryResult,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
+)
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -36,6 +40,22 @@ class FreshnessRecordingAdapter:
             value_kind="timestamp",
             observed_at=datetime(2026, 1, 2, 3, 5, 0),
         )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: object,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        return {
+            request: self.get_table_freshness_metadata(
+                connection,
+                database=request.database,
+                schema=request.schema,
+                name=request.name,
+            )
+            for request in requests
+        }
 
     def query(self, _connection: object, sql: str, *, limit: int | None = None) -> QueryResult:
         del limit

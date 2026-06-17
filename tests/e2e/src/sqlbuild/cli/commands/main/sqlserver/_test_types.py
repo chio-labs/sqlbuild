@@ -2,6 +2,13 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class SqlServerDbtReuseFromE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class SqlServerBuildE2ETestCase:
     description: str
     expected_row_count: int
