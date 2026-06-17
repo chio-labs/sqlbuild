@@ -91,6 +91,161 @@ def initialize_dbt_init_git_repo(*, workspace: Path, production_ref: str) -> Non
     _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
 
 
+def prepare_dbt_diff_workspace(
+    *,
+    tmp_path: Path,
+    workspace_name: str,
+    include_unique_key: bool = True,
+    include_cursor_meta: bool = True,
+    include_reuse_from: bool = True,
+    reuse_git_ref: str = "prod",
+    include_second_model: bool = False,
+) -> Path:
+    """Build a dbt diff workspace with prod and feature branch order tables."""
+
+    workspace: Path = tmp_path / workspace_name
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    (dbt_project_dir / "models").mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = workspace / "warehouse.duckdb"
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "target-path: target\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    write_dbt_diff_orders_model(
+        workspace=workspace,
+        amount_cents=900,
+        order_ids=(1, 2),
+        include_unique_key=include_unique_key,
+        include_cursor_meta=include_cursor_meta,
+    )
+    if include_second_model:
+        _write_dbt_diff_customers_model(workspace=workspace)
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+    reuse_block: str = (
+        "\n[dbt.reuse_from]\n"
+        f'git_ref = "{reuse_git_ref}"\n'
+        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n'
+        if include_reuse_from
+        else ""
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "analytics_sqb"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n\n'
+        "[connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n'
+        f"{reuse_block}\n"
+        "[targets.dev.connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n'
+        'target = "dev"\n',
+        encoding="utf-8",
+    )
+    macro_dir.joinpath("generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    _initialize_dbt_diff_git(workspace=workspace)
+    _run_dbt(
+        args=("run",),
+        dbt_project_dir=dbt_project_dir,
+        profiles_dir=profiles_dir,
+        target="prod",
+    )
+    _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
+    return workspace
+
+
+def _write_dbt_diff_customers_model(*, workspace: Path) -> None:
+    workspace.joinpath("dbt_project", "models", "dbt_customers.sql").write_text(
+        "{{ config(\n"
+        "    materialized='table',\n"
+        "    unique_key='customer_id',\n"
+        "    tags=['finance']\n"
+        ") }}\n\n"
+        "select 1 as customer_id, 'alice' as name\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_diff_orders_model(
+    *,
+    workspace: Path,
+    amount_cents: int,
+    order_ids: tuple[int, ...],
+    include_unique_key: bool,
+    include_cursor_meta: bool,
+) -> None:
+    """Write the dbt orders model used by diff E2Es."""
+
+    config_lines: list[str] = ["    materialized='table'"]
+    if include_unique_key:
+        config_lines.append("    unique_key='order_id'")
+    if include_cursor_meta:
+        config_lines.append(
+            "    meta={'sqlbuild': {'cursor': 'updated_at', 'cursor_type': 'timestamp'}}"
+        )
+    config_block: str = "{{ config(\n" + ",\n".join(config_lines) + "\n) }}\n"
+    selects: tuple[str, ...] = tuple(
+        f"select {order_id} as order_id, {amount_cents} as amount_cents, "
+        f"cast('2026-06-17 0{index}:00:00' as timestamp) as updated_at"
+        for index, order_id in enumerate(order_ids)
+    )
+    workspace.joinpath("dbt_project", "models", "dbt_orders.sql").write_text(
+        config_block + "\n" + "\nunion all\n".join(selects) + "\n",
+        encoding="utf-8",
+    )
+
+
+def build_dbt_diff_current_model(*, workspace: Path) -> None:
+    """Build the current dbt model into the dev schema with dbt directly."""
+
+    _run_dbt(
+        args=("run",),
+        dbt_project_dir=workspace / "dbt_project",
+        profiles_dir=workspace / "profiles",
+        target="dev",
+    )
+
+
+def _initialize_dbt_diff_git(*, workspace: Path) -> None:
+    _run_git(args=("init",), cwd=workspace)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
+    _run_git(args=("add", "."), cwd=workspace)
+    _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
+    _run_git(args=("branch", "prod"), cwd=workspace)
+
+
 def run_sqb_with_pty(
     *, command: tuple[str, ...], project_dir: Path, input_text: str, timeout_seconds: float = 60.0
 ) -> subprocess.CompletedProcess[str]:

@@ -32,6 +32,7 @@ class DbtInteropCommand(StrEnum):
     TEST = "test"
     DEBUG = "debug"
     LINEAGE = "lineage"
+    DIFF = "diff"
 
 
 class DbtLineageDirection(StrEnum):

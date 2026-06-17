@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
@@ -236,6 +237,34 @@ class DbtReuseCandidateResolution:
 
     candidates: tuple[DbtReuseCandidate, ...] = field(default_factory=tuple)
     skipped: tuple[DbtReuseCandidateSkip, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtDiffOptions:
+    """Parsed SQLBuild dbt diff options."""
+
+    dbt_args: tuple[str, ...]
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    full: bool
+    schema_only: bool
+    bounded: str | None
+    verbose: bool
+    max_column_examples: int
+    max_row_only_examples: int
+
+
+@dataclass(frozen=True)
+class DbtDiffRun:
+    """dbt diff execution result with rendering labels."""
+
+    result: DiffExecutionResult
+    from_label: str
+    to_label: str
+    mode_label: str
+    verbose: bool
+    max_column_examples: int
+    max_row_only_examples: int
 
 
 @dataclass(frozen=True)
