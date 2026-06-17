@@ -33,6 +33,9 @@ class DbtReuseFromCompileErrorTestCase:
     command_stdout: str
     expected_error_type: type[Exception]
     expected_error_fragment: str
+    extra_branch_count: int = 0
+    expected_help_fragments: tuple[str, ...] = ()
+    expected_available_ref_count: int = 0
 
 
 @dataclass(frozen=True)

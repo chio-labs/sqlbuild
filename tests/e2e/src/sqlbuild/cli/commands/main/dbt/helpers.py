@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import pty
+import select
 import subprocess
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from shutil import copytree
@@ -26,6 +30,119 @@ def skip_unless_dbt_is_runnable() -> None:
     )
     if result.returncode != 0:
         pytest.skip(f"dbt CLI is not runnable: {result.stderr or result.stdout}")
+
+
+def prepare_dbt_init_duckdb_workspace(*, tmp_path: Path, workspace_name: str) -> Path:
+    """Write a minimal dbt project and profile for dbt init E2Es."""
+
+    workspace: Path = tmp_path / workspace_name
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    db_path: Path = workspace / "warehouse.duckdb"
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "target-path: target\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    write_dbt_init_orders_model(workspace=workspace, amount_cents=900)
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+    return workspace
+
+
+def write_dbt_init_orders_model(*, workspace: Path, amount_cents: int) -> None:
+    """Write the mutable dbt model used by dbt init E2Es."""
+
+    workspace.joinpath("dbt_project", "models", "dbt_orders.sql").write_text(
+        f"select 1 as order_id, {amount_cents} as amount_cents\n",
+        encoding="utf-8",
+    )
+
+
+def initialize_dbt_init_git_repo(*, workspace: Path, production_ref: str) -> None:
+    """Create a production ref and feature branch for generated reuse config E2Es."""
+
+    _run_git(args=("init",), cwd=workspace)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
+    _run_git(args=("add", "."), cwd=workspace)
+    _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
+    _run_git(args=("branch", production_ref), cwd=workspace)
+    _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
+
+
+def run_sqb_with_pty(
+    *, command: tuple[str, ...], project_dir: Path, input_text: str, timeout_seconds: float = 60.0
+) -> subprocess.CompletedProcess[str]:
+    """Run sqb through a real PTY and return captured terminal output."""
+
+    master_fd: int
+    slave_fd: int
+    master_fd, slave_fd = pty.openpty()
+    process_env: dict[str, str] = dict(os.environ)
+    process_env["TERM"] = "xterm-256color"
+    process: subprocess.Popen[bytes] = subprocess.Popen(
+        ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
+        cwd=REPO_ROOT,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        env=process_env,
+        close_fds=True,
+    )
+    os.close(slave_fd)
+    output_parts: list[bytes] = []
+    input_written: bool = False
+    deadline: float = time.monotonic() + timeout_seconds
+    try:
+        while process.poll() is None:
+            if time.monotonic() > deadline:
+                process.kill()
+                raise subprocess.TimeoutExpired(command, timeout_seconds)
+            readable: list[int]
+            readable, _, _ = select.select([master_fd], [], [], 0.05)
+            if readable:
+                try:
+                    output_parts.append(os.read(master_fd, 4096))
+                except OSError:
+                    break
+            if not input_written:
+                os.write(master_fd, input_text.encode())
+                input_written = True
+        while True:
+            readable, _, _ = select.select([master_fd], [], [], 0)
+            if not readable:
+                break
+            try:
+                output_parts.append(os.read(master_fd, 4096))
+            except OSError:
+                break
+    finally:
+        os.close(master_fd)
+    output: str = b"".join(output_parts).decode(errors="replace")
+    return subprocess.CompletedProcess(
+        args=("sqb", *command), returncode=process.returncode or 0, stdout=output, stderr=""
+    )
 
 
 def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:

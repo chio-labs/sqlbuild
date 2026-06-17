@@ -15,13 +15,13 @@ LINEAGE_ARGS_ERROR_TEST_CASES: tuple[DbtLineageArgsErrorTestCase, ...] = (
     DbtLineageArgsErrorTestCase(
         description="rejects missing target",
         args=("--format", "json"),
-        expected_error_fragment="requires a target",
+        expected_error_fragment="requires a lineage target resource",
         expected_code="C333",
     ),
     DbtLineageArgsErrorTestCase(
         description="rejects multiple targets",
         args=("orders", "customers"),
-        expected_error_fragment="exactly one target",
+        expected_error_fragment="exactly one lineage target resource",
         expected_code="C332",
     ),
     DbtLineageArgsErrorTestCase(

@@ -348,6 +348,49 @@ DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_dbt_args=("--select", "tag:nightly"),
     ),
     MainTestCase(
+        description="dispatches dbt build with sqb project dir alias",
+        argv=[
+            "--sqb-project-dir",
+            "/tmp/demo",
+            "dbt",
+            "build",
+            "--project-dir",
+            "dbt_project",
+        ],
+        expected_exit_code=19,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--project-dir", "dbt_project"),
+    ),
+    MainTestCase(
+        description="dispatches dbt plan with sqb project dir alias and dbt flags",
+        argv=[
+            "--sqb-project-dir",
+            "/tmp/demo",
+            "dbt",
+            "plan",
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--target",
+            "dev",
+            "--select",
+            "dbt_orders",
+        ],
+        expected_exit_code=16,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=(
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--target",
+            "dev",
+            "--select",
+            "dbt_orders",
+        ),
+    ),
+    MainTestCase(
         description="dispatches dbt test and preserves dbt args",
         argv=[
             "--project-dir",
@@ -387,6 +430,27 @@ DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
         ),
     ),
     MainTestCase(
+        description="dispatches dbt debug with sqb project dir alias",
+        argv=[
+            "--sqb-project-dir",
+            "/tmp/demo",
+            "dbt",
+            "debug",
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+        ],
+        expected_exit_code=29,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=(
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+        ),
+    ),
+    MainTestCase(
         description="dispatches dbt lineage and preserves dbt args",
         argv=[
             "--project-dir",
@@ -408,6 +472,51 @@ DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
             "--project-dir",
             "dbt_project",
         ),
+    ),
+]
+
+DBT_INIT_DISPATCH_TEST_CASES: list[MainTestCase] = [
+    MainTestCase(
+        description="dispatches dbt init options including production git ref",
+        argv=[
+            "--project-dir",
+            "/tmp/workspace",
+            "dbt",
+            "init",
+            "--project-dir",
+            "dbt_project",
+            "--profiles-dir",
+            "profiles",
+            "--profile",
+            "analytics_profile",
+            "--target",
+            "dev",
+            "--sqb-output-dir",
+            "sqlbuild_project",
+            "--dry-run",
+            "--overwrite",
+            "--skip-dbt-debug",
+            "--prod-git-ref",
+            "prod",
+        ],
+        expected_exit_code=37,
+        expected_project_dir=Path("/tmp/workspace"),
+        expected_dbt_init_project_dir="dbt_project",
+        expected_dbt_init_profiles_dir="profiles",
+        expected_dbt_init_profile_name="analytics_profile",
+        expected_dbt_init_target_name="dev",
+        expected_dbt_init_sqb_output_dir="sqlbuild_project",
+        expected_dbt_init_dry_run=True,
+        expected_dbt_init_overwrite=True,
+        expected_dbt_init_skip_dbt_debug=True,
+        expected_dbt_init_production_git_ref="prod",
+    ),
+    MainTestCase(
+        description="dispatches minimal dbt init with default optional flags",
+        argv=["dbt", "init", "--project-dir", "dbt_project"],
+        expected_exit_code=38,
+        expected_project_dir=Path.cwd(),
+        expected_dbt_init_project_dir="dbt_project",
     ),
 ]
 
@@ -516,6 +625,39 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        MainTestCase(
+            description="dbt command does not create diagnostics target before auto-init",
+            argv=["dbt", "plan"],
+            expected_exit_code=41,
+        )
+    ],
+    ids=["dbt command does not create diagnostics target before auto-init"],
+)
+def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_not_create_target(
+    test_case: MainTestCase,
+    tmp_path: Path,
+) -> None:
+    raw_dbt_dir: Path = tmp_path / "raw_dbt_project"
+    received_project_dirs: list[Path | None] = []
+
+    def run_dbt_plan(project_dir: Path | None, args: tuple[str, ...], no_color: bool) -> int:
+        del args, no_color
+        received_project_dirs.append(project_dir)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", raw_dbt_dir.as_posix(), *test_case.argv],
+        handlers=build_handlers(run_dbt_plan=run_dbt_plan),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_project_dirs == [raw_dbt_dir]
+    assert not (raw_dbt_dir / "target").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
     DBT_EXECUTION_DISPATCH_TEST_CASES,
     ids=[case.description for case in DBT_EXECUTION_DISPATCH_TEST_CASES],
 )
@@ -535,6 +677,7 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
         handlers=build_handlers(
+            run_dbt_plan=run_dbt_execution,
             run_dbt_run=run_dbt_execution,
             run_dbt_build=run_dbt_execution,
             run_dbt_test=run_dbt_execution,
@@ -546,6 +689,79 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
         (test_case.expected_project_dir, test_case.expected_dbt_args, test_case.expected_no_color)
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DBT_INIT_DISPATCH_TEST_CASES,
+    ids=[case.description for case in DBT_INIT_DISPATCH_TEST_CASES],
+)
+def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatches_handler(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[
+        tuple[
+            Path,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            bool,
+            bool,
+            bool,
+            str | None,
+        ]
+    ] = []
+
+    def run_dbt_init(
+        cwd: Path,
+        dbt_project_dir: str | None,
+        profiles_dir: str | None,
+        profile_name: str | None,
+        target_name: str | None,
+        sqb_output_dir: str | None,
+        dry_run: bool,
+        overwrite: bool,
+        skip_dbt_debug: bool,
+        production_git_ref: str | None,
+    ) -> int:
+        received_args.append(
+            (
+                cwd,
+                dbt_project_dir,
+                profiles_dir,
+                profile_name,
+                target_name,
+                sqb_output_dir,
+                dry_run,
+                overwrite,
+                skip_dbt_debug,
+                production_git_ref,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_dbt_init=run_dbt_init),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [
+        (
+            test_case.expected_project_dir,
+            test_case.expected_dbt_init_project_dir,
+            test_case.expected_dbt_init_profiles_dir,
+            test_case.expected_dbt_init_profile_name,
+            test_case.expected_dbt_init_target_name,
+            test_case.expected_dbt_init_sqb_output_dir,
+            test_case.expected_dbt_init_dry_run,
+            test_case.expected_dbt_init_overwrite,
+            test_case.expected_dbt_init_skip_dbt_debug,
+            test_case.expected_dbt_init_production_git_ref,
+        )
     ]
 
 

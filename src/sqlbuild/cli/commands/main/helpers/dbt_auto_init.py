@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgressReporter
+from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.integrations.dbt.main.profile_init import run_dbt_profile_init
 from sqlbuild.integrations.dbt.models import DbtInitProgressCallbacks, DbtInitRequest, DbtInitResult
+from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 
 
@@ -40,6 +43,12 @@ def ensure_sqlbuild_project_for_dbt_command(
         stream=progress_stream,
         use_color=use_color,
     )
+    production_git_ref: str = resolve_production_git_ref(
+        explicit_git_ref=None,
+        input_stream=sys.stdin,
+        output_stream=progress_stream,
+        use_color=use_color,
+    )
     result: DbtInitResult = run_dbt_profile_init(
         request=DbtInitRequest(
             cwd=effective_project_dir,
@@ -51,13 +60,41 @@ def ensure_sqlbuild_project_for_dbt_command(
             dry_run=False,
             overwrite=False,
             skip_dbt_debug=True,
+            production_git_ref=production_git_ref,
             progress_callbacks=DbtInitProgressCallbacks(
                 start=progress.start,
                 complete=progress.complete,
             ),
         )
     )
+    _render_auto_init_result(result=result, stream=progress_stream, use_color=use_color)
     return result.output_dir, forwarded_args
+
+
+def _render_auto_init_result(*, result: DbtInitResult, stream: TextIO, use_color: bool) -> None:
+    style: CliStyle = CliStyle(use_color=use_color)
+    doc: CliDocument = CliDocument(style)
+    doc.header("SQLBuild dbt setup created")
+    doc.blank()
+    doc.section("Setup summary")
+    doc.fields(
+        (
+            ("Config file", str(result.project_file)),
+            ("Production git ref", result.production_git_ref),
+            ("Production schema macro", str(result.macro_file)),
+        ),
+        label_width=25,
+    )
+    doc.blank()
+    doc.line(
+        f"{style.value('What SQLBuild created')}: a twin config plus a production "
+        "schema macro. The macro lives in the SQLBuild project, not your dbt project."
+    )
+    doc.line(
+        "SQLBuild injects it only while compiling the production git ref so reuse points "
+        "at the correct production relations."
+    )
+    stream.write("\n" + doc.render())
 
 
 def _resolve_dbt_project_dir(*, effective_project_dir: Path, args: tuple[str, ...]) -> Path:
