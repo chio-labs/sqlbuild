@@ -267,6 +267,18 @@ class DbtReusePlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseOriginRelationTestCase:
+    description: str
+    existing_relations: tuple[tuple[str | None, str | None, str], ...]
+    expected_complete_reuse_unique_ids: tuple[str, ...]
+    expected_rebuild_unique_ids: tuple[str, ...]
+    expected_rebuild_reasons: tuple[DbtReusePlanReason, ...]
+    expected_list_relation_calls: tuple[
+        tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None], ...
+    ]
+
+
+@dataclass(frozen=True)
 class DbtReuseExecuteTestCase:
     description: str
     create_origin_relation: bool

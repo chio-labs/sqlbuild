@@ -201,7 +201,11 @@ LINEAGE_ERROR_TEST_CASES: tuple[DbtLineageErrorE2ETestCase, ...] = (
     DbtLineageErrorE2ETestCase(
         description="renders missing target error",
         command=("dbt", "lineage", "--format", "json"),
-        expected_stderr_fragments=("dbt lineage requires a target", "C333"),
+        expected_stderr_fragments=(
+            "dbt lineage requires a lineage target resource",
+            "sqb dbt lineage dbt_orders",
+            "C333",
+        ),
     ),
     DbtLineageErrorE2ETestCase(
         description="renders dbt compile failure",

@@ -55,11 +55,17 @@ def parse_dbt_lineage_args(args: tuple[str, ...]) -> DbtLineageArgs:
                 index += 1
             continue
         if target is not None:
-            raise DbtInteropArgumentError("dbt lineage accepts exactly one target", code="C332")
+            raise DbtInteropArgumentError(
+                "dbt lineage accepts exactly one lineage target resource", code="C332"
+            )
         target = token
         index += 1
     if target is None:
-        raise DbtInteropArgumentError("dbt lineage requires a target", code="C333")
+        raise DbtInteropArgumentError(
+            "dbt lineage requires a lineage target resource, for example: "
+            "sqb dbt lineage dbt_orders",
+            code="C333",
+        )
     return DbtLineageArgs(
         target=target,
         output_format=output_format,

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult
+from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RelationInfo
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
@@ -187,6 +187,74 @@ def build_reuse_plan_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
     )
 
 
+def build_reuse_plan_origin_key_current_manifest_nodes() -> tuple[dict[str, object], ...]:
+    """Build current manifest nodes for origin relation key tests."""
+
+    return (
+        build_manifest_model_node(
+            unique_id="model.analytics.orders",
+            package_name="analytics",
+            name="orders",
+            database="warehouse",
+            schema="dev_marts",
+            alias="orders_dev",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.customers",
+            package_name="analytics",
+            name="customers",
+            database="warehouse",
+            schema="dev_core",
+            alias="customers_dev",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.payments",
+            package_name="analytics",
+            name="payments",
+            database="lakehouse",
+            schema="dev_marts",
+            alias="payments_dev",
+            materialized="table",
+        ),
+    )
+
+
+def build_reuse_plan_origin_key_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
+    """Build reuse manifest nodes for origin relation key tests."""
+
+    return (
+        build_manifest_model_node(
+            unique_id="model.analytics.orders",
+            package_name="analytics",
+            name="orders",
+            database="warehouse",
+            schema="prod_marts",
+            alias="orders_prod",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.customers",
+            package_name="analytics",
+            name="customers",
+            database="warehouse",
+            schema="prod_core",
+            alias="customers_prod",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.payments",
+            package_name="analytics",
+            name="payments",
+            database="lakehouse",
+            schema="prod_marts",
+            alias="payments_prod",
+            materialized="table",
+        ),
+    )
+
+
 def assert_reuse_plan_output_matches(
     *,
     result: DbtReusePlanningResult | None,
@@ -201,6 +269,14 @@ def assert_reuse_plan_output_matches(
         return
     assert result.complete_reuse_unique_ids == expected_complete_reuse_unique_ids
     assert result.seeded_reuse_unique_ids == expected_seeded_reuse_unique_ids
+
+
+def reuse_plan_rebuild_reasons(result: DbtReusePlanningResult) -> tuple[DbtReusePlanReason, ...]:
+    """Return rebuild reasons from a dbt reuse planning result."""
+
+    return tuple(
+        entry.reason for entry in result.entries if entry.action == DbtReusePlanAction.REBUILD
+    )
 
 
 def build_reuse_execute_manifest() -> DbtManifestIndex:
@@ -905,6 +981,45 @@ class FakeLineageSourceSchemaAdapter(BaseAdapter):
         if columns is None:
             raise RuntimeError(f"missing relation {relation}")
         return columns
+
+
+class FakeReusePlanAdapter(BaseAdapter):
+    """Adapter stub for dbt reuse origin relation listing tests."""
+
+    adapter_name: ClassVar[str] = "fake_reuse_plan"
+
+    def __init__(self, relations: tuple[RelationInfo, ...]) -> None:
+        self.relations: tuple[RelationInfo, ...] = relations
+        self.list_relation_calls: list[
+            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
+        ] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        return object()
+
+    def execute(self, connection: object, sql: str) -> object:
+        raise AssertionError("execute should not be called in reuse plan tests")
+
+    def close(self, connection: object) -> None:
+        return None
+
+    def list_relations(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection
+        self.list_relation_calls.append((database, schemas, names))
+        return tuple(
+            relation
+            for relation in self.relations
+            if relation.database == database
+            and (schemas is None or relation.schema in schemas)
+            and (names is None or relation.name in names)
+        )
 
 
 def _lineage_column_id(column: QualifiedLineageColumn) -> str:

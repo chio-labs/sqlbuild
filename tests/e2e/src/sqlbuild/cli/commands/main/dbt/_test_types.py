@@ -249,6 +249,55 @@ class DbtInitDuckDbE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtInitInteractiveE2ETestCase:
+    description: str
+    input_text: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtAutoInitE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+    expected_toml_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtCliFlagAmbiguityE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtInitGeneratedReuseE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtInitMissingProdRelationE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtInitMissingProdRelationBuildE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtInitInvalidReuseRefE2ETestCase:
+    description: str
+    expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtPhase11ExecutionTestCase:
     description: str
     expected_current_stdout_fragments: tuple[str, ...]

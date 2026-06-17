@@ -127,6 +127,7 @@ class DbtReusePlanReason(StrEnum):
     NON_PHYSICAL_RESOURCE = "non_physical_resource"
     MANIFEST_NODE_MISSING = "manifest_node_missing"
     REUSE_METADATA_INVALID = "reuse_metadata_invalid"
+    ORIGIN_RELATION_MISSING = "origin_relation_missing"
 
 
 class DbtReuseExecutionMode(StrEnum):

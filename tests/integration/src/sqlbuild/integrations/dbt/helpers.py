@@ -118,6 +118,16 @@ def run_git_command(*, repo_dir: Path, args: tuple[str, ...]) -> None:
         raise RuntimeError(result.stderr or result.stdout)
 
 
+def count_available_reuse_refs(*, help_text: str) -> int:
+    """Count refs in a dbt reuse invalid-ref help message."""
+
+    marker: str = "Available local branches/tags include: "
+    if marker not in help_text:
+        return 0
+    available_refs: str = help_text.split(marker, 1)[1]
+    return len(available_refs.removesuffix(".").split(", "))
+
+
 def set_git_identity(*, repo_dir: Path) -> None:
     """Configure repo-local git identity for test commits."""
 

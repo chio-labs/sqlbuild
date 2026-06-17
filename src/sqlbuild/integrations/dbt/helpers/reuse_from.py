@@ -56,6 +56,12 @@ def compile_reuse_from_manifest(
             git_root=git_root,
             git_ref=reuse_from.git_ref,
         )
+        _raise_if_missing_git_ref(
+            git_root=git_root,
+            git_ref=archive_ref,
+            configured_ref=reuse_from.git_ref,
+            project_file=sqlbuild_project_dir / "sqlbuild_project.toml",
+        )
         _extract_git_ref(git_root=git_root, git_ref=archive_ref, destination=checkout_dir)
 
         temp_dbt_project_dir: Path = checkout_dir / dbt_relative_dir
@@ -152,6 +158,46 @@ def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
             help=result.stderr or result.stdout or None,
         )
     return remote_ref
+
+
+def _raise_if_missing_git_ref(
+    *, git_root: Path, git_ref: str, configured_ref: str, project_file: Path
+) -> None:
+    result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C", str(git_root), "rev-parse", "--verify", "--quiet", f"{git_ref}^{{commit}}"
+    )
+    if result.returncode == 0:
+        return
+    available_refs: tuple[str, ...] = _available_local_refs(git_root=git_root, limit=10)
+    available_detail: str = ""
+    if available_refs:
+        available_detail = (
+            " Available local branches/tags include: " + ", ".join(available_refs) + "."
+        )
+    raise DbtInteropConfigError(
+        f"dbt reuse_from git_ref '{configured_ref}' does not exist in this repository",
+        help=(
+            f"SQLBuild tried to archive git ref '{configured_ref}' from {git_root}. "
+            "Choose the branch or tag that represents production, then update "
+            f"{project_file} [dbt.reuse_from].git_ref." + available_detail
+        ),
+    )
+
+
+def _available_local_refs(*, git_root: Path, limit: int) -> tuple[str, ...]:
+    result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C",
+        str(git_root),
+        "for-each-ref",
+        "--sort=-committerdate",
+        "--format=%(refname:short)",
+        "refs/heads",
+        "refs/tags",
+    )
+    if result.returncode != 0:
+        return ()
+    refs: list[str] = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return tuple(refs[:limit])
 
 
 def _remote_tracking_ref(*, git_root: Path, git_ref: str) -> tuple[str, str, str] | None:

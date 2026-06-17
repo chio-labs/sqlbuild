@@ -49,6 +49,15 @@ class MainTestCase:
     expected_auto_approve: bool = False
     expected_vars: dict[str, object] | None = None
     expected_direct_state_history_versions: int | None = None
+    expected_dbt_init_project_dir: str | None = None
+    expected_dbt_init_profiles_dir: str | None = None
+    expected_dbt_init_profile_name: str | None = None
+    expected_dbt_init_target_name: str | None = None
+    expected_dbt_init_sqb_output_dir: str | None = None
+    expected_dbt_init_dry_run: bool = False
+    expected_dbt_init_overwrite: bool = False
+    expected_dbt_init_skip_dbt_debug: bool = False
+    expected_dbt_init_production_git_ref: str | None = None
 
 
 @dataclass(frozen=True)

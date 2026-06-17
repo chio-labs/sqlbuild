@@ -158,6 +158,7 @@ class DbtInitRequest:
     dry_run: bool = False
     overwrite: bool = False
     skip_dbt_debug: bool = False
+    production_git_ref: str = "main"
     progress_callbacks: DbtInitProgressCallbacks = field(default_factory=DbtInitProgressCallbacks)
 
 
@@ -168,6 +169,8 @@ class DbtInitResult:
     output_dir: Path
     project_file: Path
     project_name: str
+    macro_file: Path
+    production_git_ref: str
     adapter: str
     target_name: str
     profile_name: str
@@ -203,10 +206,18 @@ class DbtReuseCandidate:
     materialization: str
     destination_relation_name: str
     origin_relation_name: str
+    origin_database: str | None
+    origin_schema: str | None
+    origin_name: str
     package_name: str
     name: str
     fqn: tuple[str, ...] = field(default_factory=tuple)
     cursor_column: str | None = None
+    origin_relation_exists: bool = True
+
+    @property
+    def origin_relation_key(self) -> tuple[str | None, str | None, str]:
+        return (self.origin_database, self.origin_schema, self.origin_name)
 
 
 @dataclass(frozen=True)

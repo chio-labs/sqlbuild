@@ -110,6 +110,9 @@ def resolve_dbt_reuse_candidates(
                 materialization=materialization or "",
                 destination_relation_name=current_model.relation_name,
                 origin_relation_name=reuse_model.relation_name,
+                origin_database=reuse_model.database,
+                origin_schema=reuse_model.schema,
+                origin_name=reuse_model.alias or reuse_model.name,
                 package_name=current_model.package_name,
                 name=current_model.name,
                 fqn=current_model.fqn,
@@ -160,6 +163,39 @@ def build_dbt_reuse_planning_result(
     return DbtReusePlanningResult(entries=tuple(entries))
 
 
+def mark_missing_dbt_reuse_origin_relations(
+    *,
+    candidate_resolution: DbtReuseCandidateResolution,
+    existing_origin_relation_keys: frozenset[tuple[str | None, str | None, str]],
+) -> DbtReuseCandidateResolution:
+    """Mark candidates whose production-origin relation does not exist."""
+
+    candidates: list[DbtReuseCandidate] = []
+    candidate: DbtReuseCandidate
+    for candidate in candidate_resolution.candidates:
+        candidates.append(
+            DbtReuseCandidate(
+                unique_id=candidate.unique_id,
+                materialization=candidate.materialization,
+                destination_relation_name=candidate.destination_relation_name,
+                origin_relation_name=candidate.origin_relation_name,
+                origin_database=candidate.origin_database,
+                origin_schema=candidate.origin_schema,
+                origin_name=candidate.origin_name,
+                package_name=candidate.package_name,
+                name=candidate.name,
+                fqn=candidate.fqn,
+                cursor_column=candidate.cursor_column,
+                origin_relation_exists=(
+                    candidate.origin_relation_key in existing_origin_relation_keys
+                ),
+            )
+        )
+    return DbtReuseCandidateResolution(
+        candidates=tuple(candidates), skipped=candidate_resolution.skipped
+    )
+
+
 def _dbt_reuse_scope_unique_ids(*, plan: DbtInteropPlan) -> tuple[str, ...]:
     anchor_unique_ids: list[str] = []
     unique_ids: tuple[str, ...]
@@ -181,6 +217,16 @@ def _dbt_reuse_scope_unique_ids(*, plan: DbtInteropPlan) -> tuple[str, ...]:
 def _plan_reuse_candidate(
     *, candidate: DbtReuseCandidate, dbt_plan_entry: DbtModelPlanEntry | None
 ) -> DbtReusePlanEntry:
+    if not candidate.origin_relation_exists:
+        return DbtReusePlanEntry(
+            unique_id=candidate.unique_id,
+            action=DbtReusePlanAction.REBUILD,
+            reason=DbtReusePlanReason.ORIGIN_RELATION_MISSING,
+            materialization=candidate.materialization,
+            destination_relation_name=candidate.destination_relation_name,
+            origin_relation_name=candidate.origin_relation_name,
+            cursor_column=candidate.cursor_column,
+        )
     if dbt_plan_entry is None:
         return DbtReusePlanEntry(
             unique_id=candidate.unique_id,

@@ -25,6 +25,7 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
     build_local_reuse_from_git_project,
+    count_available_reuse_refs,
     run_git_command,
     set_git_identity,
 )
@@ -36,7 +37,15 @@ REUSE_FROM_COMPILE_ERROR_TEST_CASES: list[DbtReuseFromCompileErrorTestCase] = [
         command_returncode=0,
         command_stdout="",
         expected_error_type=DbtInteropConfigError,
-        expected_error_fragment="git_ref could not be archived",
+        expected_error_fragment=(
+            "dbt reuse_from git_ref 'missing-ref' does not exist in this repository"
+        ),
+        extra_branch_count=12,
+        expected_help_fragments=(
+            "sqlbuild_project.toml [dbt.reuse_from].git_ref",
+            "Available local branches/tags include:",
+        ),
+        expected_available_ref_count=10,
     ),
     DbtReuseFromCompileErrorTestCase(
         description="raises when injected dbt compile fails",
@@ -110,6 +119,12 @@ def test_given_invalid_reuse_from_compile_inputs_when_compiling_then_raises_clea
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
         build_local_reuse_from_git_project(tmp_path=tmp_path)
     )
+    branch_index: int
+    for branch_index in range(test_case.extra_branch_count):
+        run_git_command(
+            repo_dir=sqlbuild_project_dir.parent,
+            args=("branch", f"extra-branch-{branch_index:02d}"),
+        )
 
     def invoke(argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         return DbtCommandResult(
@@ -134,6 +149,11 @@ def test_given_invalid_reuse_from_compile_inputs_when_compiling_then_raises_clea
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
+    help_text: str = str(getattr(exc_info.value, "help", "") or "")
+    expected_help_fragment: str
+    for expected_help_fragment in test_case.expected_help_fragments:
+        assert expected_help_fragment in help_text
+    assert count_available_reuse_refs(help_text=help_text) == test_case.expected_available_ref_count
 
 
 @pytest.mark.parametrize(
