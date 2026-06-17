@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.adapter.base._test_types import (
     BaseAdapterIdentifierLimitTestCase,
     BaseAdapterMetadataSqlTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
+    BaseAdapterRelationMaxCursorTestCase,
     BaseAdapterSqlAnalysisDialectTestCase,
 )
 from tests.unit.src.sqlbuild.adapter.base.helpers import (
@@ -167,6 +168,47 @@ def test_given_base_adapter_when_rendering_durable_clone_then_uses_copy_fallback
 
     assert adapter.supports_durable_clone() is test_case.expected_supports_durable_clone
     assert result == test_case.expected_statements
+
+
+BASE_ADAPTER_RELATION_MAX_CURSOR_TEST_CASES: tuple[BaseAdapterRelationMaxCursorTestCase, ...] = (
+    BaseAdapterRelationMaxCursorTestCase(
+        description="queries max cursor with quoted identifier",
+        rows=((42,),),
+        relation="analytics.events",
+        cursor_column='event"time',
+        expected_value=42,
+        expected_sql='SELECT max("event""time") FROM analytics.events',
+    ),
+    BaseAdapterRelationMaxCursorTestCase(
+        description="returns none when query returns no rows",
+        rows=(),
+        relation="analytics.empty_events",
+        cursor_column="event_time",
+        expected_value=None,
+        expected_sql='SELECT max("event_time") FROM analytics.empty_events',
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    BASE_ADAPTER_RELATION_MAX_CURSOR_TEST_CASES,
+    ids=[case.description for case in BASE_ADAPTER_RELATION_MAX_CURSOR_TEST_CASES],
+)
+def test_given_relation_when_getting_max_cursor_then_base_adapter_queries_quoted_cursor(
+    test_case: BaseAdapterRelationMaxCursorTestCase,
+) -> None:
+    adapter: RecordingBaseAdapter = RecordingBaseAdapter()
+    connection: RecordingConnection = RecordingConnection(rows=test_case.rows)
+
+    result: object | None = adapter.get_relation_max_cursor(
+        connection,
+        relation=test_case.relation,
+        cursor_column=test_case.cursor_column,
+    )
+
+    assert result == test_case.expected_value
+    assert tuple(connection.executed_sql) == (test_case.expected_sql,)
 
 
 @pytest.mark.parametrize(

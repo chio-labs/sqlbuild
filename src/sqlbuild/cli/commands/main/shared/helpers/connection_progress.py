@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 
 
 class ConnectionProgressReporter:

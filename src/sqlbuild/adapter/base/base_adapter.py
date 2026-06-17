@@ -23,6 +23,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import (
     CursorKind,
@@ -102,6 +103,23 @@ class BaseAdapter(StrictAdapter):
             f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
 
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        request: TableFreshnessRequest
+        for request in requests:
+            results[request] = self.get_table_freshness_metadata(
+                connection,
+                database=request.database,
+                schema=request.schema,
+                name=request.name,
+            )
+        return results
+
     def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query without materializing full rows."""
 
@@ -112,6 +130,22 @@ class BaseAdapter(StrictAdapter):
         if description is None:
             return ()
         return tuple(str(column[0]) for column in description)
+
+    def get_relation_max_cursor(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str,
+    ) -> object | None:
+        """Return the maximum cursor value currently present in a relation."""
+
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        row: Any | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
 
     def build_cursor_filter(
         self,
@@ -458,6 +492,21 @@ class BaseAdapter(StrictAdapter):
             cursor_type=cursor_type,
         )
 
+    def render_seed_select_after_cursor(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_after_cursor_impl(
+            origin=origin,
+            cursor_column=cursor_column,
+            cursor_start_exclusive=cursor_start_exclusive,
+            cursor_type=cursor_type,
+        )
+
     def relation_names_match(self, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left, right)
 
@@ -489,6 +538,18 @@ class BaseAdapter(StrictAdapter):
         quoted_cursor: str = self.render_identifier(cursor_column)
         end_literal: str = self.render_cursor_bound_literal(cursor_end_exclusive, cursor_type)
         return f"SELECT * FROM {origin} WHERE {quoted_cursor} < {end_literal}"
+
+    def _render_seed_select_after_cursor_impl(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        start_literal: str = self.render_cursor_bound_literal(cursor_start_exclusive, cursor_type)
+        return f"SELECT * FROM {origin} WHERE {quoted_cursor} > {start_literal}"
 
     def _relation_names_match_impl(self, left: str, right: str) -> bool:
         return left.replace('"', "") == right.replace('"', "")

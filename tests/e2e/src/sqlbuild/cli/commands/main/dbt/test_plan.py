@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -17,7 +18,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
-    static_dbt_interop_project_dir,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     REPO_ROOT,
@@ -140,7 +140,6 @@ def test_given_dbt_interop_project_when_running_plan_json_then_outputs_expected_
         DbtPlanRelativeProjectDirTestCase(
             description="resolves dbt config paths from relative SQLBuild project dir",
             command=("dbt", "plan", "--json", "--select", "tag:nightly"),
-            expected_project_dir=static_dbt_interop_project_dir().relative_to(REPO_ROOT),
             expected_selected_models=("downstream_orders",),
         )
     ],
@@ -148,12 +147,15 @@ def test_given_dbt_interop_project_when_running_plan_json_then_outputs_expected_
 )
 def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_config_paths(
     test_case: DbtPlanRelativeProjectDirTestCase,
+    tmp_path: Path,
 ) -> None:
     skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    relative_project_dir: Path = Path(os.path.relpath(project_dir, REPO_ROOT))
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,
-        project_dir=test_case.expected_project_dir,
+        project_dir=relative_project_dir,
     )
 
     assert result.returncode == 0, result.stderr or result.stdout
@@ -161,6 +163,7 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
     sqlbuild_payload: object = payload["sqlbuild"]
     assert isinstance(sqlbuild_payload, dict)
     typed_sqlbuild_payload: Mapping[str, object] = cast(Mapping[str, object], sqlbuild_payload)
+    assert relative_project_dir != project_dir
     assert typed_sqlbuild_payload["selected_models"] == list(test_case.expected_selected_models)
 
 
@@ -171,12 +174,15 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
             description="outputs grouped dbt and SQLBuild plan sections",
             command=("dbt", "plan", "--select", "tag:nightly"),
             expected_stdout_fragments=(
-                "Plan ready (6 selected)",
-                "dbt (5 selected)",
-                "Models (1)",
-                "analytics.stg_orders",
-                "Tests (2)",
-                "Unit Tests (1)",
+                "Plan ready (4 selected dbt, 1 required dbt, 1 SQLBuild)",
+                "dbt (4 selected, 1 required)",
+                "selected by dbt selector: 4 from dbt selector",
+                "added for SQLBuild dependencies: 1 dbt resources",
+                "planned models: 2 run, 0 current, 0 blocked",
+                "planned non-model dbt work: 3 selected tests/seeds preserved for execution",
+                "Model plan",
+                "Run (2)",
+                "model.analytics.stg_orders  first run",
                 "SQLBuild (1 selected)",
                 "command: sqb plan --select downstream_orders",
                 "First run (1)",

@@ -45,6 +45,11 @@ def format_freshness_text(result: FreshnessCommandResult) -> str:
         f"tolerated={result.tolerated_count} "
         f"unknown={result.unknown_count} errors={result.error_count}"
     )
+    if any(source.age_status is not None for source in result.sources):
+        lines.append(
+            f"Age policy: pass={result.age_pass_count} warn={result.age_warn_count} "
+            f"error={result.age_error_count} unknown={result.age_unknown_count}"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -61,6 +66,10 @@ def format_freshness_json(result: FreshnessCommandResult) -> str:
                 "tolerated": result.tolerated_count,
                 "unknown": result.unknown_count,
                 "errors": result.error_count,
+                "age_pass": result.age_pass_count,
+                "age_warn": result.age_warn_count,
+                "age_error": result.age_error_count,
+                "age_unknown": result.age_unknown_count,
             },
         },
         indent=2,
@@ -90,6 +99,8 @@ def _format_source_line(source: FreshnessSourceResult) -> str:
             parts.append(source.strategy)
         if source.lag_tolerance is not None:
             parts.append(f"tolerance {source.lag_tolerance}")
+        if source.age_status is not None:
+            parts.append(f"age {source.age_status.value}")
         return "  ".join(parts)
     if source.status in {
         FreshnessSourceStatus.CHANGED,
@@ -103,6 +114,8 @@ def _format_source_line(source: FreshnessSourceResult) -> str:
             parts.append(f"current {source.current_data_version}")
         if source.lag_tolerance is not None:
             parts.append(f"tolerance {source.lag_tolerance}")
+        if source.age_status is not None:
+            parts.append(f"age {source.age_status.value}")
         return "  ".join(parts)
     if source.message is not None:
         return f"{source.name}  {source.message}"
@@ -124,4 +137,5 @@ def _source_payload(source: FreshnessSourceResult) -> dict[str, object]:
             "name": source.target_name,
         },
         "message": source.message,
+        "age_status": source.age_status.value if source.age_status is not None else None,
     }

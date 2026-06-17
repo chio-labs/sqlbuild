@@ -35,6 +35,7 @@ from sqlbuild.adapter.shared.models import (
     SchemaDiffResult,
     StatementRecorder,
     TableFreshnessMetadata,
+    TableFreshnessRequest,
 )
 from sqlbuild.adapter.shared.types import (
     BuiltinAdapter,
@@ -85,6 +86,16 @@ class SqlServerAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
+        raise AdapterUserError(
+            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+        )
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         raise AdapterUserError(
             f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
@@ -352,6 +363,22 @@ class SqlServerAdapter(BaseAdapter):
         )
         return tuple(str(row[2]) for row in cursor.fetchall() if row[2] is not None)
 
+    def get_relation_max_cursor(
+        self,
+        connection: Any,
+        *,
+        relation: str,
+        cursor_column: str,
+    ) -> object | None:
+        """Return the maximum cursor value currently present in a relation."""
+
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        row: Any | None = cursor.fetchone()
+        if row is None:
+            return None
+        return row[0]
+
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         if limit is not None:
             column_names: tuple[str, ...] = self.query_column_names(connection, sql)
@@ -386,15 +413,45 @@ class SqlServerAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+        from sqlbuild.compiler.fingerprints.constants import (
+            COLUMN_DEFINITION_B64,
+            COLUMN_DEFINITION_HASH,
+            COLUMN_METADATA_JSON_B64,
+            COLUMN_NODE_NAME,
+            COLUMN_NODE_TYPE,
+            COLUMN_RUN_ID,
+            COLUMN_SCHEMA_FINGERPRINT,
+            COLUMN_TARGET_DATABASE,
+            COLUMN_TARGET_NAME,
+            COLUMN_TARGET_SCHEMA,
+            COLUMN_TIMESTAMP,
+            COLUMN_VERSION_HASH,
+            FINGERPRINT_TABLE_NAME,
+        )
 
-        create_sql: str = build_create_table_sql(
+        table_name: str | None = self.render_qualified_name(
             database=database,
             schema=schema,
-            render_qualified_name=self.render_qualified_name,
-            render_framework_type=self.render_framework_type,
-        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        create_sql: str = (
+            f"CREATE TABLE {table_name} ("
+            f"{COLUMN_NODE_TYPE} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_NODE_NAME} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_TARGET_DATABASE} NVARCHAR(450), "
+            f"{COLUMN_TARGET_SCHEMA} NVARCHAR(450), "
+            f"{COLUMN_TARGET_NAME} NVARCHAR(450), "
+            f"{COLUMN_RUN_ID} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_DEFINITION_HASH} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_VERSION_HASH} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_SCHEMA_FINGERPRINT} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_DEFINITION_B64} NVARCHAR(MAX) NOT NULL, "
+            f"{COLUMN_METADATA_JSON_B64} NVARCHAR(MAX) NOT NULL, "
+            f"{COLUMN_TIMESTAMP} DATETIME2 NOT NULL"
+            f")"
+        )
         escaped_schema: str = schema.replace("'", "''")
         escaped_table: str = FINGERPRINT_TABLE_NAME.replace("'", "''")
         exists_sql: str = (
@@ -669,8 +726,9 @@ class SqlServerAdapter(BaseAdapter):
         return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        destination_name: str = destination.split(".")[-1].strip("[]")
-        return (f"EXEC sp_rename '{origin}', '{destination_name}'",)
+        origin_name: str = self._sp_rename_relation_name(origin)
+        destination_name: str = self._unquote_relation_part(destination.split(".")[-1])
+        return (f"EXEC sp_rename '{origin_name}', '{destination_name}'",)
 
     def render_add_columns(
         self, *, destination: str, columns: tuple[ColumnInfo, ...]
@@ -1659,6 +1717,21 @@ class SqlServerAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
+    def render_seed_select_after_cursor(
+        self,
+        *,
+        origin: str,
+        cursor_column: str,
+        cursor_start_exclusive: str,
+        cursor_type: str | None,
+    ) -> str:
+        return self._render_seed_select_after_cursor_impl(
+            origin=origin,
+            cursor_column=cursor_column,
+            cursor_start_exclusive=cursor_start_exclusive,
+            cursor_type=cursor_type,
+        )
+
     def relation_names_match(self, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left, right)
 
@@ -2033,12 +2106,21 @@ class SqlServerAdapter(BaseAdapter):
         )
 
     def _relation_name(self, relation: str) -> str:
-        return relation.split(".")[-1].strip("[]")
+        return self._unquote_relation_part(relation.split(".")[-1])
 
     def _with_replaced_relation_name(self, relation: str, name: str) -> str:
         parts: list[str] = relation.split(".")
         parts[-1] = self.render_identifier(name)
         return ".".join(parts)
+
+    def _sp_rename_relation_name(self, relation: str) -> str:
+        parts: list[str] = relation.split(".")
+        if len(parts) >= 2:
+            return ".".join(parts[-2:])
+        return relation
+
+    def _unquote_relation_part(self, part: str) -> str:
+        return part.strip().strip('"').strip("`").removeprefix("[").removesuffix("]")
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
         return f"{target}{call_suffix_sql}"

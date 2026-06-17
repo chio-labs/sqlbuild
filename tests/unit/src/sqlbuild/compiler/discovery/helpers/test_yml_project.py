@@ -14,6 +14,9 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     LoadProjectConfigErrorTestCase,
     LoadProjectConfigTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import (
+    write_project_config_test_files,
+)
 
 LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
     LoadLocalConfigTestCase(
@@ -221,6 +224,89 @@ adapter = "duckdb"
 reuse_hard_copy = "yes"
 """.strip(),
         expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from omits git_ref",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment="must define non-empty string 'git_ref'",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from omits schema macro override",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+""".strip(),
+        expected_error_fragment="must define non-empty string 'generate_schema_name_override'",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from schema macro override is absolute",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+generate_schema_name_override = "/tmp/prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment="must be a relative path under dbt/macros/",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from schema macro override escapes project",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+generate_schema_name_override = "dbt/macros/../prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment="must be a relative path under dbt/macros/",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from schema macro override is outside dbt macros",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+generate_schema_name_override = "macros/prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment="must be under dbt/macros/",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from contains target field",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+target = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment=r"dbt.reuse_from contains unknown key\(s\): target",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt reuse_from schema macro override file is missing",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment="generate_schema_name_override file not found",
     ),
     LoadProjectConfigErrorTestCase(
         description="raises when settings concurrency is not an integer",
@@ -733,6 +819,10 @@ project_dir = "../dbt"
 profiles_dir = "../profiles"
 target = "prod"
 target_path = "target/dbt"
+
+[dbt.reuse_from]
+git_ref = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
 """.strip(),
         expected_name="demo",
         expected_adapter="duckdb",
@@ -795,6 +885,10 @@ target_path = "target/dbt"
         expected_dbt_profiles_dir="../profiles",
         expected_dbt_target="prod",
         expected_dbt_target_path="target/dbt",
+        expected_dbt_reuse_from_git_ref="prod",
+        expected_dbt_reuse_from_generate_schema_name_override=(
+            "dbt/macros/prod_generate_schema_name.sql"
+        ),
     ),
 ]
 
@@ -808,8 +902,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     test_case: LoadProjectConfigTestCase,
     tmp_path: Path,
 ) -> None:
-    project_file: Path = tmp_path / "sqlbuild_project.toml"
-    project_file.write_text(test_case.project_file_contents, encoding="utf-8")
+    write_project_config_test_files(tmp_path=tmp_path, test_case=test_case)
 
     config: object = load_project_config(project_dir=tmp_path)
 
@@ -870,6 +963,11 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.dbt.profiles_dir == test_case.expected_dbt_profiles_dir
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.target_path == test_case.expected_dbt_target_path
+    assert config.dbt.reuse_from.git_ref == test_case.expected_dbt_reuse_from_git_ref
+    assert (
+        config.dbt.reuse_from.generate_schema_name_override
+        == test_case.expected_dbt_reuse_from_generate_schema_name_override
+    )
 
 
 @pytest.mark.parametrize(

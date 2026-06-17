@@ -39,6 +39,23 @@ class SqlServerRenderCreateSchemaTestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerRenderQualifiedNameTestCase:
+    description: str
+    database: str | None
+    schema: str | None
+    name: str
+    expected_name: str
+
+
+@dataclass(frozen=True)
+class SqlServerRenderRenameTestCase:
+    description: str
+    origin: str
+    destination: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SqlServerMoveOrCopyRelationTestCase:
     description: str
     source: str

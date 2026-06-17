@@ -33,6 +33,7 @@ def prune_standard_unchanged_scope(
     resolved_actions: PlannerResolvedActions,
     source_freshness: StandardSourceFreshnessPlanningResult | None = None,
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
+    forced_stale_model_names: tuple[str, ...] = (),
     expected_version_hashes: dict[str, str] | None = None,
     expected_seed_version_hashes: dict[str, str] | None = None,
     built_seed_fingerprints: dict[str, Fingerprint] | None = None,
@@ -40,6 +41,7 @@ def prune_standard_unchanged_scope(
     """Remove unchanged selected SQL nodes for standard stale-only planning."""
 
     selected_keys: set[CompiledObjectKey] = set()
+    forced_stale: frozenset[str] = frozenset(forced_stale_model_names)
     key: CompiledObjectKey
     for key in scope.selected_keys:
         if key.resource_type == CompiledResourceType.MODEL:
@@ -61,6 +63,8 @@ def prune_standard_unchanged_scope(
                 model_name=key.name,
                 run_despite_unchanged=run_despite_unchanged,
             ):
+                selected_keys.add(key)
+            elif key.name in forced_stale:
                 selected_keys.add(key)
             continue
         if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
@@ -95,6 +99,7 @@ def build_standard_identity_stale_model_names(
     scope: PlannerScope,
     expected_version_hashes: dict[str, str],
     built_version_hashes: dict[str, str | None],
+    forced_stale_model_names: tuple[str, ...] = (),
 ) -> frozenset[str]:
     """Return all model names whose standard built identity is missing or stale."""
 
@@ -103,6 +108,7 @@ def build_standard_identity_stale_model_names(
             model_names=tuple(scope.models_by_name),
             expected_version_hashes=expected_version_hashes,
             built_version_hashes=built_version_hashes,
+            forced_stale_model_names=forced_stale_model_names,
         )
     )
 
@@ -112,18 +118,31 @@ def mark_version_identity_stale_actions(
     scope: PlannerScope,
     resolved_actions: PlannerResolvedActions,
     expected_version_hashes: dict[str, str] | None,
+    forced_stale_model_names: tuple[str, ...] = (),
 ) -> PlannerResolvedActions:
     """Mark standard composed-version stale entries as upstream-driven work."""
 
     if expected_version_hashes is None:
         return resolved_actions
     models: dict[str, ResolvedModelAction] = dict(resolved_actions.models)
+    forced_stale: frozenset[str] = frozenset(forced_stale_model_names)
     key: CompiledObjectKey
     for key in scope.selected_keys:
         if key.resource_type != CompiledResourceType.MODEL:
             continue
         resolved_action: ResolvedModelAction | None = models.get(key.name)
         if resolved_action is None:
+            continue
+        if key.name in forced_stale and _can_mark_upstream_cascade(resolved_action):
+            models[key.name] = replace(
+                resolved_action,
+                cascade=CascadeResult(
+                    effective_action=BackfillAction.FORWARD_ONLY,
+                    effective_duration=None,
+                    root_cause=None,
+                    root_reason=PlanReason.UPSTREAM_CHANGED,
+                ),
+            )
             continue
         if not _version_identity_requires_upstream_cascade(
             model_name=key.name,
@@ -140,6 +159,14 @@ def mark_version_identity_stale_actions(
             ),
         )
     return PlannerResolvedActions(models=models)
+
+
+def _can_mark_upstream_cascade(resolved_action: ResolvedModelAction) -> bool:
+    if resolved_action.change.change_kind != ChangeKind.NO_CHANGE:
+        return False
+    if resolved_action.cascade is not None:
+        return False
+    return not _backfill_is_stale(resolved_action.backfill)
 
 
 def mark_run_despite_unchanged_actions(
@@ -268,7 +295,10 @@ def _source_freshness_marks_model_stale(
 ) -> bool:
     if source_freshness is None or source_freshness.propagation is None:
         return False
-    return model_name in source_freshness.propagation.stale_model_names
+    return model_name in (
+        source_freshness.propagation.stale_model_names
+        | source_freshness.propagation.blocked_model_names
+    )
 
 
 def _backfill_is_stale(backfill: BackfillResult) -> bool:

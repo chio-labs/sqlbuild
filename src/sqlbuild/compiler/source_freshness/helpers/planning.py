@@ -8,6 +8,13 @@ from typing import Any
 
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
+from sqlbuild.compiler.source_freshness.helpers.age_policy import (
+    evaluate_source_freshness_age_policy,
+)
+from sqlbuild.compiler.source_freshness.main.adapter_observation import (
+    observe_adapter_sources_freshness,
+)
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -26,6 +33,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessSet,
     StandardSourceFreshnessPlanningResult,
 )
+from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy
 
@@ -54,6 +62,9 @@ def build_standard_source_freshness_planning_result(
     unknown_source_names: list[str] = []
     changed_identities: set[SourceFreshnessIdentity] = set()
     unchanged_identities: set[SourceFreshnessIdentity] = set()
+    age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = {}
+    observation_sources_by_name: dict[str, SourceEntry] = {}
+    adapter_observation_sources: list[SourceEntry] = []
 
     source: SourceEntry
     for source in sources:
@@ -66,23 +77,62 @@ def build_standard_source_freshness_planning_result(
         if observation_source is None:
             unknown_source_names.append(source.name)
             continue
+        observation_sources_by_name[source.name] = observation_source
+        if observation_source.freshness is not None and (
+            observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
+        ):
+            adapter_observation_sources.append(observation_source)
 
+    adapter_observations: dict[str, SourceFreshnessObservation] = {}
+    if adapter_observation_sources:
         try:
-            observation: SourceFreshnessObservation = observe_configured_source_freshness(
+            adapter_observations = observe_adapter_sources_freshness(
                 adapter=adapter,
                 connection=connection,
-                source=observation_source,
+                sources=tuple(adapter_observation_sources),
                 observed_at=observed_at,
             )
-        except AdapterUserError:
-            unknown_source_names.append(source.name)
-            continue
+        except (AdapterUserError, SourceFreshnessObservationError):
+            unknown_source_names.extend(source.name for source in adapter_observation_sources)
+
+    for source_name, observation_source in observation_sources_by_name.items():
+        if observation_source.freshness is not None and (
+            observation_source.freshness.strategy == SourceFreshnessStrategy.ADAPTER
+        ):
+            observation: SourceFreshnessObservation | None = adapter_observations.get(source_name)
+            if observation is None:
+                continue
+        else:
+            try:
+                observation = observe_configured_source_freshness(
+                    adapter=adapter,
+                    connection=connection,
+                    source=observation_source,
+                    observed_at=observed_at,
+                )
+            except AdapterUserError:
+                unknown_source_names.append(source_name)
+                continue
+            except SourceFreshnessObservationError as exc:
+                if _source_freshness_error_is_configuration_error(error=exc):
+                    raise
+                unknown_source_names.append(source_name)
+                continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(
             observation=observation,
             source=observation_source,
             run_id=run_id,
         )
         observed_records.append(observed_record)
+        age_status: SourceFreshnessAgeStatus | None = evaluate_source_freshness_age_policy(
+            policy=observation_source.freshness.age_policy
+            if observation_source.freshness is not None
+            else None,
+            data_version=observation.data_version,
+            observed_at=observation.observed_at,
+        )
+        if age_status is not None:
+            age_statuses[observed_record.identity] = age_status
         previous_record: SourceFreshnessRecord | None = previous_records_by_identity.get(
             observed_record.identity
         )
@@ -108,7 +158,15 @@ def build_standard_source_freshness_planning_result(
         changed_identities=frozenset(changed_identities),
         unchanged_identities=frozenset(unchanged_identities),
         unknown_source_names=tuple(sorted(unknown_source_names)),
+        age_statuses=age_statuses,
     )
+
+
+def _source_freshness_error_is_configuration_error(
+    *, error: SourceFreshnessObservationError
+) -> bool:
+    message: str = str(error)
+    return "requires a physical table source" in message or "incomplete" in message
 
 
 def source_freshness_record_from_observation(

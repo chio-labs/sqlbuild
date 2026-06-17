@@ -26,11 +26,17 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     SqlTestPlanEntry,
 )
-from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanAction
+from sqlbuild.compiler.planner.types import (
+    IncrementalMode,
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import (
     BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,
     BUILD_MODEL_ENTRY_MISSING_CODE,
+    BUILD_SOURCE_FRESHNESS_BLOCKED_CODE,
     BUILD_UNKNOWN_RESOURCE_FAILED_CODE,
     BUILD_WORKER_FAILED_CODE,
     INCREMENTAL_ACTIONS,
@@ -832,6 +838,14 @@ def _dispatch_model(
 ) -> ModelExecutionResult:
     """Route a model to the correct executor based on action and mode."""
 
+    if entry.action == PlanAction.SKIP:
+        return ModelExecutionResult(
+            model_name=entry.name,
+            status=ExecutionStatus.SKIPPED,
+            skip_reason=_plan_skip_reason(entry),
+            error_code=_plan_skip_error_code(entry),
+        )
+
     if entry.action == PlanAction.CUSTOM:
         mat_name: str | None = entry.custom_materialization_name
         registry: Mapping[str, Callable[..., MaterializationResult]] = custom_materializations or {}
@@ -985,6 +999,18 @@ def _dispatch_model(
         providers=providers,
         python_identity_recorder=python_identity_recorder,
     )
+
+
+def _plan_skip_reason(entry: ModelPlanEntry) -> str:
+    if entry.reason == PlanReason.SOURCE_FRESHNESS_ERROR:
+        return "Blocked by source freshness error"
+    return entry.reason.value
+
+
+def _plan_skip_error_code(entry: ModelPlanEntry) -> str | None:
+    if entry.reason == PlanReason.SOURCE_FRESHNESS_ERROR:
+        return BUILD_SOURCE_FRESHNESS_BLOCKED_CODE
+    return None
 
 
 def _model_execution_resource_kind(materialization_type: str) -> ExecutionResourceKind:

@@ -13,6 +13,7 @@ class FreshnessOutputTestCase:
     result: FreshnessCommandResult
     expected_text_fragments: tuple[str, ...]
     expected_summary: dict[str, int]
+    expected_json_age_statuses: dict[str, str | None]
 
 
 @dataclass(frozen=True)
@@ -23,4 +24,5 @@ class FreshnessObservationTestCase:
     expected_statuses: dict[str, str]
     expected_versions: dict[str, str]
     previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None
+    expected_age_statuses: dict[str, str] | None = None
     observed_at: datetime = datetime(2026, 1, 1, 0, 0, 0)

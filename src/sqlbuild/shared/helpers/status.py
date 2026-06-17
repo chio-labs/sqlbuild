@@ -1,4 +1,4 @@
-"""Shared CLI status rendering helpers."""
+"""Shared transient status rendering helpers."""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ class TransientStatusReporter:
         enabled: bool = True,
     ) -> None:
         self._stream: TextIO = stream
-        self._use_color: bool = use_color
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._enabled: bool = enabled and hasattr(stream, "isatty") and stream.isatty()
         self._console: Console | None = (

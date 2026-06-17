@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build.constants import BUILD_SOURCE_FRESHNESS_BLOCKED_CODE
 from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
@@ -169,6 +170,8 @@ def _aggregate_build_result(
             failure_count += 1
         elif model_result.status == ExecutionStatus.SKIPPED:
             skipped_count += 1
+            if model_result.error_code == BUILD_SOURCE_FRESHNESS_BLOCKED_CODE:
+                failure_count += 1
         warning_count += len(model_result.warning_messages)
         audit_result: AuditExecutionResult
         for audit_result in model_result.audit_results:

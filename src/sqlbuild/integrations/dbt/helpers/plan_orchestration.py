@@ -14,6 +14,7 @@ from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_mode
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.selection import resolve_dbt_interop_sqlbuild_selection
+from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -168,7 +169,11 @@ def _build_required_dbt_selector_terms(
             )
             if dbt_model.unique_id not in required_ids:
                 continue
-            terms.add(f"+{dbt_model.name}")
+            selector_term: str = dbt_fqn_selector_term(
+                fqn=dbt_model.fqn,
+                fallback=dbt_model.name,
+            )
+            terms.add(f"+{selector_term}")
     return tuple(sorted(terms))
 
 

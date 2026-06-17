@@ -81,6 +81,15 @@ class TableFreshnessMetadata:
 
 
 @dataclass(frozen=True)
+class TableFreshnessRequest:
+    """Physical table identity for adapter metadata freshness lookup."""
+
+    database: str | None
+    schema: str | None
+    name: str
+
+
+@dataclass(frozen=True)
 class FunctionInfo:
     """Metadata for one discovered warehouse function or routine."""
 

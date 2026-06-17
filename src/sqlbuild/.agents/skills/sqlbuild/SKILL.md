@@ -2434,7 +2434,7 @@ Python hooks receive a `HookContext` as their first parameter (named `ctx`, `con
 | `ctx.phase` | `pre_hooks` or `post_hooks` |
 | `ctx.hook_name` | Name of the hook being invoked |
 | `ctx.run_id` | Current run ID |
-| `ctx.environment` | Active target name |
+| `ctx.target` | Active target name |
 | `ctx.vars` | Project variables |
 | `ctx.destination.qualified` | Fully qualified destination relation name |
 | `ctx.destination.schema` | Destination schema |

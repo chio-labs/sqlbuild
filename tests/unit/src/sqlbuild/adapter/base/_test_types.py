@@ -42,3 +42,13 @@ class BaseAdapterMetadataSqlTestCase:
     schema: str
     name: str
     expected_sql: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BaseAdapterRelationMaxCursorTestCase:
+    description: str
+    rows: tuple[tuple[object, ...], ...]
+    relation: str
+    cursor_column: str
+    expected_value: object | None
+    expected_sql: str

@@ -154,6 +154,14 @@ class ScenarioConfig:
 
 
 @dataclass(frozen=True)
+class DbtReuseFromConfig:
+    """dbt reuse_from configuration."""
+
+    git_ref: str | None = None
+    generate_schema_name_override: str | None = None
+
+
+@dataclass(frozen=True)
 class DbtConfig:
     """dbt interop configuration."""
 
@@ -161,6 +169,8 @@ class DbtConfig:
     profiles_dir: str | None = None
     target: str | None = None
     target_path: str | None = None
+    replay_on_change: str | None = None
+    reuse_from: DbtReuseFromConfig = field(default_factory=DbtReuseFromConfig)
 
 
 @dataclass(frozen=True)

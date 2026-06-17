@@ -74,6 +74,74 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="reports internal pure re-export module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/bridge.py": dedent(
+                """
+                from __future__ import annotations
+
+                from sqlbuild.shared.models import RetryPolicy
+
+                __all__ = ("RetryPolicy",)
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC046", "SC047"),
+    ),
+    CheckPathsTestCase(
+        description="allows top-level public re-export module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/retries.py": dedent(
+                """
+                from sqlbuild.shared.models import RetryPolicy
+
+                __all__ = ("RetryPolicy",)
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="does not report pure re-export violation for integration public surface",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/example/__init__.py": dedent(
+                """
+                from __future__ import annotations
+
+                from sqlbuild.shared.models import RetryPolicy
+
+                __all__ = ["RetryPolicy"]
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC006",),
+    ),
+    CheckPathsTestCase(
+        description="reports internal helper __all__ export surface",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/formatting.py": dedent(
+                """
+                from sqlbuild.shared.models import RetryPolicy
+
+                __all__ = ("RetryPolicy", "format_name")
+
+
+                def format_name(name: str) -> str:
+                    return name.strip()
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC047",),
+    ),
+    CheckPathsTestCase(
         description="reports ambiguous target reuse source terminology",
         repo_files=compliant_repo_files()
         | {
@@ -86,6 +154,40 @@ TEST_CASES: list[CheckPathsTestCase] = [
             )
         },
         expected_violation_codes=("SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
+        description="reports ambiguous dbt reuse source terminology",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/dbt/helpers/reuse_candidates.py": (
+                "def build_origin() -> str:\n"
+                "    source_relation = 'prod.orders'\n"
+                "    return source_relation\n"
+            )
+        },
+        expected_violation_codes=("SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
+        description="reports globally banned reuse source terminology",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/planning.py": (
+                "def build_origin() -> str:\n"
+                "    source_fingerprint = 'abc'\n"
+                "    return source_fingerprint\n"
+            )
+        },
+        expected_violation_codes=("SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
+        description="allows real adapter source relation terminology outside reuse modules",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/planning.py": (
+                "def render(source_relation: str) -> str:\n    return source_relation\n"
+            )
+        },
+        expected_violation_codes=(),
     ),
     CheckPathsTestCase(
         description="reports flat runtime main module under nested package",

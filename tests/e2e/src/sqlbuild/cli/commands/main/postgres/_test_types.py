@@ -117,6 +117,25 @@ class PostgresPartialSourceTypeEnforcementE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PostgresDbtProfileE2ETestCase:
+    description: str
+    expected_toml_fragments: tuple[str, ...]
+    unexpected_toml_fragments: tuple[str, ...]
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+    expected_noop_fragments: tuple[str, ...]
+    expected_plain_selector_block_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class PostgresDbtReuseFromE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class PostgresStateLifecycleE2ETestCase:
     description: str
     expected_exit_code: int

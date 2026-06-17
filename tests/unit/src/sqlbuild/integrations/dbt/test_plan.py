@@ -11,7 +11,23 @@ from sqlbuild.integrations.dbt.helpers.plan import (
     format_dbt_interop_plan,
     format_dbt_interop_plan_json,
 )
-from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
+from sqlbuild.integrations.dbt.models import (
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtLsNode,
+    DbtModelPlanEntry,
+    DbtModelPlanningResult,
+    DbtReusePlanEntry,
+    DbtReusePlanningResult,
+)
+from sqlbuild.integrations.dbt.types import (
+    DbtInteropCommand,
+    DbtInteropSkipReason,
+    DbtModelPlanAction,
+    DbtModelPlanReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
+)
 from sqlbuild.shared.helpers.display import DisplayOptions
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanHumanFormatterTestCase,
@@ -37,7 +53,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "Plan ready (3 selected)",
+            "Plan ready (3 selected resources)",
             "dbt",
             "command: dbt run --select tag:nightly",
             "SQLBuild",
@@ -69,7 +85,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=True,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "Plan ready (1 selected)",
+            "Plan ready (1 selected resources)",
             "skipped: no dbt work selected",
             "local_only",
         ),
@@ -94,7 +110,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=True,
         expected_human_fragments=(
-            "Plan ready (1 selected)",
+            "Plan ready (1 selected resources)",
             "command: dbt build --select state:modified",
             "skipped: no SQLBuild work selected",
         ),
@@ -121,9 +137,7 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "Plan ready (2 selected)",
-            "required: 1",
-            "model.analytics.int_orders",
+            "Plan ready (1 required dbt, 1 SQLBuild)",
             "fact_orders",
         ),
         expected_json_fragments=(
@@ -144,13 +158,14 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         selection_dbt_anchor_terms=(),
         selection_dbt_anchor_unique_ids_by_term={},
         selection_path_translations=(),
-        warnings=(),
+        warnings=("No dbt or SQLBuild resources matched the selection.",),
         expected_dbt_skipped=True,
         expected_sqlbuild_skipped=True,
         expected_human_fragments=(
-            "Plan ready (0 selected)",
+            "Plan ready (0 selected resources)",
             "skipped: no dbt work selected",
             "skipped: no SQLBuild work selected",
+            "No dbt or SQLBuild resources matched the selection.",
         ),
         expected_json_fragments=(
             '"selected_unique_ids": []',
@@ -176,9 +191,6 @@ PLAN_TEST_CASES: list[DbtPlanTestCase] = [
         expected_dbt_skipped=False,
         expected_sqlbuild_skipped=False,
         expected_human_fragments=(
-            "required: 1",
-            "dbt anchors (1)",
-            "package:stripe+: 1",
             "Path translations (1)",
             "path:models\\marts -> path:models/marts",
         ),
@@ -241,7 +253,7 @@ FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
         expected_absent_fragments=("analytics.model_2", "local_three          model"),
     ),
     DbtPlanHumanFormatterTestCase(
-        description="groups dbt resources and styles dbt names orange",
+        description="groups dbt resources with SQLBuild section styling and dbt names orange",
         dbt_ls_nodes=(
             DbtLsNode(
                 unique_id="test.analytics.unique_orders.abc123",
@@ -261,13 +273,17 @@ FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
         display_limit=None,
         use_color=True,
         expected_human_fragments=(
-            "dbt (2 selected)",
+            "dbt (2 selected resources)",
             "Models (1)",
             "Tests (1)",
             "analytics.orders",
             "analytics.unique_orders",
         ),
-        expected_human_regex_fragments=(r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",),
+        expected_human_regex_fragments=(
+            r"\x1b\[92mModels \(1\)\x1b\[0m",
+            r"\x1b\[92mTests \(1\)\x1b\[0m",
+            r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",
+        ),
         expected_absent_fragments=(),
     ),
     DbtPlanHumanFormatterTestCase(
@@ -354,6 +370,282 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        DbtPlanTestCase(
+            description="preserves dbt reuse plan on built interop plan",
+            command="build",
+            dbt_command_argv=("dbt", "build"),
+            dbt_ls_unique_ids=("model.analytics.orders",),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=(),
+            expected_json_fragments=(),
+        )
+    ],
+    ids=["preserves dbt reuse plan on built interop plan"],
+)
+def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
+    test_case: DbtPlanTestCase,
+) -> None:
+    expected_reuse_plan: DbtReusePlanningResult = DbtReusePlanningResult(
+        entries=(
+            DbtReusePlanEntry(
+                unique_id="model.analytics.orders",
+                action=DbtReusePlanAction.COMPLETE_REUSE,
+                reason=DbtReusePlanReason.DESTINATION_MISSING,
+            ),
+        )
+    )
+
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=tuple(
+            DbtLsNode(unique_id=unique_id) for unique_id in test_case.dbt_ls_unique_ids
+        ),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=DbtInteropSelectionResult(
+            sqlbuild_model_names=test_case.selection_sqlbuild_model_names,
+        ),
+        dbt_reuse_plan=expected_reuse_plan,
+    )
+
+    assert plan.dbt_reuse_plan == expected_reuse_plan
+    assert plan.dbt_reuse_plan is not None
+    assert (plan.sqlbuild_skip_reason is not None) == test_case.expected_sqlbuild_skipped
+    assert tuple(plan.dbt_reuse_plan.complete_reuse_unique_ids) == test_case.dbt_ls_unique_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
+            description="formats dbt reuse plan in human and json output",
+            command="build",
+            dbt_command_argv=("dbt", "build"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=(
+                "Reuse plan",
+                "reuse: 1",
+                "baseline reuse: 1",
+                "Reuse (1)",
+                "Baseline reuse (1)",
+                "model.analytics.orders",
+                "model.analytics.events",
+            ),
+            expected_json_fragments=(
+                '"reuse_plan"',
+                '"complete_reuse_unique_ids"',
+                '"seeded_reuse_unique_ids"',
+                '"origin_relation_name": "prod.events"',
+            ),
+        )
+    ],
+    ids=["formats dbt reuse plan in human and json output"],
+)
+def test_given_dbt_reuse_plan_when_formatting_then_outputs_reuse_sections(
+    test_case: DbtPlanTestCase,
+) -> None:
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=tuple(
+            DbtLsNode(unique_id=unique_id) for unique_id in test_case.dbt_ls_unique_ids
+        ),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.orders",
+                    package_name="analytics",
+                    name="orders",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.FIRST_RUN,
+                    relation_name="dev.orders",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.events",
+                    package_name="analytics",
+                    name="events",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.FIRST_RUN,
+                    relation_name="dev.events",
+                ),
+            )
+        ),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.orders",
+                    action=DbtReusePlanAction.COMPLETE_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    materialization="table",
+                    destination_relation_name="dev.orders",
+                    origin_relation_name="prod.orders",
+                ),
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.events",
+                    action=DbtReusePlanAction.SEEDED_REUSE,
+                    reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
+                    materialization="microbatch",
+                    destination_relation_name="dev.events",
+                    origin_relation_name="prod.events",
+                ),
+            )
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(plan, use_color=False)
+    json_output: str = format_dbt_interop_plan_json(plan)
+
+    assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
+    for fragment in test_case.expected_human_fragments:
+        assert fragment in human_output
+    for fragment in test_case.expected_json_fragments:
+        assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
+            description="hides current-only reuse plan from non-verbose human output",
+            command="build",
+            dbt_command_argv=("dbt", "build"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=("Model plan",),
+            expected_json_fragments=('"reuse_plan"', '"current"'),
+        )
+    ],
+    ids=["hides current-only reuse plan from non-verbose human output"],
+)
+def test_given_current_only_dbt_reuse_plan_when_formatting_non_verbose_then_hides_reuse_section(
+    test_case: DbtPlanTestCase,
+) -> None:
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.orders",
+                    package_name="analytics",
+                    name="orders",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="dev.orders",
+                ),
+            )
+        ),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.orders",
+                    action=DbtReusePlanAction.CURRENT,
+                    reason=DbtReusePlanReason.DESTINATION_CURRENT,
+                ),
+            )
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=False,
+        display_options=DisplayOptions(max_entries_per_section=10),
+    )
+    json_output: str = format_dbt_interop_plan_json(plan)
+
+    assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
+    for fragment in test_case.expected_human_fragments:
+        assert fragment in human_output
+    assert "Reuse plan" not in human_output
+    for fragment in test_case.expected_json_fragments:
+        assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
+            description="places dbt anchors before SQLBuild selection",
+            command="build",
+            dbt_command_argv=("dbt", "build", "--select", "+fct_customer_revenue+"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(("sqb", "build", "--select", "customer_revenue_check"),),
+            selection_sqlbuild_model_names=("customer_revenue_check",),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=("+fct_customer_revenue+",),
+            selection_dbt_anchor_unique_ids_by_term={
+                "+fct_customer_revenue+": ("model.analytics.fct_customer_revenue",)
+            },
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=("dbt anchors", "SQLBuild"),
+            expected_json_fragments=(),
+        )
+    ],
+    ids=["places dbt anchors before SQLBuild selection"],
+)
+def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_precedes_sqlbuild(
+    test_case: DbtPlanTestCase,
+) -> None:
+    selection: DbtInteropSelectionResult = DbtInteropSelectionResult(
+        sqlbuild_model_names=test_case.selection_sqlbuild_model_names,
+        dbt_anchor_terms=test_case.selection_dbt_anchor_terms,
+        dbt_anchor_unique_ids_by_term=test_case.selection_dbt_anchor_unique_ids_by_term,
+    )
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=selection,
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=False,
+        display_options=DisplayOptions(max_entries_per_section=None),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    assert human_output.index("dbt anchors") < human_output.index("SQLBuild")
+
+
+@pytest.mark.parametrize(
+    "test_case",
     FORMATTER_TEST_CASES,
     ids=[case.description for case in FORMATTER_TEST_CASES],
 )
@@ -388,5 +680,313 @@ def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_
         assert expected_fragment in human_output
     for expected_regex in test_case.expected_human_regex_fragments:
         assert re.search(expected_regex, human_output)
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanFormatterTestCase(
+            description="current model plan shows pruned seeds and tests with cap",
+            dbt_ls_nodes=(
+                *tuple(
+                    DbtLsNode(
+                        unique_id=f"seed.analytics.seed_{index}",
+                        resource_type="seed",
+                        package_name="analytics",
+                        name=f"seed_{index}",
+                    )
+                    for index in range(3)
+                ),
+                *tuple(
+                    DbtLsNode(
+                        unique_id=f"test.analytics.test_{index}",
+                        resource_type="test",
+                        package_name="analytics",
+                        name=f"test_{index}",
+                    )
+                    for index in range(3)
+                ),
+            ),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=2,
+            use_color=False,
+            expected_human_fragments=(
+                "skipped: all planned dbt models are current",
+                "Seeds pruned (3)",
+                "analytics.seed_0",
+                "analytics.seed_1",
+                "Tests pruned (3)",
+                "analytics.test_0",
+                "analytics.test_1",
+                "... and 1 more (use --verbose to show all)",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=("analytics.seed_2", "analytics.test_2", "Seeds (3)"),
+        )
+    ],
+    ids=["current model plan shows pruned seeds and tests with cap"],
+)
+def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_work(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=test_case.dbt_ls_nodes,
+        dbt_selected_unique_ids=tuple(node.unique_id for node in test_case.dbt_ls_nodes),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.current",
+                ),
+            )
+        ),
+        dbt_skip_reason=DbtInteropSkipReason.DBT_MODELS_CURRENT,
+        dbt_pruned_seed_unique_ids=tuple(
+            node.unique_id for node in test_case.dbt_ls_nodes if node.resource_type == "seed"
+        ),
+        dbt_pruned_test_unique_ids=tuple(
+            node.unique_id for node in test_case.dbt_ls_nodes if node.resource_type == "test"
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+    json_payload: dict[str, object] = json.loads(format_dbt_interop_plan_json(plan))
+    dbt_payload: dict[str, object] = cast(dict[str, object], json_payload["dbt"])
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output
+    assert dbt_payload["pruned_seed_unique_ids"] == list(plan.dbt_pruned_seed_unique_ids)
+    assert dbt_payload["pruned_test_unique_ids"] == list(plan.dbt_pruned_test_unique_ids)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanFormatterTestCase(
+            description="runnable model plan shows non-model dbt work in verbose",
+            dbt_ls_nodes=(
+                DbtLsNode(
+                    unique_id="seed.analytics.country_codes",
+                    resource_type="seed",
+                    package_name="analytics",
+                    name="country_codes",
+                ),
+                DbtLsNode(
+                    unique_id="test.analytics.not_null_orders",
+                    resource_type="test",
+                    package_name="analytics",
+                    name="not_null_orders",
+                ),
+            ),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=None,
+            use_color=False,
+            expected_human_fragments=(
+                "Seeds (1)",
+                "Tests (1)",
+                "Non-model dbt work",
+                "Seeds (1, always run)",
+                "analytics.country_codes",
+                "Tests (1)",
+                "analytics.not_null_orders",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=("Tests pruned", "Seeds pruned"),
+        )
+    ],
+    ids=["runnable model plan shows non-model dbt work in verbose"],
+)
+def test_given_runnable_dbt_model_when_formatting_verbose_then_shows_non_model_work(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build", "--select", "run_me", "country_codes"),
+        dbt_selected_nodes=test_case.dbt_ls_nodes,
+        dbt_selected_unique_ids=tuple(node.unique_id for node in test_case.dbt_ls_nodes),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.run_me",
+                    package_name="analytics",
+                    name="run_me",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.run_me",
+                ),
+            )
+        ),
+        dbt_non_model_run_unique_ids=tuple(node.unique_id for node in test_case.dbt_ls_nodes),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanFormatterTestCase(
+            description="caps displayed dbt command select terms",
+            dbt_ls_nodes=(),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=2,
+            use_color=False,
+            expected_human_fragments=(
+                "command: dbt build --select model_0 model_1 ... and 3 more",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=("model_2 model_3 model_4",),
+        )
+    ],
+    ids=["caps displayed dbt command select terms"],
+)
+def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_terms(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=(
+            "dbt",
+            "build",
+            "--select",
+            "model_0",
+            "model_1",
+            "model_2",
+            "model_3",
+            "model_4",
+        ),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanFormatterTestCase(
+            description="model plan shows reasons and inspected dependency wording",
+            dbt_ls_nodes=(),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=None,
+            use_color=False,
+            expected_human_fragments=(
+                "Plan ready (2 required dbt)",
+                "dbt (2 required)",
+                "selected by dbt selector: 0 from dbt selector",
+                "added for SQLBuild dependencies: 2 dbt resources",
+                "planned models: 2 run, 1 current, 0 blocked",
+                "planned non-model dbt work: 0",
+                "model.analytics.changed checksum changed",
+                "query diff:",
+                "--- previous",
+                "+++ current",
+                "-select 1 as order_id",
+                "+select 2 as order_id",
+                "model.analytics.cascade upstream changed",
+                "Current (1)",
+                "model.analytics.current no change",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=(),
+        )
+    ],
+    ids=["model plan shows reasons and inspected dependency wording"],
+)
+def test_given_dbt_model_plan_when_formatting_then_shows_reasons_and_dependency_context(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build", "--select", "changed+"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(
+            dbt_required_unique_ids=("model.analytics.changed", "model.analytics.cascade")
+        ),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.changed",
+                    package_name="analytics",
+                    name="changed",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.changed",
+                    fingerprint_query_sql="select 2 as order_id",
+                    previous_query_sql="select 1 as order_id",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.cascade",
+                    package_name="analytics",
+                    name="cascade",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.UPSTREAM_CHANGED,
+                    relation_name="main.cascade",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.current",
+                    package_name="analytics",
+                    name="current",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.current",
+                ),
+            )
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
     for absent_fragment in test_case.expected_absent_fragments:
         assert absent_fragment not in human_output

@@ -46,6 +46,9 @@ class SharedSourceFreshnessColumnSqlTestCase:
     source_schema: str | None
     source_table: str
     expected_sql_fragment: str
+    freshness_filter: str | None = None
+    expected_filter_fragment: str | None = None
+    unexpected_sql_fragment: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,16 @@ class StandardSourceFreshnessLagToleranceTestCase:
 
 
 @dataclass(frozen=True)
+class StandardSourceFreshnessAgePolicyTestCase:
+    description: str
+    current_query: str
+    warn_after: str | None
+    error_after: str | None
+    expected_age_status: str
+    observed_at: datetime = datetime(2026, 1, 15, 12, 0, 0)
+
+
+@dataclass(frozen=True)
 class StandardSourceFreshnessUnknownTestCase:
     description: str
     expected_unknown_source_names: tuple[str, ...]
@@ -94,6 +107,7 @@ class StandardSourceFreshnessAdapterDefaultTestCase:
     description: str
     expected_changed_count: int
     expected_observed_count: int
+    expected_batch_call_count: int
 
 
 @dataclass(frozen=True)
@@ -126,6 +140,9 @@ class StandardSourceFreshnessPropagationTestCase:
     expected_stale_model_names: frozenset[str]
     expected_changed_source_model_names: dict[str, frozenset[str]]
     expected_unknown_source_model_names: dict[str, frozenset[str]]
+    error_source_names: tuple[str, ...] = ()
+    expected_blocked_model_names: frozenset[str] = frozenset()
+    expected_error_source_model_names: dict[str, frozenset[str]] | None = None
 
 
 @dataclass(frozen=True)

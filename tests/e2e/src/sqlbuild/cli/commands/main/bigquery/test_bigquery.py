@@ -10,6 +10,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryBuildE2ETestCase,
     BigQueryCliTestCase,
     BigQueryCloneE2ETestCase,
+    BigQueryDbtProfileE2ETestCase,
+    BigQueryDbtReuseFromE2ETestCase,
     BigQueryDiffE2ETestCase,
     BigQueryErrorE2ETestCase,
     BigQueryIntermediateDagStrategyE2ETestCase,
@@ -28,6 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryVirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
+    assert_bigquery_seeded_reuse_case,
     assert_bigquery_snapshot_apply_rows,
     assert_bigquery_snapshot_matrix_rows,
     assert_current_bigquery_snapshot_rows,
@@ -61,6 +64,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_complete_reuse_from_lifecycle,
+    assert_dbt_profile_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -77,6 +82,198 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDbtProfileE2ETestCase(
+            description="dbt init generated project builds through BigQuery dbt profile",
+            schema_prefix="sqlbuild_dbt_profile",
+            expected_toml_fragments=(
+                'adapter = "bigquery"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+            ),
+        )
+    ],
+    ids=["dbt init generated project builds through BigQuery dbt profile"],
+)
+def test_given_bigquery_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
+    tmp_path: Path,
+    test_case: BigQueryDbtProfileE2ETestCase,
+) -> None:
+    dataset_name: str = build_unique_dataset_name(prefix=test_case.schema_prefix)
+    config: dict[str, object] = build_bigquery_connection_config(schema=dataset_name)
+    project_id: str = str(config["project"])
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
+        assert_dbt_profile_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: bigquery\n"
+                "      method: oauth\n"
+                f"      project: {project_id}\n"
+                f"      dataset: {dataset_name}\n"
+                f"      location: {config['location']}\n"
+            ),
+            env=None,
+            fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dataset_name, sql=sql),
+            no_profile_tables_exist=lambda: (
+                fetch_bigquery_rows(
+                    dataset_name=dataset_name,
+                    sql=(
+                        "SELECT table_name FROM "
+                        f"`{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES` "
+                        "WHERE table_name IN ('dbt_orders', 'downstream_orders') "
+                        "ORDER BY table_name"
+                    ),
+                )
+                == ()
+            ),
+            dbt_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(dataset_name=dataset_name, name='dbt_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_orders_sql=(
+                "SELECT order_id FROM "
+                f"{relation_name(dataset_name=dataset_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_toml_fragments=test_case.expected_toml_fragments,
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDbtReuseFromE2ETestCase(
+            description="dbt reuse_from reuses a complete table on BigQuery",
+            schema_prefix="sqlbuild_dbt_reuse",
+            expected_rows=((1, 900),),
+        )
+    ],
+    ids=["dbt reuse_from reuses a complete table on BigQuery"],
+)
+def test_given_bigquery_dbt_reuse_from_when_plain_build_then_reuses_prod_table(
+    tmp_path: Path,
+    test_case: BigQueryDbtReuseFromE2ETestCase,
+) -> None:
+    dataset_base: str = build_unique_dataset_name(prefix=test_case.schema_prefix)
+    dev_dataset_name: str = f"{dataset_base}_dev"
+    prod_dataset_name: str = f"{dataset_base}_prod"
+    config: dict[str, object] = build_bigquery_connection_config(schema=dev_dataset_name)
+    project_id: str = str(config["project"])
+    try:
+        ensure_bigquery_dataset_ready(dataset_name=dev_dataset_name)
+        ensure_bigquery_dataset_ready(dataset_name=prod_dataset_name)
+        assert_dbt_complete_reuse_from_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: bigquery\n"
+                "      method: oauth\n"
+                f"      project: {project_id}\n"
+                f"      dataset: {dev_dataset_name}\n"
+                f"      location: {config['location']}\n"
+                "    prod:\n"
+                "      type: bigquery\n"
+                "      method: oauth\n"
+                f"      project: {project_id}\n"
+                f"      dataset: {prod_dataset_name}\n"
+                f"      location: {config['location']}\n"
+            ),
+            project_toml=(
+                build_bigquery_project_toml(
+                    project_name="bigquery_dbt_reuse_from",
+                    dataset_name=dev_dataset_name,
+                )
+                + "\n[dbt]\n"
+                + 'project_dir = "../dbt_project"\n'
+                + 'profiles_dir = "../profiles"\n'
+                + 'target_path = "../dbt_project/target"\n'
+                + "[dbt.reuse_from]\n"
+                + 'git_ref = "prod"\n'
+                + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
+            ),
+            fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dev_dataset_name, sql=sql),
+            destination_rows_sql=(
+                "SELECT order_id, amount FROM "
+                f"{relation_name(dataset_name=dev_dataset_name, name='fact_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_rows_sql=(
+                "SELECT order_id, downstream_amount FROM "
+                f"{relation_name(dataset_name=dev_dataset_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_rows=test_case.expected_rows,
+        )
+    finally:
+        cleanup_bigquery_dataset(dataset_name=dev_dataset_name)
+        cleanup_bigquery_dataset(dataset_name=prod_dataset_name)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDbtReuseFromE2ETestCase(
+            description="dbt seeded reuse_from catches up an incremental model on BigQuery",
+            schema_prefix="sqlbuild_dbt_seeded_reuse",
+            expected_rows=((1, 900), (2, 901)),
+        )
+    ],
+    ids=["dbt seeded reuse_from catches up an incremental model on BigQuery"],
+)
+def test_given_bigquery_dbt_seeded_reuse_from_when_plain_build_then_catches_up_incremental(
+    tmp_path: Path,
+    test_case: BigQueryDbtReuseFromE2ETestCase,
+) -> None:
+    assert_bigquery_seeded_reuse_case(
+        tmp_path=tmp_path,
+        schema_prefix=test_case.schema_prefix,
+        expected_rows=test_case.expected_rows,
+        snapshot=False,
+    )
+    assert test_case.expected_rows == ((1, 900), (2, 901))
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDbtReuseFromE2ETestCase(
+            description="dbt snapshot seeded reuse_from catches up on BigQuery",
+            schema_prefix="sqlbuild_dbt_snapshot_reuse",
+            expected_rows=((1, 900), (2, 901)),
+        )
+    ],
+    ids=["dbt snapshot seeded reuse_from catches up on BigQuery"],
+)
+def test_given_bigquery_dbt_snapshot_seeded_reuse_from_when_plain_build_then_catches_up_snapshot(
+    tmp_path: Path,
+    test_case: BigQueryDbtReuseFromE2ETestCase,
+) -> None:
+    assert_bigquery_seeded_reuse_case(
+        tmp_path=tmp_path,
+        schema_prefix=test_case.schema_prefix,
+        expected_rows=test_case.expected_rows,
+        snapshot=True,
+    )
+    assert test_case.expected_rows == ((1, 900), (2, 901))
 
 
 @pytest.mark.parametrize(
@@ -322,7 +519,10 @@ def test_given_virtual_incremental_change_when_building_on_bigquery_then_seeds_w
             description="direct changes only build prunes unchanged bigquery model",
             expected_table_name="orders",
             expected_row_count=1,
-            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+            expected_stdout_fragments=(
+                "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
         )
     ],
     ids=["direct changes only build prunes unchanged bigquery model"],

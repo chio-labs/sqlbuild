@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from sqlbuild.integrations.dbt.helpers.profile_init import build_dbt_init_project
+from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
+from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
+    DbtProfileInitTomlTestCase,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtProfileInitTomlTestCase(
+            description="generated TOML references dbt profile without materializing secret path",
+            secret_value="/tmp/secret-profile.duckdb",
+            expected_fragments=(
+                'adapter = "duckdb"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+                'target = "dev"',
+                "[targets.dev]",
+                'schema = "main"',
+            ),
+            unexpected_fragments=("/tmp/secret-profile.duckdb",),
+        )
+    ],
+    ids=["generated TOML references dbt profile without materializing secret path"],
+)
+def test_given_dbt_duckdb_profile_when_building_init_project_then_toml_omits_secret_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: DbtProfileInitTomlTestCase,
+) -> None:
+    dbt_project_dir: Path = tmp_path / "dbt_project"
+    profiles_dir: Path = tmp_path / "profiles"
+    dbt_project_dir.mkdir()
+    profiles_dir.mkdir()
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics_project\nprofile: analytics\ntarget-path: target\n",
+        encoding="utf-8",
+    )
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        "      path: \"{{ env_var('DBT_SECRET_DUCKDB_PATH') }}\"\n"
+        "      schema: main\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DBT_SECRET_DUCKDB_PATH", test_case.secret_value)
+
+    result: DbtInitResult = build_dbt_init_project(
+        request=DbtInitRequest(
+            cwd=tmp_path,
+            dbt_project_dir=Path("dbt_project"),
+            profiles_dir=Path("profiles"),
+            profile_name=None,
+            target_name=None,
+            sqb_output_dir=Path("sqlbuild_project"),
+            dry_run=False,
+            overwrite=False,
+            skip_dbt_debug=True,
+        )
+    )
+
+    assert result.project_file.exists()
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.toml
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in result.toml

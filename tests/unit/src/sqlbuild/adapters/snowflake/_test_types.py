@@ -88,6 +88,13 @@ class SnowflakeTableFreshnessMetadataTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeTableFreshnessBatchTestCase:
+    description: str
+    expected_data_versions: tuple[datetime, ...]
+    expected_query_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SnowflakeTableFreshnessMetadataErrorTestCase:
     description: str
     row: tuple[object, ...] | None

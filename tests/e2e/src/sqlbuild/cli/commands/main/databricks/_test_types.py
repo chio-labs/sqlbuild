@@ -2,11 +2,25 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class DatabricksDbtReuseFromE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DatabricksCliTestCase:
     description: str
     command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class DatabricksDbtProfileE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_toml_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

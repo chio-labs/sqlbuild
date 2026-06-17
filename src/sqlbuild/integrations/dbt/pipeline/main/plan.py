@@ -20,6 +20,7 @@ from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import plan_dbt_interop_command
 from sqlbuild.integrations.dbt.helpers.plan_runtime import (
     resolve_dbt_interop_adapter,
@@ -34,13 +35,23 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropRoutedArgs,
+    DbtModelPlanningResult,
+    DbtReusePlanningResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    build_dbt_non_model_run_unique_ids,
+    build_dbt_pruned_seed_unique_ids,
+    build_dbt_pruned_test_unique_ids,
+    build_unblocked_sqlbuild_model_names,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
+    build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
 
 def plan_dbt_interop_from_project(
@@ -62,6 +73,7 @@ def plan_dbt_interop_from_project(
         args=args,
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
@@ -134,14 +146,94 @@ def plan_dbt_interop_from_project(
         dbt_executable=dbt_executable,
         sqlbuild_executable=sqlbuild_executable,
     )
+    dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        project=project,
+        adapter=adapter,
+        adapter_name=adapter_name,
+        manifest=manifest,
+        graph=graph,
+        candidate_unique_ids=tuple(
+            sorted(
+                frozenset(
+                    (
+                        *plan.dbt_selected_unique_ids,
+                        *plan.selection.dbt_required_unique_ids,
+                    )
+                )
+            )
+        ),
+        full_refresh="--full-refresh" in routed.dbt_args,
+        on_connection_start=(
+            None if connection_progress is None else connection_progress.on_connection_start
+        ),
+        on_connection_complete=(
+            None if connection_progress is None else connection_progress.on_connection_complete
+        ),
+        on_connection_error=(
+            None if connection_progress is None else connection_progress.on_connection_error
+        ),
+    )
+    if dbt_model_plan is not None:
+        plan = replace(plan, dbt_model_plan=dbt_model_plan)
+    reuse_git_ref: str | None = _dbt_reuse_git_ref(discovered_inputs)
+    has_explicit_dbt_reuse_scope: bool = bool(
+        plan.dbt_selected_unique_ids
+        or plan.selection.dbt_required_unique_ids
+        or plan.selection.dbt_anchor_unique_ids_by_term
+    )
+    reuse_plan_start: float | None = None
+    if reuse_git_ref is not None and has_explicit_dbt_reuse_scope:
+        reuse_plan_start = time.monotonic()
+        _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
+    dbt_reuse_plan: DbtReusePlanningResult | None = None
+    if has_explicit_dbt_reuse_scope:
+        dbt_reuse_plan = build_dbt_reuse_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            current_manifest=manifest,
+            dbt_model_plan=dbt_model_plan,
+            plan=plan,
+            dbt_options=dbt_options,
+            runner=runner,
+        )
+    if reuse_plan_start is not None:
+        _report_progress(
+            on_progress,
+            f"Planned dbt reuse from git ref '{reuse_git_ref}'. "
+            f"({time.monotonic() - reuse_plan_start:.2f}s)",
+        )
+    if dbt_reuse_plan is not None:
+        plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
+    plan = replace(
+        plan,
+        dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+        dbt_pruned_seed_unique_ids=build_dbt_pruned_seed_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+        dbt_pruned_test_unique_ids=build_dbt_pruned_test_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+    )
     sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         project=project,
         adapter=adapter,
         adapter_name=adapter_name,
-        selected_model_names=plan.selection.sqlbuild_model_names,
+        selected_model_names=build_unblocked_sqlbuild_model_names(plan),
         required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+        forced_stale_model_names=(
+            plan.dbt_model_plan.stale_sqlbuild_model_names
+            if plan.dbt_model_plan is not None
+            else ()
+        ),
         sqlbuild_args=routed.sqlbuild_args,
         on_progress=on_progress,
         on_connection_start=(
@@ -166,3 +258,10 @@ def plan_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _dbt_reuse_git_ref(discovered_inputs: DiscoveredProjectInputs) -> str | None:
+    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
+    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
+        return None
+    return reuse_from.git_ref

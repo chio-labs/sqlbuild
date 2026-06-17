@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
+    DbtModelOutcomeState,
+    DbtModelPlanAction,
+    DbtModelPlanReason,
+    DbtReuseCandidateSkipReason,
+    DbtReusePlanAction,
+    DbtReusePlanReason,
 )
 
 
@@ -57,6 +66,113 @@ class ResolvedDbtConfig:
 
 
 @dataclass(frozen=True)
+class DbtProjectProfileMetadata:
+    """dbt project metadata needed for profile resolution."""
+
+    project_name: str
+    profile_name: str
+    target_path: str
+
+
+@dataclass(frozen=True)
+class RawDbtProfile:
+    """Raw dbt profile payload loaded from profiles.yml."""
+
+    name: str
+    default_target: str | None
+    outputs: dict[str, dict[str, object]]
+
+
+@dataclass(frozen=True)
+class SelectedDbtProfileOutput:
+    """Selected dbt profile target output before rendering."""
+
+    profile_name: str
+    target_name: str
+    output: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ResolvedDbtProfileOutput:
+    """Rendered dbt profile target output."""
+
+    project_dir: Path
+    profiles_dir: Path
+    profile_name: str
+    target_name: str
+    output: dict[str, object]
+
+    @property
+    def adapter_type(self) -> str:
+        """Return the dbt adapter type from the rendered output."""
+
+        value: object | None = self.output.get("type")
+        return value if isinstance(value, str) else ""
+
+
+@dataclass(frozen=True)
+class NormalizedDbtProfileConnection:
+    """Rendered dbt profile output normalized for SQLBuild."""
+
+    adapter: str
+    connection: dict[str, object]
+    target_schema: str | None = None
+    target_database: str | None = None
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtProfileConnectionRequest:
+    """Request to resolve one dbt-profile-backed SQLBuild connection."""
+
+    sqlbuild_project_dir: Path
+    dbt_project_dir: Path | None
+    profiles_dir: Path | None
+    profile_name: str | None
+    target_name: str | None
+    cli_vars: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DbtInitProgressCallbacks:
+    """Optional progress hooks for `sqb dbt init` phases."""
+
+    start: Callable[[str], None] | None = None
+    complete: Callable[[str], None] | None = None
+
+
+@dataclass(frozen=True)
+class DbtInitRequest:
+    """Request to initialize a SQLBuild project from a dbt project."""
+
+    cwd: Path
+    dbt_project_dir: Path
+    profiles_dir: Path | None
+    profile_name: str | None
+    target_name: str | None
+    sqb_output_dir: Path | None
+    dry_run: bool = False
+    overwrite: bool = False
+    skip_dbt_debug: bool = False
+    progress_callbacks: DbtInitProgressCallbacks = field(default_factory=DbtInitProgressCallbacks)
+
+
+@dataclass(frozen=True)
+class DbtInitResult:
+    """Result from `sqb dbt init`."""
+
+    output_dir: Path
+    project_file: Path
+    project_name: str
+    adapter: str
+    target_name: str
+    profile_name: str
+    toml: str
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    dry_run: bool = False
+
+
+@dataclass(frozen=True)
 class DbtCommandResult:
     """Completed dbt command output."""
 
@@ -67,6 +183,169 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
+class DbtReuseFromCompileResult:
+    """Manifest produced by compiling a dbt project at a reuse git ref."""
+
+    git_ref: str
+    manifest_contents: str
+    command: DbtCommandResult
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidate:
+    """One scoped dbt node eligible for physical reuse consideration."""
+
+    unique_id: str
+    materialization: str
+    destination_relation_name: str
+    origin_relation_name: str
+    package_name: str
+    name: str
+    fqn: tuple[str, ...] = field(default_factory=tuple)
+    cursor_column: str | None = None
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidateSkip:
+    """One scoped dbt node excluded from physical reuse consideration."""
+
+    unique_id: str
+    reason: DbtReuseCandidateSkipReason
+    materialization: str | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class DbtReuseCandidateResolution:
+    """Selection-scoped dbt reuse candidate resolution result."""
+
+    candidates: tuple[DbtReuseCandidate, ...] = field(default_factory=tuple)
+    skipped: tuple[DbtReuseCandidateSkip, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtReusePlanEntry:
+    """Planned reuse_from action for one scoped dbt node."""
+
+    unique_id: str
+    action: DbtReusePlanAction
+    reason: DbtReusePlanReason
+    materialization: str | None = None
+    destination_relation_name: str | None = None
+    origin_relation_name: str | None = None
+    dbt_plan_action: DbtModelPlanAction | None = None
+    dbt_plan_reason: DbtModelPlanReason | None = None
+    skip_reason: DbtReuseCandidateSkipReason | None = None
+    cursor_column: str | None = None
+
+
+@dataclass(frozen=True)
+class DbtReusePlanningResult:
+    """dbt reuse_from planning result for scoped dbt nodes."""
+
+    entries: tuple[DbtReusePlanEntry, ...] = field(default_factory=tuple)
+
+    @property
+    def complete_reuse_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.entries
+            if entry.action == DbtReusePlanAction.COMPLETE_REUSE
+        )
+
+    @property
+    def seeded_reuse_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.entries
+            if entry.action == DbtReusePlanAction.SEEDED_REUSE
+        )
+
+    @property
+    def rebuild_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtReusePlanAction.REBUILD
+        )
+
+
+@dataclass(frozen=True)
+class DbtNodeMessage:
+    """One dbt log message attached to a dbt node."""
+
+    level: str
+    message: str
+
+
+@dataclass(frozen=True)
+class DbtNodeExecutionResult:
+    """One dbt node execution result parsed from JSON logs."""
+
+    unique_id: str
+    resource_type: str
+    node_name: str
+    status: str
+    index: int | None
+    total: int | None
+    execution_time: float | None
+    materialized: str | None = None
+    relation_name: str | None = None
+    database: str | None = None
+    schema: str | None = None
+    node_checksum: str | None = None
+    messages: tuple[DbtNodeMessage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtCommandExecutionResult:
+    """dbt command execution output from streamed JSON events."""
+
+    returncode: int
+    node_results: tuple[DbtNodeExecutionResult, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtModelExecutionOutcomeEntry:
+    """Actual or planned outcome for one dbt model upstream."""
+
+    unique_id: str
+    state: DbtModelOutcomeState
+    planned_action: DbtModelPlanAction | None = None
+    status: str | None = None
+    relation_name: str | None = None
+    node_checksum: str | None = None
+    messages: tuple[DbtNodeMessage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtExecutionOutcome:
+    """Aggregated dbt model outcomes used as SQLBuild upstream overlay."""
+
+    entries: tuple[DbtModelExecutionOutcomeEntry, ...] = field(default_factory=tuple)
+    stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def changed_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.state == DbtModelOutcomeState.CHANGED
+        )
+
+    @property
+    def current_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.state == DbtModelOutcomeState.CURRENT
+        )
+
+    @property
+    def blocking_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.entries
+            if entry.state == DbtModelOutcomeState.BLOCKING
+        )
+
+
+@dataclass(frozen=True)
 class DbtLsNode:
     """One node returned by `dbt ls --output json`."""
 
@@ -74,8 +353,13 @@ class DbtLsNode:
     resource_type: str | None = None
     package_name: str | None = None
     name: str | None = None
+    fqn: tuple[str, ...] = field(default_factory=tuple)
     original_file_path: str | None = None
     payload: dict[str, object] = field(default_factory=dict)
+
+    @property
+    def selector_term(self) -> str:
+        return dbt_fqn_selector_term(fqn=self.fqn, fallback=self.name or self.unique_id)
 
 
 @dataclass(frozen=True)
@@ -146,6 +430,63 @@ class DbtInteropSelectionResult:
 
 
 @dataclass(frozen=True)
+class DbtModelPlanEntry:
+    """Planner result for one dbt model node."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    action: DbtModelPlanAction
+    reason: DbtModelPlanReason
+    relation_name: str
+    fqn: tuple[str, ...] = field(default_factory=tuple)
+    fingerprint_query_sql: str | None = None
+    previous_query_sql: str | None = None
+    previous_version_hash: str | None = None
+    previous_metadata_json: str | None = None
+    expected_version_hash: str | None = None
+    blocked_source_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def selector_term(self) -> str:
+        return dbt_fqn_selector_term(fqn=self.fqn, fallback=self.name)
+
+
+@dataclass(frozen=True)
+class DbtModelPlanningResult:
+    """dbt model planning summary used for pruning dbt execution."""
+
+    entries: tuple[DbtModelPlanEntry, ...] = field(default_factory=tuple)
+    stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    source_freshness: StandardSourceFreshnessPlanningResult | None = None
+
+    @property
+    def run_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.RUN
+        )
+
+    @property
+    def run_selector_terms(self) -> tuple[str, ...]:
+        return tuple(
+            entry.selector_term for entry in self.entries if entry.action == DbtModelPlanAction.RUN
+        )
+
+    @property
+    def current_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.CURRENT
+        )
+
+    @property
+    def blocked_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.BLOCKED
+        )
+
+
+@dataclass(frozen=True)
 class DbtInteropPlan:
     """Plan output for one future `sqb dbt` command."""
 
@@ -156,6 +497,11 @@ class DbtInteropPlan:
     sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
     selection: DbtInteropSelectionResult
     sqlbuild_plan_output: PlanOutput | None = None
+    dbt_model_plan: DbtModelPlanningResult | None = None
+    dbt_reuse_plan: DbtReusePlanningResult | None = None
+    dbt_non_model_run_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+    dbt_pruned_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+    dbt_pruned_test_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
     supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None

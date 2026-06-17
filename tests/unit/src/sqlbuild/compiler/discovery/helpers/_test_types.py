@@ -50,6 +50,8 @@ class LoadProjectConfigTestCase:
     expected_dbt_profiles_dir: str | None = None
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
+    expected_dbt_reuse_from_git_ref: str | None = None
+    expected_dbt_reuse_from_generate_schema_name_override: str | None = None
     expected_auto_load_sources: bool = True
     expected_virtual_environments: bool = False
 
@@ -300,7 +302,10 @@ class ParseSourcesYamlTestCase:
     expected_freshness_value_kinds: tuple[str | None, ...] | None = None
     expected_freshness_columns: tuple[str | None, ...] | None = None
     expected_freshness_queries: tuple[str | None, ...] | None = None
+    expected_freshness_filters: tuple[str | None, ...] | None = None
     expected_freshness_lag_tolerances: tuple[str | None, ...] | None = None
+    expected_freshness_age_policy_warn_afters: tuple[str | None, ...] | None = None
+    expected_freshness_age_policy_error_afters: tuple[str | None, ...] | None = None
     expected_source_audit_names: tuple[tuple[str, ...], ...] = ()
     expected_column_audit_names: tuple[tuple[tuple[str, ...], ...], ...] = ()
     expected_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None

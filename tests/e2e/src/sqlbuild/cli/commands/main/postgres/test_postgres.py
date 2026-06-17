@@ -11,6 +11,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresBuildE2ETestCase,
+    PostgresDbtProfileE2ETestCase,
+    PostgresDbtReuseFromE2ETestCase,
     PostgresIntermediateDagStrategyE2ETestCase,
     PostgresLoaderWaffleShopE2ETestCase,
     PostgresNodeResultE2ETestCase,
@@ -24,6 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     assert_current_postgres_snapshot_rows_from_case,
+    assert_postgres_seeded_reuse_case,
     assert_postgres_snapshot_apply_rows,
     assert_postgres_snapshot_matrix_rows,
     build_postgres_project_toml,
@@ -43,6 +46,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    add_dbt_profile_downstream_model,
+    assert_dbt_complete_reuse_from_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -50,10 +55,312 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_historical_timestamp_extracts_model_sql,
     build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
+    prepare_dbt_profile_workspace,
     prepare_inline_project,
     run_sqb,
     stringify_warehouse_rows,
+    write_dbt_profile_orders_model,
 )
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresDbtProfileE2ETestCase(
+            description="dbt init generated project builds through postgres dbt profile",
+            expected_toml_fragments=(
+                'adapter = "postgres"',
+                'source = "dbt_profile"',
+                'profile = "analytics"',
+                'target = "dev"',
+            ),
+            unexpected_toml_fragments=("DBT_POSTGRES_PASSWORD",),
+            expected_initial_rows=((1,),),
+            expected_changed_rows=((2,),),
+            expected_noop_fragments=("Skipping dbt", "Skipping SQLBuild"),
+            expected_plain_selector_block_fragments=(
+                "Skipping dbt: no dbt work selected.",
+                "depends on missing dbt relation(s)",
+                "Use --select +downstream_orders",
+            ),
+        )
+    ],
+    ids=["dbt init generated project builds through postgres dbt profile"],
+)
+def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_profile(
+    tmp_path: Path,
+    test_case: PostgresDbtProfileE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_dbt_profile")
+    workspace: Path = prepare_dbt_profile_workspace(
+        tmp_path=tmp_path,
+        profiles_yml=(
+            "analytics:\n"
+            "  target: dev\n"
+            "  outputs:\n"
+            "    dev:\n"
+            "      type: postgres\n"
+            f"      host: {postgres_e2e_config['host']}\n"
+            f"      port: {postgres_e2e_config['port']}\n"
+            f"      dbname: {postgres_e2e_config['dbname']}\n"
+            f"      user: {postgres_e2e_config['user']}\n"
+            "      pass: \"{{ env_var('DBT_POSTGRES_PASSWORD') }}\"\n"
+            f"      schema: {schema_name}\n"
+        ),
+    )
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    env: dict[str, str] = {"DBT_POSTGRES_PASSWORD": str(postgres_e2e_config["password"])}
+    try:
+        init_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "dbt",
+                "init",
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--skip-dbt-debug",
+            ),
+            project_dir=workspace,
+            env=env,
+        )
+
+        assert init_result.returncode == test_case.expected_return_code, (
+            init_result.stdout + init_result.stderr
+        )
+        generated_toml: str = (sqlbuild_project_dir / "sqlbuild_project.toml").read_text(
+            encoding="utf-8"
+        )
+        for fragment in test_case.expected_toml_fragments:
+            assert fragment in generated_toml
+        for fragment in test_case.unexpected_toml_fragments:
+            assert fragment not in generated_toml
+
+        add_dbt_profile_downstream_model(sqlbuild_project_dir=sqlbuild_project_dir)
+
+        plain_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+            project_dir=sqlbuild_project_dir,
+            env=env,
+        )
+
+        assert plain_result.returncode != test_case.expected_return_code, (
+            plain_result.stdout + plain_result.stderr
+        )
+        for fragment in test_case.expected_plain_selector_block_fragments:
+            assert fragment in plain_result.stdout
+        assert (
+            fetch_postgres_rows(
+                config=postgres_e2e_config,
+                sql=(
+                    "SELECT table_name FROM information_schema.tables "
+                    f"WHERE table_schema = '{schema_name}' "
+                    "AND table_name IN ('dbt_orders', 'downstream_orders') "
+                    "ORDER BY table_name"
+                ),
+            )
+            == ()
+        )
+
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
+            project_dir=sqlbuild_project_dir,
+            env=env,
+        )
+
+        assert first_result.returncode == test_case.expected_return_code, (
+            first_result.stdout + first_result.stderr
+        )
+        assert (
+            fetch_postgres_rows(
+                config=postgres_e2e_config,
+                sql=f"SELECT order_id FROM {schema_name}.dbt_orders ORDER BY order_id",
+            )
+            == test_case.expected_initial_rows
+        )
+        assert (
+            fetch_postgres_rows(
+                config=postgres_e2e_config,
+                sql=f"SELECT order_id FROM {schema_name}.downstream_orders ORDER BY order_id",
+            )
+            == test_case.expected_initial_rows
+        )
+
+        noop_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
+            project_dir=sqlbuild_project_dir,
+            env=env,
+        )
+
+        assert noop_result.returncode == test_case.expected_return_code, (
+            noop_result.stdout + noop_result.stderr
+        )
+        for fragment in test_case.expected_noop_fragments:
+            assert fragment in noop_result.stdout
+
+        write_dbt_profile_orders_model(workspace=workspace, order_id=2)
+        changed_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
+            project_dir=sqlbuild_project_dir,
+            env=env,
+        )
+
+        assert changed_result.returncode == test_case.expected_return_code, (
+            changed_result.stdout + changed_result.stderr
+        )
+        assert (
+            fetch_postgres_rows(
+                config=postgres_e2e_config,
+                sql=f"SELECT order_id FROM {schema_name}.dbt_orders ORDER BY order_id",
+            )
+            == test_case.expected_changed_rows
+        )
+        assert (
+            fetch_postgres_rows(
+                config=postgres_e2e_config,
+                sql=f"SELECT order_id FROM {schema_name}.downstream_orders ORDER BY order_id",
+            )
+            == test_case.expected_changed_rows
+        )
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresDbtReuseFromE2ETestCase(
+            description="dbt reuse_from reuses a complete table on postgres",
+            schema_prefix="sqlbuild_dbt_reuse",
+            expected_rows=((1, 900),),
+        )
+    ],
+    ids=["dbt reuse_from reuses a complete table on postgres"],
+)
+def test_given_postgres_dbt_reuse_from_when_plain_build_then_reuses_prod_table(
+    tmp_path: Path,
+    test_case: PostgresDbtReuseFromE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
+    dev_schema_name: str = f"{schema_base}_dev"
+    prod_schema_name: str = f"{schema_base}_prod"
+    env: dict[str, str] = {"DBT_POSTGRES_PASSWORD": str(postgres_e2e_config["password"])}
+    try:
+        ensure_postgres_schema_ready(schema_name=dev_schema_name, config=postgres_e2e_config)
+        ensure_postgres_schema_ready(schema_name=prod_schema_name, config=postgres_e2e_config)
+        assert_dbt_complete_reuse_from_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: postgres\n"
+                f"      host: {postgres_e2e_config['host']}\n"
+                f"      port: {postgres_e2e_config['port']}\n"
+                f"      dbname: {postgres_e2e_config['dbname']}\n"
+                f"      user: {postgres_e2e_config['user']}\n"
+                "      pass: \"{{ env_var('DBT_POSTGRES_PASSWORD') }}\"\n"
+                f"      schema: {dev_schema_name}\n"
+                "    prod:\n"
+                "      type: postgres\n"
+                f"      host: {postgres_e2e_config['host']}\n"
+                f"      port: {postgres_e2e_config['port']}\n"
+                f"      dbname: {postgres_e2e_config['dbname']}\n"
+                f"      user: {postgres_e2e_config['user']}\n"
+                "      pass: \"{{ env_var('DBT_POSTGRES_PASSWORD') }}\"\n"
+                f"      schema: {prod_schema_name}\n"
+            ),
+            project_toml=(
+                build_postgres_project_toml(
+                    project_name="postgres_dbt_reuse_from",
+                    schema_name=dev_schema_name,
+                    config=postgres_e2e_config,
+                )
+                + "\n[dbt]\n"
+                + 'project_dir = "../dbt_project"\n'
+                + 'profiles_dir = "../profiles"\n'
+                + 'target_path = "../dbt_project/target"\n'
+                + "[dbt.reuse_from]\n"
+                + 'git_ref = "prod"\n'
+                + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
+            ),
+            fetch_rows=lambda sql: fetch_postgres_rows(config=postgres_e2e_config, sql=sql),
+            destination_rows_sql=(
+                "SELECT order_id, amount FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='fact_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_rows_sql=(
+                "SELECT order_id, downstream_amount FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_rows=test_case.expected_rows,
+            env=env,
+        )
+    finally:
+        cleanup_postgres_schema(schema_name=dev_schema_name, config=postgres_e2e_config)
+        cleanup_postgres_schema(schema_name=prod_schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresDbtReuseFromE2ETestCase(
+            description="dbt seeded reuse_from catches up an incremental model on postgres",
+            schema_prefix="sqlbuild_dbt_seeded_reuse",
+            expected_rows=((1, 900), (2, 901)),
+        )
+    ],
+    ids=["dbt seeded reuse_from catches up an incremental model on postgres"],
+)
+def test_given_postgres_dbt_seeded_reuse_from_when_plain_build_then_catches_up_incremental(
+    tmp_path: Path,
+    test_case: PostgresDbtReuseFromE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    assert_postgres_seeded_reuse_case(
+        tmp_path=tmp_path,
+        schema_prefix=test_case.schema_prefix,
+        expected_rows=test_case.expected_rows,
+        postgres_e2e_config=postgres_e2e_config,
+        snapshot=False,
+    )
+    assert test_case.expected_rows == ((1, 900), (2, 901))
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresDbtReuseFromE2ETestCase(
+            description="dbt snapshot seeded reuse_from catches up on postgres",
+            schema_prefix="sqlbuild_dbt_snapshot_reuse",
+            expected_rows=((1, 900), (2, 901)),
+        )
+    ],
+    ids=["dbt snapshot seeded reuse_from catches up on postgres"],
+)
+def test_given_postgres_dbt_snapshot_seeded_reuse_from_when_plain_build_then_catches_up_snapshot(
+    tmp_path: Path,
+    test_case: PostgresDbtReuseFromE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    assert_postgres_seeded_reuse_case(
+        tmp_path=tmp_path,
+        schema_prefix=test_case.schema_prefix,
+        expected_rows=test_case.expected_rows,
+        postgres_e2e_config=postgres_e2e_config,
+        snapshot=True,
+    )
+    assert test_case.expected_rows == ((1, 900), (2, 901))
 
 
 @pytest.mark.parametrize(
@@ -193,7 +500,10 @@ def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_tab
             description="direct changes only build prunes unchanged postgres model",
             expected_table_name="orders",
             expected_row_count=1,
-            expected_stdout_fragments=("Plan ready (0 selected)", "TOTAL=0"),
+            expected_stdout_fragments=(
+                "Plan ready (0 selected)",
+                "Skipped current models (1 already up to date)",
+            ),
         )
     ],
     ids=["direct changes only build prunes unchanged postgres model"],

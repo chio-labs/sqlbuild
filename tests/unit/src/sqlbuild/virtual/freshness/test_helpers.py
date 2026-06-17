@@ -18,11 +18,11 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-from sqlbuild.virtual.executor.helpers.source_freshness import (
-    observe_virtual_environment_source_freshness,
-)
 from sqlbuild.virtual.freshness.helpers.state import (
     source_freshness_record_from_observation,
+)
+from sqlbuild.virtual.freshness.main.runtime_observation import (
+    observe_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.state.models import SourceFreshnessRecord

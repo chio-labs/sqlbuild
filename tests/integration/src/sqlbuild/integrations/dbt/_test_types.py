@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlbuild.integrations.dbt.types import DbtInteropSkipReason
 
@@ -12,6 +13,33 @@ class RealDbtRunnerTestCase:
     exclude: tuple[str, ...]
     resource_types: tuple[str, ...]
     expected_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RealDbtReuseFromCompileTestCase:
+    description: str
+    git_ref: str
+    override_relative_path: Path
+    expected_unique_id: str
+    expected_manifest_schema: str
+    expected_manifest_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtReuseFromCompileErrorTestCase:
+    description: str
+    git_ref: str
+    command_returncode: int
+    command_stdout: str
+    expected_error_type: type[Exception]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtReuseFromCompileSetupErrorTestCase:
+    description: str
+    setup_kind: str
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

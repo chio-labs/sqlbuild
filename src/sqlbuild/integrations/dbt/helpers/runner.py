@@ -91,6 +91,7 @@ def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]:
                 resource_type=_optional_str(payload.get("resource_type")),
                 package_name=_optional_str(payload.get("package_name")),
                 name=_optional_str(payload.get("name")),
+                fqn=_parse_fqn(payload.get("fqn")),
                 original_file_path=_optional_str(payload.get("original_file_path")),
                 payload=dict(payload),
             )
@@ -203,3 +204,15 @@ def _optional_str(value: object | None) -> str | None:
     if isinstance(value, str):
         return value
     return None
+
+
+def _parse_fqn(value: object | None) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    parts: list[str] = []
+    item: object
+    for item in value:
+        if not isinstance(item, str) or not item:
+            return ()
+        parts.append(item)
+    return tuple(parts)

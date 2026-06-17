@@ -44,8 +44,13 @@ class FakeSnowflakeDescribeConnection:
 class FakeSnowflakeMetadataCursor:
     """Cursor double exposing Snowflake-style metadata rows."""
 
-    def __init__(self, row: tuple[object, ...] | None) -> None:
+    def __init__(
+        self,
+        row: tuple[object, ...] | None = None,
+        rows: list[tuple[object, ...]] | None = None,
+    ) -> None:
         self.row: tuple[object, ...] | None = row
+        self.rows: list[tuple[object, ...]] = rows or []
         self.executed_sql: str | None = None
         self.executed_params: tuple[object, ...] | None = None
         self.closed: bool = False
@@ -56,6 +61,9 @@ class FakeSnowflakeMetadataCursor:
 
     def fetchone(self) -> tuple[object, ...] | None:
         return self.row
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
 
     def close(self) -> None:
         self.closed = True

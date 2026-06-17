@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import json
 import re
 from collections import Counter
@@ -34,6 +33,7 @@ from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
 from sqlbuild.shared.helpers.materialization_labels import model_materialization_label
+from sqlbuild.shared.helpers.query_diff import format_query_diff
 from sqlbuild.shared.types import ExecutionResourceKind
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
@@ -129,6 +129,12 @@ def format_plan(
         python_plan_entries=python_plan_entries,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
+    )
+    _format_standard_pruned_metadata(
+        lines,
+        plan,
+        display_options=resolved_display_options,
+        skipped_header_style=style.muted,
     )
 
     _format_python_plan_entries(
@@ -450,6 +456,39 @@ def _all_provider_usages(
     return tuple(usages)
 
 
+def _format_standard_pruned_metadata(
+    lines: list[str],
+    plan: PlanOutput,
+    *,
+    display_options: DisplayOptions,
+    skipped_header_style: Callable[[str], str],
+) -> None:
+    raw_names: object = plan.metadata.get("standard_pruned_model_names")
+    if not isinstance(raw_names, tuple):
+        return
+    names: tuple[str, ...] = tuple(name for name in raw_names if isinstance(name, str))
+    if not names:
+        return
+    lines.append("")
+    lines.append(skipped_header_style(f"Skipped current models ({len(names)} already up to date)"))
+    if display_options.max_entries_per_section is not None:
+        return
+    visible_names: Sequence[str] = visible_entries(names, options=display_options)
+    name: str
+    name_column_width: int = resolve_name_column_width(names)
+    for name in visible_names:
+        lines.append(
+            _format_name_value_line(name, "up to date", name_column_width=name_column_width)
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(names),
+        visible_count=len(visible_names),
+        indent="  ",
+        options=display_options,
+    )
+
+
 def _format_python_plan_entries(
     lines: list[str],
     *,
@@ -507,7 +546,7 @@ def _format_python_source_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_definition_source_text(entry.current_definition_json)
     if previous is None or current is None or previous == current:
         return []
-    return _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+    return _indent_diff(format_query_diff(previous, current), extra_indent="  ")
 
 
 def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
@@ -516,7 +555,7 @@ def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
     if previous is None or current is None or previous == current:
         return []
     return _dim_python_dependency_headers(
-        _indent_diff(_format_query_diff(previous, current), extra_indent="  ")
+        _indent_diff(format_query_diff(previous, current), extra_indent="  ")
     )
 
 
@@ -863,7 +902,7 @@ def _append_query_diff(lines: list[str], entry: ModelPlanEntry) -> None:
         return
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    query diff:"))
-    lines.extend(_format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
+    lines.extend(format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
 
 
 def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
@@ -879,7 +918,7 @@ def _append_config_diff(lines: list[str], entry: ModelPlanEntry) -> None:
         return
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    config diff:"))
-    lines.extend(_format_query_diff(previous_config, current_config))
+    lines.extend(format_query_diff(previous_config, current_config))
 
 
 def _format_config_json(metadata_json: str) -> str:
@@ -1184,7 +1223,7 @@ def _format_function_entry(
             style: CliStyle = CliStyle(use_color=True)
             lines.append(style.label("    query diff:"))
             lines.extend(
-                _format_query_diff(
+                format_query_diff(
                     function_entry.previous_query_sql, function_entry.fingerprint_query_sql
                 )
             )
@@ -1352,8 +1391,17 @@ def _format_standard_source_freshness_metadata(
     unknown_source_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("unknown_source_names")
     )
+    age_warning_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("age_warning_source_names")
+    )
+    age_error_source_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("age_error_source_names")
+    )
     stale_model_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("stale_model_names")
+    )
+    blocked_model_names: tuple[str, ...] = _metadata_string_tuple(
+        source_freshness_metadata.get("blocked_model_names")
     )
     if not observed_source_names and not unknown_source_names:
         return
@@ -1406,12 +1454,42 @@ def _format_standard_source_freshness_metadata(
                 warn=True,
             )
         )
+    if age_warning_source_names:
+        lines.append(
+            _source_freshness_set_line(
+                style,
+                "age warnings",
+                age_warning_source_names,
+                display_options=display_options,
+                warn=True,
+            )
+        )
+    if age_error_source_names:
+        lines.append(
+            _source_freshness_set_line(
+                style,
+                "age errors",
+                age_error_source_names,
+                display_options=display_options,
+                warn=True,
+            )
+        )
     if stale_model_names:
         lines.append(
             _source_freshness_set_line(
                 style,
                 "source-stale models",
                 stale_model_names,
+                display_options=display_options,
+                warn=True,
+            )
+        )
+    if blocked_model_names:
+        lines.append(
+            _source_freshness_set_line(
+                style,
+                "source-blocked models",
+                blocked_model_names,
                 display_options=display_options,
                 warn=True,
             )
@@ -1430,14 +1508,18 @@ def _format_standard_remaining_stale_metadata(
     )
     if not remaining_stale_model_names:
         return
+    style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(section_header_style("Remaining stale"))
-    lines.append(f"  models outside selection: {len(remaining_stale_model_names)}")
+    lines.append(style.muted(f"  models outside selection: {len(remaining_stale_model_names)}"))
     lines.append(
-        "  model set: "
-        + _format_capped_name_list(
-            remaining_stale_model_names,
-            display_options=display_options,
+        style.muted(
+            "  model set: "
+            + _format_capped_name_list(
+                remaining_stale_model_names,
+                display_options=display_options,
+                name_style=style.muted,
+            )
         )
     )
 
@@ -1555,31 +1637,6 @@ def _schema_kind_label(kind: SchemaChangeKind) -> str:
     if kind == SchemaChangeKind.COLUMN_TYPE_CHANGED:
         return "type changed"
     return str(kind)
-
-
-def _format_query_diff(previous: str, current: str) -> list[str]:
-    """Format a unified diff between previous and current SQL."""
-
-    style: CliStyle = CliStyle(use_color=True)
-    previous_lines: list[str] = previous.splitlines(keepends=True)
-    current_lines: list[str] = current.splitlines(keepends=True)
-    diff_lines: list[str] = list(
-        difflib.unified_diff(previous_lines, current_lines, fromfile="previous", tofile="current")
-    )
-    result: list[str] = []
-    line: str
-    for line in diff_lines:
-        stripped: str = line.rstrip("\n")
-        formatted: str = f"      {stripped}"
-        if stripped.startswith("+") and not stripped.startswith("+++"):
-            result.append(style.success(formatted))
-        elif stripped.startswith("-") and not stripped.startswith("---"):
-            result.append(style.error(formatted))
-        elif stripped.startswith(("---", "+++", "@@")):
-            result.append(style.muted(formatted))
-        else:
-            result.append(formatted)
-    return result
 
 
 def _strip_ansi(text: str) -> str:

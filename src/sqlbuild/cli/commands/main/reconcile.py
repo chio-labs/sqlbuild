@@ -10,10 +10,10 @@ from sqlbuild.cli.commands.main.helpers.reconcile.output import format_reconcile
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.status import TransientStatusReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.status import TransientStatusReporter
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.reconcile.main.reconcile import run_virtual_reconcile
 

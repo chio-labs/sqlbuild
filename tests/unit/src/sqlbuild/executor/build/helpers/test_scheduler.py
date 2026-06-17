@@ -14,8 +14,10 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SourceLoadPlanEntry
+from sqlbuild.compiler.planner.types import PlanAction, PlanReason
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import HookContext
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry
@@ -23,6 +25,7 @@ from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (
     BuildSchedulerModelHookTestCase,
+    BuildSchedulerPlannedSkipTestCase,
     BuildSchedulerPreHookSkipTestCase,
     BuildSchedulerSourceLoadTestCase,
 )
@@ -285,4 +288,77 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
     assert tuple(model.status for model in result.model_results) == (
         test_case.expected_model_statuses
     )
+    assert tuple(node_starts) == test_case.expected_execution_order
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildSchedulerPlannedSkipTestCase(
+            description="planned source freshness skip blocks downstream model",
+            expected_model_statuses=(ExecutionStatus.SKIPPED, ExecutionStatus.SKIPPED),
+            expected_build_status=BuildStatus.FAILED,
+            expected_failure_count=1,
+            expected_skip_reason="Blocked by source freshness error",
+            expected_execution_order=("upstream_model",),
+        )
+    ],
+    ids=["planned source freshness skip blocks downstream model"],
+)
+def test_given_model_plan_action_skip_when_build_runs_then_downstream_model_is_skipped(
+    test_case: BuildSchedulerPlannedSkipTestCase,
+    tmp_path: Path,
+) -> None:
+    upstream_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.MODEL, "upstream_model"
+    )
+    downstream_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.MODEL, "downstream_model"
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: object = adapter.connect(
+        {"database": str(tmp_path / "scheduler_planned_skip.duckdb")}
+    )
+    node_starts: list[str] = []
+    plan: PlanOutput = PlanOutput(
+        execution_order=(upstream_key, downstream_key),
+        selected_keys=frozenset({upstream_key, downstream_key}),
+        model_entries=(
+            build_model_plan_entry(
+                name="upstream_model",
+                action=PlanAction.SKIP,
+                reason=PlanReason.SOURCE_FRESHNESS_ERROR,
+                resolved_sql="SELECT 1 AS id",
+            ),
+            build_model_plan_entry(
+                name="downstream_model",
+                resolved_sql="SELECT id FROM upstream_model",
+            ),
+        ),
+        upstream_deps={upstream_key: (), downstream_key: (upstream_key,)},
+        downstream_deps={upstream_key: (downstream_key,), downstream_key: ()},
+    )
+
+    try:
+        result: BuildExecutionResult = execute_build_plan(
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler_planned_skip.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            promotion_mode=TablePromotionMode.DIRECT,
+            run_id="run-1",
+            run_audits=False,
+            run_tests=False,
+            on_node_start=lambda name, _kind: node_starts.append(name),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert tuple(model.status for model in result.model_results) == (
+        test_case.expected_model_statuses
+    )
+    assert result.status == test_case.expected_build_status
+    assert result.failure_count == test_case.expected_failure_count
+    assert result.model_results[0].skip_reason == test_case.expected_skip_reason
     assert tuple(node_starts) == test_case.expected_execution_order
