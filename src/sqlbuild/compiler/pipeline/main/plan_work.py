@@ -13,6 +13,7 @@ def plan_has_executable_work(
 
     return bool(
         plan.model_entries
+        or plan.dependency_baseline_entries
         or plan.seed_entries
         or plan.source_load_entries
         or plan.function_entries

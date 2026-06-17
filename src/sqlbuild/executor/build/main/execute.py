@@ -27,6 +27,7 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.main.dependency_baseline import execute_dependency_baseline_entries
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -117,6 +118,26 @@ def execute_build_plan(
         python_identity_recorder=python_identity_recorder,
     )
 
+    dependency_baseline_results: tuple[ModelExecutionResult, ...] = (
+        execute_dependency_baseline_entries(
+            entries=plan.dependency_baseline_entries,
+            adapter=adapter,
+            connection=scheduler_connection,
+            on_node_start=on_node_start,
+            on_node_complete=on_node_complete,
+        )
+    )
+    if any(result.status == ExecutionStatus.FAILED for result in dependency_baseline_results):
+        return _aggregate_build_result(
+            model_results=dependency_baseline_results,
+            seed_results=(),
+            function_results=(),
+            load_results=initial_load_results,
+            test_results=(),
+            source_audit_results=(),
+            end_audit_results=(),
+        )
+
     model_results: tuple[ModelExecutionResult, ...]
     seed_results: tuple[SeedExecutionResult, ...]
     function_results: tuple[FunctionExecutionResult, ...]
@@ -135,7 +156,7 @@ def execute_build_plan(
     ) = scheduler.run()
 
     return _aggregate_build_result(
-        model_results=model_results,
+        model_results=(*dependency_baseline_results, *model_results),
         seed_results=seed_results,
         function_results=function_results,
         load_results=load_results,

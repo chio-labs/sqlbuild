@@ -11,6 +11,7 @@ from typing import cast
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    DependencyBaselinePlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
@@ -149,6 +150,14 @@ def format_plan(
     _format_source_loads(
         lines,
         plan,
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=resolved_section_header_style,
+    )
+
+    _format_dependency_baseline_entries(
+        lines,
+        plan.dependency_baseline_entries,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
@@ -341,6 +350,40 @@ def _selected_count(plan: PlanOutput) -> int:
     """Count selected executable resources shown in plan output."""
 
     return len(plan.model_entries) + len(plan.seed_entries) + len(plan.function_entries)
+
+
+def _format_dependency_baseline_entries(
+    lines: list[str],
+    entries: tuple[DependencyBaselinePlanEntry, ...],
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    if not entries:
+        return
+    lines.append("")
+    lines.append(section_header_style(f"Dependency baseline ({len(entries)})"))
+    visible: Sequence[DependencyBaselinePlanEntry] = visible_entries(
+        entries, options=display_options
+    )
+    entry: DependencyBaselinePlanEntry
+    for entry in visible:
+        lines.append(
+            "  "
+            + _format_name_value_line(
+                entry.name,
+                f"{entry.resource_label}  baseline reuse",
+                name_column_width=name_column_width,
+            )
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(entries),
+        visible_count=len(visible),
+        indent="  ",
+        options=display_options,
+    )
 
 
 def _plan_ready_header(
@@ -1585,7 +1628,9 @@ def _format_capped_name_list(
 def _resolve_name_column_width(
     plan: PlanOutput, *, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> int:
-    names: list[str] = [entry.name for entry in plan.model_entries]
+    names: list[str] = [
+        entry.name for entry in (*plan.dependency_baseline_entries, *plan.model_entries)
+    ]
     names.extend(entry.name for entry in plan.function_entries)
     names.extend(entry.name for entry in python_plan_entries)
     return resolve_name_column_width(names)

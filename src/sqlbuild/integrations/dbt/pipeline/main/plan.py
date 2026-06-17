@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry, PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
@@ -38,6 +38,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtModelPlanningResult,
     DbtReusePlanningResult,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
+    build_dbt_native_dependency_baseline_entries,
+    dependency_baseline_unique_ids,
+)
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_non_model_run_unique_ids,
     build_dbt_pruned_seed_unique_ids,
@@ -49,7 +53,10 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_sqlbuild_plan_output,
     dbt_failure_detail,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import (
+    build_dbt_dependency_baseline_plan_output,
+    build_dbt_reuse_plan_output,
+)
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
@@ -206,6 +213,52 @@ def plan_dbt_interop_from_project(
         )
     if dbt_reuse_plan is not None:
         plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
+    dependency_baseline_ids: tuple[str, ...] = dependency_baseline_unique_ids(
+        project=project,
+        manifest=manifest,
+        plan=plan,
+    )
+    dependency_baseline_model_plan: DbtModelPlanningResult | None = None
+    if dependency_baseline_ids:
+        dependency_baseline_model_plan = build_dbt_model_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            project=project,
+            adapter=adapter,
+            adapter_name=adapter_name,
+            manifest=manifest,
+            graph=graph,
+            candidate_unique_ids=dependency_baseline_ids,
+            full_refresh="--full-refresh" in routed.dbt_args,
+            on_connection_start=(
+                None if connection_progress is None else connection_progress.on_connection_start
+            ),
+            on_connection_complete=(
+                None if connection_progress is None else connection_progress.on_connection_complete
+            ),
+            on_connection_error=(
+                None if connection_progress is None else connection_progress.on_connection_error
+            ),
+        )
+    dbt_dependency_baseline_plan: DbtReusePlanningResult | None = (
+        build_dbt_dependency_baseline_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            current_manifest=manifest,
+            dbt_model_plan=dependency_baseline_model_plan,
+            scoped_unique_ids=dependency_baseline_ids,
+            dbt_options=dbt_options,
+            runner=runner,
+        )
+    )
+    if dbt_dependency_baseline_plan is not None:
+        plan = replace(plan, dbt_dependency_baseline_plan=dbt_dependency_baseline_plan)
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
+        build_dbt_native_dependency_baseline_entries(
+            plan=dbt_dependency_baseline_plan,
+            destination_target_name=project.effective_target_name,
+        )
+    )
     plan = replace(
         plan,
         dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
@@ -245,6 +298,7 @@ def plan_dbt_interop_from_project(
         on_connection_error=(
             None if connection_progress is None else connection_progress.on_connection_error
         ),
+        dependency_baseline_entries=dependency_baseline_entries,
     )
     if sqlbuild_plan_output is not None:
         plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)

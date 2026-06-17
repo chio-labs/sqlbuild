@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,11 +14,13 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_insert_sql,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.version_identity import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
+    DependencyBaselinePlanEntry,
     ModelPlanEntry,
     PlanOutput,
     StandardModelVersionIdentities,
@@ -36,6 +39,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     ExternalBlockedPlanOutputTestCase,
     HookFunctionPlanOutputTestCase,
+    StandardDependencyBaselinePlanOutputTestCase,
     StandardReuseFromSourceDeferralConflictTestCase,
     StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,
@@ -372,6 +376,103 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
     assert snapshot_entry.relation_reuse is not None
     assert snapshot_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
     assert snapshot_entry.relation_reuse.origin.qualified_name == "prod_schema.account_snapshot"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardDependencyBaselinePlanOutputTestCase(
+            description=(
+                "plain downstream selection baselines unselected upstream from reuse target"
+            ),
+            selected_model_name="downstream",
+            expected_model_names=("downstream",),
+            expected_dependency_baseline_names=("upstream",),
+        )
+    ],
+    ids=["plain downstream selection baselines unselected upstream from reuse target"],
+)
+def test_given_plain_downstream_selection_when_upstream_missing_then_plans_dependency_baseline(
+    test_case: StandardDependencyBaselinePlanOutputTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    project: CompiledProject = build_compiled_project_with_models(
+        {
+            "upstream": "select 1 as id",
+            "downstream": "select id from __ref('upstream')",
+        }
+    )
+    project = replace(project, effective_target_name="dev")
+    version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
+        functions=project.functions,
+        scope=build_planner_scope(
+            project=project,
+            select=(),
+            exclude=(),
+            auto_load_sources=False,
+        ),
+    )
+    try:
+        adapter.execute(connection, "CREATE SCHEMA prod_schema")
+        adapter.execute(
+            connection,
+            build_create_table_sql(
+                database=None,
+                schema="prod_schema",
+                render_qualified_name=adapter.render_qualified_name,
+                render_framework_type=adapter.render_framework_type,
+            ),
+        )
+        adapter.execute(
+            connection,
+            build_insert_sql(
+                database=None,
+                schema="prod_schema",
+                node_type="model",
+                node_name="upstream",
+                target_database=None,
+                target_schema="prod_schema",
+                target_name="upstream",
+                run_id="run_1",
+                definition_hash="definition_hash",
+                version_hash=version_identities.model_version_hashes["upstream"],
+                schema_fingerprint="schema_hash",
+                definition="SELECT 1",
+                metadata_json="{}",
+                ts="2026-01-01T00:00:00+00:00",
+                render_qualified_name=adapter.render_qualified_name,
+            ),
+        )
+        adapter.execute(connection, "CREATE TABLE prod_schema.upstream AS SELECT 1 AS id")
+
+        plan_output: PlanOutput = build_execution_plan(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            select=(test_case.selected_model_name,),
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
+                    "prod": TargetConfig(schema="prod_schema"),
+                },
+            ),
+            local_config=LocalConfig(),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert (
+        tuple(entry.name for entry in plan_output.model_entries) == test_case.expected_model_names
+    )
+    assert tuple(entry.name for entry in plan_output.dependency_baseline_entries) == (
+        test_case.expected_dependency_baseline_names
+    )
+    baseline_entry: DependencyBaselinePlanEntry = plan_output.dependency_baseline_entries[0]
+    assert baseline_entry.relation_reuse is not None
+    assert baseline_entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
 
 
 @pytest.mark.parametrize(

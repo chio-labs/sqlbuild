@@ -245,6 +245,16 @@ class DbtReusePlanningTestCase:
 
 
 @dataclass(frozen=True)
+class DbtNativeDependencyBaselineConversionTestCase:
+    description: str
+    expected_name: str
+    expected_destination_relation: str
+    expected_origin_relation: str
+    expected_resource_label: str
+    expected_hard_copy: bool
+
+
+@dataclass(frozen=True)
 class DbtReusePlanOutputTestCase:
     description: str
     configure_reuse_from: bool

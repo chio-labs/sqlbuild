@@ -30,6 +30,7 @@ from sqlbuild.compiler.planner.helpers.source_load_nodes import build_source_loa
 from sqlbuild.compiler.planner.helpers.sql_test_assembly import plan_test
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    DependencyBaselinePlanEntry,
     FunctionChangeResult,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -60,6 +61,7 @@ def build_plan_output(
     changes: PlannerChangeResults,
     model_entry_results: PlannerModelEntryResults,
     reload_sources: bool,
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
     seed_version_hashes: dict[str, str] | None = None,
     seed_metadata_jsons: dict[str, str] | None = None,
     seed_plan_reasons: dict[str, PlanReason] | None = None,
@@ -132,6 +134,7 @@ def build_plan_output(
     return PlanOutput(
         execution_order=scoped_order,
         model_entries=model_entry_results.entries,
+        dependency_baseline_entries=dependency_baseline_entries,
         seed_entries=tuple(seed_entries),
         source_load_entries=tuple(source_load_entries),
         function_entries=tuple(function_entries),

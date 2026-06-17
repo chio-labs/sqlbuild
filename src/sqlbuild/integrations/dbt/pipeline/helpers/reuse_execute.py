@@ -74,6 +74,17 @@ def execute_dbt_complete_reuse_plan(
     return tuple(reused_unique_ids)
 
 
+def has_physical_dbt_reuse_work(plan: DbtInteropPlan) -> bool:
+    """Return whether selected dbt reuse has physical relation work."""
+
+    if plan.dbt_reuse_plan is None:
+        return False
+    return any(
+        entry.action in {DbtReusePlanAction.COMPLETE_REUSE, DbtReusePlanAction.SEEDED_REUSE}
+        for entry in plan.dbt_reuse_plan.entries
+    )
+
+
 def execute_dbt_seeded_reuse_plan(
     *,
     adapter: BaseAdapter,
