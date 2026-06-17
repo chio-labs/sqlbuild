@@ -110,6 +110,46 @@ class DbtSeededReuseFromE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtMultiNodeCompleteReuseFromE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    failure_sql: str
+    recovery_sql: str
+    expected_failed_destination_rows: tuple[tuple[str, int], ...]
+    expected_failed_fingerprint_rows: tuple[tuple[str], ...]
+    expected_rerun_downstream_rows: tuple[tuple[str, int], ...]
+    expected_rerun_fingerprint_rows: tuple[tuple[str], ...]
+    expected_absent_failed_relation: tuple[str, str]
+    expected_failed_absent_stdout_fragments: tuple[str, ...]
+    expected_rerun_stdout_fragments: tuple[str, ...]
+    expected_rerun_absent_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtMultiNodeSeededReuseFromE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    failure_sql: str
+    recovery_sql: str
+    expected_failed_destination_rows: tuple[tuple[str, int, int], ...]
+    expected_absent_failed_relation: tuple[str, str]
+    expected_failed_absent_stdout_fragments: tuple[str, ...]
+    expected_rerun_stdout_fragments: tuple[str, ...]
+    expected_rerun_absent_stdout_fragments: tuple[str, ...]
+    expected_rerun_downstream_rows: tuple[tuple[str, int, int], ...]
+
+
+@dataclass(frozen=True)
+class DbtSnapshotSeededReuseFromE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_destination_rows: tuple[tuple[int, int], ...]
+    expected_downstream_rows: tuple[tuple[int, int], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rerun_absent_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtTestCliTestCase:
     description: str
     command: tuple[str, ...]

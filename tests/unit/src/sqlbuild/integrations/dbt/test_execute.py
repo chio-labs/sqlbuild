@@ -95,6 +95,7 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
             effective_target_database=None,
             effective_target_schema="main",
             effective_target_name="dev",
+            models=(),
         ),
     )
     monkeypatch.setattr(execute_module, "build_dbt_combined_graph", lambda **kwargs: object())

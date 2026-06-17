@@ -2,6 +2,13 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class DatabricksDbtReuseFromE2ETestCase:
+    description: str
+    schema_prefix: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DatabricksCliTestCase:
     description: str
     command: tuple[str, ...]

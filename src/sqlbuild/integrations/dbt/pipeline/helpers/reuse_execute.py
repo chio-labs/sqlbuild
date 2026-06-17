@@ -196,6 +196,7 @@ def _execute_complete_reuse_entry(
         relation_name=entry.destination_relation_name or model.relation_name
     )
     staging_relation: str = _staging_relation_name(
+        adapter=adapter,
         database=destination_database,
         schema=destination_schema,
         name=destination_name,
@@ -303,7 +304,7 @@ def _write_reuse_fingerprint(
 
 
 def _relation_parts(*, relation_name: str) -> tuple[str | None, str | None, str]:
-    parts: list[str] = [part.strip('"') for part in relation_name.split(".")]
+    parts: list[str] = [_unquote_relation_part(part=part) for part in relation_name.split(".")]
     if len(parts) >= 3:
         return parts[-3], parts[-2], parts[-1]
     if len(parts) == 2:
@@ -343,10 +344,17 @@ def _cursor_literal_value(value: object) -> str:
     return str(value)
 
 
-def _staging_relation_name(*, database: str | None, schema: str | None, name: str) -> str:
+def _staging_relation_name(
+    *, adapter: BaseAdapter, database: str | None, schema: str | None, name: str
+) -> str:
     staging_name: str = f"{name}__sqlbuild_reuse_stage"
-    if database is not None and schema is not None:
-        return f"{database}.{schema}.{staging_name}"
-    if schema is not None:
-        return f"{schema}.{staging_name}"
-    return staging_name
+    qualified_name: str | None = adapter.render_qualified_name(
+        database=database,
+        schema=schema,
+        name=staging_name,
+    )
+    return qualified_name or staging_name
+
+
+def _unquote_relation_part(*, part: str) -> str:
+    return part.strip().strip('"').strip("`").removeprefix("[").removesuffix("]")

@@ -7,6 +7,8 @@ from typing import Any
 
 from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_seeded_reuse_from_lifecycle,
+    assert_dbt_snapshot_seeded_reuse_from_lifecycle,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,
@@ -46,6 +48,117 @@ def build_sqlserver_project_toml(
         'defer_sources_to = "dev"\n\n'
         "[defaults]\n"
         'materialized = "table"\n'
+    )
+
+
+def assert_sqlserver_seeded_reuse_case(
+    *,
+    tmp_path: Path,
+    schema_prefix: str,
+    expected_rows: tuple[tuple[object, ...], ...],
+    snapshot: bool,
+) -> None:
+    schema_base: str = build_unique_schema_name(prefix=schema_prefix)
+    dev_schema_name: str = f"{schema_base}_dev"
+    prod_schema_name: str = f"{schema_base}_prod"
+    config: dict[str, object] = build_sqlserver_config()
+    try:
+        ensure_sqlserver_schema_ready(schema_name=dev_schema_name, config=config)
+        ensure_sqlserver_schema_ready(schema_name=prod_schema_name, config=config)
+        relation: str = "orders_snapshot" if snapshot else "fact_orders"
+        current_filter: str = " WHERE dbt_valid_to IS NULL" if snapshot else ""
+        profiles_yml: str = _sqlserver_reuse_profiles_yml(
+            config=config,
+            dev_schema_name=dev_schema_name,
+            prod_schema_name=prod_schema_name,
+        )
+        project_toml: str = _sqlserver_reuse_project_toml(
+            config=config,
+            dev_schema_name=dev_schema_name,
+        )
+        destination_rows_sql: str = (
+            "SELECT order_id, amount FROM "
+            f"{relation_name(schema_name=dev_schema_name, name=relation)}"
+            f"{current_filter} ORDER BY order_id"
+        )
+        downstream_rows_sql: str = (
+            "SELECT order_id, downstream_amount FROM "
+            f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
+            "ORDER BY order_id"
+        )
+        if snapshot:
+            assert_dbt_snapshot_seeded_reuse_from_lifecycle(
+                tmp_path=tmp_path,
+                profiles_yml=profiles_yml,
+                project_toml=project_toml,
+                origin_snapshot_schema=prod_schema_name,
+                destination_snapshot_schema=dev_schema_name,
+                fetch_rows=lambda sql: fetch_sqlserver_rows(config=config, sql=sql),
+                destination_rows_sql=destination_rows_sql,
+                downstream_rows_sql=downstream_rows_sql,
+                expected_rows=expected_rows,
+                timestamp_type="DATETIME2",
+            )
+        else:
+            assert_dbt_seeded_reuse_from_lifecycle(
+                tmp_path=tmp_path,
+                profiles_yml=profiles_yml,
+                project_toml=project_toml,
+                fetch_rows=lambda sql: fetch_sqlserver_rows(config=config, sql=sql),
+                destination_rows_sql=destination_rows_sql,
+                downstream_rows_sql=downstream_rows_sql,
+                expected_rows=expected_rows,
+                timestamp_type="DATETIME2",
+            )
+    finally:
+        cleanup_sqlserver_schema(schema_name=dev_schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=prod_schema_name, config=config)
+
+
+def _sqlserver_reuse_profiles_yml(
+    *, config: dict[str, object], dev_schema_name: str, prod_schema_name: str
+) -> str:
+    return (
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: sqlserver\n"
+        "      driver: ODBC Driver 18 for SQL Server\n"
+        f"      server: {config['host']}\n"
+        f"      port: {config['port']}\n"
+        f"      database: {config['database']}\n"
+        f"      user: {config['user']}\n"
+        f"      password: {config['password']}\n"
+        f"      schema: {dev_schema_name}\n"
+        "      trust_cert: true\n"
+        "    prod:\n"
+        "      type: sqlserver\n"
+        "      driver: ODBC Driver 18 for SQL Server\n"
+        f"      server: {config['host']}\n"
+        f"      port: {config['port']}\n"
+        f"      database: {config['database']}\n"
+        f"      user: {config['user']}\n"
+        f"      password: {config['password']}\n"
+        f"      schema: {prod_schema_name}\n"
+        "      trust_cert: true\n"
+    )
+
+
+def _sqlserver_reuse_project_toml(*, config: dict[str, object], dev_schema_name: str) -> str:
+    return (
+        build_sqlserver_project_toml(
+            project_name="sqlserver_dbt_reuse_from",
+            schema_name=dev_schema_name,
+            config=config,
+        )
+        + "\n[dbt]\n"
+        + 'project_dir = "../dbt_project"\n'
+        + 'profiles_dir = "../profiles"\n'
+        + 'target_path = "../dbt_project/target"\n'
+        + "[dbt.reuse_from]\n"
+        + 'git_ref = "prod"\n'
+        + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
     )
 
 

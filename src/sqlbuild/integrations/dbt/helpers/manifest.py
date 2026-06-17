@@ -14,6 +14,8 @@ from sqlbuild.integrations.dbt.manifest.models import (
 )
 from sqlbuild.shared.types import SqlReferenceKind
 
+_INDEXED_NODE_RESOURCE_TYPES: frozenset[str] = frozenset({"model", "snapshot"})
+
 
 def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex:
     """Load and index dbt model nodes from a manifest.json file."""
@@ -59,7 +61,7 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
             continue
         node_data: dict[object, object] = cast(dict[object, object], raw_node)
-        if node_data.get("resource_type") != "model":
+        if node_data.get("resource_type") not in _INDEXED_NODE_RESOURCE_TYPES:
             continue
         model: DbtManifestModel = _parse_model(unique_id=unique_id, raw_node=node_data)
         models_by_unique_id[model.unique_id] = model
@@ -146,7 +148,7 @@ def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManife
         node_checksum=_parse_checksum(raw_node.get("checksum")),
         relation_name=relation_name,
         fqn=_parse_fqn(raw_node.get("fqn")),
-        query_sql=_required_str(raw_node.get("raw_code"), field_name="raw_code"),
+        query_sql=_model_query_sql(raw_node=raw_node),
         depends_on_nodes=depends_on_nodes,
         payload={str(key): value for key, value in raw_node.items()},
     )
@@ -198,6 +200,16 @@ def _source_freshness_filter(
 def _render_relation_name(*, database: str | None, schema: str | None, name: str) -> str:
     parts: tuple[str, ...] = tuple(part for part in (database, schema, name) if part)
     return ".".join(parts)
+
+
+def _model_query_sql(*, raw_node: dict[object, object]) -> str:
+    return (
+        _optional_str(raw_node.get("raw_code"))
+        or _optional_str(raw_node.get("compiled_code"))
+        or _optional_str(raw_node.get("raw_sql"))
+        or _optional_str(raw_node.get("compiled_sql"))
+        or ""
+    )
 
 
 def _required_str(value: object, *, field_name: str) -> str:

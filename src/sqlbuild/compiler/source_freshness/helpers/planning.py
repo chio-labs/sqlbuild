@@ -110,7 +110,12 @@ def build_standard_source_freshness_planning_result(
                     source=observation_source,
                     observed_at=observed_at,
                 )
-            except (AdapterUserError, SourceFreshnessObservationError):
+            except AdapterUserError:
+                unknown_source_names.append(source_name)
+                continue
+            except SourceFreshnessObservationError as exc:
+                if _source_freshness_error_is_configuration_error(error=exc):
+                    raise
                 unknown_source_names.append(source_name)
                 continue
         observed_record: SourceFreshnessRecord = source_freshness_record_from_observation(
@@ -155,6 +160,13 @@ def build_standard_source_freshness_planning_result(
         unknown_source_names=tuple(sorted(unknown_source_names)),
         age_statuses=age_statuses,
     )
+
+
+def _source_freshness_error_is_configuration_error(
+    *, error: SourceFreshnessObservationError
+) -> bool:
+    message: str = str(error)
+    return "requires a physical table source" in message or "incomplete" in message
 
 
 def source_freshness_record_from_observation(

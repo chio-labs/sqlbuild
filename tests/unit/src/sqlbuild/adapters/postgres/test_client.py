@@ -106,7 +106,7 @@ def test_given_sql_function_when_rendering_create_then_postgres_declares_languag
             database=None,
             schema="analytics",
             expected_statements=(
-                "CREATE INDEX IF NOT EXISTS analytics._sqlbuild_fingerprints_latest_idx "
+                "CREATE INDEX IF NOT EXISTS _sqlbuild_fingerprints_latest_idx "
                 "ON analytics._sqlbuild_fingerprints (node_type, node_name, ts DESC, run_id DESC)",
             ),
         )
@@ -134,7 +134,7 @@ def test_given_fingerprint_table_when_rendering_indexes_then_postgres_uses_lates
             database=None,
             schema="analytics",
             expected_statements=(
-                "CREATE INDEX IF NOT EXISTS analytics._sqlbuild_source_freshness_latest_idx "
+                "CREATE INDEX IF NOT EXISTS _sqlbuild_source_freshness_latest_idx "
                 "ON analytics._sqlbuild_source_freshness ("
                 "source_name, target_database, target_schema, target_name, "
                 "observed_at DESC, run_id DESC)",

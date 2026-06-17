@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+    assert_dbt_complete_reuse_from_lifecycle,
     assert_dbt_profile_lifecycle,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
@@ -31,6 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
     SqlServerDbtProfileE2ETestCase,
+    SqlServerDbtReuseFromE2ETestCase,
     SqlServerIntermediateDagStrategyE2ETestCase,
     SqlServerJanitorDetachedVdeE2ETestCase,
     SqlServerLoaderWaffleShopE2ETestCase,
@@ -50,6 +52,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     adapt_sqlserver_project_files,
     adapt_sqlserver_sql,
     assert_current_sqlserver_snapshot_rows_from_case,
+    assert_sqlserver_seeded_reuse_case,
     assert_sqlserver_snapshot_apply_rows,
     assert_sqlserver_snapshot_matrix_rows,
     build_sqlserver_config,
@@ -137,6 +140,138 @@ def test_given_sqlserver_dbt_profile_when_running_dbt_init_then_builds_profile_l
         )
     finally:
         cleanup_sqlserver_schema(schema_name=schema_name, config=config)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerDbtReuseFromE2ETestCase(
+            description="dbt reuse_from reuses a complete table on SQL Server",
+            schema_prefix="sqlbuild_dbt_reuse",
+            expected_rows=((1, 900),),
+        )
+    ],
+    ids=["dbt reuse_from reuses a complete table on SQL Server"],
+)
+def test_given_sqlserver_dbt_reuse_from_when_plain_build_then_reuses_prod_table(
+    tmp_path: Path,
+    test_case: SqlServerDbtReuseFromE2ETestCase,
+) -> None:
+    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
+    dev_schema_name: str = f"{schema_base}_dev"
+    prod_schema_name: str = f"{schema_base}_prod"
+    config: dict[str, object] = build_sqlserver_config()
+    try:
+        ensure_sqlserver_schema_ready(schema_name=dev_schema_name, config=config)
+        ensure_sqlserver_schema_ready(schema_name=prod_schema_name, config=config)
+        assert_dbt_complete_reuse_from_lifecycle(
+            tmp_path=tmp_path,
+            profiles_yml=(
+                "analytics:\n"
+                "  target: dev\n"
+                "  outputs:\n"
+                "    dev:\n"
+                "      type: sqlserver\n"
+                "      driver: ODBC Driver 18 for SQL Server\n"
+                f"      server: {config['host']}\n"
+                f"      port: {config['port']}\n"
+                f"      database: {config['database']}\n"
+                f"      user: {config['user']}\n"
+                f"      password: {config['password']}\n"
+                f"      schema: {dev_schema_name}\n"
+                "      trust_cert: true\n"
+                "    prod:\n"
+                "      type: sqlserver\n"
+                "      driver: ODBC Driver 18 for SQL Server\n"
+                f"      server: {config['host']}\n"
+                f"      port: {config['port']}\n"
+                f"      database: {config['database']}\n"
+                f"      user: {config['user']}\n"
+                f"      password: {config['password']}\n"
+                f"      schema: {prod_schema_name}\n"
+                "      trust_cert: true\n"
+            ),
+            project_toml=(
+                build_sqlserver_project_toml(
+                    project_name="sqlserver_dbt_reuse_from",
+                    schema_name=dev_schema_name,
+                    config=config,
+                )
+                + "\n[dbt]\n"
+                + 'project_dir = "../dbt_project"\n'
+                + 'profiles_dir = "../profiles"\n'
+                + 'target_path = "../dbt_project/target"\n'
+                + "[dbt.reuse_from]\n"
+                + 'git_ref = "prod"\n'
+                + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
+            ),
+            fetch_rows=lambda sql: fetch_sqlserver_rows(config=config, sql=sql),
+            destination_rows_sql=(
+                "SELECT order_id, amount FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='fact_orders')} "
+                "ORDER BY order_id"
+            ),
+            downstream_rows_sql=(
+                "SELECT order_id, downstream_amount FROM "
+                f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
+                "ORDER BY order_id"
+            ),
+            expected_rows=test_case.expected_rows,
+        )
+    finally:
+        cleanup_sqlserver_schema(schema_name=dev_schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=prod_schema_name, config=config)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerDbtReuseFromE2ETestCase(
+            description="dbt seeded reuse_from catches up an incremental model on SQL Server",
+            schema_prefix="sqlbuild_dbt_seeded_reuse",
+            expected_rows=((1, 900), (2, 901)),
+        )
+    ],
+    ids=["dbt seeded reuse_from catches up an incremental model on SQL Server"],
+)
+def test_given_sqlserver_dbt_seeded_reuse_from_when_plain_build_then_catches_up_incremental(
+    tmp_path: Path,
+    test_case: SqlServerDbtReuseFromE2ETestCase,
+) -> None:
+    assert_sqlserver_seeded_reuse_case(
+        tmp_path=tmp_path,
+        schema_prefix=test_case.schema_prefix,
+        expected_rows=test_case.expected_rows,
+        snapshot=False,
+    )
+    assert test_case.expected_rows == ((1, 900), (2, 901))
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerDbtReuseFromE2ETestCase(
+            description="dbt snapshot seeded reuse_from catches up on SQL Server",
+            schema_prefix="sqlbuild_dbt_snapshot_reuse",
+            expected_rows=((1, 900), (2, 901)),
+        )
+    ],
+    ids=["dbt snapshot seeded reuse_from catches up on SQL Server"],
+)
+def test_given_sqlserver_dbt_snapshot_seeded_reuse_from_when_plain_build_then_catches_up_snapshot(
+    tmp_path: Path,
+    test_case: SqlServerDbtReuseFromE2ETestCase,
+) -> None:
+    assert_sqlserver_seeded_reuse_case(
+        tmp_path=tmp_path,
+        schema_prefix=test_case.schema_prefix,
+        expected_rows=test_case.expected_rows,
+        snapshot=True,
+    )
+    assert test_case.expected_rows == ((1, 900), (2, 901))
 
 
 @pytest.mark.parametrize(

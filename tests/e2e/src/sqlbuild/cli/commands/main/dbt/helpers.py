@@ -513,6 +513,292 @@ def prepare_dbt_seeded_reuse_from_project(*, tmp_path: Path) -> Path:
     return sqlbuild_project_dir
 
 
+def prepare_dbt_multi_node_reuse_from_project(*, tmp_path: Path) -> Path:
+    """Write a DuckDB dbt reuse_from project with three reusable table models."""
+
+    root_dir: Path = tmp_path / "dbt_multi_node_reuse_from"
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_models_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_multi_node_reuse_from.duckdb"
+    _write_reuse_from_profiles(profiles_dir=profiles_dir, db_path=db_path)
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    model_name: str
+    for model_name in ("orders_a", "orders_b", "orders_c"):
+        (dbt_models_dir / f"{model_name}.sql").write_text(
+            f"select '{model_name}' as model_name, 900 as amount\n",
+            encoding="utf-8",
+        )
+    _write_reuse_from_sqlbuild_project(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        project_name="dbt_multi_node_reuse_from",
+        database_name="dbt_multi_node_reuse_from.duckdb",
+    )
+    _write_prod_schema_macro(macro_dir=macro_dir)
+    (sqlbuild_models_dir / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        'SELECT model_name, amount AS downstream_amount FROM __dbt_ref("analytics", "orders_a")\n'
+        "UNION ALL\n"
+        'SELECT model_name, amount AS downstream_amount FROM __dbt_ref("analytics", "orders_b")\n'
+        "UNION ALL\n"
+        'SELECT model_name, amount AS downstream_amount FROM __dbt_ref("analytics", "orders_c")\n',
+        encoding="utf-8",
+    )
+    _initialize_reuse_from_git(root_dir=root_dir)
+    _run_dbt(
+        args=("run",), dbt_project_dir=dbt_project_dir, profiles_dir=profiles_dir, target="prod"
+    )
+    for model_name in ("orders_a", "orders_b", "orders_c"):
+        (dbt_models_dir / f"{model_name}.sql").write_text(
+            f"select '{model_name}' as model_name, 111 as amount\n",
+            encoding="utf-8",
+        )
+    return sqlbuild_project_dir
+
+
+def prepare_dbt_multi_node_seeded_reuse_from_project(*, tmp_path: Path) -> Path:
+    """Write a DuckDB dbt reuse_from project with three seeded incremental models."""
+
+    root_dir: Path = tmp_path / "dbt_multi_node_seeded_reuse_from"
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_models_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_multi_node_seeded_reuse_from.duckdb"
+    _write_reuse_from_profiles(profiles_dir=profiles_dir, db_path=db_path)
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\nversion: '1.0'\nprofile: analytics\nmodel-paths: ['models']\n",
+        encoding="utf-8",
+    )
+    model_name: str
+    for model_name in ("orders_a", "orders_b", "orders_c"):
+        (dbt_models_dir / f"{model_name}.sql").write_text(
+            "{{ config(materialized='incremental', "
+            "meta={'sqlbuild': {'reuse_cursor': 'event_time'}}) }}\n"
+            f"select model_name, order_id, amount, event_time from main.raw_{model_name}\n"
+            "{% if is_incremental() %}\n"
+            "where event_time > (select max(event_time) from {{ this }})\n"
+            "{% endif %}\n",
+            encoding="utf-8",
+        )
+    _write_reuse_from_sqlbuild_project(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        project_name="dbt_multi_node_seeded_reuse_from",
+        database_name="dbt_multi_node_seeded_reuse_from.duckdb",
+    )
+    _write_prod_schema_macro(macro_dir=macro_dir)
+    (sqlbuild_models_dir / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        "SELECT model_name, order_id, amount AS downstream_amount "
+        'FROM __dbt_ref("analytics", "orders_a")\n'
+        "UNION ALL\n"
+        "SELECT model_name, order_id, amount AS downstream_amount "
+        'FROM __dbt_ref("analytics", "orders_b")\n'
+        "UNION ALL\n"
+        "SELECT model_name, order_id, amount AS downstream_amount "
+        'FROM __dbt_ref("analytics", "orders_c")\n',
+        encoding="utf-8",
+    )
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    seed_sql_parts: list[str] = []
+    for model_name in ("orders_a", "orders_b", "orders_c"):
+        seed_sql_parts.append(
+            f"CREATE TABLE main.raw_{model_name} AS "
+            f"SELECT '{model_name}' AS model_name, 1 AS order_id, 900 AS amount, "
+            "TIMESTAMP '2026-01-01' AS event_time"
+        )
+    execute_duckdb(db_path=db_path, sql="; ".join(seed_sql_parts))
+    _initialize_reuse_from_git(root_dir=root_dir)
+    _run_dbt(
+        args=("run",), dbt_project_dir=dbt_project_dir, profiles_dir=profiles_dir, target="prod"
+    )
+    for model_name in ("orders_a", "orders_b", "orders_c"):
+        execute_duckdb(
+            db_path=db_path,
+            sql=(
+                f"INSERT INTO main.raw_{model_name} VALUES "
+                f"('{model_name}', 2, 901, TIMESTAMP '2026-01-02')"
+            ),
+        )
+    return sqlbuild_project_dir
+
+
+def prepare_dbt_snapshot_seeded_reuse_from_project(*, tmp_path: Path) -> Path:
+    """Write a DuckDB dbt reuse_from project with a seeded dbt snapshot."""
+
+    root_dir: Path = tmp_path / "dbt_snapshot_seeded_reuse_from"
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    snapshots_dir: Path = dbt_project_dir / "snapshots"
+    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    snapshots_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_models_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_snapshot_seeded_reuse_from.duckdb"
+    _write_reuse_from_profiles(profiles_dir=profiles_dir, db_path=db_path)
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "snapshot-paths: ['snapshots']\n",
+        encoding="utf-8",
+    )
+    _write_dbt_orders_snapshot(snapshots_dir=snapshots_dir, target_schema="prod")
+    _write_reuse_from_sqlbuild_project(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        project_name="dbt_snapshot_seeded_reuse_from",
+        database_name="dbt_snapshot_seeded_reuse_from.duckdb",
+    )
+    _write_prod_schema_macro(macro_dir=macro_dir)
+    (sqlbuild_models_dir / "downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        "SELECT order_id, amount AS downstream_amount "
+        'FROM __dbt_ref("analytics", "orders_snapshot") '
+        "WHERE dbt_valid_to IS NULL\n",
+        encoding="utf-8",
+    )
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE TABLE main.raw_orders AS "
+            "SELECT 1 AS order_id, 900 AS amount, TIMESTAMP '2026-01-01' AS event_time"
+        ),
+    )
+    _initialize_reuse_from_git(root_dir=root_dir)
+    _run_dbt(
+        args=("snapshot",),
+        dbt_project_dir=dbt_project_dir,
+        profiles_dir=profiles_dir,
+        target="prod",
+    )
+    _write_dbt_orders_snapshot(snapshots_dir=snapshots_dir, target_schema="main")
+    execute_duckdb(
+        db_path=db_path,
+        sql="INSERT INTO main.raw_orders VALUES (2, 901, TIMESTAMP '2026-01-02')",
+    )
+    return sqlbuild_project_dir
+
+
+def _write_reuse_from_profiles(*, profiles_dir: Path, db_path: Path) -> None:
+    profiles_dir.joinpath("profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+
+
+def _write_reuse_from_sqlbuild_project(
+    *, sqlbuild_project_dir: Path, project_name: str, database_name: str
+) -> None:
+    sqlbuild_project_dir.joinpath("sqlbuild_project.toml").write_text(
+        f'name = "{project_name}"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n'
+        "[connection]\n"
+        f'database = "{database_name}"\n'
+        "[targets.dev]\n"
+        'schema = "main"\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n'
+        "[dbt.reuse_from]\n"
+        'git_ref = "prod"\n'
+        'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n',
+        encoding="utf-8",
+    )
+
+
+def _write_prod_schema_macro(*, macro_dir: Path) -> None:
+    macro_dir.joinpath("prod_generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+
+
+def _write_dbt_orders_snapshot(*, snapshots_dir: Path, target_schema: str) -> None:
+    snapshots_dir.joinpath("orders_snapshot.sql").write_text(
+        "{% snapshot orders_snapshot %}\n"
+        "{{ config(\n"
+        f"  target_schema='{target_schema}',\n"
+        "  unique_key='order_id',\n"
+        "  strategy='timestamp',\n"
+        "  updated_at='event_time',\n"
+        "  meta={'sqlbuild': {'reuse_cursor': 'event_time'}}\n"
+        ") }}\n"
+        "select order_id, amount, event_time from main.raw_orders\n"
+        "{% endsnapshot %}\n",
+        encoding="utf-8",
+    )
+
+
+def _initialize_reuse_from_git(*, root_dir: Path) -> None:
+    _run_git(args=("init",), cwd=root_dir)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=root_dir)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=root_dir)
+    _run_git(args=("add", "."), cwd=root_dir)
+    _run_git(args=("commit", "-m", "prod baseline"), cwd=root_dir)
+    _run_git(args=("branch", "prod"), cwd=root_dir)
+
+
+def _run_dbt(
+    *, args: tuple[str, ...], dbt_project_dir: Path, profiles_dir: Path, target: str
+) -> None:
+    subprocess.run(
+        (
+            "dbt",
+            *args,
+            "--project-dir",
+            dbt_project_dir.as_posix(),
+            "--profiles-dir",
+            profiles_dir.as_posix(),
+            "--target",
+            target,
+        ),
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+
+
 def write_dbt_reuse_from_fact_orders_model(*, project_dir: Path, amount: int) -> None:
     """Write the mutable dbt model used by reuse_from E2Es."""
 

@@ -14,14 +14,20 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtExecutionQueryAssertion,
     DbtExistingRelationGuardE2ETestCase,
     DbtMissingRelationGuardE2ETestCase,
+    DbtMultiNodeCompleteReuseFromE2ETestCase,
+    DbtMultiNodeSeededReuseFromE2ETestCase,
     DbtReuseFromE2ETestCase,
     DbtSeededReuseFromE2ETestCase,
+    DbtSnapshotSeededReuseFromE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
     prepare_dbt_interop_project,
+    prepare_dbt_multi_node_reuse_from_project,
+    prepare_dbt_multi_node_seeded_reuse_from_project,
     prepare_dbt_reuse_from_project,
     prepare_dbt_seeded_reuse_from_project,
+    prepare_dbt_snapshot_seeded_reuse_from_project,
     skip_unless_dbt_is_runnable,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -673,6 +679,259 @@ def test_given_seeded_reuse_from_when_incremental_model_runs_then_dbt_catches_up
         db_path=db_path,
         sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
     ) == list(test_case.expected_destination_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtMultiNodeCompleteReuseFromE2ETestCase(
+            description="multi-node complete reuse resumes after later origin failure",
+            command=("dbt", "build", "--select", "downstream_orders"),
+            failure_sql="DROP TABLE prod.orders_c",
+            recovery_sql=(
+                "CREATE TABLE prod.orders_c AS SELECT 'orders_c' AS model_name, 900 AS amount"
+            ),
+            expected_failed_destination_rows=(("orders_a", 900), ("orders_b", 900)),
+            expected_failed_fingerprint_rows=(
+                ("model.analytics.orders_a",),
+                ("model.analytics.orders_b",),
+            ),
+            expected_rerun_downstream_rows=(
+                ("orders_a", 900),
+                ("orders_b", 900),
+                ("orders_c", 900),
+            ),
+            expected_rerun_fingerprint_rows=(
+                ("model.analytics.orders_a",),
+                ("model.analytics.orders_b",),
+                ("model.analytics.orders_c",),
+            ),
+            expected_absent_failed_relation=("main", "orders_c"),
+            expected_failed_absent_stdout_fragments=(
+                "Reused dbt relation: model.analytics.orders_c",
+            ),
+            expected_rerun_stdout_fragments=("Reused dbt relation: model.analytics.orders_c",),
+            expected_rerun_absent_stdout_fragments=(
+                "Reused dbt relation: model.analytics.orders_a",
+                "Reused dbt relation: model.analytics.orders_b",
+            ),
+        )
+    ],
+    ids=["multi-node complete reuse resumes after later origin failure"],
+)
+def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rerun_resumes_failed_node(
+    tmp_path: Path,
+    test_case: DbtMultiNodeCompleteReuseFromE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_multi_node_reuse_from_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_multi_node_reuse_from.duckdb"
+    execute_duckdb(db_path=db_path, sql=test_case.failure_sql)
+
+    failed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert failed_result.returncode != 0
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_failed_absent_stdout_fragments:
+        assert absent_stdout_fragment not in failed_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT model_name, amount FROM main.orders_a "
+            "UNION ALL "
+            "SELECT model_name, amount FROM main.orders_b "
+            "ORDER BY model_name"
+        ),
+    ) == list(test_case.expected_failed_destination_rows)
+    absent_schema, absent_relation = test_case.expected_absent_failed_relation
+    assert not table_exists(db_path=db_path, table_name=absent_relation, schema=absent_schema)
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'dbt' ORDER BY node_name"
+        ),
+    ) == list(test_case.expected_failed_fingerprint_rows)
+
+    execute_duckdb(db_path=db_path, sql=test_case.recovery_sql)
+    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_rerun_stdout_fragments:
+        assert expected_stdout_fragment in rerun_result.stdout
+    absent_stdout_fragment = ""
+    for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
+        assert absent_stdout_fragment not in rerun_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT model_name, downstream_amount FROM main.downstream_orders ORDER BY model_name"
+        ),
+    ) == list(test_case.expected_rerun_downstream_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'dbt' ORDER BY node_name"
+        ),
+    ) == list(test_case.expected_rerun_fingerprint_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtMultiNodeSeededReuseFromE2ETestCase(
+            description=(
+                "multi-node seeded reuse resumes from live cursors after later origin failure"
+            ),
+            command=("dbt", "build", "--select", "downstream_orders"),
+            failure_sql="DROP TABLE prod.orders_c",
+            recovery_sql=(
+                "CREATE TABLE prod.orders_c AS "
+                "SELECT 'orders_c' AS model_name, 1 AS order_id, 900 AS amount, "
+                "TIMESTAMP '2026-01-01' AS event_time"
+            ),
+            expected_failed_destination_rows=(("orders_a", 1, 900), ("orders_b", 1, 900)),
+            expected_absent_failed_relation=("main", "orders_c"),
+            expected_failed_absent_stdout_fragments=(
+                "Seeded dbt relation: model.analytics.orders_c",
+            ),
+            expected_rerun_stdout_fragments=("Seeded dbt relation: model.analytics.orders_c",),
+            expected_rerun_absent_stdout_fragments=(
+                "Seeded dbt relation: model.analytics.orders_a",
+                "Seeded dbt relation: model.analytics.orders_b",
+            ),
+            expected_rerun_downstream_rows=(
+                ("orders_a", 1, 900),
+                ("orders_a", 2, 901),
+                ("orders_b", 1, 900),
+                ("orders_b", 2, 901),
+                ("orders_c", 1, 900),
+                ("orders_c", 2, 901),
+            ),
+        )
+    ],
+    ids=["multi-node seeded reuse resumes from live cursors after later origin failure"],
+)
+def test_given_multi_node_seeded_reuse_when_later_origin_missing_then_rerun_uses_live_cursors(
+    tmp_path: Path,
+    test_case: DbtMultiNodeSeededReuseFromE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_multi_node_seeded_reuse_from_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_multi_node_seeded_reuse_from.duckdb"
+    execute_duckdb(db_path=db_path, sql=test_case.failure_sql)
+
+    failed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert failed_result.returncode != 0
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_failed_absent_stdout_fragments:
+        assert absent_stdout_fragment not in failed_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT model_name, order_id, amount FROM main.orders_a "
+            "UNION ALL "
+            "SELECT model_name, order_id, amount FROM main.orders_b "
+            "ORDER BY model_name, order_id"
+        ),
+    ) == list(test_case.expected_failed_destination_rows)
+    absent_schema, absent_relation = test_case.expected_absent_failed_relation
+    assert not table_exists(db_path=db_path, table_name=absent_relation, schema=absent_schema)
+
+    execute_duckdb(db_path=db_path, sql=test_case.recovery_sql)
+    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_rerun_stdout_fragments:
+        assert expected_stdout_fragment in rerun_result.stdout
+    absent_stdout_fragment = ""
+    for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
+        assert absent_stdout_fragment not in rerun_result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT model_name, order_id, downstream_amount FROM main.downstream_orders "
+            "ORDER BY model_name, order_id"
+        ),
+    ) == list(test_case.expected_rerun_downstream_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSnapshotSeededReuseFromE2ETestCase(
+            description="snapshot seeded reuse pre-seeds snapshot before dbt catch-up",
+            command=("dbt", "build", "--select", "downstream_orders"),
+            expected_destination_rows=((1, 900), (2, 901)),
+            expected_downstream_rows=((1, 900), (2, 901)),
+            expected_stdout_fragments=(
+                "Seeded dbt relation: snapshot.analytics.orders_snapshot",
+                "dbt execution",
+                "SQLBuild execution",
+            ),
+            expected_rerun_absent_stdout_fragments=(
+                "Seeded dbt relation: snapshot.analytics.orders_snapshot",
+            ),
+        )
+    ],
+    ids=["snapshot seeded reuse pre-seeds snapshot before dbt catch-up"],
+)
+def test_given_snapshot_seeded_reuse_from_when_snapshot_runs_then_dbt_catches_up(
+    tmp_path: Path,
+    test_case: DbtSnapshotSeededReuseFromE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_snapshot_seeded_reuse_from_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_snapshot_seeded_reuse_from.duckdb"
+    assert table_exists(db_path=db_path, table_name="orders_snapshot", schema="prod")
+    assert not table_exists(db_path=db_path, table_name="orders_snapshot", schema="main")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT order_id, amount FROM main.orders_snapshot "
+            "WHERE dbt_valid_to IS NULL ORDER BY order_id"
+        ),
+    ) == list(test_case.expected_destination_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id",
+    ) == list(test_case.expected_downstream_rows)
+
+    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
+        assert absent_stdout_fragment not in rerun_result.stdout
 
 
 @pytest.mark.parametrize(
