@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.35.0](https://github.com/chio-labs/sqlbuild/compare/v0.34.0...v0.35.0) (2026-06-17)
+
+
+### Features
+
+* add dbt outcome overlay ([adf4e65](https://github.com/chio-labs/sqlbuild/commit/adf4e65053bb2b8c3a44241d62cee6556671c026))
+* add dbt profile init support ([240e86e](https://github.com/chio-labs/sqlbuild/commit/240e86ed14c5d7551bb0b137885f64b902184611))
+* add dbt reuse_from compile foundation ([063ceb8](https://github.com/chio-labs/sqlbuild/commit/063ceb8fe4c2c8508caac50d9b3f5e9682d6b6bd))
+* add dbt seeded reuse runtime ([bea0981](https://github.com/chio-labs/sqlbuild/commit/bea09816d3d7c7b672ba330d52ae821d3e9904d2))
+* add source freshness age policy ([4bcb816](https://github.com/chio-labs/sqlbuild/commit/4bcb816431b2ddb126bc6e6ed8f4e9ea887abb6f))
+* auto-init dbt interop projects ([9ba14b5](https://github.com/chio-labs/sqlbuild/commit/9ba14b59dd69c4e79dd1fca83c2cc944f8987752))
+* batch table freshness metadata ([78c4802](https://github.com/chio-labs/sqlbuild/commit/78c4802b69e9c5a0c857ce1004f1301940dafd78))
+* block stale source downstreams ([bb45f71](https://github.com/chio-labs/sqlbuild/commit/bb45f718fa7b957f6459029aa90da9812940548d))
+* execute dbt complete reuse ([f573ba2](https://github.com/chio-labs/sqlbuild/commit/f573ba2cfb100ecb162a923f20c41a5cc2b4ca35))
+* expand dbt profile adapters ([cfbc1aa](https://github.com/chio-labs/sqlbuild/commit/cfbc1aa3546319053ea679b8a88a66bdc5329d25))
+* expand dbt reuse coverage ([1138005](https://github.com/chio-labs/sqlbuild/commit/113800589ac513d01fdea31ed4749d7d90f14778))
+* persist dbt source freshness state ([5a41763](https://github.com/chio-labs/sqlbuild/commit/5a4176318d12bed6e7ff5429ef36f3c91ab5ae94))
+* plan dbt reuse candidates ([a2295d1](https://github.com/chio-labs/sqlbuild/commit/a2295d10d4e10f8b25ac25f19cdd132d71fe6d22))
+* prune current dbt models ([640b218](https://github.com/chio-labs/sqlbuild/commit/640b218820bc13a4ca8382707a24a9dacc323628))
+* resume dbt complete reuse ([69436c6](https://github.com/chio-labs/sqlbuild/commit/69436c653d0a5ea2e81d0a62fc4e67b1b922a9fb))
+* show dbt sql diffs ([b037d44](https://github.com/chio-labs/sqlbuild/commit/b037d44a59b51314544d356b37c9b5f0bac30df1))
+* track dbt node state ([64c568a](https://github.com/chio-labs/sqlbuild/commit/64c568ab718e55f91f3b9aa5042b0c4669ded4b9))
+* translate dbt source freshness ([2868bf2](https://github.com/chio-labs/sqlbuild/commit/2868bf25bad0730b34be85161c98695049029ef7))
+
+
+### Bug Fixes
+
+* align hook target context naming ([b55e412](https://github.com/chio-labs/sqlbuild/commit/b55e412f8b8227d087b173cc2f253aeacc8bb3b5))
+* ban internal re-export shims ([4cd0ddb](https://github.com/chio-labs/sqlbuild/commit/4cd0ddbde1e9fa2e9ff190c8c475247e64c84a60))
+* clarify dbt reuse output ([98fe959](https://github.com/chio-labs/sqlbuild/commit/98fe9592da64cc52f693eb08739c4dd985d696b9))
+* polish dbt interop output ([1c9f1e2](https://github.com/chio-labs/sqlbuild/commit/1c9f1e29039f6726e08dd592d85dceb9784b8bbb))
+* space dbt-only no-work output ([99adedd](https://github.com/chio-labs/sqlbuild/commit/99adedd54b89ba97394196dcf28e91e681c8148b))
+* use exact dbt fqn selectors ([012c3e8](https://github.com/chio-labs/sqlbuild/commit/012c3e8a85a7c32711270a1b3c5b19aaa3f219db))
+
 ## [0.34.0](https://github.com/chio-labs/sqlbuild/compare/v0.33.0...v0.34.0) (2026-06-13)
 
 
