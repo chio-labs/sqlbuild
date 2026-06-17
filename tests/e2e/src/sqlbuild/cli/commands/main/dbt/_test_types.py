@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,33 @@ class DbtDependencyBaselinePlanJsonE2ETestCase:
     expected_entry_action: str
     expected_entry_reason: str
     expected_entry_materialization: str
+
+
+@dataclass(frozen=True)
+class DbtLineageE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_node_ids: tuple[str, ...]
+    expected_edges: tuple[tuple[str, str], ...]
+    expected_focus: tuple[str, ...]
+    expected_direction: str
+    expected_node_metadata: tuple[tuple[str, str, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtLineageTextE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageErrorE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+    setup: Callable[[Path], None] | None = None
 
 
 @dataclass(frozen=True)

@@ -406,6 +406,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers.add_parser("build")
     dbt_subparsers.add_parser("test")
     dbt_subparsers.add_parser("debug")
+    dbt_subparsers.add_parser("lineage")
     dbt_init_parser: argparse.ArgumentParser = dbt_subparsers.add_parser("init")
     dbt_init_parser.add_argument("--project-dir", dest="dbt_project_dir", default=None)
     dbt_init_parser.add_argument("--profiles-dir", dest="dbt_profiles_dir", default=None)
@@ -523,6 +524,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=args,
             no_color=no_color,
         ),
+        run_dbt_lineage=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.LINEAGE,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
         run_dbt_init=run_dbt_init_positional,
         run_build=run_build,
         run_freshness=run_freshness,
@@ -569,6 +576,7 @@ def _main_with_dependencies(
             "build",
             "test",
             "debug",
+            "lineage",
         }:
             args.dbt_args = unknown_args
         elif unknown_args:
@@ -663,6 +671,8 @@ def _main_with_dependencies(
                 return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
             if args.dbt_command == "debug":
                 return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "lineage":
+                return handlers.run_dbt_lineage(project_dir, tuple(args.dbt_args), args.no_color)
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(

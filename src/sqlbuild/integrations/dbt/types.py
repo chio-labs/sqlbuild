@@ -31,6 +31,23 @@ class DbtInteropCommand(StrEnum):
     BUILD = "build"
     TEST = "test"
     DEBUG = "debug"
+    LINEAGE = "lineage"
+
+
+class DbtLineageDirection(StrEnum):
+    """Traversal direction for mixed dbt/SQLBuild lineage."""
+
+    UPSTREAM = "upstream"
+    DOWNSTREAM = "downstream"
+    BOTH = "both"
+
+
+class DbtLineageOutputFormat(StrEnum):
+    """Output format for mixed dbt/SQLBuild lineage."""
+
+    TREE = "tree"
+    JSON = "json"
+    LIST = "list"
 
 
 class DbtInteropSqlbuildTestAction(StrEnum):

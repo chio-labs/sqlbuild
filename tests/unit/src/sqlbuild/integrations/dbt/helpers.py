@@ -30,20 +30,25 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.integrations.dbt.helpers.graph import (
+    build_dbt_combined_graph,
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
+from sqlbuild.integrations.dbt.helpers.lineage_selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
+    DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropSelectionResult,
+    DbtLineageGraph,
     DbtModelPlanEntry,
     DbtReusePlanEntry,
     DbtReusePlanningResult,
@@ -52,6 +57,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
+    DbtLineageDirection,
     DbtModelPlanAction,
     DbtModelPlanReason,
     DbtReusePlanAction,
@@ -634,6 +640,7 @@ def write_dbt_test_fingerprint(
         metadata_json="{}",
         ts=datetime.now(tz=UTC),
     )
+
     write_fingerprint(
         connection=connection,
         execute=adapter.execute,
@@ -644,6 +651,74 @@ def write_dbt_test_fingerprint(
         render_framework_type=adapter.render_framework_type,
         render_create_table_sql=adapter.render_create_fingerprint_table_sql,
         render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
+    )
+
+
+def build_lineage_manifest_data() -> dict[str, object]:
+    """Build manifest data for mixed dbt/SQLBuild lineage unit tests."""
+
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.stg_orders",
+                package_name="analytics",
+                name="stg_orders",
+                relation_name="analytics.stg_orders",
+                depends_on_nodes=("source.analytics.raw.orders",),
+            ),
+            build_manifest_model_node(
+                unique_id="model.analytics.int_orders",
+                package_name="analytics",
+                name="int_orders",
+                relation_name="analytics.int_orders",
+                depends_on_nodes=("model.analytics.stg_orders",),
+            ),
+        ),
+        sources=(
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                relation_name="raw.orders",
+            ),
+        ),
+    )
+
+
+def build_lineage_graph_for_output_test() -> DbtLineageGraph:
+    """Build a mixed lineage graph for output formatter tests."""
+
+    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=build_lineage_manifest_data())
+    project: CompiledProject = build_compiled_project_with_models(
+        {"fact_orders": 'select * from __dbt_ref("int_orders")'}
+    )
+    combined_graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    return select_dbt_lineage_target(
+        project=project,
+        manifest=manifest,
+        graph=combined_graph,
+        target="fact_orders",
+        direction=DbtLineageDirection.UPSTREAM,
+        depth=None,
+    )
+
+
+def build_depth_zero_lineage_graph_for_output_test() -> DbtLineageGraph:
+    """Build a single-node mixed lineage graph for output formatter tests."""
+
+    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=build_lineage_manifest_data())
+    project: CompiledProject = build_compiled_project_with_models(
+        {
+            "fact_orders": 'select * from __dbt_ref("int_orders")',
+            "mart_orders": 'select * from __ref("fact_orders")',
+        }
+    )
+    combined_graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    return select_dbt_lineage_target(
+        project=project,
+        manifest=manifest,
+        graph=combined_graph,
+        target="mart_orders",
+        direction=DbtLineageDirection.UPSTREAM,
+        depth=0,
     )
 
 

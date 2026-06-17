@@ -5,6 +5,8 @@ from pathlib import Path
 
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import (
+    DbtLineageDirection,
+    DbtLineageOutputFormat,
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
@@ -338,6 +340,59 @@ class DbtCombinedGraphTestCase:
     expected_downstream_keys: tuple[str, ...]
     expected_upstream_from: str
     expected_upstream_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageSelectionTestCase:
+    description: str
+    target: str
+    direction: DbtLineageDirection
+    depth: int | None
+    expected_node_ids: tuple[str, ...]
+    expected_edges: tuple[tuple[str, str], ...]
+    expected_focus_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageSelectionErrorTestCase:
+    description: str
+    target: str
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtLineageArgsTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_target: str
+    expected_output_format: DbtLineageOutputFormat
+    expected_direction: DbtLineageDirection
+    expected_depth: int | None
+    expected_no_sql_validation: bool
+    expected_dbt_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageArgsErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtLineageOutputTestCase:
+    description: str
+    output_format: DbtLineageOutputFormat
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageJsonOutputTestCase:
+    description: str
+    expected_node_metadata: tuple[tuple[str, str, object], ...]
+    expected_direction: str
 
 
 @dataclass(frozen=True)

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from shutil import copytree
+from typing import cast
 
 import pytest
 
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtLineageErrorE2ETestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
 
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"
@@ -78,6 +81,78 @@ def load_json_stdout(stdout: str) -> dict[str, object]:
     payload: object = json.loads(stdout)
     assert isinstance(payload, dict)
     return payload
+
+
+def assert_dbt_lineage_json_payload(
+    *,
+    payload: dict[str, object],
+    expected_node_ids: tuple[str, ...],
+    expected_edges: tuple[tuple[str, str], ...],
+    expected_focus: tuple[str, ...],
+    expected_direction: str,
+    expected_node_metadata: tuple[tuple[str, str, object], ...] = (),
+) -> None:
+    """Assert stable dbt lineage JSON output."""
+
+    nodes_payload: object = payload["nodes"]
+    edges_payload: object = payload["edges"]
+    focus_payload: object = payload["focus"]
+    assert isinstance(nodes_payload, Sequence)
+    assert isinstance(edges_payload, Sequence)
+    assert isinstance(focus_payload, Sequence)
+    nodes: list[Mapping[str, object]] = [
+        cast(Mapping[str, object], node) for node in nodes_payload if isinstance(node, dict)
+    ]
+    assert [node["id"] for node in nodes] == list(expected_node_ids)
+    assert [
+        (cast(Mapping[str, object], edge)["from"], cast(Mapping[str, object], edge)["to"])
+        for edge in edges_payload
+        if isinstance(edge, dict)
+    ] == list(expected_edges)
+    assert list(focus_payload) == list(expected_focus)
+    assert payload["direction"] == expected_direction
+    node_by_id: dict[str, Mapping[str, object]] = {str(node["id"]): node for node in nodes}
+    for node_id, metadata_key, expected_value in expected_node_metadata:
+        assert node_by_id[node_id][metadata_key] == expected_value, (
+            node_id,
+            metadata_key,
+            node_by_id[node_id][metadata_key],
+        )
+
+
+def remove_dbt_phase11_sqlbuild_models(*, project_dir: Path) -> None:
+    """Remove all SQLBuild model files from the focused dbt fixture."""
+
+    model_path: Path
+    for model_path in (project_dir / "models").glob("*.sql"):
+        model_path.unlink()
+
+
+def write_dbt_phase11_missing_ref_model(project_dir: Path) -> None:
+    """Make dbt compile fail before lineage can load a manifest."""
+
+    (project_dir.parent / "dbt_project" / "models" / "fact_orders.sql").write_text(
+        "select order_id from {{ ref('does_not_exist') }}\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_phase11_invalid_sqlbuild_model(project_dir: Path) -> None:
+    """Add a SQLBuild model that only compiles with SQL validation disabled."""
+
+    (project_dir / "models" / "invalid_sql.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT FROM\n",
+        encoding="utf-8",
+    )
+
+
+def apply_dbt_lineage_error_setup(
+    *, project_dir: Path, test_case: DbtLineageErrorE2ETestCase
+) -> None:
+    """Apply optional setup for a dbt lineage error E2E."""
+
+    if test_case.setup is not None:
+        test_case.setup(project_dir)
 
 
 def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
