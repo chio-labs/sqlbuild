@@ -430,7 +430,7 @@ def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
             description="formats dbt reuse plan in human and json output",
             command="build",
             dbt_command_argv=("dbt", "build"),
-            dbt_ls_unique_ids=("model.analytics.orders",),
+            dbt_ls_unique_ids=(),
             sqlbuild_command_argvs=(),
             selection_sqlbuild_model_names=(),
             selection_dbt_required_unique_ids=(),
@@ -438,12 +438,16 @@ def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
             selection_dbt_anchor_unique_ids_by_term={},
             selection_path_translations=(),
             warnings=(),
-            expected_dbt_skipped=False,
+            expected_dbt_skipped=True,
             expected_sqlbuild_skipped=True,
             expected_human_fragments=(
                 "Reuse plan",
-                "complete reuse: 1",
-                "seeded reuse: 1",
+                "reuse: 1",
+                "baseline reuse: 1",
+                "Reuse (1)",
+                "Baseline reuse (1)",
+                "model.analytics.orders",
+                "model.analytics.events",
             ),
             expected_json_fragments=(
                 '"reuse_plan"',
@@ -466,6 +470,26 @@ def test_given_dbt_reuse_plan_when_formatting_then_outputs_reuse_sections(
         ),
         sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
         selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.orders",
+                    package_name="analytics",
+                    name="orders",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.FIRST_RUN,
+                    relation_name="dev.orders",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.events",
+                    package_name="analytics",
+                    name="events",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.FIRST_RUN,
+                    relation_name="dev.events",
+                ),
+            )
+        ),
         dbt_reuse_plan=DbtReusePlanningResult(
             entries=(
                 DbtReusePlanEntry(
@@ -494,6 +518,76 @@ def test_given_dbt_reuse_plan_when_formatting_then_outputs_reuse_sections(
     assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
     for fragment in test_case.expected_human_fragments:
         assert fragment in human_output
+    for fragment in test_case.expected_json_fragments:
+        assert fragment in json_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanTestCase(
+            description="hides current-only reuse plan from non-verbose human output",
+            command="build",
+            dbt_command_argv=("dbt", "build"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=("Model plan",),
+            expected_json_fragments=('"reuse_plan"', '"current"'),
+        )
+    ],
+    ids=["hides current-only reuse plan from non-verbose human output"],
+)
+def test_given_current_only_dbt_reuse_plan_when_formatting_non_verbose_then_hides_reuse_section(
+    test_case: DbtPlanTestCase,
+) -> None:
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=test_case.command,
+        dbt_command_argv=test_case.dbt_command_argv,
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.orders",
+                    package_name="analytics",
+                    name="orders",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="dev.orders",
+                ),
+            )
+        ),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.orders",
+                    action=DbtReusePlanAction.CURRENT,
+                    reason=DbtReusePlanReason.DESTINATION_CURRENT,
+                ),
+            )
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=False,
+        display_options=DisplayOptions(max_entries_per_section=10),
+    )
+    json_output: str = format_dbt_interop_plan_json(plan)
+
+    assert (plan.dbt_skip_reason is not None) == test_case.expected_dbt_skipped
+    for fragment in test_case.expected_human_fragments:
+        assert fragment in human_output
+    assert "Reuse plan" not in human_output
     for fragment in test_case.expected_json_fragments:
         assert fragment in json_output
 

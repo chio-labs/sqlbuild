@@ -515,8 +515,8 @@ def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_
     "test_case",
     [
         DbtReuseFromE2ETestCase(
-            description="plain SQLBuild selection reuses missing dbt upstream from prod ref",
-            command=("dbt", "build", "--select", "downstream_orders"),
+            description="explicit upstream selection reuses missing dbt upstream from prod ref",
+            command=("dbt", "build", "--select", "+downstream_orders"),
             expected_destination_rows=((1, 900),),
             expected_downstream_rows=((1, 900),),
             expected_rerun_destination_rows=((1, 900),),
@@ -529,21 +529,25 @@ def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_
                 '"reuse_mode":"complete",'
                 '"status":"success"}'
             ),
-            expected_stdout_fragments=("Reused dbt relation: model.analytics.fact_orders",),
+            expected_stdout_fragments=(
+                "dbt reuse",
+                "model.analytics.fact_orders",
+                "OK     reuse",
+            ),
             expected_absent_relations=(("main", "unrelated_model"),),
             expected_absent_stdout_fragments=(
                 "depends on missing dbt relation",
                 "dbt execution",
             ),
             expected_rerun_absent_stdout_fragments=(
-                "Reused dbt relation: model.analytics.fact_orders",
+                "dbt reuse  pre-phase",
                 "dbt execution",
             ),
         )
     ],
-    ids=["plain SQLBuild selection reuses missing dbt upstream from prod ref"],
+    ids=["explicit upstream selection reuses missing dbt upstream from prod ref"],
 )
-def test_given_plain_sqlbuild_selection_with_reuse_from_when_dbt_ref_missing_then_reuses_prod_table(
+def test_given_explicit_upstream_selection_with_reuse_from_when_ref_missing_then_reuses_prod_table(
     tmp_path: Path,
     test_case: DbtReuseFromE2ETestCase,
 ) -> None:
@@ -623,17 +627,17 @@ def test_given_plain_sqlbuild_selection_with_reuse_from_when_dbt_ref_missing_the
     [
         DbtSeededReuseFromE2ETestCase(
             description="seeded reuse pre-seeds incremental relation before dbt catch-up",
-            command=("dbt", "build", "--select", "downstream_orders"),
+            command=("dbt", "build", "--select", "+downstream_orders"),
             expected_destination_rows=((1, 900), (2, 901)),
             expected_downstream_rows=((1, 900), (2, 901)),
             expected_stdout_fragments=(
-                "Seeded dbt relation: model.analytics.fact_orders",
+                "dbt reuse",
+                "model.analytics.fact_orders",
+                "OK     baseline reuse before dbt catch-up",
                 "dbt execution",
                 "SQLBuild execution",
             ),
-            expected_rerun_absent_stdout_fragments=(
-                "Seeded dbt relation: model.analytics.fact_orders",
-            ),
+            expected_rerun_absent_stdout_fragments=("dbt reuse  pre-phase",),
         )
     ],
     ids=["seeded reuse pre-seeds incremental relation before dbt catch-up"],
@@ -686,7 +690,7 @@ def test_given_seeded_reuse_from_when_incremental_model_runs_then_dbt_catches_up
     [
         DbtMultiNodeCompleteReuseFromE2ETestCase(
             description="multi-node complete reuse resumes after later origin failure",
-            command=("dbt", "build", "--select", "downstream_orders"),
+            command=("dbt", "build", "--select", "+downstream_orders"),
             failure_sql="DROP TABLE prod.orders_c",
             recovery_sql=(
                 "CREATE TABLE prod.orders_c AS SELECT 'orders_c' AS model_name, 900 AS amount"
@@ -707,13 +711,15 @@ def test_given_seeded_reuse_from_when_incremental_model_runs_then_dbt_catches_up
                 ("model.analytics.orders_c",),
             ),
             expected_absent_failed_relation=("main", "orders_c"),
-            expected_failed_absent_stdout_fragments=(
-                "Reused dbt relation: model.analytics.orders_c",
+            expected_failed_absent_stdout_fragments=("dbt reuse  pre-phase",),
+            expected_rerun_stdout_fragments=(
+                "dbt reuse",
+                "model.analytics.orders_c",
+                "OK     reuse",
             ),
-            expected_rerun_stdout_fragments=("Reused dbt relation: model.analytics.orders_c",),
             expected_rerun_absent_stdout_fragments=(
-                "Reused dbt relation: model.analytics.orders_a",
-                "Reused dbt relation: model.analytics.orders_b",
+                "model.analytics.orders_a        OK",
+                "model.analytics.orders_b        OK",
             ),
         )
     ],
@@ -791,7 +797,7 @@ def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rerun_re
             description=(
                 "multi-node seeded reuse resumes from live cursors after later origin failure"
             ),
-            command=("dbt", "build", "--select", "downstream_orders"),
+            command=("dbt", "build", "--select", "+downstream_orders"),
             failure_sql="DROP TABLE prod.orders_c",
             recovery_sql=(
                 "CREATE TABLE prod.orders_c AS "
@@ -800,13 +806,15 @@ def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rerun_re
             ),
             expected_failed_destination_rows=(("orders_a", 1, 900), ("orders_b", 1, 900)),
             expected_absent_failed_relation=("main", "orders_c"),
-            expected_failed_absent_stdout_fragments=(
-                "Seeded dbt relation: model.analytics.orders_c",
+            expected_failed_absent_stdout_fragments=("dbt reuse  pre-phase",),
+            expected_rerun_stdout_fragments=(
+                "dbt reuse",
+                "model.analytics.orders_c",
+                "OK     baseline reuse before dbt catch-up",
             ),
-            expected_rerun_stdout_fragments=("Seeded dbt relation: model.analytics.orders_c",),
             expected_rerun_absent_stdout_fragments=(
-                "Seeded dbt relation: model.analytics.orders_a",
-                "Seeded dbt relation: model.analytics.orders_b",
+                "model.analytics.orders_a        OK",
+                "model.analytics.orders_b        OK",
             ),
             expected_rerun_downstream_rows=(
                 ("orders_a", 1, 900),
@@ -877,17 +885,17 @@ def test_given_multi_node_seeded_reuse_when_later_origin_missing_then_rerun_uses
     [
         DbtSnapshotSeededReuseFromE2ETestCase(
             description="snapshot seeded reuse pre-seeds snapshot before dbt catch-up",
-            command=("dbt", "build", "--select", "downstream_orders"),
+            command=("dbt", "build", "--select", "+downstream_orders"),
             expected_destination_rows=((1, 900), (2, 901)),
             expected_downstream_rows=((1, 900), (2, 901)),
             expected_stdout_fragments=(
-                "Seeded dbt relation: snapshot.analytics.orders_snapshot",
+                "dbt reuse",
+                "snapshot.analytics.orders_snapshot",
+                "OK     baseline reuse before dbt catch-up",
                 "dbt execution",
                 "SQLBuild execution",
             ),
-            expected_rerun_absent_stdout_fragments=(
-                "Seeded dbt relation: snapshot.analytics.orders_snapshot",
-            ),
+            expected_rerun_absent_stdout_fragments=("dbt reuse  pre-phase",),
         )
     ],
     ids=["snapshot seeded reuse pre-seeds snapshot before dbt catch-up"],

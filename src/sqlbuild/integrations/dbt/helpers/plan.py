@@ -191,8 +191,9 @@ def _format_dbt_section(
     _format_dbt_resource_summary(lines, plan)
     if plan.dbt_skip_reason is not None:
         lines.append(style.muted(f"  skipped: {_dbt_skip_reason_label(plan.dbt_skip_reason)}"))
-        if plan.dbt_skip_reason == DbtInteropSkipReason.DBT_MODELS_CURRENT:
+        if plan.dbt_model_plan is not None:
             _format_dbt_model_plan(lines, plan, display_options=display_options)
+            _format_dbt_reuse_plan(lines, plan, display_options=display_options)
             _format_dbt_non_model_sections(lines, plan, display_options=display_options)
         return
     display_argv: str = _format_display_argv(
@@ -244,14 +245,26 @@ def _format_dbt_reuse_plan(
         return
     style: CliStyle = CliStyle(use_color=True)
     counts: Counter[DbtReusePlanAction] = Counter(entry.action for entry in entries)
+    has_actionable_reuse_output: bool = any(
+        counts[action] > 0
+        for action in (
+            DbtReusePlanAction.COMPLETE_REUSE,
+            DbtReusePlanAction.SEEDED_REUSE,
+            DbtReusePlanAction.REBUILD,
+            DbtReusePlanAction.BLOCKED,
+            DbtReusePlanAction.SKIPPED,
+        )
+    )
+    if not has_actionable_reuse_output and not _is_verbose(display_options):
+        return
     lines.append("")
     lines.append(f"  {style.plan_section('Reuse plan')}")
     lines.append(
         "    "
         + ", ".join(
             (
-                f"complete reuse: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
-                f"seeded reuse: {counts[DbtReusePlanAction.SEEDED_REUSE]}",
+                f"reuse: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
+                f"baseline reuse: {counts[DbtReusePlanAction.SEEDED_REUSE]}",
                 f"current: {counts[DbtReusePlanAction.CURRENT]}",
                 f"rebuild: {counts[DbtReusePlanAction.REBUILD]}",
                 f"blocked: {counts[DbtReusePlanAction.BLOCKED]}",
@@ -260,38 +273,66 @@ def _format_dbt_reuse_plan(
         )
     )
     if not _is_verbose(display_options):
+        _format_dbt_reuse_plan_action_entries(
+            lines,
+            entries=entries,
+            action=DbtReusePlanAction.COMPLETE_REUSE,
+            display_options=display_options,
+        )
+        _format_dbt_reuse_plan_action_entries(
+            lines,
+            entries=entries,
+            action=DbtReusePlanAction.SEEDED_REUSE,
+            display_options=display_options,
+        )
         return
 
-    name_column_width: int = resolve_name_column_width(tuple(entry.unique_id for entry in entries))
     action: DbtReusePlanAction
     for action in DbtReusePlanAction:
-        action_entries: tuple[DbtReusePlanEntry, ...] = tuple(
-            entry for entry in entries if entry.action == action
-        )
-        if not action_entries:
-            continue
-        section_label: str = f"{_dbt_reuse_plan_action_label(action)} ({len(action_entries)})"
-        lines.append(f"    {style.plan_section(section_label)}")
-        visible_action_entries: Sequence[DbtReusePlanEntry] = visible_entries(
-            action_entries, options=display_options
-        )
-        for entry in visible_action_entries:
-            lines.append(
-                "      "
-                + format_aligned_name_value(
-                    plain_name=entry.unique_id,
-                    styled_name=style.dbt_object_name(entry.unique_id),
-                    value=style.muted(_dbt_reuse_plan_reason_label(entry.reason)),
-                    name_column_width=name_column_width,
-                )
-            )
-        _append_dbt_overflow_line(
+        _format_dbt_reuse_plan_action_entries(
             lines,
-            total_count=len(action_entries),
-            visible_count=len(visible_action_entries),
-            indent="      ",
-            options=display_options,
+            entries=entries,
+            action=action,
+            display_options=display_options,
         )
+
+
+def _format_dbt_reuse_plan_action_entries(
+    lines: list[str],
+    *,
+    entries: tuple[DbtReusePlanEntry, ...],
+    action: DbtReusePlanAction,
+    display_options: DisplayOptions,
+) -> None:
+    action_entries: tuple[DbtReusePlanEntry, ...] = tuple(
+        entry for entry in entries if entry.action == action
+    )
+    if not action_entries:
+        return
+    style: CliStyle = CliStyle(use_color=True)
+    name_column_width: int = resolve_name_column_width(tuple(entry.unique_id for entry in entries))
+    section_label: str = f"{_dbt_reuse_plan_action_label(action)} ({len(action_entries)})"
+    lines.append(f"    {style.plan_section(section_label)}")
+    visible_action_entries: Sequence[DbtReusePlanEntry] = visible_entries(
+        action_entries, options=display_options
+    )
+    for entry in visible_action_entries:
+        lines.append(
+            "      "
+            + format_aligned_name_value(
+                plain_name=entry.unique_id,
+                styled_name=style.dbt_object_name(entry.unique_id),
+                value=style.muted(_dbt_reuse_plan_reason_label(entry.reason)),
+                name_column_width=name_column_width,
+            )
+        )
+    _append_dbt_overflow_line(
+        lines,
+        total_count=len(action_entries),
+        visible_count=len(visible_action_entries),
+        indent="      ",
+        options=display_options,
+    )
 
 
 def _format_dbt_model_plan(
@@ -566,9 +607,9 @@ def _dbt_model_plan_reason_section_label(reason: DbtModelPlanReason) -> str:
 
 def _dbt_reuse_plan_action_label(action: DbtReusePlanAction) -> str:
     if action == DbtReusePlanAction.COMPLETE_REUSE:
-        return "Complete reuse"
+        return "Reuse"
     if action == DbtReusePlanAction.SEEDED_REUSE:
-        return "Seeded reuse"
+        return "Baseline reuse"
     return action.value.replace("_", " ").title()
 
 

@@ -158,7 +158,7 @@ def assert_dbt_profile_lifecycle(
     add_dbt_profile_downstream_model(sqlbuild_project_dir=sqlbuild_project_dir)
 
     plain_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
         project_dir=sqlbuild_project_dir,
         env=env,
     )
@@ -305,25 +305,27 @@ def assert_dbt_complete_reuse_from_lifecycle(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
         project_dir=sqlbuild_project_dir,
         env=env,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Reused dbt relation: model.analytics.fact_orders" in result.stdout
+    assert "dbt reuse" in result.stdout
+    assert "model.analytics.fact_orders" in result.stdout
+    assert "OK     reuse" in result.stdout
     assert "dbt execution" not in result.stdout
     assert fetch_rows(destination_rows_sql) == expected_rows
     assert fetch_rows(downstream_rows_sql) == expected_rows
 
     rerun_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
         project_dir=sqlbuild_project_dir,
         env=env,
     )
 
     assert rerun_result.returncode == 0, rerun_result.stdout + rerun_result.stderr
-    assert "Reused dbt relation: model.analytics.fact_orders" not in rerun_result.stdout
+    assert "dbt reuse  pre-phase" not in rerun_result.stdout
 
 
 def assert_dbt_seeded_reuse_from_lifecycle(
@@ -370,25 +372,27 @@ def assert_dbt_seeded_reuse_from_lifecycle(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
         project_dir=sqlbuild_project_dir,
         env=env,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Seeded dbt relation: model.analytics.fact_orders" in result.stdout
+    assert "dbt reuse" in result.stdout
+    assert "model.analytics.fact_orders" in result.stdout
+    assert "OK     baseline reuse before dbt catch-up" in result.stdout
     assert "dbt execution" in result.stdout
     assert fetch_rows(destination_rows_sql) == expected_rows
     assert fetch_rows(downstream_rows_sql) == expected_rows
 
     rerun_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
         project_dir=sqlbuild_project_dir,
         env=env,
     )
 
     assert rerun_result.returncode == 0, rerun_result.stdout + rerun_result.stderr
-    assert "Seeded dbt relation: model.analytics.fact_orders" not in rerun_result.stdout
+    assert "dbt reuse  pre-phase" not in rerun_result.stdout
 
 
 def assert_dbt_snapshot_seeded_reuse_from_lifecycle(
@@ -444,13 +448,15 @@ def assert_dbt_snapshot_seeded_reuse_from_lifecycle(
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "downstream_orders"),
+        command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
         project_dir=sqlbuild_project_dir,
         env=env,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Seeded dbt relation: snapshot.analytics.orders_snapshot" in result.stdout
+    assert "dbt reuse" in result.stdout
+    assert "snapshot.analytics.orders_snapshot" in result.stdout
+    assert "OK     baseline reuse before dbt catch-up" in result.stdout
     assert "dbt execution" in result.stdout
     assert fetch_rows(destination_rows_sql) == expected_rows
     assert fetch_rows(downstream_rows_sql) == expected_rows
@@ -462,7 +468,7 @@ def assert_dbt_snapshot_seeded_reuse_from_lifecycle(
     )
 
     assert rerun_result.returncode == 0, rerun_result.stdout + rerun_result.stderr
-    assert "Seeded dbt relation: snapshot.analytics.orders_snapshot" not in rerun_result.stdout
+    assert "dbt reuse  pre-phase" not in rerun_result.stdout
 
 
 def _prepare_dbt_reuse_workspace(
