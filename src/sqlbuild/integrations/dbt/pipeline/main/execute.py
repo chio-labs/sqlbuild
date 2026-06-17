@@ -67,12 +67,14 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
-    find_direct_dbt_dependency_unique_ids,
     resolve_connection_config,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
     execute_dbt_seeded_reuse_plan,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.reuse_output import (
+    format_dbt_reuse_execution_output,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
 from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
@@ -87,7 +89,8 @@ from sqlbuild.integrations.dbt.types import (
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
 
 def execute_dbt_interop_from_project(
@@ -205,11 +208,6 @@ def execute_dbt_interop_from_project(
                     (
                         *plan.dbt_selected_unique_ids,
                         *plan.selection.dbt_required_unique_ids,
-                        *find_direct_dbt_dependency_unique_ids(
-                            project=project,
-                            manifest=manifest,
-                            selected_model_names=plan.selection.sqlbuild_model_names,
-                        ),
                     )
                 )
             )
@@ -221,15 +219,36 @@ def execute_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
-    dbt_reuse_plan: DbtReusePlanningResult | None = build_dbt_reuse_plan_output(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        current_manifest=manifest,
-        dbt_model_plan=dbt_model_plan,
-        plan=plan,
-        dbt_options=dbt_options,
-        runner=runner,
+    reuse_git_ref: str | None = None
+    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
+    if reuse_from.git_ref is not None and reuse_from.generate_schema_name_override is not None:
+        reuse_git_ref = reuse_from.git_ref
+    has_explicit_dbt_reuse_scope: bool = bool(
+        plan.dbt_selected_unique_ids
+        or plan.selection.dbt_required_unique_ids
+        or plan.selection.dbt_anchor_unique_ids_by_term
     )
+    reuse_plan_start: float | None = None
+    if reuse_git_ref is not None and has_explicit_dbt_reuse_scope:
+        reuse_plan_start = time.monotonic()
+        _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
+    dbt_reuse_plan: DbtReusePlanningResult | None = None
+    if has_explicit_dbt_reuse_scope:
+        dbt_reuse_plan = build_dbt_reuse_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            current_manifest=manifest,
+            dbt_model_plan=dbt_model_plan,
+            plan=plan,
+            dbt_options=dbt_options,
+            runner=runner,
+        )
+    if reuse_plan_start is not None:
+        _report_progress(
+            on_progress,
+            f"Planned dbt reuse from git ref '{reuse_git_ref}'. "
+            f"({time.monotonic() - reuse_plan_start:.2f}s)",
+        )
     if dbt_reuse_plan is not None:
         plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
     connection_config: dict[str, object] = resolve_connection_config(
@@ -239,10 +258,16 @@ def execute_dbt_interop_from_project(
         discovered_inputs=discovered_inputs,
     )
     dbt_fingerprint_warnings: list[str] = []
+    reused_dbt_unique_ids: tuple[str, ...] = ()
+    baseline_reused_dbt_unique_ids: tuple[str, ...] = ()
     if _has_physical_dbt_reuse_work(plan):
+        reuse_status: TransientStatusReporter | None = None
+        if hasattr(output_stream, "isatty") and output_stream.isatty():
+            reuse_status = TransientStatusReporter(stream=output_stream, use_color=use_color)
+            reuse_status.start("Preparing dbt reuse relations...")
         reuse_connection: object = adapter.connect(connection_config)
         try:
-            reused_dbt_unique_ids: tuple[str, ...] = execute_dbt_complete_reuse_plan(
+            reused_dbt_unique_ids = execute_dbt_complete_reuse_plan(
                 adapter=adapter,
                 connection=reuse_connection,
                 manifest=manifest,
@@ -253,19 +278,15 @@ def execute_dbt_interop_from_project(
                 target_name=project.effective_target_name,
                 warnings=dbt_fingerprint_warnings,
             )
-            seeded_dbt_unique_ids: tuple[str, ...] = execute_dbt_seeded_reuse_plan(
+            baseline_reused_dbt_unique_ids = execute_dbt_seeded_reuse_plan(
                 adapter=adapter,
                 connection=reuse_connection,
                 manifest=manifest,
                 plan=plan,
             )
-            for reused_dbt_unique_id in reused_dbt_unique_ids:
-                output_stream.write(f"Reused dbt relation: {reused_dbt_unique_id}\n")
-            for seeded_dbt_unique_id in seeded_dbt_unique_ids:
-                output_stream.write(f"Seeded dbt relation: {seeded_dbt_unique_id}\n")
-            if reused_dbt_unique_ids or seeded_dbt_unique_ids:
-                output_stream.flush()
         finally:
+            if reuse_status is not None:
+                reuse_status.close()
             adapter.close(reuse_connection)
     plan = replace(
         plan,
@@ -354,6 +375,18 @@ def execute_dbt_interop_from_project(
             display_options=DisplayOptions(max_entries_per_section=None if verbose else 10),
         )
         output_stream.write(rendered_plan + "\n\n")
+        reuse_execution_output: str = ""
+        if plan.dbt_reuse_plan is not None:
+            reuse_execution_output = format_dbt_reuse_execution_output(
+                plan=plan.dbt_reuse_plan,
+                reused_unique_ids=reused_dbt_unique_ids,
+                baseline_reused_unique_ids=baseline_reused_dbt_unique_ids,
+                use_color=use_color,
+                dbt_execution_will_run=merged_dbt_argv is not None,
+                display_options=DisplayOptions(max_entries_per_section=None if verbose else 10),
+            )
+        if reuse_execution_output:
+            output_stream.write(reuse_execution_output + "\n\n")
         output_stream.flush()
 
     buffered_dbt_results: list[DbtNodeExecutionResult] = []

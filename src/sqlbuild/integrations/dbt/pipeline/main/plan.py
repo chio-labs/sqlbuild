@@ -48,11 +48,10 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
-    find_direct_dbt_dependency_unique_ids,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import build_dbt_reuse_plan_output
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
 
 def plan_dbt_interop_from_project(
@@ -161,11 +160,6 @@ def plan_dbt_interop_from_project(
                     (
                         *plan.dbt_selected_unique_ids,
                         *plan.selection.dbt_required_unique_ids,
-                        *find_direct_dbt_dependency_unique_ids(
-                            project=project,
-                            manifest=manifest,
-                            selected_model_names=plan.selection.sqlbuild_model_names,
-                        ),
                     )
                 )
             )
@@ -183,15 +177,33 @@ def plan_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
-    dbt_reuse_plan: DbtReusePlanningResult | None = build_dbt_reuse_plan_output(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        current_manifest=manifest,
-        dbt_model_plan=dbt_model_plan,
-        plan=plan,
-        dbt_options=dbt_options,
-        runner=runner,
+    reuse_git_ref: str | None = _dbt_reuse_git_ref(discovered_inputs)
+    has_explicit_dbt_reuse_scope: bool = bool(
+        plan.dbt_selected_unique_ids
+        or plan.selection.dbt_required_unique_ids
+        or plan.selection.dbt_anchor_unique_ids_by_term
     )
+    reuse_plan_start: float | None = None
+    if reuse_git_ref is not None and has_explicit_dbt_reuse_scope:
+        reuse_plan_start = time.monotonic()
+        _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
+    dbt_reuse_plan: DbtReusePlanningResult | None = None
+    if has_explicit_dbt_reuse_scope:
+        dbt_reuse_plan = build_dbt_reuse_plan_output(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            current_manifest=manifest,
+            dbt_model_plan=dbt_model_plan,
+            plan=plan,
+            dbt_options=dbt_options,
+            runner=runner,
+        )
+    if reuse_plan_start is not None:
+        _report_progress(
+            on_progress,
+            f"Planned dbt reuse from git ref '{reuse_git_ref}'. "
+            f"({time.monotonic() - reuse_plan_start:.2f}s)",
+        )
     if dbt_reuse_plan is not None:
         plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
     plan = replace(
@@ -246,3 +258,10 @@ def plan_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _dbt_reuse_git_ref(discovered_inputs: DiscoveredProjectInputs) -> str | None:
+    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
+    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
+        return None
+    return reuse_from.git_ref

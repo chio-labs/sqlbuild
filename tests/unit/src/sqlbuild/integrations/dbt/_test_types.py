@@ -93,6 +93,26 @@ class DbtExecutionSpacingTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseExecutionOutputTestCase:
+    description: str
+    reused_unique_ids: tuple[str, ...]
+    baseline_reused_unique_ids: tuple[str, ...]
+    max_entries_per_section: int | None
+    dbt_execution_will_run: bool
+    expected_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...] = ()
+    expected_color_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtReuseExecutionOrderingTestCase:
+    description: str
+    expected_ordered_fragments: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtEventParseTestCase:
     description: str
     event: dict[str, object]
