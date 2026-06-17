@@ -55,6 +55,32 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
     )
 
 
+def build_bigquery_dependency_baseline_project_toml(
+    *, project_name: str, dev_dataset_name: str, prod_dataset_name: str
+) -> str:
+    config: dict[str, object] = build_bigquery_connection_config(schema=dev_dataset_name)
+    project_id: str = str(config["project"])
+    location: str = str(config["location"])
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "bigquery"\n'
+        'default_target = "dev"\n\n'
+        "[connection]\n"
+        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
+        f'location = "{location}"\n\n'
+        "[targets.prod]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{prod_dataset_name}"\n\n'
+        "[targets.dev]\n"
+        f'database = "{project_id}"\n'
+        f'schema = "{dev_dataset_name}"\n'
+        'reuse_from = "prod"\n'
+        "reuse_hard_copy = true\n\n"
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def assert_bigquery_seeded_reuse_case(
     *,
     tmp_path: Path,

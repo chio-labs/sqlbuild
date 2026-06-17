@@ -45,6 +45,30 @@ def build_postgres_project_toml(
     )
 
 
+def build_postgres_dependency_baseline_project_toml(
+    *, project_name: str, dev_schema_name: str, prod_schema_name: str, config: dict[str, object]
+) -> str:
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "postgres"\n'
+        'default_target = "dev"\n\n'
+        "[connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n\n'
+        "[targets.prod]\n"
+        f'schema = "{prod_schema_name}"\n\n'
+        "[targets.dev]\n"
+        f'schema = "{dev_schema_name}"\n'
+        'reuse_from = "prod"\n'
+        "reuse_hard_copy = true\n\n"
+        "[defaults]\n"
+        'materialized = "table"\n'
+    )
+
+
 def assert_postgres_seeded_reuse_case(
     *,
     tmp_path: Path,

@@ -33,6 +33,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
     SqlServerDbtProfileE2ETestCase,
     SqlServerDbtReuseFromE2ETestCase,
+    SqlServerDependencyBaselineE2ETestCase,
     SqlServerIntermediateDagStrategyE2ETestCase,
     SqlServerJanitorDetachedVdeE2ETestCase,
     SqlServerLoaderWaffleShopE2ETestCase,
@@ -52,6 +53,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     adapt_sqlserver_project_files,
     adapt_sqlserver_sql,
     assert_current_sqlserver_snapshot_rows_from_case,
+    assert_sqlserver_dependency_baseline_case,
     assert_sqlserver_seeded_reuse_case,
     assert_sqlserver_snapshot_apply_rows,
     assert_sqlserver_snapshot_matrix_rows,
@@ -68,6 +70,37 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     prepare_sqlserver_waffle_shop,
     relation_name,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerDependencyBaselineE2ETestCase(
+            description="direct dependency baseline copies prod upstream on SQL Server",
+            schema_prefix="sqb_dep_base",
+            command=("--no-color", "build", "--select", "downstream"),
+            expected_stdout_fragments=(
+                "Plan ready (1 selected)",
+                "Dependency baseline (1)",
+                "upstream",
+                "baseline reuse",
+                "downstream",
+                "Completed successfully.",
+            ),
+            expected_absent_stdout_fragments=("cannot build selected scope",),
+            expected_upstream_rows=((1, 900),),
+            expected_downstream_rows=((1, 900),),
+            expected_fingerprint_rows=(("model", "downstream"),),
+        )
+    ],
+    ids=["direct dependency baseline copies prod upstream on SQL Server"],
+)
+def test_given_downstream_selection_when_sqlserver_upstream_missing_then_baselines_from_prod(
+    tmp_path: Path,
+    test_case: SqlServerDependencyBaselineE2ETestCase,
+) -> None:
+    assert test_case.expected_upstream_rows == ((1, 900),)
+    assert_sqlserver_dependency_baseline_case(tmp_path=tmp_path, test_case=test_case)
 
 
 @pytest.mark.dbt
