@@ -396,6 +396,37 @@ class DbtLineageJsonOutputTestCase:
 
 
 @dataclass(frozen=True)
+class DbtColumnLineageSelectionTestCase:
+    description: str
+    target: str
+    direction: DbtLineageDirection
+    expected_edges: tuple[tuple[str, str], ...]
+    expected_warnings: tuple[str, ...] = ()
+    depth: int | None = None
+    expected_target: tuple[str, str, str] | None = None
+    expected_truncated: bool = False
+    expected_transforms: tuple[str, ...] = ()
+    expected_confidences: tuple[str, ...] = ()
+    expected_is_column_target: bool = True
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageErrorTestCase:
+    description: str
+    target: str
+    direction: DbtLineageDirection
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageOutputTestCase:
+    description: str
+    output_format: DbtLineageOutputFormat
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtArgRoutingTestCase:
     description: str
     command: str

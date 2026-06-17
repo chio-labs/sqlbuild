@@ -145,6 +145,16 @@ class DbtLineageE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtColumnLineageE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_target: tuple[str, str, str]
+    expected_edges: tuple[tuple[str, str], ...]
+    expected_direction: str
+    expected_warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class DbtLineageTextE2ETestCase:
     description: str
     command: tuple[str, ...]

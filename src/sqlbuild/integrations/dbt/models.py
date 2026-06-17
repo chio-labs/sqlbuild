@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
@@ -23,6 +24,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
+from sqlbuild.spec.models.source import SourceColumnEntry
 
 
 @dataclass(frozen=True)
@@ -427,6 +429,27 @@ class DbtLineageGraph:
     edges: tuple[tuple[DbtCombinedGraphKey, DbtCombinedGraphKey], ...]
     focus_keys: tuple[DbtCombinedGraphKey, ...] = field(default_factory=tuple)
     direction: DbtLineageDirection | None = None
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageTrace:
+    """Selected mixed dbt/SQLBuild column lineage trace."""
+
+    target: QualifiedLineageColumn
+    trace: tuple[ColumnLineageEdge, ...]
+    direction: DbtLineageDirection
+    max_depth: int | None
+    analyzed_model_count: int
+    truncated: bool = False
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtSourceSchemaInspectionResult:
+    """Best-effort dbt source schemas for column lineage analysis."""
+
+    columns_by_unique_id: dict[str, tuple[SourceColumnEntry, ...]]
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

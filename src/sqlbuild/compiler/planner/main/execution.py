@@ -148,6 +148,7 @@ def build_execution_plan(
         local_config=local_config,
         defer_sources_to=defer_sources_to,
         source_deferral_enabled=source_deferral_enabled,
+        require_source_deferral_config=False,
     )
     if on_progress is not None:
         on_progress(f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)")
@@ -295,12 +296,34 @@ def build_execution_plan(
         scope,
         selected_keys=scope.selected_keys & reusable_dependency_baseline_keys,
     )
+    execution_relations: PlannerRelationsContext = build_planner_relations_context(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        scope=execution_scope,
+        deferred_locations=deferred_locations,
+        project_config=project_config,
+        local_config=local_config,
+        defer_sources_to=defer_sources_to,
+        source_deferral_enabled=source_deferral_enabled,
+    )
+    dependency_baseline_relations: PlannerRelationsContext = build_planner_relations_context(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        scope=dependency_baseline_scope,
+        deferred_locations=deferred_locations,
+        project_config=project_config,
+        local_config=local_config,
+        defer_sources_to=defer_sources_to,
+        source_deferral_enabled=source_deferral_enabled,
+    )
     dependency_baseline_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
         scope=dependency_baseline_scope,
         snapshot=snapshot,
-        relations=relations,
+        relations=dependency_baseline_relations,
         resolved_actions=resolved_actions,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
@@ -323,7 +346,7 @@ def build_execution_plan(
         adapter=adapter,
         scope=execution_scope,
         snapshot=snapshot,
-        relations=relations,
+        relations=execution_relations,
         resolved_actions=resolved_actions,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,

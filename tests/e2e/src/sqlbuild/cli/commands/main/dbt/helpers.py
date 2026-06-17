@@ -120,6 +120,49 @@ def assert_dbt_lineage_json_payload(
         )
 
 
+def assert_dbt_column_lineage_json_payload(
+    *,
+    payload: dict[str, object],
+    expected_target: tuple[str, str, str],
+    expected_edges: tuple[tuple[str, str], ...],
+    expected_direction: str,
+    expected_warnings: tuple[str, ...] = (),
+) -> None:
+    """Assert stable dbt column lineage JSON output."""
+
+    target_payload: object = payload["target"]
+    trace_payload: object = payload["trace"]
+    metadata_payload: object = payload["metadata"]
+    assert isinstance(target_payload, dict)
+    assert isinstance(trace_payload, Sequence)
+    assert isinstance(metadata_payload, dict)
+    target: Mapping[str, object] = cast(Mapping[str, object], target_payload)
+    metadata: Mapping[str, object] = cast(Mapping[str, object], metadata_payload)
+    assert (
+        target["resource_type"],
+        target["resource_name"],
+        target["column_name"],
+    ) == expected_target
+    assert [
+        (
+            _column_payload_id(
+                cast(Mapping[str, object], cast(Mapping[str, object], edge)["source"])
+            ),
+            _column_payload_id(
+                cast(Mapping[str, object], cast(Mapping[str, object], edge)["target"])
+            ),
+        )
+        for edge in trace_payload
+        if isinstance(edge, dict)
+    ] == list(expected_edges)
+    assert payload["direction"] == expected_direction
+    assert metadata["warnings"] == list(expected_warnings), metadata["warnings"]
+
+
+def _column_payload_id(column: Mapping[str, object]) -> str:
+    return f"{column['resource_name']}:{column['column_name']}"
+
+
 def remove_dbt_phase11_sqlbuild_models(*, project_dir: Path) -> None:
     """Remove all SQLBuild model files from the focused dbt fixture."""
 
@@ -143,6 +186,31 @@ def write_dbt_phase11_invalid_sqlbuild_model(project_dir: Path) -> None:
     (project_dir / "models" / "invalid_sql.sql").write_text(
         "MODEL (materialized table);\n\nSELECT FROM\n",
         encoding="utf-8",
+    )
+
+
+def write_dbt_phase11_star_lineage_models(project_dir: Path) -> None:
+    """Use SELECT * dbt models to exercise adapter-described source schemas."""
+
+    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
+    (dbt_models_dir / "stg_orders.sql").write_text(
+        "select * from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "fact_orders.sql").write_text(
+        "select * from {{ ref('stg_orders') }}\n",
+        encoding="utf-8",
+    )
+
+
+def drop_dbt_phase11_orders_source_table(project_dir: Path) -> None:
+    """Remove the physical source table while keeping the dbt source definition."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    execute_duckdb(
+        db_path=project_dir / "dbt_phase11.duckdb",
+        sql="DROP TABLE IF EXISTS main.raw_orders",
     )
 
 
