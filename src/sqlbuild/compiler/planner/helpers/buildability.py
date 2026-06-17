@@ -14,6 +14,7 @@ def check_buildability(
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     snapshot: WarehouseSnapshot,
     deferred_relations: dict[str, RelationInfo] | None = None,
+    satisfied_keys: frozenset[CompiledObjectKey] = frozenset(),
 ) -> tuple[MissingUpstream, ...]:
     """Validate that all upstream deps for selected keys exist in scope or warehouse.
 
@@ -34,6 +35,8 @@ def check_buildability(
             if dep_key.resource_type == CompiledResourceType.SOURCE:
                 continue
             if dep_key in selected_keys:
+                continue
+            if dep_key in satisfied_keys:
                 continue
             if dep_key.name in snapshot.existing_relations:
                 continue

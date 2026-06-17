@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.display_plan import build_display_only_sqlbuild_plan
 from sqlbuild.compiler.planner.main.execution import build_execution_plan
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    CursorOverrides,
+    DependencyBaselinePlanEntry,
+    PlanOutput,
+)
 from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
@@ -74,6 +79,31 @@ def find_sqlbuild_models_with_missing_dbt_relations(
     return {name: tuple(models) for name, models in blocked.items()}
 
 
+def find_direct_dbt_dependency_unique_ids(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    selected_model_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return direct dbt refs needed by selected SQLBuild models."""
+
+    selected_names: frozenset[str] = frozenset(selected_model_names)
+    unique_ids: set[str] = set()
+    for model in project.models:
+        if model.name not in selected_names:
+            continue
+        for reference in model.references:
+            if reference.ref_kind != SqlReferenceKind.DBT_REF:
+                continue
+            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
+                manifest=manifest,
+                package_name=reference.ref_package,
+                name=reference.ref_name,
+            )
+            unique_ids.add(dbt_model.unique_id)
+    return tuple(sorted(unique_ids))
+
+
 def build_sqlbuild_plan_output(
     *,
     project_dir: Path,
@@ -91,6 +121,7 @@ def build_sqlbuild_plan_output(
     on_connection_complete: Callable[[int, float], None] | None,
     on_connection_error: Callable[[int, float], None] | None,
     deferred_relations: dict[str, RelationInfo] | None = None,
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
 ) -> PlanOutput | None:
     del required_dbt_unique_ids
     if not selected_model_names:
@@ -115,7 +146,7 @@ def build_sqlbuild_plan_output(
         on_connection_complete(1, time.monotonic() - start)
     try:
         try:
-            return build_execution_plan(
+            plan_output: PlanOutput = build_execution_plan(
                 project=project,
                 adapter=adapter,
                 connection=connection,
@@ -131,6 +162,13 @@ def build_sqlbuild_plan_output(
                 ),
                 on_progress=on_progress,
                 deferred_relations=deferred_relations,
+            )
+            return replace(
+                plan_output,
+                dependency_baseline_entries=(
+                    *dependency_baseline_entries,
+                    *plan_output.dependency_baseline_entries,
+                ),
             )
         except PlannerInputError:
             return build_display_only_sqlbuild_plan(

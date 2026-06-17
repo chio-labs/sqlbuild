@@ -421,6 +421,17 @@ class RelationReusePlan:
 
 
 @dataclass(frozen=True)
+class DependencyBaselinePlanEntry:
+    """Physical dependency relation prepared before selected work executes."""
+
+    name: str
+    destination: CompiledRelationLocation
+    relation_reuse: RelationReusePlan
+    fingerprint_version_hash: str | None
+    resource_label: str = "table"
+
+
+@dataclass(frozen=True)
 class ModelPlanEntry:
     """Per-model execution plan entry with action, reason, and resolved artifacts."""
 
@@ -770,6 +781,9 @@ class PlanOutput:
 
     execution_order: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = field(
+        default_factory=tuple
+    )
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = field(default_factory=tuple)
     function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)

@@ -110,6 +110,28 @@ class DbtSeededReuseFromE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtDependencyBaselineReuseFromE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_destination_rows: tuple[tuple[object, ...], ...]
+    expected_downstream_rows: tuple[tuple[object, ...], ...]
+    expected_dbt_fingerprint_rows: tuple[tuple[object, ...], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDependencyBaselinePlanJsonE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_selected_models: tuple[str, ...]
+    expected_seeded_reuse_unique_ids: tuple[str, ...]
+    expected_entry_action: str
+    expected_entry_reason: str
+    expected_entry_materialization: str
+
+
+@dataclass(frozen=True)
 class DbtMultiNodeCompleteReuseFromE2ETestCase:
     description: str
     command: tuple[str, ...]
