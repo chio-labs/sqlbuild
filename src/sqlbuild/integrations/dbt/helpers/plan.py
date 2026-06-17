@@ -147,6 +147,7 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
             "skip_reason": plan.dbt_skip_reason.value if plan.dbt_skip_reason is not None else None,
             "model_plan": _format_dbt_model_plan_json(plan),
             "reuse_plan": _format_dbt_reuse_plan_json(plan),
+            "dependency_baseline_plan": _format_dbt_dependency_baseline_plan_json(plan),
         },
         "sqlbuild": {
             "argvs": [list(argv) for argv in plan.sqlbuild_command_argvs],
@@ -332,6 +333,45 @@ def _format_dbt_reuse_plan_action_entries(
         visible_count=len(visible_action_entries),
         indent="      ",
         options=display_options,
+    )
+
+
+def _format_dbt_dependency_baseline_plan(
+    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+) -> None:
+    if plan.dbt_dependency_baseline_plan is None:
+        return
+    entries: tuple[DbtReusePlanEntry, ...] = tuple(
+        entry
+        for entry in plan.dbt_dependency_baseline_plan.entries
+        if entry.action in {DbtReusePlanAction.COMPLETE_REUSE, DbtReusePlanAction.SEEDED_REUSE}
+    )
+    if not entries:
+        return
+    style: CliStyle = CliStyle(use_color=True)
+    counts: Counter[DbtReusePlanAction] = Counter(entry.action for entry in entries)
+    lines.append("")
+    lines.append(f"  {style.plan_section('Dependency baseline')}")
+    lines.append(
+        "    "
+        + ", ".join(
+            (
+                f"reuse: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
+                f"baseline: {counts[DbtReusePlanAction.SEEDED_REUSE]}",
+            )
+        )
+    )
+    _format_dbt_reuse_plan_action_entries(
+        lines,
+        entries=entries,
+        action=DbtReusePlanAction.COMPLETE_REUSE,
+        display_options=display_options,
+    )
+    _format_dbt_reuse_plan_action_entries(
+        lines,
+        entries=entries,
+        action=DbtReusePlanAction.SEEDED_REUSE,
+        display_options=display_options,
     )
 
 
@@ -811,6 +851,38 @@ def _format_dbt_reuse_plan_json(plan: DbtInteropPlan) -> dict[str, object] | Non
         "complete_reuse_unique_ids": list(plan.dbt_reuse_plan.complete_reuse_unique_ids),
         "seeded_reuse_unique_ids": list(plan.dbt_reuse_plan.seeded_reuse_unique_ids),
         "rebuild_unique_ids": list(plan.dbt_reuse_plan.rebuild_unique_ids),
+        "entries": [
+            {
+                "unique_id": entry.unique_id,
+                "action": entry.action.value,
+                "reason": entry.reason.value,
+                "materialization": entry.materialization,
+                "destination_relation_name": entry.destination_relation_name,
+                "origin_relation_name": entry.origin_relation_name,
+                "dbt_plan_action": entry.dbt_plan_action.value
+                if entry.dbt_plan_action is not None
+                else None,
+                "dbt_plan_reason": entry.dbt_plan_reason.value
+                if entry.dbt_plan_reason is not None
+                else None,
+                "skip_reason": entry.skip_reason.value if entry.skip_reason is not None else None,
+            }
+            for entry in entries
+        ],
+    }
+
+
+def _format_dbt_dependency_baseline_plan_json(
+    plan: DbtInteropPlan,
+) -> dict[str, object] | None:
+    if plan.dbt_dependency_baseline_plan is None:
+        return None
+    entries: tuple[DbtReusePlanEntry, ...] = plan.dbt_dependency_baseline_plan.entries
+    return {
+        "complete_reuse_unique_ids": list(
+            plan.dbt_dependency_baseline_plan.complete_reuse_unique_ids
+        ),
+        "seeded_reuse_unique_ids": list(plan.dbt_dependency_baseline_plan.seeded_reuse_unique_ids),
         "entries": [
             {
                 "unique_id": entry.unique_id,

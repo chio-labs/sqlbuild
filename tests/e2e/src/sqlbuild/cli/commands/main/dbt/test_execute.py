@@ -9,6 +9,8 @@ from typing import cast
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtDependencyBaselinePlanJsonE2ETestCase,
+    DbtDependencyBaselineReuseFromE2ETestCase,
     DbtExecutionCliTestCase,
     DbtExecutionFailureCliTestCase,
     DbtExecutionQueryAssertion,
@@ -940,6 +942,124 @@ def test_given_snapshot_seeded_reuse_from_when_snapshot_runs_then_dbt_catches_up
     absent_stdout_fragment: str
     for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
         assert absent_stdout_fragment not in rerun_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtDependencyBaselineReuseFromE2ETestCase(
+            description=("plain sqlbuild selection baselines dbt dependency without dbt catch-up"),
+            command=("dbt", "build", "--select", "downstream_orders"),
+            expected_destination_rows=((1, 900),),
+            expected_downstream_rows=((1, 900),),
+            expected_dbt_fingerprint_rows=(),
+            expected_stdout_fragments=(
+                "dbt (0 selected resources)",
+                "Dependency baseline",
+                "model.analytics.fact_orders",
+                "baseline reuse",
+                "Skipping dbt: no dbt work selected.",
+                "SQLBuild execution",
+            ),
+            expected_absent_stdout_fragments=(
+                "depends on missing dbt relation",
+                "dbt execution",
+                "baseline reuse before dbt catch-up",
+            ),
+        )
+    ],
+    ids=["plain sqlbuild selection baselines dbt dependency without dbt catch-up"],
+)
+def test_given_plain_selection_with_reuse_from_when_dbt_ref_missing_then_baselines_dependency(
+    tmp_path: Path,
+    test_case: DbtDependencyBaselineReuseFromE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_seeded_reuse_from_project(tmp_path=tmp_path)
+    db_path: Path = project_dir / "dbt_seeded_reuse_from.duckdb"
+    assert table_exists(db_path=db_path, table_name="fact_orders", schema="prod")
+    assert not table_exists(db_path=db_path, table_name="fact_orders", schema="main")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_absent_stdout_fragments:
+        assert absent_stdout_fragment not in result.stdout
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
+    ) == list(test_case.expected_destination_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id",
+    ) == list(test_case.expected_downstream_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_type, node_name FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'dbt' ORDER BY node_name"
+        ),
+    ) == list(test_case.expected_dbt_fingerprint_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtDependencyBaselinePlanJsonE2ETestCase(
+            description="plain sqlbuild selection exposes dbt dependency baseline in JSON",
+            command=("dbt", "plan", "--json", "--select", "downstream_orders"),
+            expected_selected_models=("downstream_orders",),
+            expected_seeded_reuse_unique_ids=("model.analytics.fact_orders",),
+            expected_entry_action="seeded_reuse",
+            expected_entry_reason="fingerprint_missing",
+            expected_entry_materialization="incremental",
+        )
+    ],
+    ids=["plain sqlbuild selection exposes dbt dependency baseline in JSON"],
+)
+def test_given_plain_selection_with_reuse_from_when_planning_json_then_shows_dependency_baseline(
+    tmp_path: Path,
+    test_case: DbtDependencyBaselinePlanJsonE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_seeded_reuse_from_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload: dict[str, object] = load_json_stdout(result.stdout)
+    sqlbuild_payload: object = payload["sqlbuild"]
+    assert isinstance(sqlbuild_payload, dict)
+    typed_sqlbuild_payload: Mapping[str, object] = cast(Mapping[str, object], sqlbuild_payload)
+    assert typed_sqlbuild_payload["selected_models"] == list(test_case.expected_selected_models)
+    dbt_payload: object = payload["dbt"]
+    assert isinstance(dbt_payload, dict)
+    typed_dbt_payload: Mapping[str, object] = cast(Mapping[str, object], dbt_payload)
+    baseline_payload: object = typed_dbt_payload["dependency_baseline_plan"]
+    assert isinstance(baseline_payload, dict)
+    typed_baseline_payload: Mapping[str, object] = cast(Mapping[str, object], baseline_payload)
+    assert typed_baseline_payload["seeded_reuse_unique_ids"] == list(
+        test_case.expected_seeded_reuse_unique_ids
+    )
+    entries_payload: object = typed_baseline_payload["entries"]
+    assert isinstance(entries_payload, list)
+    assert len(entries_payload) == 1
+    entry_payload: object = entries_payload[0]
+    assert isinstance(entry_payload, dict)
+    typed_entry_payload: Mapping[str, object] = cast(Mapping[str, object], entry_payload)
+    assert typed_entry_payload["action"] == test_case.expected_entry_action
+    assert typed_entry_payload["reason"] == test_case.expected_entry_reason
+    assert typed_entry_payload["materialization"] == test_case.expected_entry_materialization
 
 
 @pytest.mark.parametrize(

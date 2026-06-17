@@ -33,6 +33,14 @@ class StandardReuseFromTargetPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class StandardDependencyBaselinePlanOutputTestCase:
+    description: str
+    selected_model_name: str
+    expected_model_names: tuple[str, ...]
+    expected_dependency_baseline_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class StandardReuseFullRefreshBypassTestCase:
     description: str
     expected_reuse_from_target_metadata_present: bool

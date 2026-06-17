@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_REUSE_CURSOR_KEY,
     DBT_MANIFEST_SQLBUILD_META_KEY,
@@ -23,7 +24,11 @@ from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtModelPlanningResult,
     DbtReuseCandidateResolution,
+    DbtReusePlanEntry,
     DbtReusePlanningResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
+    build_dbt_native_dependency_baseline_entries,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
@@ -35,6 +40,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanReason,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtNativeDependencyBaselineConversionTestCase,
     DbtReuseCandidateResolutionTestCase,
     DbtReusePlanningTestCase,
     DbtReuseScopeFromPlanTestCase,
@@ -592,6 +598,51 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
     assert tuple(entry.reason for entry in result.entries) == (test_case.expected_reason,)
     assert result.entries[0].materialization == test_case.candidate_materialization
     assert result.entries[0].cursor_column == test_case.cursor_column
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtNativeDependencyBaselineConversionTestCase(
+            description="converts dbt reuse entry to native dependency baseline entry",
+            expected_name="model.analytics.fact_orders",
+            expected_destination_relation='"dev_db"."main"."fact_orders"',
+            expected_origin_relation='"prod_db"."prod"."fact_orders"',
+            expected_resource_label="incremental",
+            expected_hard_copy=True,
+        )
+    ],
+    ids=["converts dbt reuse entry to native dependency baseline entry"],
+)
+def test_given_dbt_dependency_baseline_plan_when_converting_then_returns_native_entries(
+    test_case: DbtNativeDependencyBaselineConversionTestCase,
+) -> None:
+    plan: DbtReusePlanningResult = DbtReusePlanningResult(
+        entries=(
+            DbtReusePlanEntry(
+                unique_id=test_case.expected_name,
+                action=DbtReusePlanAction.SEEDED_REUSE,
+                reason=DbtReusePlanReason.FINGERPRINT_MISSING,
+                materialization=test_case.expected_resource_label,
+                destination_relation_name=test_case.expected_destination_relation,
+                origin_relation_name=test_case.expected_origin_relation,
+            ),
+        )
+    )
+
+    entries: tuple[DependencyBaselinePlanEntry, ...] = build_dbt_native_dependency_baseline_entries(
+        plan=plan,
+        destination_target_name="dev",
+    )
+
+    assert len(entries) == 1
+    entry: DependencyBaselinePlanEntry = entries[0]
+    assert entry.name == test_case.expected_name
+    assert entry.destination.qualified_name == test_case.expected_destination_relation
+    assert entry.relation_reuse.origin.qualified_name == test_case.expected_origin_relation
+    assert entry.resource_label == test_case.expected_resource_label
+    assert entry.relation_reuse.hard_copy == test_case.expected_hard_copy
+    assert entry.fingerprint_version_hash is None
 
 
 @pytest.mark.parametrize(
