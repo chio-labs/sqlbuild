@@ -14,6 +14,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
+    DbtLineageDirection,
+    DbtLineageOutputFormat,
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
@@ -405,6 +407,38 @@ class DbtCombinedGraph:
     nodes: frozenset[DbtCombinedGraphKey]
     upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
     downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
+
+
+@dataclass(frozen=True)
+class DbtLineageNode:
+    """One displayable mixed dbt/SQLBuild lineage graph node."""
+
+    key: DbtCombinedGraphKey
+    label: str
+    qualified_name: str | None = None
+    relative_path: str | None = None
+
+
+@dataclass(frozen=True)
+class DbtLineageGraph:
+    """Selected mixed dbt/SQLBuild lineage graph slice."""
+
+    nodes: tuple[DbtLineageNode, ...]
+    edges: tuple[tuple[DbtCombinedGraphKey, DbtCombinedGraphKey], ...]
+    focus_keys: tuple[DbtCombinedGraphKey, ...] = field(default_factory=tuple)
+    direction: DbtLineageDirection | None = None
+
+
+@dataclass(frozen=True)
+class DbtLineageArgs:
+    """Parsed arguments for `sqb dbt lineage`."""
+
+    target: str
+    output_format: DbtLineageOutputFormat = DbtLineageOutputFormat.TREE
+    direction: DbtLineageDirection = DbtLineageDirection.UPSTREAM
+    depth: int | None = None
+    no_sql_validation: bool = False
+    dbt_args: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
