@@ -109,16 +109,30 @@ verify:
 	@mkdir -p /tmp/opencode
 	@log="/tmp/opencode/verify-$$(date +%Y%m%d-%H%M%S).log"; \
 	{ \
-		set -e; \
-		uv run ruff format .; \
-		uv run ruff check --fix .; \
-		uv run ty check src tests; \
-		PYTHONUNBUFFERED=1 uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes; \
-		PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
-		PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
-		uv run check-test-conventions tests; \
-		uv run check-structure-conventions src/sqlbuild scripts; \
-		uv run check-type-annotation-conventions src tests; \
+		status=0; \
+		run_verify_step() { \
+			label="$$1"; \
+			shift; \
+			echo; \
+			echo "==> $$label"; \
+			"$$@"; \
+			rc=$$?; \
+			if [ $$rc -ne 0 ]; then \
+				echo "STEP_FAILED[$$rc]: $$label"; \
+				if [ $$status -eq 0 ]; then status=$$rc; fi; \
+			fi; \
+		}; \
+		run_verify_step "ruff format" uv run ruff format .; \
+		run_verify_step "ruff check" uv run ruff check --fix .; \
+		run_verify_step "type check" uv run ty check src tests; \
+		run_verify_step "e2e tests" env PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
+		run_verify_step "performance e2e tests" env PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "integration tests" env PYTHONUNBUFFERED=1 uv run pytest tests/integration -m "not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "unit tests" env PYTHONUNBUFFERED=1 uv run pytest tests/unit -m "not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "test conventions" uv run check-test-conventions tests; \
+		run_verify_step "structure conventions" uv run check-structure-conventions src/sqlbuild scripts; \
+		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
+		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "VERIFY_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
