@@ -15,7 +15,14 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.lineage_args import parse_dbt_lineage_args
+from sqlbuild.integrations.dbt.helpers.lineage_columns import (
+    inspect_dbt_source_schemas,
+    select_dbt_column_lineage_target,
+)
 from sqlbuild.integrations.dbt.helpers.lineage_output import (
+    format_dbt_column_lineage_json,
+    format_dbt_column_lineage_list,
+    format_dbt_column_lineage_tree,
     format_dbt_lineage_json,
     format_dbt_lineage_list,
     format_dbt_lineage_tree,
@@ -32,6 +39,7 @@ from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
+    DbtColumnLineageTrace,
     DbtCombinedGraph,
     DbtCommandResult,
     DbtLineageArgs,
@@ -87,6 +95,26 @@ def build_dbt_lineage_output(
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    column_trace: DbtColumnLineageTrace | None = select_dbt_column_lineage_target(
+        project=project,
+        manifest=manifest,
+        graph=graph,
+        target=lineage_args.target,
+        direction=lineage_args.direction,
+        depth=lineage_args.depth,
+        source_schemas=inspect_dbt_source_schemas(
+            adapter=adapter,
+            project=project,
+            project_dir=project_dir,
+            manifest=manifest,
+        ),
+    )
+    if column_trace is not None:
+        if lineage_args.output_format == DbtLineageOutputFormat.JSON:
+            return format_dbt_column_lineage_json(column_trace)
+        if lineage_args.output_format == DbtLineageOutputFormat.LIST:
+            return "\n" + format_dbt_column_lineage_list(column_trace, use_color=use_color) + "\n"
+        return "\n" + format_dbt_column_lineage_tree(column_trace, use_color=use_color) + "\n"
     lineage_graph: DbtLineageGraph = select_dbt_lineage_target(
         project=project,
         manifest=manifest,

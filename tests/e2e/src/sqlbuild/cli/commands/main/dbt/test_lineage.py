@@ -1,24 +1,30 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtColumnLineageE2ETestCase,
     DbtLineageE2ETestCase,
     DbtLineageErrorE2ETestCase,
     DbtLineageTextE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     apply_dbt_lineage_error_setup,
+    assert_dbt_column_lineage_json_payload,
     assert_dbt_lineage_json_payload,
+    drop_dbt_phase11_orders_source_table,
     load_json_stdout,
     prepare_dbt_phase11_project,
     remove_dbt_phase11_sqlbuild_models,
     skip_unless_dbt_is_runnable,
     write_dbt_phase11_invalid_sqlbuild_model,
     write_dbt_phase11_missing_ref_model,
+    write_dbt_phase11_star_lineage_models,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 
@@ -214,6 +220,44 @@ LINEAGE_ERROR_TEST_CASES: tuple[DbtLineageErrorE2ETestCase, ...] = (
         expected_stderr_fragments=("error[P001]", "--no-sql-validation"),
         setup=write_dbt_phase11_invalid_sqlbuild_model,
     ),
+    DbtLineageErrorE2ETestCase(
+        description="renders malformed column target error",
+        command=("dbt", "lineage", "downstream_orders:", "--format", "json"),
+        expected_stderr_fragments=("unknown dbt lineage target 'downstream_orders:'", "C331"),
+    ),
+)
+
+COLUMN_LINEAGE_TEST_CASES: tuple[DbtColumnLineageE2ETestCase, ...] = (
+    DbtColumnLineageE2ETestCase(
+        description="traces SQLBuild column upstream through compiled dbt SQL",
+        command=("dbt", "lineage", "downstream_orders:downstream_amount", "--format", "json"),
+        expected_target=("model", "downstream_orders", "downstream_amount"),
+        expected_edges=(
+            ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+        ),
+        expected_direction="upstream",
+    ),
+    DbtColumnLineageE2ETestCase(
+        description="traces dbt source column downstream through compiled dbt SQL",
+        command=(
+            "dbt",
+            "lineage",
+            "source.analytics.raw.orders:amount",
+            "--format",
+            "json",
+            "--direction",
+            "downstream",
+        ),
+        expected_target=("source", "source.analytics.raw.orders", "amount"),
+        expected_edges=(
+            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+            ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+        ),
+        expected_direction="downstream",
+    ),
 )
 
 
@@ -244,6 +288,127 @@ def test_given_dbt_interop_project_when_running_lineage_json_then_outputs_mixed_
         expected_direction=test_case.expected_direction,
         expected_node_metadata=test_case.expected_node_metadata,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    COLUMN_LINEAGE_TEST_CASES,
+    ids=[case.description for case in COLUMN_LINEAGE_TEST_CASES],
+)
+def test_given_dbt_interop_project_when_running_column_lineage_json_then_outputs_column_trace(
+    tmp_path: Path,
+    test_case: DbtColumnLineageE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload: dict[str, object] = load_json_stdout(result.stdout)
+    assert_dbt_column_lineage_json_payload(
+        payload=payload,
+        expected_target=test_case.expected_target,
+        expected_edges=test_case.expected_edges,
+        expected_direction=test_case.expected_direction,
+        expected_warnings=test_case.expected_warnings,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtColumnLineageE2ETestCase(
+            description="expands star lineage from adapter-described dbt source schema",
+            command=("dbt", "lineage", "downstream_orders:downstream_amount", "--format", "json"),
+            expected_target=("model", "downstream_orders", "downstream_amount"),
+            expected_edges=(
+                ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+            expected_direction="upstream",
+        )
+    ],
+    ids=["expands star lineage from adapter-described dbt source schema"],
+)
+def test_given_star_dbt_models_when_running_column_lineage_json_then_uses_source_schema(
+    tmp_path: Path,
+    test_case: DbtColumnLineageE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
+    write_dbt_phase11_star_lineage_models(project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload: dict[str, object] = load_json_stdout(result.stdout)
+    assert_dbt_column_lineage_json_payload(
+        payload=payload,
+        expected_target=test_case.expected_target,
+        expected_edges=test_case.expected_edges,
+        expected_direction=test_case.expected_direction,
+        expected_warnings=test_case.expected_warnings,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtColumnLineageE2ETestCase(
+            description="warns and returns best-effort trace when dbt source schema is missing",
+            command=("dbt", "lineage", "downstream_orders:downstream_amount", "--format", "json"),
+            expected_target=("model", "downstream_orders", "downstream_amount"),
+            expected_edges=(
+                ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+            expected_direction="upstream",
+            expected_warnings=(
+                "Could not inspect source source.analytics.raw.orders; "
+                "SELECT * lineage from this source may be incomplete: ",
+            ),
+        )
+    ],
+    ids=["warns and returns best-effort trace when dbt source schema is missing"],
+)
+def test_given_missing_dbt_source_table_when_running_column_lineage_json_then_warns_and_traces(
+    tmp_path: Path,
+    test_case: DbtColumnLineageE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
+    drop_dbt_phase11_orders_source_table(project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload: dict[str, object] = load_json_stdout(result.stdout)
+    metadata_payload: object = payload["metadata"]
+    assert isinstance(metadata_payload, dict)
+    metadata: Mapping[str, object] = cast(Mapping[str, object], metadata_payload)
+    warnings_payload: object = metadata["warnings"]
+    assert isinstance(warnings_payload, list)
+    assert_dbt_column_lineage_json_payload(
+        payload=payload,
+        expected_target=test_case.expected_target,
+        expected_edges=test_case.expected_edges,
+        expected_direction=test_case.expected_direction,
+        expected_warnings=tuple(str(warning) for warning in warnings_payload),
+    )
+    assert len(warnings_payload) == 1
+    assert test_case.expected_warnings[0] in str(warnings_payload[0])
 
 
 @pytest.mark.parametrize(
