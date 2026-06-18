@@ -13,8 +13,13 @@ from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
     execute_dbt_seeded_reuse_plan,
 )
-from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtReuseExecuteTestCase
+from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtFreshSchemaReuseExecuteTestCase,
+    DbtReuseExecuteTestCase,
+)
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    build_fresh_schema_reuse_execute_manifest,
+    build_fresh_schema_reuse_execute_plan,
     build_reuse_execute_manifest,
     build_reuse_execute_plan,
     build_seeded_reuse_execute_plan,
@@ -469,5 +474,59 @@ def test_given_seeded_reuse_skip_condition_when_executing_then_preserves_destina
             connection,
             "SELECT order_id, amount FROM main.fact_orders ORDER BY order_id",
         ).fetchall() == list(test_case.expected_destination_rows)
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtFreshSchemaReuseExecuteTestCase(
+            description="reuses into fresh dev schema and writes fingerprint into fresh schema",
+            fingerprint_schema="dev_alice",
+            expected_reused_unique_ids=("model.analytics.fact_orders",),
+            expected_destination_rows=((1, 900),),
+            expected_fingerprint_node_names=("model.analytics.fact_orders",),
+        )
+    ],
+    ids=["reuses into fresh dev schema and writes fingerprint into fresh schema"],
+)
+def test_given_fresh_dev_schema_when_executing_complete_reuse_then_creates_schema_and_swaps(
+    tmp_path: Path,
+    test_case: DbtFreshSchemaReuseExecuteTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "fresh_schema_reuse.duckdb")})
+    warnings: list[str] = []
+    try:
+        adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS marts")
+        adapter.execute(
+            connection,
+            "CREATE TABLE marts.fact_orders AS SELECT 1 AS order_id, 900 AS amount",
+        )
+
+        reused_unique_ids: tuple[str, ...] = execute_dbt_complete_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            manifest=build_fresh_schema_reuse_execute_manifest(),
+            plan=build_fresh_schema_reuse_execute_plan(),
+            run_id="run-1",
+            fingerprint_database=None,
+            fingerprint_schema=test_case.fingerprint_schema,
+            target_name="dev",
+            warnings=warnings,
+        )
+
+        assert reused_unique_ids == test_case.expected_reused_unique_ids
+        assert adapter.execute(
+            connection,
+            "SELECT order_id, amount FROM dev_marts.fact_orders ORDER BY order_id",
+        ).fetchall() == list(test_case.expected_destination_rows)
+        assert adapter.execute(
+            connection,
+            f"SELECT node_name FROM {test_case.fingerprint_schema}._sqlbuild_fingerprints "
+            "ORDER BY node_name",
+        ).fetchall() == [(name,) for name in test_case.expected_fingerprint_node_names]
+        assert warnings == []
     finally:
         adapter.close(connection)

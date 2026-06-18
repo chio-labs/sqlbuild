@@ -670,6 +670,7 @@ def _dbt_reuse_plan_reason_label(reason: DbtReusePlanReason) -> str:
         DbtReusePlanReason.MANIFEST_NODE_MISSING: "manifest node missing",
         DbtReusePlanReason.REUSE_METADATA_INVALID: "reuse metadata invalid",
         DbtReusePlanReason.ORIGIN_RELATION_MISSING: "production relation missing",
+        DbtReusePlanReason.DEFINITION_CHANGED: "definition changed",
     }
     return labels[reason]
 

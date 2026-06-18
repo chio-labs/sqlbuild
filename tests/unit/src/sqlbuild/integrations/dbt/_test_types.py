@@ -244,6 +244,8 @@ class DbtReusePlanningTestCase:
     expected_reason: DbtReusePlanReason
     cursor_column: str | None = None
     previous_cursor_column: str | None = None
+    current_checksum: str | None = None
+    origin_checksum: str | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +293,15 @@ class DbtReuseExecuteTestCase:
     cursor_column: str | None = None
     destination_event_time: str | None = None
     destination_order_id: int | None = None
+
+
+@dataclass(frozen=True)
+class DbtFreshSchemaReuseExecuteTestCase:
+    description: str
+    fingerprint_schema: str
+    expected_reused_unique_ids: tuple[str, ...]
+    expected_destination_rows: tuple[tuple[object, ...], ...]
+    expected_fingerprint_node_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

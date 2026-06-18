@@ -332,6 +332,51 @@ def build_reuse_execute_plan() -> DbtInteropPlan:
     )
 
 
+def build_fresh_schema_reuse_execute_manifest() -> DbtManifestIndex:
+    """Build a manifest whose destination schema does not exist yet."""
+
+    model: DbtManifestModel = DbtManifestModel(
+        unique_id="model.analytics.fact_orders",
+        package_name="analytics",
+        name="fact_orders",
+        relation_name='"dev_marts"."fact_orders"',
+        database=None,
+        schema="dev_marts",
+        alias="fact_orders",
+        node_checksum="checksum-1",
+        query_sql="select 1 as order_id, 111 as amount",
+    )
+    return DbtManifestIndex(
+        models_by_unique_id={model.unique_id: model},
+        models_by_name={model.name: (model,)},
+        models_by_package_and_name={(model.package_name, model.name): model},
+    )
+
+
+def build_fresh_schema_reuse_execute_plan() -> DbtInteropPlan:
+    """Build a complete reuse plan whose destination uses a quoted fresh schema."""
+
+    return build_dbt_interop_plan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.fact_orders",
+                    action=DbtReusePlanAction.COMPLETE_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    materialization="table",
+                    destination_relation_name='"dev_marts"."fact_orders"',
+                    origin_relation_name='"marts"."fact_orders"',
+                ),
+            )
+        ),
+    )
+
+
 def build_seeded_reuse_execute_plan(*, cursor_column: str | None) -> DbtInteropPlan:
     """Build a dbt interop plan with one seeded reuse entry."""
 

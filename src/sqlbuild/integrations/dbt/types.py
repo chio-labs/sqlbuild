@@ -129,6 +129,7 @@ class DbtReusePlanReason(StrEnum):
     MANIFEST_NODE_MISSING = "manifest_node_missing"
     REUSE_METADATA_INVALID = "reuse_metadata_invalid"
     ORIGIN_RELATION_MISSING = "origin_relation_missing"
+    DEFINITION_CHANGED = "definition_changed"
 
 
 class DbtReuseExecutionMode(StrEnum):

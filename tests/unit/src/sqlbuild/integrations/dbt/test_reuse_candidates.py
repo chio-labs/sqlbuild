@@ -376,6 +376,26 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         expected_action=DbtReusePlanAction.BLOCKED,
         expected_reason=DbtReusePlanReason.SOURCE_FRESHNESS_BLOCK,
     ),
+    DbtReusePlanningTestCase(
+        description="rebuilds when current definition differs from origin",
+        candidate_materialization="table",
+        dbt_plan_action=DbtModelPlanAction.RUN,
+        dbt_plan_reason=DbtModelPlanReason.FIRST_RUN,
+        expected_action=DbtReusePlanAction.REBUILD,
+        expected_reason=DbtReusePlanReason.DEFINITION_CHANGED,
+        current_checksum="dev-edited-checksum",
+        origin_checksum="prod-checksum",
+    ),
+    DbtReusePlanningTestCase(
+        description="reuses when current definition matches origin",
+        candidate_materialization="table",
+        dbt_plan_action=DbtModelPlanAction.RUN,
+        dbt_plan_reason=DbtModelPlanReason.FIRST_RUN,
+        expected_action=DbtReusePlanAction.COMPLETE_REUSE,
+        expected_reason=DbtReusePlanReason.FINGERPRINT_MISSING,
+        current_checksum="shared-checksum",
+        origin_checksum="shared-checksum",
+    ),
 )
 
 REUSE_METADATA_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
@@ -535,6 +555,7 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
                         package_name="analytics",
                         name="orders",
                         relation_name="dev.orders",
+                        checksum=test_case.current_checksum,
                         materialized=(
                             "incremental"
                             if test_case.candidate_materialization == "microbatch"
@@ -564,6 +585,7 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
                         package_name="analytics",
                         name="orders",
                         relation_name="prod.orders",
+                        checksum=test_case.origin_checksum,
                         materialized=(
                             "incremental"
                             if test_case.candidate_materialization == "microbatch"

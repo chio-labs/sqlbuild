@@ -6,11 +6,13 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.main.playground import run_playground
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import skip_unless_dbt_is_runnable
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
+    DbtReusePlaygroundLifecycleTestCase,
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
 
 
 @pytest.mark.parametrize(
@@ -207,3 +209,83 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
     assert check_result.returncode == 0
     for expected_fragment in test_case.expected_check_fragments:
         assert expected_fragment in check_output
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReusePlaygroundLifecycleTestCase(
+            description="dbt reuse playground prebuilds prod and reuses on first dev build",
+            project_name="dbt_reuse_playground",
+            expected_prod_schemas=("intermediate", "marts", "raw", "staging"),
+            expected_first_build_fragments=(
+                "reuse: 8",
+                "rebuild: 2",
+                "OK     reuse",
+                "model     agg_daily_revenue",
+                "model     dim_customers",
+            ),
+            expected_first_build_absent_fragments=(
+                "Schema with name",
+                "syntax error",
+                "agg_daily_revenue                          OK     reuse",
+                "dim_customers                              OK     reuse",
+            ),
+            expected_second_build_fragments=(
+                "current: 10",
+                "Skipping dbt: no dbt work selected.",
+            ),
+            expected_second_build_absent_fragments=("OK     reuse",),
+        )
+    ],
+    ids=["dbt reuse playground prebuilds prod and reuses on first dev build"],
+)
+def test_given_dbt_reuse_playground_when_init_and_build_then_reuses_prod(
+    test_case: DbtReusePlaygroundLifecycleTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    assert run_playground(tmp_path, test_case.project_name, template="dbt") == 0
+    workspace: Path = tmp_path / test_case.project_name
+    db_path: Path = workspace / "warehouse.duckdb"
+
+    prod_schemas: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT DISTINCT table_schema FROM information_schema.tables "
+            "WHERE table_schema IN ('staging', 'intermediate', 'marts', 'raw') "
+            "ORDER BY table_schema"
+        ),
+    )
+    assert tuple(row[0] for row in prod_schemas) == test_case.expected_prod_schemas
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("dbt", "init", "--project-dir", "dbt_project", "--profiles-dir", "profiles"),
+        project_dir=workspace,
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    first_build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build"),
+        project_dir=sqlbuild_project_dir,
+    )
+    assert first_build.returncode == 0, first_build.stdout + first_build.stderr
+    first_output: str = first_build.stdout + first_build.stderr
+    fragment: str
+    for fragment in test_case.expected_first_build_fragments:
+        assert fragment in first_output
+    for fragment in test_case.expected_first_build_absent_fragments:
+        assert fragment not in first_output
+
+    second_build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build"),
+        project_dir=sqlbuild_project_dir,
+    )
+    assert second_build.returncode == 0, second_build.stdout + second_build.stderr
+    second_output: str = second_build.stdout + second_build.stderr
+    for fragment in test_case.expected_second_build_fragments:
+        assert fragment in second_output
+    for fragment in test_case.expected_second_build_absent_fragments:
+        assert fragment not in second_output
