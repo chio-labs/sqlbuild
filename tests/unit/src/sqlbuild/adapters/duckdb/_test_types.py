@@ -54,3 +54,11 @@ class DuckDbPruneSqlTestCase:
     schema: str
     retain_versions: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuckDbRenderSwapTestCase:
+    description: str
+    left: str
+    right: str
+    expected_statements: tuple[str, ...]

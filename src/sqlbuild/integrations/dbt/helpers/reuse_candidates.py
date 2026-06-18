@@ -117,6 +117,8 @@ def resolve_dbt_reuse_candidates(
                 name=current_model.name,
                 fqn=current_model.fqn,
                 cursor_column=_model_reuse_cursor(model=current_model),
+                current_checksum=current_model.node_checksum,
+                origin_checksum=reuse_model.node_checksum,
             )
         )
     return DbtReuseCandidateResolution(candidates=tuple(candidates), skipped=tuple(skipped))
@@ -189,6 +191,8 @@ def mark_missing_dbt_reuse_origin_relations(
                 origin_relation_exists=(
                     candidate.origin_relation_key in existing_origin_relation_keys
                 ),
+                current_checksum=candidate.current_checksum,
+                origin_checksum=candidate.origin_checksum,
             )
         )
     return DbtReuseCandidateResolution(
@@ -268,6 +272,13 @@ def _plan_reuse_candidate(
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.REBUILD,
             reason=DbtReusePlanReason.FULL_REFRESH,
+        )
+    if candidate.definition_changed_from_origin:
+        return _candidate_entry(
+            candidate=candidate,
+            dbt_plan_entry=dbt_plan_entry,
+            action=DbtReusePlanAction.REBUILD,
+            reason=DbtReusePlanReason.DEFINITION_CHANGED,
         )
     reuse_action: DbtReusePlanAction = (
         DbtReusePlanAction.COMPLETE_REUSE

@@ -413,9 +413,9 @@ def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_mov
             left="public.orders",
             right="public.orders__staging",
             expected_statements=(
-                "ALTER TABLE public.orders RENAME TO orders__swap_staging",
+                'ALTER TABLE public.orders RENAME TO "orders__swap_staging"',
                 "ALTER TABLE public.orders__staging RENAME TO orders",
-                "ALTER TABLE public.orders__swap_staging RENAME TO orders__staging",
+                'ALTER TABLE public."orders__swap_staging" RENAME TO orders__staging',
             ),
         )
     ],

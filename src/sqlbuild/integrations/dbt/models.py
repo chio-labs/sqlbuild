@@ -215,10 +215,20 @@ class DbtReuseCandidate:
     fqn: tuple[str, ...] = field(default_factory=tuple)
     cursor_column: str | None = None
     origin_relation_exists: bool = True
+    current_checksum: str | None = None
+    origin_checksum: str | None = None
 
     @property
     def origin_relation_key(self) -> tuple[str | None, str | None, str]:
         return (self.origin_database, self.origin_schema, self.origin_name)
+
+    @property
+    def definition_changed_from_origin(self) -> bool:
+        """Return whether the current model definition differs from the reuse origin."""
+
+        if self.current_checksum is None or self.origin_checksum is None:
+            return False
+        return self.current_checksum != self.origin_checksum
 
 
 @dataclass(frozen=True)

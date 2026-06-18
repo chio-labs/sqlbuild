@@ -195,7 +195,7 @@ def _default_generate_schema_name_macro() -> str:
         "    {%- if custom_schema_name is none -%}\n"
         "        {{ target.schema }}\n"
         "    {%- else -%}\n"
-        "        {{ target.schema }}_{{ custom_schema_name | trim }}\n"
+        "        {{ custom_schema_name | trim }}\n"
         "    {%- endif -%}\n"
         "{%- endmacro %}\n"
     )
