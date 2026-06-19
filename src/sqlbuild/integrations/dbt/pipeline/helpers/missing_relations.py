@@ -12,8 +12,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     find_sqlbuild_models_with_missing_dbt_relations,
-    resolve_connection_config,
 )
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 
 
 def find_and_report_missing_dbt_relation_blocks(

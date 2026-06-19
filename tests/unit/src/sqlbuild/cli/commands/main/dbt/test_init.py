@@ -1,13 +1,97 @@
 from __future__ import annotations
 
+from io import StringIO
 from pathlib import Path
 
 import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild.cli.commands.main.dbt_init as dbt_init_module
+from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
-from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import DbtInitOutputTestCase
+from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtInitOutputTestCase,
+    DbtInitPromptTestCase,
+)
+
+DBT_INIT_PROMPT_TEST_CASES: list[DbtInitPromptTestCase] = [
+    DbtInitPromptTestCase(
+        description="uses explicit production git ref without prompting",
+        explicit_git_ref="release/prod",
+        input_text="ignored\n",
+        input_is_tty=True,
+        expected_git_ref="release/prod",
+    ),
+    DbtInitPromptTestCase(
+        description="defaults to main in non interactive runs",
+        explicit_git_ref=None,
+        input_text="prod\n",
+        input_is_tty=False,
+        expected_git_ref="main",
+    ),
+    DbtInitPromptTestCase(
+        description="reads production git ref from interactive input",
+        explicit_git_ref=None,
+        input_text="prod\n",
+        input_is_tty=True,
+        expected_git_ref="prod",
+        expected_output_fragments=(
+            "dbt production reuse setup",
+            "Production git ref [main]:",
+        ),
+    ),
+    DbtInitPromptTestCase(
+        description="uses main when interactive input is blank",
+        explicit_git_ref=None,
+        input_text="\n",
+        input_is_tty=True,
+        expected_git_ref="main",
+        expected_output_fragments=("Production git ref [main]:",),
+    ),
+    DbtInitPromptTestCase(
+        description="uses main when interactive input is whitespace",
+        explicit_git_ref=None,
+        input_text="   \t  \n",
+        input_is_tty=True,
+        expected_git_ref="main",
+        expected_output_fragments=("Production git ref [main]:",),
+    ),
+    DbtInitPromptTestCase(
+        description="uses main when interactive input reaches eof",
+        explicit_git_ref=None,
+        input_text="",
+        input_is_tty=True,
+        expected_git_ref="main",
+        expected_output_fragments=("Production git ref [main]:",),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DBT_INIT_PROMPT_TEST_CASES,
+    ids=[case.description for case in DBT_INIT_PROMPT_TEST_CASES],
+)
+def test_given_dbt_init_prompt_inputs_when_resolving_prod_ref_then_returns_expected_ref(
+    test_case: DbtInitPromptTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_stream: StringIO = StringIO(test_case.input_text)
+    output_stream: StringIO = StringIO()
+    monkeypatch.setattr(input_stream, "isatty", lambda: test_case.input_is_tty)
+
+    result: str = resolve_production_git_ref(
+        explicit_git_ref=test_case.explicit_git_ref,
+        input_stream=input_stream,
+        output_stream=output_stream,
+        use_color=False,
+    )
+
+    assert result == test_case.expected_git_ref
+    output_text: str = output_stream.getvalue()
+    expected_fragment: str
+    for expected_fragment in test_case.expected_output_fragments:
+        assert expected_fragment in output_text
 
 
 @pytest.mark.parametrize(
@@ -20,6 +104,18 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import DbtInitOut
                 "Inspecting dbt project and profile...",
                 "Inspected dbt project and profile.",
                 "SQLBuild project created",
+                "Setup summary:",
+                "Config file",
+                "/workspace/sqlbuild_project/sqlbuild_project.toml",
+                "Production git ref",
+                "main",
+                "Production schema macro",
+                "/workspace/sqlbuild_project/dbt/macros/generate_schema_name.sql",
+                "What SQLBuild created:",
+                "SQLBuild twin config",
+                "Production schema macro",
+                "This file lives in the SQLBuild project, not your dbt project.",
+                "It must make dbt resolve models to production schemas",
                 "sqb dbt debug",
                 "sqb dbt build",
             ),
@@ -42,6 +138,8 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
             output_dir=Path("/workspace/sqlbuild_project"),
             project_file=Path("/workspace/sqlbuild_project/sqlbuild_project.toml"),
             project_name="analytics",
+            macro_file=Path("/workspace/sqlbuild_project/dbt/macros/generate_schema_name.sql"),
+            production_git_ref="main",
             adapter="duckdb",
             target_name="dev",
             profile_name="analytics_profile",
@@ -83,6 +181,9 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
                 "Rendering dbt profile connection...",
                 "Rendered dbt profile connection.",
                 "SQLBuild project preview",
+                "Production git ref: release/prod",
+                "Production schema macro: "
+                "/workspace/sqlbuild_project/dbt/macros/generate_schema_name.sql",
                 "Generated config:",
                 'source = "dbt_profile"',
             ),
@@ -104,6 +205,8 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
             output_dir=Path("/workspace/sqlbuild_project"),
             project_file=Path("/workspace/sqlbuild_project/sqlbuild_project.toml"),
             project_name="analytics",
+            macro_file=Path("/workspace/sqlbuild_project/dbt/macros/generate_schema_name.sql"),
+            production_git_ref="release/prod",
             adapter="duckdb",
             target_name="dev",
             profile_name="analytics_profile",
@@ -132,6 +235,7 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
         dry_run=test_case.dry_run,
         overwrite=False,
         skip_dbt_debug=True,
+        production_git_ref="release/prod",
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -152,10 +256,15 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
             expected_color_fragments=(
                 "\033[2mInspecting dbt project and profile...\033[0m",
                 "\033[32m\033[1mSQLBuild project created\033[0m",
-                "  \033[34m\033[1mProject\033[0m: analytics",
+                "\033[1mSetup summary\033[0m:",
+                "\033[34m\033[1mProject",
+                "analytics",
+                "\033[1mWhat SQLBuild created\033[0m:",
+                "\033[34m\033[1mSQLBuild twin config\033[0m",
                 "\033[1mNext steps\033[0m:",
-                "  2. \033[2msqb dbt debug\033[0m",
-                "  3. \033[2msqb dbt build\033[0m",
+                "\033[33mReview the config file and production schema macro above.\033[0m",
+                "  3. \033[2msqb dbt debug\033[0m",
+                "  4. \033[2msqb dbt build\033[0m",
             ),
         )
     ],
@@ -175,6 +284,8 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
             output_dir=Path("/workspace/sqlbuild_project"),
             project_file=Path("/workspace/sqlbuild_project/sqlbuild_project.toml"),
             project_name="analytics",
+            macro_file=Path("/workspace/sqlbuild_project/dbt/macros/generate_schema_name.sql"),
+            production_git_ref="main",
             adapter="duckdb",
             target_name="dev",
             profile_name="analytics_profile",

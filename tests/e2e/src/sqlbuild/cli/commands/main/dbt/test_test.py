@@ -25,10 +25,10 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 DBT_TEST_COMMAND_TEST_CASES: list[DbtTestCliTestCase] = [
     DbtTestCliTestCase(
         description="test executes mixed dbt and SQLBuild validation work",
-        setup_command=("dbt", "build", "--select", "tag:nightly"),
+        setup_command=("dbt", "build", "--select", "tag:nightly", "+downstream_orders"),
         command=("dbt", "test", "--select", "tag:nightly"),
         expected_stdout_fragments=(
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution  sqb test",
             "SQLBuild execution  sqb audit",
             "test_downstream_orders",
@@ -46,7 +46,7 @@ DBT_TEST_COMMAND_TEST_CASES: list[DbtTestCliTestCase] = [
         description="test executes dbt only validation work",
         setup_command=("dbt", "run", "--select", "dbt_only"),
         command=("dbt", "test", "--select", "dbt_only"),
-        expected_stdout_fragments=("Running dbt:", "PASS"),
+        expected_stdout_fragments=("dbt execution", "PASS"),
         expected_absent_stdout_fragments=("SQLBuild execution",),
         expected_query_assertions=(
             DbtExecutionQueryAssertion(
@@ -88,7 +88,7 @@ DBT_TEST_COMMAND_TEST_CASES: list[DbtTestCliTestCase] = [
         ),
         command=("dbt", "test", "--select", "test_type:data", "local_only"),
         expected_stdout_fragments=(
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution  sqb audit",
             "not_null",
         ),
@@ -106,7 +106,7 @@ DBT_TEST_COMMAND_TEST_CASES: list[DbtTestCliTestCase] = [
         setup_command=("dbt", "build", "--select", "local_only"),
         command=("dbt", "test", "--select", "test_type:unit", "local_only"),
         expected_stdout_fragments=(
-            "Running dbt:",
+            "dbt execution",
             "SQLBuild execution  sqb test",
             "test_local_only",
         ),
@@ -204,7 +204,7 @@ def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
             description="failing dbt test stops before SQLBuild validation",
             setup_command=("dbt", "run", "--select", "+fact_orders"),
             command=("dbt", "test", "--select", "tag:nightly"),
-            expected_stdout_fragments=("Running dbt:",),
+            expected_stdout_fragments=("dbt execution",),
             expected_absent_stdout_fragments=("SQLBuild execution",),
         )
     ],

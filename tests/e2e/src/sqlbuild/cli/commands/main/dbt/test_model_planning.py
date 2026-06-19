@@ -80,7 +80,7 @@ def test_given_built_dbt_models_when_rerunning_and_changing_model_then_prunes_an
     db_path: Path = project_dir / "dbt_phase11.duckdb"
 
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert first_result.returncode == 0, first_result.stderr or first_result.stdout
@@ -93,7 +93,7 @@ def test_given_built_dbt_models_when_rerunning_and_changing_model_then_prunes_an
     ) == [(unique_id,) for unique_id in test_case.expected_fingerprint_unique_ids]
 
     current_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert current_result.returncode == 0, current_result.stderr or current_result.stdout
@@ -109,7 +109,7 @@ def test_given_built_dbt_models_when_rerunning_and_changing_model_then_prunes_an
         amount_expression="amount + 5",
     )
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert changed_result.returncode == 0, changed_result.stderr or changed_result.stdout
@@ -147,7 +147,7 @@ def test_given_dbt_source_freshness_error_when_building_then_blocks_affected_bra
     seed_dbt_phase11_sources(project_dir=project_dir, stale_orders=True)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders", "customer_summary"),
+        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
         project_dir=project_dir,
     )
 
@@ -212,7 +212,7 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     db_path: Path = project_dir / "dbt_phase11.duckdb"
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders", "customer_summary"),
+        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
         project_dir=project_dir,
     )
     assert first_result.returncode == 0, first_result.stderr or first_result.stdout
@@ -226,7 +226,7 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
     ) == list(test_case.expected_source_freshness_rows)
 
     current_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert current_result.returncode == 0, current_result.stderr or current_result.stdout
@@ -248,8 +248,8 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
             "plan",
             "--json",
             "--select",
-            "downstream_orders",
-            "customer_summary",
+            "+downstream_orders",
+            "+customer_summary",
         ),
         project_dir=project_dir,
     )
@@ -271,7 +271,7 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_plan_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
 
@@ -284,7 +284,7 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
     ) == list(test_case.expected_rows)
 
     final_current_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert final_current_result.returncode == 0, (
@@ -415,7 +415,7 @@ def test_given_empty_dbt_source_when_rerunning_then_models_are_current_without_f
     )
 
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert first_result.returncode == test_case.expected_returncode, (
@@ -433,7 +433,7 @@ def test_given_empty_dbt_source_when_rerunning_then_models_are_current_without_f
     )
 
     current_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert current_result.returncode == test_case.expected_returncode, (
@@ -474,7 +474,7 @@ def test_given_multi_source_dbt_model_when_one_source_changes_then_model_reruns(
         ),
     )
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "payment_summary"),
+        command=("dbt", "build", "--select", "+payment_summary"),
         project_dir=project_dir,
     )
     assert first_result.returncode == 0, first_result.stderr or first_result.stdout
@@ -488,7 +488,7 @@ def test_given_multi_source_dbt_model_when_one_source_changes_then_model_reruns(
         ),
     )
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--json", "--select", "payment_summary"),
+        command=("dbt", "plan", "--json", "--select", "+payment_summary"),
         project_dir=project_dir,
     )
     assert plan_result.returncode == 0, plan_result.stderr or plan_result.stdout
@@ -508,7 +508,7 @@ def test_given_multi_source_dbt_model_when_one_source_changes_then_model_reruns(
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_run_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "payment_summary"),
+        command=("dbt", "build", "--select", "+payment_summary"),
         project_dir=project_dir,
     )
     assert changed_result.returncode == 0, changed_result.stderr or changed_result.stdout
@@ -562,7 +562,7 @@ def test_given_query_and_filtered_dbt_sources_when_source_changes_then_freshness
         ),
     )
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "event_summary"),
+        command=("dbt", "build", "--select", "+event_summary"),
         project_dir=project_dir,
     )
     assert first_result.returncode == 0, first_result.stderr or first_result.stdout
@@ -588,7 +588,7 @@ def test_given_query_and_filtered_dbt_sources_when_source_changes_then_freshness
         ),
     )
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--json", "--select", "event_summary"),
+        command=("dbt", "plan", "--json", "--select", "+event_summary"),
         project_dir=project_dir,
     )
     assert plan_result.returncode == 0, plan_result.stderr or plan_result.stdout
@@ -608,7 +608,7 @@ def test_given_query_and_filtered_dbt_sources_when_source_changes_then_freshness
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_run_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "event_summary"),
+        command=("dbt", "build", "--select", "+event_summary"),
         project_dir=project_dir,
     )
     assert changed_result.returncode == 0, changed_result.stderr or changed_result.stdout
@@ -645,7 +645,7 @@ def test_given_dbt_source_freshness_moves_backward_when_building_then_reruns_dow
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     db_path: Path = project_dir / "dbt_phase11.duckdb"
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert first_result.returncode == 0, first_result.stderr or first_result.stdout
@@ -659,7 +659,7 @@ def test_given_dbt_source_freshness_moves_backward_when_building_then_reruns_dow
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--json", "--select", "downstream_orders"),
+        command=("dbt", "plan", "--json", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert plan_result.returncode == 0, plan_result.stderr or plan_result.stdout
@@ -679,7 +679,7 @@ def test_given_dbt_source_freshness_moves_backward_when_building_then_reruns_dow
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_run_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert changed_result.returncode == 0, changed_result.stderr or changed_result.stdout
@@ -713,7 +713,7 @@ def test_given_missing_dbt_source_table_when_planning_then_source_freshness_is_u
     execute_duckdb(db_path=db_path, sql="DROP TABLE main.raw_orders")
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--json", "--select", "downstream_orders"),
+        command=("dbt", "plan", "--json", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
 
@@ -752,7 +752,7 @@ def test_given_custom_sqlbuild_target_schema_when_building_then_writes_freshness
     set_dbt_phase11_sqlbuild_target_schema(project_dir=project_dir, schema="analytics_state")
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
 
@@ -793,7 +793,7 @@ def test_given_sqlbuild_execution_fails_after_dbt_when_building_then_does_not_wr
     write_dbt_phase11_invalid_downstream_model(project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
 
@@ -836,7 +836,7 @@ def test_given_dbt_model_failure_when_building_then_blocks_affected_sqlbuild_bra
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders", "customer_summary"),
+        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
         project_dir=project_dir,
     )
 
@@ -863,7 +863,7 @@ def test_given_dbt_model_failure_when_building_then_blocks_affected_sqlbuild_bra
                 "dbt",
                 "build",
                 "--select",
-                "downstream_orders",
+                "+downstream_orders",
                 "country_codes",
                 "not_null_fact_orders_order_id",
             ),
@@ -887,7 +887,7 @@ def test_given_current_dbt_models_when_seed_and_test_selected_then_prunes_non_mo
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders", "customer_summary"),
+        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
         project_dir=project_dir,
     )
     assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
@@ -915,7 +915,7 @@ def test_given_current_dbt_models_when_seed_and_test_selected_then_prunes_non_mo
                 "dbt",
                 "build",
                 "--select",
-                "downstream_orders",
+                "+downstream_orders",
                 "country_codes",
                 "not_null_fact_orders_order_id",
             ),
@@ -941,7 +941,7 @@ def test_given_changed_dbt_model_when_seed_and_test_selected_then_runs_non_model
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders", "customer_summary"),
+        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
         project_dir=project_dir,
     )
     assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
@@ -988,14 +988,14 @@ def test_given_current_dbt_and_new_sqlbuild_function_when_building_then_shows_na
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders", "customer_summary"),
+        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
         project_dir=project_dir,
     )
     assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
     add_dbt_phase11_sqlbuild_function_branch(project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "amount_quality", "customer_summary"),
+        command=("dbt", "build", "--select", "+amount_quality", "+customer_summary"),
         project_dir=project_dir,
     )
 
@@ -1030,13 +1030,13 @@ def test_given_current_dbt_models_when_planning_then_outputs_model_plan_state(
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert build_result.returncode == 0, build_result.stderr or build_result.stdout
 
     json_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--json", "--select", "downstream_orders"),
+        command=("dbt", "plan", "--json", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert json_result.returncode == 0, json_result.stderr or json_result.stdout
@@ -1046,7 +1046,7 @@ def test_given_current_dbt_models_when_planning_then_outputs_model_plan_state(
     assert model_plan["current_unique_ids"] == list(test_case.expected_current_unique_ids)
 
     human_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--select", "downstream_orders"),
+        command=("dbt", "plan", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert human_result.returncode == 0, human_result.stderr or human_result.stdout
@@ -1076,7 +1076,7 @@ def test_given_dbt_replay_full_when_model_changes_then_dbt_execution_uses_full_r
         replay_on_change="full",
     )
     first_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
     assert first_result.returncode == 0, first_result.stderr or first_result.stdout
@@ -1086,7 +1086,7 @@ def test_given_dbt_replay_full_when_model_changes_then_dbt_execution_uses_full_r
     )
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "downstream_orders"),
+        command=("dbt", "build", "--select", "+downstream_orders"),
         project_dir=project_dir,
     )
 

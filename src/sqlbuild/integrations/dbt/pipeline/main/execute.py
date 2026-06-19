@@ -71,7 +71,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
-    resolve_connection_config,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
@@ -89,6 +88,8 @@ from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
     append_dbt_source_freshness_records,
 )
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
@@ -106,7 +107,7 @@ def execute_dbt_interop_from_project(
     project_dir: Path,
     args: tuple[str, ...],
     dbt_runner: DbtRunner | None = None,
-    dbt_executable: str = "dbt",
+    dbt_executable: str | None = None,
     sqlbuild_executable: str = "sqb",
     no_sql_validation: bool = False,
     fail_fast: bool = False,
@@ -121,6 +122,8 @@ def execute_dbt_interop_from_project(
 
     if command not in (DbtInteropCommand.RUN, DbtInteropCommand.BUILD, DbtInteropCommand.TEST):
         raise DbtInteropArgumentError(f"unsupported dbt interop execution command: {command}")
+
+    dbt_executable = dbt_executable or resolve_dbt_executable()
 
     output_stream: TextIO = progress_stream or sys.stdout
     dbt_output_stream: TextIO = dbt_stdout_stream or output_stream
@@ -245,6 +248,8 @@ def execute_dbt_interop_from_project(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             current_manifest=manifest,
+            adapter=adapter,
+            adapter_name=adapter_name,
             dbt_model_plan=dbt_model_plan,
             plan=plan,
             dbt_options=dbt_options,
@@ -284,6 +289,8 @@ def execute_dbt_interop_from_project(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             current_manifest=manifest,
+            adapter=adapter,
+            adapter_name=adapter_name,
             dbt_model_plan=dependency_baseline_model_plan,
             scoped_unique_ids=dependency_baseline_ids,
             dbt_options=dbt_options,
@@ -297,6 +304,16 @@ def execute_dbt_interop_from_project(
             plan=dbt_dependency_baseline_plan,
             destination_target_name=project.effective_target_name,
         )
+    )
+    reused_dependency_baseline_ids: frozenset[str] = (
+        frozenset(
+            (
+                *dbt_dependency_baseline_plan.complete_reuse_unique_ids,
+                *dbt_dependency_baseline_plan.seeded_reuse_unique_ids,
+            )
+        )
+        if dbt_dependency_baseline_plan is not None
+        else frozenset()
     )
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
@@ -369,8 +386,8 @@ def execute_dbt_interop_from_project(
             selected_model_names=plan.selection.sqlbuild_model_names,
             dbt_unique_ids_selected_for_execution=frozenset(
                 (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
-                + tuple(dependency_baseline_ids)
-            ),
+            )
+            | reused_dependency_baseline_ids,
             output_stream=output_stream,
         )
         sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
@@ -396,6 +413,7 @@ def execute_dbt_interop_from_project(
             on_connection_error=connection_progress.on_connection_error,
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
             dependency_baseline_entries=dependency_baseline_entries,
+            disable_scope_pruning=command == DbtInteropCommand.TEST,
         )
         if sqlbuild_plan_output is not None:
             plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
@@ -545,9 +563,9 @@ def execute_dbt_interop_from_project(
                 (
                     *plan.dbt_selected_unique_ids,
                     *plan.selection.dbt_required_unique_ids,
-                    *dependency_baseline_ids,
                 )
-            ),
+            )
+            | reused_dependency_baseline_ids,
             output_stream=output_stream,
         )
         execution_plan_connection_progress: Any = build_connection_progress_reporter(
@@ -576,6 +594,7 @@ def execute_dbt_interop_from_project(
             on_connection_error=execution_plan_connection_progress.on_connection_error,
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
             dependency_baseline_entries=dependency_baseline_entries,
+            disable_scope_pruning=command == DbtInteropCommand.TEST,
         )
     if plan_output is None:
         exit_code: int = max(

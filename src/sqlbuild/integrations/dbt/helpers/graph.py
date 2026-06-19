@@ -126,6 +126,10 @@ def _add_dbt_model_edges(
                 source_key: DbtCombinedGraphKey = dbt_source_graph_key(source.unique_id)
                 upstream.setdefault(source_key, [])
                 upstream[key].append(source_key)
+            if dep_unique_id in manifest.seeds_by_unique_id:
+                seed_key: DbtCombinedGraphKey = dbt_source_graph_key(dep_unique_id)
+                upstream.setdefault(seed_key, [])
+                upstream[key].append(seed_key)
 
 
 def _add_sqlbuild_model_edges(

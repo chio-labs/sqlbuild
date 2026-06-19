@@ -23,6 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtSnapshotSeededReuseFromE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    break_dbt_interop_fact_orders_model,
     load_json_stdout,
     prepare_dbt_interop_project,
     prepare_dbt_multi_node_reuse_from_project,
@@ -309,18 +310,30 @@ EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
 
 EXECUTION_FAILURE_TEST_CASES: list[DbtExecutionFailureCliTestCase] = [
     DbtExecutionFailureCliTestCase(
-        description="run stops before sqlbuild when dbt fails",
+        description="run skips dependent sqlbuild work when dbt model fails",
         command=("dbt", "run", "--select", "fact_orders+"),
-        expected_stdout_fragments=("Running dbt:", "Completed with 1 error"),
-        expected_absent_stdout_fragments=("SQLBuild execution",),
+        expected_stdout_fragments=(
+            "dbt execution",
+            "fact_orders",
+            "skip: external_upstream_failed",
+        ),
+        expected_absent_stdout_fragments=(),
+        expected_returncode=1,
         expected_absent_relations=("downstream_orders", "mart_orders"),
+        setup=break_dbt_interop_fact_orders_model,
     ),
     DbtExecutionFailureCliTestCase(
-        description="build stops before sqlbuild when dbt fails",
+        description="build skips dependent sqlbuild work when dbt model fails",
         command=("dbt", "build", "--select", "fact_orders+"),
-        expected_stdout_fragments=("Running dbt:", "Completed with 1 error"),
-        expected_absent_stdout_fragments=("SQLBuild execution",),
+        expected_stdout_fragments=(
+            "dbt execution",
+            "fact_orders",
+            "skip: external_upstream_failed",
+        ),
+        expected_absent_stdout_fragments=(),
+        expected_returncode=1,
         expected_absent_relations=("downstream_orders", "mart_orders"),
+        setup=break_dbt_interop_fact_orders_model,
     ),
 ]
 
@@ -691,105 +704,65 @@ def test_given_seeded_reuse_from_when_incremental_model_runs_then_dbt_catches_up
     "test_case",
     [
         DbtMultiNodeCompleteReuseFromE2ETestCase(
-            description="multi-node complete reuse resumes after later origin failure",
+            description="multi-node complete reuse rebuilds the node whose origin is missing",
             command=("dbt", "build", "--select", "+downstream_orders"),
-            failure_sql="DROP TABLE prod.orders_c",
-            recovery_sql=(
-                "CREATE TABLE prod.orders_c AS SELECT 'orders_c' AS model_name, 900 AS amount"
-            ),
-            expected_failed_destination_rows=(("orders_a", 900), ("orders_b", 900)),
-            expected_failed_fingerprint_rows=(
-                ("model.analytics.orders_a",),
-                ("model.analytics.orders_b",),
-            ),
-            expected_rerun_downstream_rows=(
+            missing_origin_sql="DROP TABLE prod.orders_c",
+            expected_downstream_rows=(
                 ("orders_a", 900),
                 ("orders_b", 900),
                 ("orders_c", 900),
             ),
-            expected_rerun_fingerprint_rows=(
+            expected_fingerprint_rows=(
                 ("model.analytics.orders_a",),
                 ("model.analytics.orders_b",),
                 ("model.analytics.orders_c",),
             ),
-            expected_absent_failed_relation=("main", "orders_c"),
-            expected_failed_absent_stdout_fragments=("dbt reuse  pre-phase",),
-            expected_rerun_stdout_fragments=(
+            expected_stdout_fragments=(
                 "dbt reuse",
-                "model.analytics.orders_c",
-                "OK     reuse",
+                "model.analytics.orders_a OK     reuse",
+                "model.analytics.orders_b OK     reuse",
+                "dbt execution",
+                "orders_c",
             ),
-            expected_rerun_absent_stdout_fragments=(
-                "model.analytics.orders_a        OK",
-                "model.analytics.orders_b        OK",
-            ),
+            expected_absent_stdout_fragments=("model.analytics.orders_c OK     reuse",),
         )
     ],
-    ids=["multi-node complete reuse resumes after later origin failure"],
+    ids=["multi-node complete reuse rebuilds the node whose origin is missing"],
 )
-def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rerun_resumes_failed_node(
+def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rebuilds_that_node(
     tmp_path: Path,
     test_case: DbtMultiNodeCompleteReuseFromE2ETestCase,
 ) -> None:
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_multi_node_reuse_from_project(tmp_path=tmp_path)
     db_path: Path = project_dir / "dbt_multi_node_reuse_from.duckdb"
-    execute_duckdb(db_path=db_path, sql=test_case.failure_sql)
+    execute_duckdb(db_path=db_path, sql=test_case.missing_origin_sql)
 
-    failed_result: subprocess.CompletedProcess[str] = run_sqb(
+    result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,
         project_dir=project_dir,
     )
 
-    assert failed_result.returncode != 0
-    absent_stdout_fragment: str
-    for absent_stdout_fragment in test_case.expected_failed_absent_stdout_fragments:
-        assert absent_stdout_fragment not in failed_result.stdout
-    assert query_duckdb(
-        db_path=db_path,
-        sql=(
-            "SELECT model_name, amount FROM main.orders_a "
-            "UNION ALL "
-            "SELECT model_name, amount FROM main.orders_b "
-            "ORDER BY model_name"
-        ),
-    ) == list(test_case.expected_failed_destination_rows)
-    absent_schema, absent_relation = test_case.expected_absent_failed_relation
-    assert not table_exists(db_path=db_path, table_name=absent_relation, schema=absent_schema)
-    assert query_duckdb(
-        db_path=db_path,
-        sql=(
-            "SELECT node_name FROM main._sqlbuild_fingerprints "
-            "WHERE node_type = 'dbt' ORDER BY node_name"
-        ),
-    ) == list(test_case.expected_failed_fingerprint_rows)
-
-    execute_duckdb(db_path=db_path, sql=test_case.recovery_sql)
-    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    assert result.returncode == 0, result.stderr or result.stdout
     expected_stdout_fragment: str
-    for expected_stdout_fragment in test_case.expected_rerun_stdout_fragments:
-        assert expected_stdout_fragment in rerun_result.stdout
-    absent_stdout_fragment = ""
-    for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
-        assert absent_stdout_fragment not in rerun_result.stdout
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_absent_stdout_fragments:
+        assert absent_stdout_fragment not in result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql=(
             "SELECT model_name, downstream_amount FROM main.downstream_orders ORDER BY model_name"
         ),
-    ) == list(test_case.expected_rerun_downstream_rows)
+    ) == list(test_case.expected_downstream_rows)
     assert query_duckdb(
         db_path=db_path,
         sql=(
             "SELECT node_name FROM main._sqlbuild_fingerprints "
             "WHERE node_type = 'dbt' ORDER BY node_name"
         ),
-    ) == list(test_case.expected_rerun_fingerprint_rows)
+    ) == list(test_case.expected_fingerprint_rows)
 
 
 @pytest.mark.parametrize(
@@ -797,28 +770,22 @@ def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rerun_re
     [
         DbtMultiNodeSeededReuseFromE2ETestCase(
             description=(
-                "multi-node seeded reuse resumes from live cursors after later origin failure"
+                "multi-node seeded reuse rebuilds the node whose origin is missing "
+                "while others seed and catch up"
             ),
             command=("dbt", "build", "--select", "+downstream_orders"),
-            failure_sql="DROP TABLE prod.orders_c",
-            recovery_sql=(
-                "CREATE TABLE prod.orders_c AS "
-                "SELECT 'orders_c' AS model_name, 1 AS order_id, 900 AS amount, "
-                "TIMESTAMP '2026-01-01' AS event_time"
-            ),
-            expected_failed_destination_rows=(("orders_a", 1, 900), ("orders_b", 1, 900)),
-            expected_absent_failed_relation=("main", "orders_c"),
-            expected_failed_absent_stdout_fragments=("dbt reuse  pre-phase",),
-            expected_rerun_stdout_fragments=(
+            missing_origin_sql="DROP TABLE prod.orders_c",
+            expected_stdout_fragments=(
                 "dbt reuse",
-                "model.analytics.orders_c",
-                "OK     baseline reuse before dbt catch-up",
+                "model.analytics.orders_a OK     baseline reuse before dbt catch-up",
+                "model.analytics.orders_b OK     baseline reuse before dbt catch-up",
+                "dbt execution",
+                "orders_c",
             ),
-            expected_rerun_absent_stdout_fragments=(
-                "model.analytics.orders_a        OK",
-                "model.analytics.orders_b        OK",
+            expected_absent_stdout_fragments=(
+                "model.analytics.orders_c OK     baseline reuse before dbt catch-up",
             ),
-            expected_rerun_downstream_rows=(
+            expected_downstream_rows=(
                 ("orders_a", 1, 900),
                 ("orders_a", 2, 901),
                 ("orders_b", 1, 900),
@@ -828,58 +795,39 @@ def test_given_multi_node_complete_reuse_when_later_origin_missing_then_rerun_re
             ),
         )
     ],
-    ids=["multi-node seeded reuse resumes from live cursors after later origin failure"],
+    ids=[
+        "multi-node seeded reuse rebuilds the node whose origin is missing "
+        "while others seed and catch up"
+    ],
 )
-def test_given_multi_node_seeded_reuse_when_later_origin_missing_then_rerun_uses_live_cursors(
+def test_given_multi_node_seeded_reuse_when_later_origin_missing_then_rebuilds_that_node(
     tmp_path: Path,
     test_case: DbtMultiNodeSeededReuseFromE2ETestCase,
 ) -> None:
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_multi_node_seeded_reuse_from_project(tmp_path=tmp_path)
     db_path: Path = project_dir / "dbt_multi_node_seeded_reuse_from.duckdb"
-    execute_duckdb(db_path=db_path, sql=test_case.failure_sql)
+    execute_duckdb(db_path=db_path, sql=test_case.missing_origin_sql)
 
-    failed_result: subprocess.CompletedProcess[str] = run_sqb(
+    result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,
         project_dir=project_dir,
     )
 
-    assert failed_result.returncode != 0
-    absent_stdout_fragment: str
-    for absent_stdout_fragment in test_case.expected_failed_absent_stdout_fragments:
-        assert absent_stdout_fragment not in failed_result.stdout
-    assert query_duckdb(
-        db_path=db_path,
-        sql=(
-            "SELECT model_name, order_id, amount FROM main.orders_a "
-            "UNION ALL "
-            "SELECT model_name, order_id, amount FROM main.orders_b "
-            "ORDER BY model_name, order_id"
-        ),
-    ) == list(test_case.expected_failed_destination_rows)
-    absent_schema, absent_relation = test_case.expected_absent_failed_relation
-    assert not table_exists(db_path=db_path, table_name=absent_relation, schema=absent_schema)
-
-    execute_duckdb(db_path=db_path, sql=test_case.recovery_sql)
-    rerun_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert rerun_result.returncode == 0, rerun_result.stderr or rerun_result.stdout
+    assert result.returncode == 0, result.stderr or result.stdout
     expected_stdout_fragment: str
-    for expected_stdout_fragment in test_case.expected_rerun_stdout_fragments:
-        assert expected_stdout_fragment in rerun_result.stdout
-    absent_stdout_fragment = ""
-    for absent_stdout_fragment in test_case.expected_rerun_absent_stdout_fragments:
-        assert absent_stdout_fragment not in rerun_result.stdout
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    absent_stdout_fragment: str
+    for absent_stdout_fragment in test_case.expected_absent_stdout_fragments:
+        assert absent_stdout_fragment not in result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql=(
             "SELECT model_name, order_id, downstream_amount FROM main.downstream_orders "
             "ORDER BY model_name, order_id"
         ),
-    ) == list(test_case.expected_rerun_downstream_rows)
+    ) == list(test_case.expected_downstream_rows)
 
 
 @pytest.mark.parametrize(
@@ -1096,19 +1044,20 @@ def test_given_dbt_interop_execution_case_when_planning_then_selected_models_mat
     EXECUTION_FAILURE_TEST_CASES,
     ids=[case.description for case in EXECUTION_FAILURE_TEST_CASES],
 )
-def test_given_failing_dbt_execution_when_running_command_then_sqlbuild_does_not_run(
+def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is_skipped(
     test_case: DbtExecutionFailureCliTestCase,
     tmp_path: Path,
 ) -> None:
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    test_case.setup(project_dir)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,
         project_dir=project_dir,
     )
 
-    assert result.returncode == 1
+    assert result.returncode == test_case.expected_returncode, result.stderr or result.stdout
     db_path: Path = project_dir / "dbt_interop.duckdb"
     expected_stdout_fragment: str
     for expected_stdout_fragment in test_case.expected_stdout_fragments:

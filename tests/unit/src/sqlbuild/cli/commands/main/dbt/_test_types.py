@@ -49,3 +49,13 @@ class DbtInitOutputTestCase:
     expected_fragments: tuple[str, ...]
     expected_color_fragments: tuple[str, ...] = ()
     unexpected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtInitPromptTestCase:
+    description: str
+    explicit_git_ref: str | None
+    input_text: str
+    input_is_tty: bool
+    expected_git_ref: str
+    expected_output_fragments: tuple[str, ...] = ()

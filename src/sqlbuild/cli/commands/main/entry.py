@@ -32,6 +32,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     read_selector_files,
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
+from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
@@ -52,7 +53,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
 
     parser_class: type[SqlbuildArgumentParser] = build_argument_parser_class(use_color=use_color)
     parser: argparse.ArgumentParser = parser_class(prog="sqb")
-    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--project-dir", "--sqb-project-dir", dest="project_dir", default=None)
     parser.add_argument("--no-color", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=False)
 
@@ -406,11 +407,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_subparsers.add_parser("build")
     dbt_subparsers.add_parser("test")
     dbt_subparsers.add_parser("debug")
+    dbt_subparsers.add_parser("lineage")
+    dbt_subparsers.add_parser("diff")
     dbt_init_parser: argparse.ArgumentParser = dbt_subparsers.add_parser("init")
     dbt_init_parser.add_argument("--project-dir", dest="dbt_project_dir", default=None)
     dbt_init_parser.add_argument("--profiles-dir", dest="dbt_profiles_dir", default=None)
     dbt_init_parser.add_argument("--profile", dest="dbt_profile", default=None)
     dbt_init_parser.add_argument("--target", dest="dbt_target", default=None)
+    dbt_init_parser.add_argument("--prod-git-ref", dest="dbt_prod_git_ref", default=None)
     dbt_init_parser.add_argument("--sqb-output-dir", dest="sqb_output_dir", default=None)
     dbt_init_parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False)
     dbt_init_parser.add_argument(
@@ -476,6 +480,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dry_run: bool,
         overwrite: bool,
         skip_dbt_debug: bool,
+        production_git_ref: str | None,
     ) -> int:
         return run_dbt_init_command(
             cwd=cwd,
@@ -487,6 +492,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             dry_run=dry_run,
             overwrite=overwrite,
             skip_dbt_debug=skip_dbt_debug,
+            production_git_ref=production_git_ref,
         )
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
@@ -519,6 +525,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         run_dbt_debug=lambda project_dir, args, no_color: run_dbt_command(
             command=DbtInteropCommand.DEBUG,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_lineage=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.LINEAGE,
+            project_dir=project_dir,
+            args=args,
+            no_color=no_color,
+        ),
+        run_dbt_diff=lambda project_dir, args, no_color: run_dbt_command(
+            command=DbtInteropCommand.DIFF,
             project_dir=project_dir,
             args=args,
             no_color=no_color,
@@ -569,6 +587,8 @@ def _main_with_dependencies(
             "build",
             "test",
             "debug",
+            "lineage",
+            "diff",
         }:
             args.dbt_args = unknown_args
         elif unknown_args:
@@ -581,7 +601,11 @@ def _main_with_dependencies(
     try:
         project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
         effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
-        if args.command is not None:
+        if args.command is not None and not (
+            args.command == CliCommand.DBT
+            and args.dbt_command != "init"
+            and not (effective_project_dir / PROJECT_CONFIG_FILENAME).exists()
+        ):
             configure_diagnostics(
                 target_dir=effective_project_dir / "target",
                 debug=args.debug,
@@ -652,6 +676,7 @@ def _main_with_dependencies(
                     args.dry_run,
                     args.overwrite,
                     args.skip_dbt_debug,
+                    args.dbt_prod_git_ref,
                 )
             if args.dbt_command == "plan":
                 return handlers.run_dbt_plan(project_dir, tuple(args.dbt_args), args.no_color)
@@ -663,6 +688,10 @@ def _main_with_dependencies(
                 return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
             if args.dbt_command == "debug":
                 return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "lineage":
+                return handlers.run_dbt_lineage(project_dir, tuple(args.dbt_args), args.no_color)
+            if args.dbt_command == "diff":
+                return handlers.run_dbt_diff(project_dir, tuple(args.dbt_args), args.no_color)
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
             cursor_overrides = CursorOverrides(

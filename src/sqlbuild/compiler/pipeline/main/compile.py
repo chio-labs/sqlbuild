@@ -198,7 +198,7 @@ def _build_result(
             project_graph=_build_project_graph(project=project),
             discovered_inputs=discovered_inputs,
         )
-        selected_sql_keys = run_selection.sql_keys
+        selected_sql_keys = run_selection.sql_keys if run_selection.python_node_names else None
         selected_python_node_names = run_selection.python_node_names
 
     custom_prepare_version_functions: dict[str, Any] = load_custom_prepare_version_functions(
