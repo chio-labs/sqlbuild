@@ -7,6 +7,21 @@ DBT_MANIFEST_META_KEY: str = "meta"
 DBT_MANIFEST_SQLBUILD_META_KEY: str = "sqlbuild"
 DBT_MANIFEST_REUSE_CURSOR_KEY: str = "reuse_cursor"
 
+DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "schema",
+        "database",
+        "alias",
+        "target_schema",
+        "target_database",
+        "tags",
+        "docs",
+        "group",
+        "enabled",
+        "packages",
+    }
+)
+
 DBT_MATERIALIZATION_EPHEMERAL: str = "ephemeral"
 DBT_MATERIALIZATION_INCREMENTAL: str = "incremental"
 DBT_MATERIALIZATION_MICROBATCH: str = "microbatch"

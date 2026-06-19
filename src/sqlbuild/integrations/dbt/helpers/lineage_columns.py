@@ -58,6 +58,35 @@ class _ColumnCandidateSelection:
     truncated: bool
 
 
+def dbt_column_lineage_selected_keys(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    target: str,
+    direction: DbtLineageDirection,
+    depth: int | None,
+) -> frozenset[DbtCombinedGraphKey]:
+    """Return the graph keys a column lineage target would analyze, or empty."""
+
+    if ":" not in target or direction == DbtLineageDirection.BOTH:
+        return frozenset()
+    raw_resource, column_name = target.rsplit(":", 1)
+    if not raw_resource or not column_name:
+        return frozenset()
+    resource_key: DbtCombinedGraphKey = resolve_dbt_lineage_target(
+        project=project,
+        manifest=manifest,
+        target=raw_resource,
+    )
+    return _column_candidate_selection(
+        graph=graph,
+        key=resource_key,
+        direction=direction,
+        depth=depth,
+    ).keys
+
+
 def select_dbt_column_lineage_target(
     *,
     project: CompiledProject,
@@ -199,8 +228,9 @@ def inspect_dbt_source_schemas(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     manifest: DbtManifestIndex,
+    selected_keys: frozenset[DbtCombinedGraphKey],
 ) -> DbtSourceSchemaInspectionResult:
-    """Best-effort source schema inspection for dbt column lineage star expansion."""
+    """Best-effort source/seed schema inspection for selected dbt lineage keys."""
 
     columns_by_unique_id: dict[str, tuple[SourceColumnEntry, ...]] = {}
     warnings: list[str] = []
@@ -209,6 +239,8 @@ def inspect_dbt_source_schemas(
         connection = adapter.connect(connection_config)
         source: DbtManifestSource
         for source in manifest.sources_by_unique_id.values():
+            if dbt_source_graph_key(source.unique_id) not in selected_keys:
+                continue
             columns: tuple[ColumnInfo, ...] | None = None
             errors: list[str] = []
             for relation_name in _source_relation_candidates(source):
@@ -228,6 +260,8 @@ def inspect_dbt_source_schemas(
             )
         seed: DbtManifestSeed
         for seed in manifest.seeds_by_unique_id.values():
+            if dbt_source_graph_key(seed.unique_id) not in selected_keys:
+                continue
             seed_columns: tuple[ColumnInfo, ...] | None = None
             seed_errors: list[str] = []
             for relation_name in _seed_relation_candidates(seed):

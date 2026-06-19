@@ -9,7 +9,10 @@ import pytest
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.helpers.graph import (
+    build_dbt_combined_graph,
+    dbt_source_graph_key,
+)
 from sqlbuild.integrations.dbt.helpers.lineage_columns import (
     inspect_dbt_source_schemas,
     select_dbt_column_lineage_target,
@@ -735,6 +738,7 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
         adapter=adapter_by_description[test_case.description],
         connection_config={},
         manifest=manifest,
+        selected_keys=frozenset({dbt_source_graph_key("source.analytics.raw.orders")}),
     )
 
     assert tuple(result.warnings) == test_case.expected_warnings

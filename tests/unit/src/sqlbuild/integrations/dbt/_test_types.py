@@ -235,12 +235,27 @@ class DbtReuseScopeFromPlanTestCase:
 
 
 @dataclass(frozen=True)
+class DbtDefinitionFingerprintTestCase:
+    description: str
+    current_raw_code: str
+    origin_raw_code: str
+    current_config_overrides: dict[str, object]
+    origin_config_overrides: dict[str, object]
+    current_macro_ids: tuple[str, ...]
+    origin_macro_ids: tuple[str, ...]
+    current_macro_sql_by_id: dict[str, str]
+    origin_macro_sql_by_id: dict[str, str]
+    macro_deps_by_id: dict[str, tuple[str, ...]]
+    expected_definition_changed: bool
+
+
+@dataclass(frozen=True)
 class DbtReuseCascadeTestCase:
     description: str
-    upstream_current_checksum: str
-    upstream_reuse_checksum: str
-    downstream_current_checksum: str
-    downstream_reuse_checksum: str
+    upstream_current_raw_sql: str
+    upstream_reuse_raw_sql: str
+    downstream_current_raw_sql: str
+    downstream_reuse_raw_sql: str
     expected_downstream_definition_changed: bool
 
 
@@ -254,8 +269,8 @@ class DbtReusePlanningTestCase:
     expected_reason: DbtReusePlanReason
     cursor_column: str | None = None
     previous_cursor_column: str | None = None
-    current_checksum: str | None = None
-    origin_checksum: str | None = None
+    current_raw_sql: str | None = None
+    origin_raw_sql: str | None = None
 
 
 @dataclass(frozen=True)

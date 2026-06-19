@@ -215,8 +215,8 @@ class DbtReuseCandidate:
     fqn: tuple[str, ...] = field(default_factory=tuple)
     cursor_column: str | None = None
     origin_relation_exists: bool = True
-    current_checksum: str | None = None
-    origin_checksum: str | None = None
+    current_definition_fingerprint: str = ""
+    origin_definition_fingerprint: str = ""
     effective_definition_changed: bool = False
 
     @property
@@ -229,9 +229,9 @@ class DbtReuseCandidate:
 
         if self.effective_definition_changed:
             return True
-        if self.current_checksum is None or self.origin_checksum is None:
+        if not self.current_definition_fingerprint or not self.origin_definition_fingerprint:
             return False
-        return self.current_checksum != self.origin_checksum
+        return self.current_definition_fingerprint != self.origin_definition_fingerprint
 
 
 @dataclass(frozen=True)

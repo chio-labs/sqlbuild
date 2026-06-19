@@ -118,8 +118,8 @@ def resolve_dbt_reuse_candidates(
                 name=current_model.name,
                 fqn=current_model.fqn,
                 cursor_column=_model_reuse_cursor(model=current_model),
-                current_checksum=current_model.node_checksum,
-                origin_checksum=reuse_model.node_checksum,
+                current_definition_fingerprint=current_model.definition_fingerprint,
+                origin_definition_fingerprint=reuse_model.definition_fingerprint,
                 effective_definition_changed=_effective_definition_changed(
                     unique_id=unique_id,
                     current_manifest=current_manifest,
@@ -184,9 +184,9 @@ def _model_definition_changed(
     reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(unique_id)
     if current_model is None or reuse_model is None:
         return True
-    if current_model.node_checksum is None or reuse_model.node_checksum is None:
+    if not current_model.definition_fingerprint or not reuse_model.definition_fingerprint:
         return False
-    return current_model.node_checksum != reuse_model.node_checksum
+    return current_model.definition_fingerprint != reuse_model.definition_fingerprint
 
 
 def resolve_dbt_reuse_candidates_for_plan(
@@ -256,8 +256,8 @@ def mark_missing_dbt_reuse_origin_relations(
                 origin_relation_exists=(
                     candidate.origin_relation_key in existing_origin_relation_keys
                 ),
-                current_checksum=candidate.current_checksum,
-                origin_checksum=candidate.origin_checksum,
+                current_definition_fingerprint=candidate.current_definition_fingerprint,
+                origin_definition_fingerprint=candidate.origin_definition_fingerprint,
                 effective_definition_changed=candidate.effective_definition_changed,
             )
         )

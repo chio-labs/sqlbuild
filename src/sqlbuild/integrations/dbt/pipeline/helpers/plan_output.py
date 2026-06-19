@@ -119,6 +119,7 @@ def build_sqlbuild_plan_output(
     on_connection_error: Callable[[int, float], None] | None,
     deferred_relations: dict[str, RelationInfo] | None = None,
     dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
+    disable_scope_pruning: bool = False,
 ) -> PlanOutput | None:
     del required_dbt_unique_ids
     if not selected_model_names:
@@ -154,7 +155,7 @@ def build_sqlbuild_plan_output(
                 external_blocked_model_names=external_blocked_model_names,
                 standard_scope_pruning=(
                     StandardScopePruning.PRUNE_UNCHANGED
-                    if "--force" not in sqlbuild_args
+                    if "--force" not in sqlbuild_args and not disable_scope_pruning
                     else StandardScopePruning.NONE
                 ),
                 on_progress=on_progress,
