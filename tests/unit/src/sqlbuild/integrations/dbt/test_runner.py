@@ -197,7 +197,7 @@ def test_given_repeated_dbt_ls_when_running_then_reuses_memoized_result(
     test_case: DbtRunnerMemoTestCase,
 ) -> None:
     invoker: RecordingDbtInvoker = RecordingDbtInvoker(test_case.command_result)
-    runner: DbtRunner = DbtRunner(invoker=invoker)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoker)
     options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
 
     first: DbtLsResult = runner.ls(options=options, select=("tag:nightly",))
@@ -223,7 +223,7 @@ def test_given_dbt_runner_when_running_compile_then_uses_project_dir_as_cwd(
     test_case: DbtRunnerCommandTestCase,
 ) -> None:
     invoker: RecordingDbtInvoker = RecordingDbtInvoker(test_case.command_result)
-    runner: DbtRunner = DbtRunner(invoker=invoker)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoker)
     options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
 
     result: DbtCommandResult = runner.compile(options=options)
