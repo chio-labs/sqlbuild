@@ -235,6 +235,16 @@ class DbtReuseScopeFromPlanTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseCascadeTestCase:
+    description: str
+    upstream_current_checksum: str
+    upstream_reuse_checksum: str
+    downstream_current_checksum: str
+    downstream_reuse_checksum: str
+    expected_downstream_definition_changed: bool
+
+
+@dataclass(frozen=True)
 class DbtReusePlanningTestCase:
     description: str
     candidate_materialization: str

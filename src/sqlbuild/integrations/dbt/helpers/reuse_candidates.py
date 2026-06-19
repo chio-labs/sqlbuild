@@ -65,6 +65,7 @@ def resolve_dbt_reuse_candidates(
 
     candidates: list[DbtReuseCandidate] = []
     skipped: list[DbtReuseCandidateSkip] = []
+    effective_change_cache: dict[str, bool] = {}
     unique_id: str
     for unique_id in _dedupe_preserving_order(values=scoped_unique_ids):
         current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
@@ -119,9 +120,73 @@ def resolve_dbt_reuse_candidates(
                 cursor_column=_model_reuse_cursor(model=current_model),
                 current_checksum=current_model.node_checksum,
                 origin_checksum=reuse_model.node_checksum,
+                effective_definition_changed=_effective_definition_changed(
+                    unique_id=unique_id,
+                    current_manifest=current_manifest,
+                    reuse_manifest=reuse_manifest,
+                    cache=effective_change_cache,
+                ),
             )
         )
     return DbtReuseCandidateResolution(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
+def _effective_definition_changed(
+    *,
+    unique_id: str,
+    current_manifest: DbtManifestIndex,
+    reuse_manifest: DbtManifestIndex,
+    cache: dict[str, bool],
+    visiting: frozenset[str] = frozenset(),
+) -> bool:
+    """Return whether a model or any transitive dbt-model upstream changed vs the reuse ref."""
+
+    if unique_id in cache:
+        return cache[unique_id]
+    if unique_id in visiting:
+        return False
+    if _model_definition_changed(
+        unique_id=unique_id,
+        current_manifest=current_manifest,
+        reuse_manifest=reuse_manifest,
+    ):
+        cache[unique_id] = True
+        return True
+    current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
+    if current_model is None:
+        cache[unique_id] = False
+        return False
+    next_visiting: frozenset[str] = visiting | {unique_id}
+    dependency_unique_id: str
+    for dependency_unique_id in current_model.depends_on_nodes:
+        if dependency_unique_id not in current_manifest.models_by_unique_id:
+            continue
+        if _effective_definition_changed(
+            unique_id=dependency_unique_id,
+            current_manifest=current_manifest,
+            reuse_manifest=reuse_manifest,
+            cache=cache,
+            visiting=next_visiting,
+        ):
+            cache[unique_id] = True
+            return True
+    cache[unique_id] = False
+    return False
+
+
+def _model_definition_changed(
+    *,
+    unique_id: str,
+    current_manifest: DbtManifestIndex,
+    reuse_manifest: DbtManifestIndex,
+) -> bool:
+    current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
+    reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(unique_id)
+    if current_model is None or reuse_model is None:
+        return True
+    if current_model.node_checksum is None or reuse_model.node_checksum is None:
+        return False
+    return current_model.node_checksum != reuse_model.node_checksum
 
 
 def resolve_dbt_reuse_candidates_for_plan(
@@ -193,6 +258,7 @@ def mark_missing_dbt_reuse_origin_relations(
                 ),
                 current_checksum=candidate.current_checksum,
                 origin_checksum=candidate.origin_checksum,
+                effective_definition_changed=candidate.effective_definition_changed,
             )
         )
     return DbtReuseCandidateResolution(

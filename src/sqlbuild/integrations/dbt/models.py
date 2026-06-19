@@ -217,6 +217,7 @@ class DbtReuseCandidate:
     origin_relation_exists: bool = True
     current_checksum: str | None = None
     origin_checksum: str | None = None
+    effective_definition_changed: bool = False
 
     @property
     def origin_relation_key(self) -> tuple[str | None, str | None, str]:
@@ -224,8 +225,10 @@ class DbtReuseCandidate:
 
     @property
     def definition_changed_from_origin(self) -> bool:
-        """Return whether the current model definition differs from the reuse origin."""
+        """Return whether this model or any dbt upstream differs from the reuse origin."""
 
+        if self.effective_definition_changed:
+            return True
         if self.current_checksum is None or self.origin_checksum is None:
             return False
         return self.current_checksum != self.origin_checksum
