@@ -1004,6 +1004,29 @@ DEFINITION_FINGERPRINT_TEST_CASES: tuple[DbtDefinitionFingerprintTestCase, ...] 
         macro_deps_by_id={},
         expected_definition_changed=False,
     ),
+    DbtDefinitionFingerprintTestCase(
+        description="generated snapshot wrapper macro change does not change the definition",
+        current_raw_code="{{ snapshot_orders_snapshot() }}",
+        origin_raw_code="{{ snapshot_orders_snapshot() }}",
+        current_macro_ids=("snapshot.analytics.snapshot_orders_snapshot",),
+        origin_macro_ids=("snapshot.analytics.snapshot_orders_snapshot",),
+        current_config_overrides={"strategy": "timestamp"},
+        origin_config_overrides={"strategy": "timestamp"},
+        current_macro_sql_by_id={
+            "snapshot.analytics.snapshot_orders_snapshot": (
+                "{% snapshot orders_snapshot %}{{ config(target_schema='main') }}"
+                "select 1{% endsnapshot %}"
+            )
+        },
+        origin_macro_sql_by_id={
+            "snapshot.analytics.snapshot_orders_snapshot": (
+                "{% snapshot orders_snapshot %}{{ config(target_schema='prod') }}"
+                "select 1{% endsnapshot %}"
+            )
+        },
+        macro_deps_by_id={},
+        expected_definition_changed=False,
+    ),
 )
 
 
