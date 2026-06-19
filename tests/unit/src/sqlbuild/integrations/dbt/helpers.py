@@ -5,8 +5,12 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RelationInfo, RowDiffResult
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
@@ -22,6 +26,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, Discover
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -29,29 +34,42 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.graph import (
+    build_dbt_combined_graph,
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
+from sqlbuild.integrations.dbt.helpers.lineage_selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
+    DbtColumnLineageTrace,
+    DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtCommandResult,
     DbtInteropPlan,
     DbtInteropSelectionResult,
+    DbtLineageGraph,
+    DbtLsNode,
     DbtModelPlanEntry,
     DbtReusePlanEntry,
     DbtReusePlanningResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
+    DbtDiffOptions,
+    parse_dbt_diff_options,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
+    DbtLineageDirection,
     DbtModelPlanAction,
     DbtModelPlanReason,
     DbtReusePlanAction,
@@ -177,6 +195,74 @@ def build_reuse_plan_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
     )
 
 
+def build_reuse_plan_origin_key_current_manifest_nodes() -> tuple[dict[str, object], ...]:
+    """Build current manifest nodes for origin relation key tests."""
+
+    return (
+        build_manifest_model_node(
+            unique_id="model.analytics.orders",
+            package_name="analytics",
+            name="orders",
+            database="warehouse",
+            schema="dev_marts",
+            alias="orders_dev",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.customers",
+            package_name="analytics",
+            name="customers",
+            database="warehouse",
+            schema="dev_core",
+            alias="customers_dev",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.payments",
+            package_name="analytics",
+            name="payments",
+            database="lakehouse",
+            schema="dev_marts",
+            alias="payments_dev",
+            materialized="table",
+        ),
+    )
+
+
+def build_reuse_plan_origin_key_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
+    """Build reuse manifest nodes for origin relation key tests."""
+
+    return (
+        build_manifest_model_node(
+            unique_id="model.analytics.orders",
+            package_name="analytics",
+            name="orders",
+            database="warehouse",
+            schema="prod_marts",
+            alias="orders_prod",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.customers",
+            package_name="analytics",
+            name="customers",
+            database="warehouse",
+            schema="prod_core",
+            alias="customers_prod",
+            materialized="table",
+        ),
+        build_manifest_model_node(
+            unique_id="model.analytics.payments",
+            package_name="analytics",
+            name="payments",
+            database="lakehouse",
+            schema="prod_marts",
+            alias="payments_prod",
+            materialized="table",
+        ),
+    )
+
+
 def assert_reuse_plan_output_matches(
     *,
     result: DbtReusePlanningResult | None,
@@ -191,6 +277,14 @@ def assert_reuse_plan_output_matches(
         return
     assert result.complete_reuse_unique_ids == expected_complete_reuse_unique_ids
     assert result.seeded_reuse_unique_ids == expected_seeded_reuse_unique_ids
+
+
+def reuse_plan_rebuild_reasons(result: DbtReusePlanningResult) -> tuple[DbtReusePlanReason, ...]:
+    """Return rebuild reasons from a dbt reuse planning result."""
+
+    return tuple(
+        entry.reason for entry in result.entries if entry.action == DbtReusePlanAction.REBUILD
+    )
 
 
 def build_reuse_execute_manifest() -> DbtManifestIndex:
@@ -232,6 +326,51 @@ def build_reuse_execute_plan() -> DbtInteropPlan:
                     materialization="table",
                     destination_relation_name="main.fact_orders",
                     origin_relation_name="prod.fact_orders",
+                ),
+            )
+        ),
+    )
+
+
+def build_fresh_schema_reuse_execute_manifest() -> DbtManifestIndex:
+    """Build a manifest whose destination schema does not exist yet."""
+
+    model: DbtManifestModel = DbtManifestModel(
+        unique_id="model.analytics.fact_orders",
+        package_name="analytics",
+        name="fact_orders",
+        relation_name='"dev_marts"."fact_orders"',
+        database=None,
+        schema="dev_marts",
+        alias="fact_orders",
+        node_checksum="checksum-1",
+        query_sql="select 1 as order_id, 111 as amount",
+    )
+    return DbtManifestIndex(
+        models_by_unique_id={model.unique_id: model},
+        models_by_name={model.name: (model,)},
+        models_by_package_and_name={(model.package_name, model.name): model},
+    )
+
+
+def build_fresh_schema_reuse_execute_plan() -> DbtInteropPlan:
+    """Build a complete reuse plan whose destination uses a quoted fresh schema."""
+
+    return build_dbt_interop_plan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_reuse_plan=DbtReusePlanningResult(
+            entries=(
+                DbtReusePlanEntry(
+                    unique_id="model.analytics.fact_orders",
+                    action=DbtReusePlanAction.COMPLETE_REUSE,
+                    reason=DbtReusePlanReason.DESTINATION_MISSING,
+                    materialization="table",
+                    destination_relation_name='"dev_marts"."fact_orders"',
+                    origin_relation_name='"marts"."fact_orders"',
                 ),
             )
         ),
@@ -418,13 +557,17 @@ def extract_dbt_ls_excludes(argv: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def build_manifest_data(
-    *, nodes: tuple[dict[str, object], ...], sources: tuple[dict[str, object], ...] = ()
+    *,
+    nodes: tuple[dict[str, object], ...],
+    sources: tuple[dict[str, object], ...] = (),
+    macros: tuple[dict[str, object], ...] = (),
 ) -> dict[str, object]:
     """Build a minimal dbt manifest payload for model lookup tests."""
 
     return {
         "nodes": {str(node["unique_id"]): node for node in nodes},
         "sources": {str(source["unique_id"]): source for source in sources},
+        "macros": {str(macro["unique_id"]): macro for macro in macros},
     }
 
 
@@ -440,10 +583,13 @@ def build_manifest_model_node(
     checksum: str | None = None,
     fqn: tuple[str, ...] = (),
     raw_code: str | None = None,
+    compiled_code: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
+    depends_on_macro_ids: tuple[str, ...] = (),
     materialized: str | None = "view",
     incremental_strategy: str | None = None,
     meta: dict[str, object] | None = None,
+    config_overrides: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
 
@@ -456,6 +602,8 @@ def build_manifest_model_node(
     }
     if relation_name is not None:
         node["relation_name"] = relation_name
+    if compiled_code is not None:
+        node["compiled_code"] = compiled_code
     if database is not None:
         node["database"] = database
     if schema is not None:
@@ -466,16 +614,34 @@ def build_manifest_model_node(
         node["checksum"] = {"checksum": checksum}
     if fqn:
         node["fqn"] = list(fqn)
-    if depends_on_nodes:
-        node["depends_on"] = {"nodes": list(depends_on_nodes)}
+    if depends_on_nodes or depends_on_macro_ids:
+        node["depends_on"] = {
+            "nodes": list(depends_on_nodes),
+            "macros": list(depends_on_macro_ids),
+        }
     if materialized is not None:
         config: dict[str, object] = {"materialized": materialized}
         if incremental_strategy is not None:
             config["incremental_strategy"] = incremental_strategy
         if meta is not None:
             config["meta"] = meta
+        if config_overrides is not None:
+            config.update(config_overrides)
         node["config"] = config
     return node
+
+
+def build_manifest_macro_node(
+    *, unique_id: str, macro_sql: str, depends_on_macro_ids: tuple[str, ...] = ()
+) -> dict[str, object]:
+    """Build a minimal dbt manifest macro node."""
+
+    return {
+        "unique_id": unique_id,
+        "resource_type": "macro",
+        "macro_sql": macro_sql,
+        "depends_on": {"macros": list(depends_on_macro_ids)},
+    }
 
 
 def build_manifest_source_node(
@@ -634,6 +800,7 @@ def write_dbt_test_fingerprint(
         metadata_json="{}",
         ts=datetime.now(tz=UTC),
     )
+
     write_fingerprint(
         connection=connection,
         execute=adapter.execute,
@@ -644,6 +811,336 @@ def write_dbt_test_fingerprint(
         render_framework_type=adapter.render_framework_type,
         render_create_table_sql=adapter.render_create_fingerprint_table_sql,
         render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
+    )
+
+
+def build_lineage_manifest_data() -> dict[str, object]:
+    """Build manifest data for mixed dbt/SQLBuild lineage unit tests."""
+
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.stg_orders",
+                package_name="analytics",
+                name="stg_orders",
+                relation_name="analytics.stg_orders",
+                depends_on_nodes=("source.analytics.raw.orders",),
+            ),
+            build_manifest_model_node(
+                unique_id="model.analytics.int_orders",
+                package_name="analytics",
+                name="int_orders",
+                relation_name="analytics.int_orders",
+                depends_on_nodes=("model.analytics.stg_orders",),
+            ),
+        ),
+        sources=(
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                relation_name="raw.orders",
+            ),
+        ),
+    )
+
+
+def build_column_lineage_manifest_data() -> dict[str, object]:
+    """Build manifest data with compiled SQL for dbt column lineage unit tests."""
+
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.stg_orders",
+                package_name="analytics",
+                name="stg_orders",
+                relation_name='"db"."raw"."stg_orders"',
+                compiled_code='select order_id, amount from "db"."raw"."orders"',
+                depends_on_nodes=("source.analytics.raw.orders",),
+            ),
+            build_manifest_model_node(
+                unique_id="model.analytics.fact_orders",
+                package_name="analytics",
+                name="fact_orders",
+                relation_name='"db"."marts"."fact_orders"',
+                compiled_code='select order_id, amount from "db"."raw"."stg_orders"',
+                depends_on_nodes=("model.analytics.stg_orders",),
+            ),
+        ),
+        sources=(
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                relation_name='"db"."raw"."orders"',
+            ),
+        ),
+    )
+
+
+def build_column_lineage_star_manifest_data(*, include_source_schema: bool) -> dict[str, object]:
+    """Build manifest data for SELECT * dbt column lineage tests."""
+
+    source: dict[str, object] = build_manifest_source_node(
+        unique_id="source.analytics.raw.orders",
+        relation_name='"db"."raw"."orders"',
+    )
+    if include_source_schema:
+        source["columns"] = {
+            "order_id": {"name": "order_id", "data_type": "INTEGER"},
+            "amount": {"name": "amount", "data_type": "INTEGER"},
+        }
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.stg_orders",
+                package_name="analytics",
+                name="stg_orders",
+                relation_name="raw.stg_orders",
+                compiled_code="select * from raw.orders",
+                depends_on_nodes=("source.analytics.raw.orders",),
+            ),
+            build_manifest_model_node(
+                unique_id="model.analytics.fact_orders",
+                package_name="analytics",
+                name="fact_orders",
+                relation_name="marts.fact_orders",
+                compiled_code="select * from raw.stg_orders",
+                depends_on_nodes=("model.analytics.stg_orders",),
+            ),
+        ),
+        sources=(source,),
+    )
+
+
+def build_column_lineage_join_manifest_data() -> dict[str, object]:
+    """Build manifest data with aliases, joins, and expression transforms."""
+
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.stg_orders",
+                package_name="analytics",
+                name="stg_orders",
+                relation_name="raw.stg_orders",
+                compiled_code="select o.order_id, o.amount from raw.orders as o",
+                depends_on_nodes=("source.analytics.raw.orders",),
+            ),
+            build_manifest_model_node(
+                unique_id="model.analytics.fact_orders",
+                package_name="analytics",
+                name="fact_orders",
+                relation_name="fact_orders",
+                compiled_code=(
+                    "select o.order_id, o.amount * 100 as amount_cents "
+                    "from raw.stg_orders o join raw.customers c on o.order_id = c.order_id"
+                ),
+                depends_on_nodes=(
+                    "model.analytics.stg_orders",
+                    "source.analytics.raw.customers",
+                ),
+            ),
+        ),
+        sources=(
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                relation_name="raw.orders",
+            ),
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.customers",
+                name="customers",
+                relation_name="raw.customers",
+            ),
+        ),
+    )
+
+
+def build_column_lineage_quoted_schema_manifest_data() -> dict[str, object]:
+    """Build manifest data with quoted schema-qualified compiled SQL relations."""
+
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.stg_orders",
+                package_name="analytics",
+                name="stg_orders",
+                relation_name='"raw"."stg_orders"',
+                compiled_code='select order_id, amount from "raw"."orders"',
+                depends_on_nodes=("source.analytics.raw.orders",),
+            ),
+            build_manifest_model_node(
+                unique_id="model.analytics.fact_orders",
+                package_name="analytics",
+                name="fact_orders",
+                relation_name='"marts"."fact_orders"',
+                compiled_code='select order_id, amount from "raw"."stg_orders"',
+                depends_on_nodes=("model.analytics.stg_orders",),
+            ),
+        ),
+        sources=(
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                relation_name='"db"."raw"."orders"',
+            ),
+        ),
+    )
+
+
+def build_column_lineage_ambiguous_table_manifest_data() -> dict[str, object]:
+    """Build manifest data where table-only relation names are ambiguous."""
+
+    return build_manifest_data(
+        nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.fact_orders",
+                package_name="analytics",
+                name="fact_orders",
+                relation_name='"marts"."fact_orders"',
+                compiled_code="select order_id, amount from orders",
+                depends_on_nodes=(
+                    "source.analytics.raw.orders",
+                    "source.analytics.archive.orders",
+                ),
+            ),
+        ),
+        sources=(
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                relation_name='"db"."raw"."orders"',
+            ),
+            build_manifest_source_node(
+                unique_id="source.analytics.archive.orders",
+                name="orders",
+                relation_name='"db"."archive"."orders"',
+            ),
+        ),
+    )
+
+
+def column_lineage_edge_ids(edge: ColumnLineageEdge) -> tuple[str, str]:
+    """Return compact source/target identifiers for column lineage assertions."""
+
+    source: QualifiedLineageColumn = edge.source
+    target: QualifiedLineageColumn = edge.target
+    return (_lineage_column_id(source), _lineage_column_id(target))
+
+
+def column_lineage_target_id(trace: DbtColumnLineageTrace) -> tuple[str, str, str]:
+    """Return compact target identity for dbt column lineage assertions."""
+
+    return (
+        str(trace.target.resource_type),
+        trace.target.resource_name,
+        trace.target.column_name,
+    )
+
+
+class FakeLineageSourceSchemaAdapter(BaseAdapter):
+    """Adapter stub for dbt source schema inspection unit tests."""
+
+    adapter_name: ClassVar[str] = "fake_lineage_source_schema"
+
+    def __init__(self, columns_by_relation: dict[str, tuple[ColumnInfo, ...]]) -> None:
+        self.columns_by_relation: dict[str, tuple[ColumnInfo, ...]] = columns_by_relation
+        self.described_relations: list[str] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        return object()
+
+    def execute(self, connection: object, sql: str) -> object:
+        raise AssertionError("execute should not be called in source schema tests")
+
+    def query(self, connection: object, sql: str, *, limit: int | None) -> QueryResult:
+        raise AssertionError("query should not be called in source schema tests")
+
+    def close(self, connection: object) -> None:
+        return None
+
+    def describe_relation(self, connection: object, relation: str) -> tuple[ColumnInfo, ...]:
+        self.described_relations.append(relation)
+        columns: tuple[ColumnInfo, ...] | None = self.columns_by_relation.get(relation)
+        if columns is None:
+            raise RuntimeError(f"missing relation {relation}")
+        return columns
+
+
+class FakeReusePlanAdapter(BaseAdapter):
+    """Adapter stub for dbt reuse origin relation listing tests."""
+
+    adapter_name: ClassVar[str] = "fake_reuse_plan"
+
+    def __init__(self, relations: tuple[RelationInfo, ...]) -> None:
+        self.relations: tuple[RelationInfo, ...] = relations
+        self.list_relation_calls: list[
+            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
+        ] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        return object()
+
+    def execute(self, connection: object, sql: str) -> object:
+        raise AssertionError("execute should not be called in reuse plan tests")
+
+    def close(self, connection: object) -> None:
+        return None
+
+    def list_relations(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection
+        self.list_relation_calls.append((database, schemas, names))
+        return tuple(
+            relation
+            for relation in self.relations
+            if relation.database == database
+            and (schemas is None or relation.schema in schemas)
+            and (names is None or relation.name in names)
+        )
+
+
+def _lineage_column_id(column: QualifiedLineageColumn) -> str:
+    resource_name: str = column.resource_name
+    column_name: str = column.column_name
+    return f"{resource_name}:{column_name}"
+
+
+def build_lineage_graph_for_output_test() -> DbtLineageGraph:
+    """Build a mixed lineage graph for output formatter tests."""
+
+    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=build_lineage_manifest_data())
+    project: CompiledProject = build_compiled_project_with_models(
+        {"fact_orders": 'select * from __dbt_ref("int_orders")'}
+    )
+    combined_graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    return select_dbt_lineage_target(
+        project=project,
+        manifest=manifest,
+        graph=combined_graph,
+        target="fact_orders",
+        direction=DbtLineageDirection.UPSTREAM,
+        depth=None,
+    )
+
+
+def build_depth_zero_lineage_graph_for_output_test() -> DbtLineageGraph:
+    """Build a single-node mixed lineage graph for output formatter tests."""
+
+    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=build_lineage_manifest_data())
+    project: CompiledProject = build_compiled_project_with_models(
+        {
+            "fact_orders": 'select * from __dbt_ref("int_orders")',
+            "mart_orders": 'select * from __ref("fact_orders")',
+        }
+    )
+    combined_graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    return select_dbt_lineage_target(
+        project=project,
+        manifest=manifest,
+        graph=combined_graph,
+        target="mart_orders",
+        direction=DbtLineageDirection.UPSTREAM,
+        depth=0,
     )
 
 
@@ -666,3 +1163,207 @@ def setup_dbt_model_planning_state(
             unique_id=unique_id,
             version_hash=fingerprint_hash,
         )
+
+
+def build_dbt_diff_manifest_model_node(
+    *,
+    unique_id: str,
+    name: str,
+    schema: str,
+    relation_name: str,
+    unique_key: object | None = None,
+    node_meta: dict[str, object] | None = None,
+    config_meta: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build a dbt manifest model node with diff-relevant config and meta."""
+
+    config: dict[str, object] = {"materialized": "table"}
+    if unique_key is not None:
+        config["unique_key"] = unique_key
+    if config_meta is not None:
+        config["meta"] = config_meta
+    node: dict[str, object] = {
+        "unique_id": unique_id,
+        "resource_type": "model",
+        "package_name": "analytics",
+        "name": name,
+        "schema": schema,
+        "alias": name,
+        "relation_name": relation_name,
+        "raw_code": f"select * from {name}",
+        "config": config,
+    }
+    if node_meta is not None:
+        node["meta"] = node_meta
+    return node
+
+
+def build_dbt_diff_manifest_index(
+    *,
+    schema: str,
+    relation_name: str,
+    config: dict[str, object],
+    unique_id: str = "model.analytics.dbt_orders",
+    name: str = "dbt_orders",
+    node_meta: dict[str, object] | None = None,
+    config_meta: dict[str, object] | None = None,
+) -> DbtManifestIndex:
+    """Build a single-model dbt manifest index for diff executor tests."""
+
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_dbt_diff_manifest_model_node(
+                    unique_id=unique_id,
+                    name=name,
+                    schema=schema,
+                    relation_name=relation_name,
+                    unique_key=config.get("unique_key"),
+                    node_meta=node_meta,
+                    config_meta=config_meta,
+                ),
+            )
+        )
+    )
+
+
+def build_dbt_diff_ls_node(
+    *,
+    unique_id: str = "model.analytics.dbt_orders",
+    name: str = "dbt_orders",
+    resource_type: str = "model",
+) -> DbtLsNode:
+    """Build a dbt ls node for diff executor tests."""
+
+    return DbtLsNode(
+        unique_id=unique_id,
+        resource_type=resource_type,
+        package_name="analytics",
+        name=name,
+        fqn=("analytics", name),
+    )
+
+
+def create_dbt_diff_relation(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    name: str,
+    rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Create a dbt diff order table from literal rows in a real DuckDB schema."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    union_sql: str = " UNION ALL ".join(
+        f"SELECT {order_id} AS order_id, {amount} AS amount_cents" for order_id, amount in rows
+    )
+    adapter.execute(connection, f"CREATE TABLE {schema}.{name} AS {union_sql}")
+
+
+def build_dbt_diff_schema_only_options() -> DbtDiffOptions:
+    """Build parsed schema-only dbt diff options for executor tests."""
+
+    return parse_dbt_diff_options(("--select", "dbt_orders", "--schema-only"))
+
+
+def build_dbt_diff_full_options() -> DbtDiffOptions:
+    """Build parsed full dbt diff options for executor tests."""
+
+    return parse_dbt_diff_options(("--select", "dbt_orders", "--full"))
+
+
+def build_dbt_diff_bounded_options(bounded: str) -> DbtDiffOptions:
+    """Build parsed bounded dbt diff options for executor tests."""
+
+    return parse_dbt_diff_options(("--select", "dbt_orders", "--bounded", bounded))
+
+
+def assert_dbt_diff_execution_result(
+    *,
+    result: DiffExecutionResult,
+    expected_model_names: tuple[str, ...],
+    expected_has_row_result: bool,
+    expected_unequal_count: int,
+    expected_left_only_count: int,
+    expected_right_only_count: int,
+    expected_has_failures: bool,
+) -> None:
+    """Assert dbt diff execution result shape, row counts, and failure flag."""
+
+    assert tuple(item.name for item in result.model_results) == expected_model_names
+    row_result: RowDiffResult | None = (
+        result.model_results[0].row_result if result.model_results else None
+    )
+    assert (row_result is not None) == expected_has_row_result
+    unequal: int = row_result.unequal_count if row_result is not None else 0
+    left_only: int = row_result.left_only_count if row_result is not None else 0
+    right_only: int = row_result.right_only_count if row_result is not None else 0
+    assert unequal == expected_unequal_count
+    assert left_only == expected_left_only_count
+    assert right_only == expected_right_only_count
+    assert has_diff_failures(result) == expected_has_failures
+
+
+def create_dbt_diff_unique_key_relation(
+    *, adapter: DuckDbAdapter, connection: object, schema: str, amount_cents: int
+) -> None:
+    """Create a two-column-key dbt diff relation for unique key tests."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(
+        connection,
+        f"CREATE TABLE {schema}.dbt_orders AS "
+        f"SELECT 1 AS order_id, 1 AS line_id, {amount_cents} AS amount_cents",
+    )
+
+
+def create_dbt_diff_relation_with_columns(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    column_sql: str,
+) -> None:
+    """Create a dbt diff relation from an explicit column projection."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}")
+
+
+def create_dbt_diff_cursor_relation(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    cursor_column: str,
+    cursor_kind: str,
+) -> None:
+    """Create a dbt diff relation that carries a bounded cursor column."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    cursor_value: str = (
+        "cast('2026-06-17 00:00:00' as timestamp)" if cursor_kind == "timestamp" else "10"
+    )
+    adapter.execute(
+        connection,
+        f"CREATE TABLE {schema}.dbt_orders AS "
+        f"SELECT 1 AS order_id, 100 AS amount_cents, {cursor_value} AS {cursor_column}",
+    )
+
+
+def create_dbt_diff_relation_when_requested(
+    *, adapter: DuckDbAdapter, connection: object, schema: str, create: bool
+) -> None:
+    """Create a dbt diff relation only when requested, else just the schema."""
+
+    if not create:
+        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+        return
+    create_dbt_diff_relation(
+        adapter=adapter,
+        connection=connection,
+        schema=schema,
+        name="dbt_orders",
+        rows=((1, 1),),
+    )

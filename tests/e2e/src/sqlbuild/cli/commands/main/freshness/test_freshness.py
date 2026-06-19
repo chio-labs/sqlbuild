@@ -149,7 +149,8 @@ def test_given_unknown_source_freshness_when_fail_on_error_then_returns_nonzero(
             description="explicit freshness error returns nonzero with fail on error",
             expected_fragments=(
                 "Errors (1)",
-                'raw_error  Binder Error: Referenced column "missing_column"',
+                "raw_error  source 'raw_error' freshness query failed: "
+                'Binder Error: Referenced column "missing_column"',
                 "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=0 errors=1",
             ),
         )
@@ -1090,7 +1091,8 @@ def test_given_virtual_timestamp_freshness_moves_backwards_when_state_then_retur
             description="virtual state comparison fails on explicit observation error",
             expected_fragments=(
                 "Errors (1)",
-                'raw_orders  Binder Error: Referenced column "missing_column"',
+                "raw_orders  source 'raw_orders' freshness query failed: "
+                'Binder Error: Referenced column "missing_column"',
                 "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=0 errors=1",
             ),
         )

@@ -6,14 +6,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
+    DbtLineageDirection,
+    DbtLineageOutputFormat,
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
@@ -21,6 +25,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
+from sqlbuild.spec.models.source import SourceColumnEntry
 
 
 @dataclass(frozen=True)
@@ -154,6 +159,7 @@ class DbtInitRequest:
     dry_run: bool = False
     overwrite: bool = False
     skip_dbt_debug: bool = False
+    production_git_ref: str = "main"
     progress_callbacks: DbtInitProgressCallbacks = field(default_factory=DbtInitProgressCallbacks)
 
 
@@ -164,6 +170,8 @@ class DbtInitResult:
     output_dir: Path
     project_file: Path
     project_name: str
+    macro_file: Path
+    production_git_ref: str
     adapter: str
     target_name: str
     profile_name: str
@@ -199,10 +207,31 @@ class DbtReuseCandidate:
     materialization: str
     destination_relation_name: str
     origin_relation_name: str
+    origin_database: str | None
+    origin_schema: str | None
+    origin_name: str
     package_name: str
     name: str
     fqn: tuple[str, ...] = field(default_factory=tuple)
     cursor_column: str | None = None
+    origin_relation_exists: bool = True
+    current_definition_fingerprint: str = ""
+    origin_definition_fingerprint: str = ""
+    effective_definition_changed: bool = False
+
+    @property
+    def origin_relation_key(self) -> tuple[str | None, str | None, str]:
+        return (self.origin_database, self.origin_schema, self.origin_name)
+
+    @property
+    def definition_changed_from_origin(self) -> bool:
+        """Return whether this model or any dbt upstream differs from the reuse origin."""
+
+        if self.effective_definition_changed:
+            return True
+        if not self.current_definition_fingerprint or not self.origin_definition_fingerprint:
+            return False
+        return self.current_definition_fingerprint != self.origin_definition_fingerprint
 
 
 @dataclass(frozen=True)
@@ -221,6 +250,34 @@ class DbtReuseCandidateResolution:
 
     candidates: tuple[DbtReuseCandidate, ...] = field(default_factory=tuple)
     skipped: tuple[DbtReuseCandidateSkip, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtDiffOptions:
+    """Parsed SQLBuild dbt diff options."""
+
+    dbt_args: tuple[str, ...]
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    full: bool
+    schema_only: bool
+    bounded: str | None
+    verbose: bool
+    max_column_examples: int
+    max_row_only_examples: int
+
+
+@dataclass(frozen=True)
+class DbtDiffRun:
+    """dbt diff execution result with rendering labels."""
+
+    result: DiffExecutionResult
+    from_label: str
+    to_label: str
+    mode_label: str
+    verbose: bool
+    max_column_examples: int
+    max_row_only_examples: int
 
 
 @dataclass(frozen=True)
@@ -405,6 +462,59 @@ class DbtCombinedGraph:
     nodes: frozenset[DbtCombinedGraphKey]
     upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
     downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
+
+
+@dataclass(frozen=True)
+class DbtLineageNode:
+    """One displayable mixed dbt/SQLBuild lineage graph node."""
+
+    key: DbtCombinedGraphKey
+    label: str
+    qualified_name: str | None = None
+    relative_path: str | None = None
+
+
+@dataclass(frozen=True)
+class DbtLineageGraph:
+    """Selected mixed dbt/SQLBuild lineage graph slice."""
+
+    nodes: tuple[DbtLineageNode, ...]
+    edges: tuple[tuple[DbtCombinedGraphKey, DbtCombinedGraphKey], ...]
+    focus_keys: tuple[DbtCombinedGraphKey, ...] = field(default_factory=tuple)
+    direction: DbtLineageDirection | None = None
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageTrace:
+    """Selected mixed dbt/SQLBuild column lineage trace."""
+
+    target: QualifiedLineageColumn
+    trace: tuple[ColumnLineageEdge, ...]
+    direction: DbtLineageDirection
+    max_depth: int | None
+    analyzed_model_count: int
+    truncated: bool = False
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtSourceSchemaInspectionResult:
+    """Best-effort dbt source schemas for column lineage analysis."""
+
+    columns_by_unique_id: dict[str, tuple[SourceColumnEntry, ...]]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtLineageArgs:
+    """Parsed arguments for `sqb dbt lineage`."""
+
+    target: str
+    output_format: DbtLineageOutputFormat = DbtLineageOutputFormat.TREE
+    direction: DbtLineageDirection = DbtLineageDirection.UPSTREAM
+    depth: int | None = None
+    no_sql_validation: bool = False
+    dbt_args: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

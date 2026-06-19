@@ -65,6 +65,7 @@ def resolve_dbt_reuse_candidates(
 
     candidates: list[DbtReuseCandidate] = []
     skipped: list[DbtReuseCandidateSkip] = []
+    effective_change_cache: dict[str, bool] = {}
     unique_id: str
     for unique_id in _dedupe_preserving_order(values=scoped_unique_ids):
         current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
@@ -110,13 +111,82 @@ def resolve_dbt_reuse_candidates(
                 materialization=materialization or "",
                 destination_relation_name=current_model.relation_name,
                 origin_relation_name=reuse_model.relation_name,
+                origin_database=reuse_model.database,
+                origin_schema=reuse_model.schema,
+                origin_name=reuse_model.alias or reuse_model.name,
                 package_name=current_model.package_name,
                 name=current_model.name,
                 fqn=current_model.fqn,
                 cursor_column=_model_reuse_cursor(model=current_model),
+                current_definition_fingerprint=current_model.definition_fingerprint,
+                origin_definition_fingerprint=reuse_model.definition_fingerprint,
+                effective_definition_changed=_effective_definition_changed(
+                    unique_id=unique_id,
+                    current_manifest=current_manifest,
+                    reuse_manifest=reuse_manifest,
+                    cache=effective_change_cache,
+                ),
             )
         )
     return DbtReuseCandidateResolution(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
+def _effective_definition_changed(
+    *,
+    unique_id: str,
+    current_manifest: DbtManifestIndex,
+    reuse_manifest: DbtManifestIndex,
+    cache: dict[str, bool],
+    visiting: frozenset[str] = frozenset(),
+) -> bool:
+    """Return whether a model or any transitive dbt-model upstream changed vs the reuse ref."""
+
+    if unique_id in cache:
+        return cache[unique_id]
+    if unique_id in visiting:
+        return False
+    if _model_definition_changed(
+        unique_id=unique_id,
+        current_manifest=current_manifest,
+        reuse_manifest=reuse_manifest,
+    ):
+        cache[unique_id] = True
+        return True
+    current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
+    if current_model is None:
+        cache[unique_id] = False
+        return False
+    next_visiting: frozenset[str] = visiting | {unique_id}
+    dependency_unique_id: str
+    for dependency_unique_id in current_model.depends_on_nodes:
+        if dependency_unique_id not in current_manifest.models_by_unique_id:
+            continue
+        if _effective_definition_changed(
+            unique_id=dependency_unique_id,
+            current_manifest=current_manifest,
+            reuse_manifest=reuse_manifest,
+            cache=cache,
+            visiting=next_visiting,
+        ):
+            cache[unique_id] = True
+            return True
+    cache[unique_id] = False
+    return False
+
+
+def _model_definition_changed(
+    *,
+    unique_id: str,
+    current_manifest: DbtManifestIndex,
+    reuse_manifest: DbtManifestIndex,
+) -> bool:
+    current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
+    reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(unique_id)
+    if current_model is None or reuse_model is None:
+        return True
+    if not current_model.definition_fingerprint or not reuse_model.definition_fingerprint:
+        return False
+    return current_model.definition_fingerprint != reuse_model.definition_fingerprint
 
 
 def resolve_dbt_reuse_candidates_for_plan(
@@ -160,6 +230,42 @@ def build_dbt_reuse_planning_result(
     return DbtReusePlanningResult(entries=tuple(entries))
 
 
+def mark_missing_dbt_reuse_origin_relations(
+    *,
+    candidate_resolution: DbtReuseCandidateResolution,
+    existing_origin_relation_keys: frozenset[tuple[str | None, str | None, str]],
+) -> DbtReuseCandidateResolution:
+    """Mark candidates whose production-origin relation does not exist."""
+
+    candidates: list[DbtReuseCandidate] = []
+    candidate: DbtReuseCandidate
+    for candidate in candidate_resolution.candidates:
+        candidates.append(
+            DbtReuseCandidate(
+                unique_id=candidate.unique_id,
+                materialization=candidate.materialization,
+                destination_relation_name=candidate.destination_relation_name,
+                origin_relation_name=candidate.origin_relation_name,
+                origin_database=candidate.origin_database,
+                origin_schema=candidate.origin_schema,
+                origin_name=candidate.origin_name,
+                package_name=candidate.package_name,
+                name=candidate.name,
+                fqn=candidate.fqn,
+                cursor_column=candidate.cursor_column,
+                origin_relation_exists=(
+                    candidate.origin_relation_key in existing_origin_relation_keys
+                ),
+                current_definition_fingerprint=candidate.current_definition_fingerprint,
+                origin_definition_fingerprint=candidate.origin_definition_fingerprint,
+                effective_definition_changed=candidate.effective_definition_changed,
+            )
+        )
+    return DbtReuseCandidateResolution(
+        candidates=tuple(candidates), skipped=candidate_resolution.skipped
+    )
+
+
 def _dbt_reuse_scope_unique_ids(*, plan: DbtInteropPlan) -> tuple[str, ...]:
     anchor_unique_ids: list[str] = []
     unique_ids: tuple[str, ...]
@@ -181,6 +287,16 @@ def _dbt_reuse_scope_unique_ids(*, plan: DbtInteropPlan) -> tuple[str, ...]:
 def _plan_reuse_candidate(
     *, candidate: DbtReuseCandidate, dbt_plan_entry: DbtModelPlanEntry | None
 ) -> DbtReusePlanEntry:
+    if not candidate.origin_relation_exists:
+        return DbtReusePlanEntry(
+            unique_id=candidate.unique_id,
+            action=DbtReusePlanAction.REBUILD,
+            reason=DbtReusePlanReason.ORIGIN_RELATION_MISSING,
+            materialization=candidate.materialization,
+            destination_relation_name=candidate.destination_relation_name,
+            origin_relation_name=candidate.origin_relation_name,
+            cursor_column=candidate.cursor_column,
+        )
     if dbt_plan_entry is None:
         return DbtReusePlanEntry(
             unique_id=candidate.unique_id,
@@ -222,6 +338,13 @@ def _plan_reuse_candidate(
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.REBUILD,
             reason=DbtReusePlanReason.FULL_REFRESH,
+        )
+    if candidate.definition_changed_from_origin:
+        return _candidate_entry(
+            candidate=candidate,
+            dbt_plan_entry=dbt_plan_entry,
+            action=DbtReusePlanAction.REBUILD,
+            reason=DbtReusePlanReason.DEFINITION_CHANGED,
         )
     reuse_action: DbtReusePlanAction = (
         DbtReusePlanAction.COMPLETE_REUSE
@@ -323,6 +446,11 @@ def _reason_from_skip_reason(*, reason: DbtReuseCandidateSkipReason) -> DbtReuse
 
 
 def _model_materialization(*, model: DbtManifestModel) -> str | None:
+    resource_type: object | None = model.payload.get("resource_type")
+    if isinstance(resource_type, str) and resource_type.strip().lower() == (
+        DBT_MATERIALIZATION_SNAPSHOT
+    ):
+        return DBT_MATERIALIZATION_SNAPSHOT
     config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
     if not isinstance(config, dict):
         return None

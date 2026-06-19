@@ -5,6 +5,8 @@ from pathlib import Path
 
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import (
+    DbtLineageDirection,
+    DbtLineageOutputFormat,
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
@@ -233,6 +235,31 @@ class DbtReuseScopeFromPlanTestCase:
 
 
 @dataclass(frozen=True)
+class DbtDefinitionFingerprintTestCase:
+    description: str
+    current_raw_code: str
+    origin_raw_code: str
+    current_config_overrides: dict[str, object]
+    origin_config_overrides: dict[str, object]
+    current_macro_ids: tuple[str, ...]
+    origin_macro_ids: tuple[str, ...]
+    current_macro_sql_by_id: dict[str, str]
+    origin_macro_sql_by_id: dict[str, str]
+    macro_deps_by_id: dict[str, tuple[str, ...]]
+    expected_definition_changed: bool
+
+
+@dataclass(frozen=True)
+class DbtReuseCascadeTestCase:
+    description: str
+    upstream_current_raw_sql: str
+    upstream_reuse_raw_sql: str
+    downstream_current_raw_sql: str
+    downstream_reuse_raw_sql: str
+    expected_downstream_definition_changed: bool
+
+
+@dataclass(frozen=True)
 class DbtReusePlanningTestCase:
     description: str
     candidate_materialization: str
@@ -242,6 +269,8 @@ class DbtReusePlanningTestCase:
     expected_reason: DbtReusePlanReason
     cursor_column: str | None = None
     previous_cursor_column: str | None = None
+    current_raw_sql: str | None = None
+    origin_raw_sql: str | None = None
 
 
 @dataclass(frozen=True)
@@ -265,6 +294,18 @@ class DbtReusePlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseOriginRelationTestCase:
+    description: str
+    existing_relations: tuple[tuple[str | None, str | None, str], ...]
+    expected_complete_reuse_unique_ids: tuple[str, ...]
+    expected_rebuild_unique_ids: tuple[str, ...]
+    expected_rebuild_reasons: tuple[DbtReusePlanReason, ...]
+    expected_list_relation_calls: tuple[
+        tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None], ...
+    ]
+
+
+@dataclass(frozen=True)
 class DbtReuseExecuteTestCase:
     description: str
     create_origin_relation: bool
@@ -277,6 +318,15 @@ class DbtReuseExecuteTestCase:
     cursor_column: str | None = None
     destination_event_time: str | None = None
     destination_order_id: int | None = None
+
+
+@dataclass(frozen=True)
+class DbtFreshSchemaReuseExecuteTestCase:
+    description: str
+    fingerprint_schema: str
+    expected_reused_unique_ids: tuple[str, ...]
+    expected_destination_rows: tuple[tuple[object, ...], ...]
+    expected_fingerprint_node_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -338,6 +388,90 @@ class DbtCombinedGraphTestCase:
     expected_downstream_keys: tuple[str, ...]
     expected_upstream_from: str
     expected_upstream_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageSelectionTestCase:
+    description: str
+    target: str
+    direction: DbtLineageDirection
+    depth: int | None
+    expected_node_ids: tuple[str, ...]
+    expected_edges: tuple[tuple[str, str], ...]
+    expected_focus_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageSelectionErrorTestCase:
+    description: str
+    target: str
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtLineageArgsTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_target: str
+    expected_output_format: DbtLineageOutputFormat
+    expected_direction: DbtLineageDirection
+    expected_depth: int | None
+    expected_no_sql_validation: bool
+    expected_dbt_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageArgsErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtLineageOutputTestCase:
+    description: str
+    output_format: DbtLineageOutputFormat
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtLineageJsonOutputTestCase:
+    description: str
+    expected_node_metadata: tuple[tuple[str, str, object], ...]
+    expected_direction: str
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageSelectionTestCase:
+    description: str
+    target: str
+    direction: DbtLineageDirection
+    expected_edges: tuple[tuple[str, str], ...]
+    expected_warnings: tuple[str, ...] = ()
+    depth: int | None = None
+    expected_target: tuple[str, str, str] | None = None
+    expected_truncated: bool = False
+    expected_transforms: tuple[str, ...] = ()
+    expected_confidences: tuple[str, ...] = ()
+    expected_is_column_target: bool = True
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageErrorTestCase:
+    description: str
+    target: str
+    direction: DbtLineageDirection
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtColumnLineageOutputTestCase:
+    description: str
+    output_format: DbtLineageOutputFormat
+    expected_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -445,3 +579,87 @@ class DbtPlanOrchestrationErrorTestCase:
     expected_error_fragment: str
     expected_code: str
     expected_help_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtDiffOptionsTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_select: tuple[str, ...]
+    expected_exclude: tuple[str, ...]
+    expected_full: bool
+    expected_schema_only: bool
+    expected_bounded: str | None
+    expected_verbose: bool
+    expected_max_column_examples: int
+    expected_max_row_only_examples: int
+    expected_dbt_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDiffOptionsErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtDiffUniqueKeyTestCase:
+    description: str
+    config: dict[str, object]
+    expected_unique_key: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtDiffUniqueKeyErrorTestCase:
+    description: str
+    config: dict[str, object]
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtDiffBoundedCursorTestCase:
+    description: str
+    node_meta: dict[str, object] | None
+    config_meta: dict[str, object] | None
+    bounded: str
+    expected_cursor_column: str
+    expected_cursor_kind: str
+    expected_has_end_cursor: bool
+
+
+@dataclass(frozen=True)
+class DbtDiffBoundedCursorErrorTestCase:
+    description: str
+    node_meta: dict[str, object] | None
+    config_meta: dict[str, object] | None
+    bounded: str
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtDiffExecuteTestCase:
+    description: str
+    options_args: tuple[str, ...]
+    current_rows: tuple[tuple[object, ...], ...]
+    reuse_rows: tuple[tuple[object, ...], ...]
+    node_resource_type: str
+    expected_model_names: tuple[str, ...]
+    expected_has_row_result: bool
+    expected_unequal_count: int
+    expected_left_only_count: int
+    expected_right_only_count: int
+    expected_has_failures: bool
+
+
+@dataclass(frozen=True)
+class DbtDiffExecuteErrorTestCase:
+    description: str
+    schema_only: bool
+    create_current_relation: bool
+    create_reuse_relation: bool
+    expected_error_fragment: str
+    expected_code: str

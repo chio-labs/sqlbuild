@@ -251,7 +251,6 @@ def _format_dbt_reuse_plan(
         for action in (
             DbtReusePlanAction.COMPLETE_REUSE,
             DbtReusePlanAction.SEEDED_REUSE,
-            DbtReusePlanAction.REBUILD,
             DbtReusePlanAction.BLOCKED,
             DbtReusePlanAction.SKIPPED,
         )
@@ -284,6 +283,12 @@ def _format_dbt_reuse_plan(
             lines,
             entries=entries,
             action=DbtReusePlanAction.SEEDED_REUSE,
+            display_options=display_options,
+        )
+        _format_dbt_reuse_plan_action_entries(
+            lines,
+            entries=entries,
+            action=DbtReusePlanAction.BLOCKED,
             display_options=display_options,
         )
         return
@@ -664,6 +669,8 @@ def _dbt_reuse_plan_reason_label(reason: DbtReusePlanReason) -> str:
         DbtReusePlanReason.NON_PHYSICAL_RESOURCE: "non-physical resource",
         DbtReusePlanReason.MANIFEST_NODE_MISSING: "manifest node missing",
         DbtReusePlanReason.REUSE_METADATA_INVALID: "reuse metadata invalid",
+        DbtReusePlanReason.ORIGIN_RELATION_MISSING: "production relation missing",
+        DbtReusePlanReason.DEFINITION_CHANGED: "definition changed",
     }
     return labels[reason]
 

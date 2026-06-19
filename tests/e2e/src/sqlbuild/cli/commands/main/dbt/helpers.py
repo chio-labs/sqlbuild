@@ -1,28 +1,312 @@
 from __future__ import annotations
 
 import json
+import os
+import pty
+import select
 import subprocess
+import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from shutil import copytree
+from typing import cast
 
 import pytest
 
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtLineageErrorE2ETestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
 
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"
+
+
+def dbt_executable() -> str:
+    """Return the dbt executable for e2e tests, honoring DBT_EXECUTABLE."""
+
+    override: str | None = os.environ.get("DBT_EXECUTABLE")
+    if override is not None and override.strip():
+        return override.strip()
+    return "dbt"
 
 
 def skip_unless_dbt_is_runnable() -> None:
     """Skip e2e dbt tests when the dbt CLI is unavailable."""
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
-        ("dbt", "--version"),
+        (dbt_executable(), "--version"),
         capture_output=True,
         check=False,
         text=True,
     )
     if result.returncode != 0:
         pytest.skip(f"dbt CLI is not runnable: {result.stderr or result.stdout}")
+
+
+def prepare_dbt_init_duckdb_workspace(*, tmp_path: Path, workspace_name: str) -> Path:
+    """Write a minimal dbt project and profile for dbt init E2Es."""
+
+    workspace: Path = tmp_path / workspace_name
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    db_path: Path = workspace / "warehouse.duckdb"
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "target-path: target\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    write_dbt_init_orders_model(workspace=workspace, amount_cents=900)
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+    return workspace
+
+
+def write_dbt_init_orders_model(*, workspace: Path, amount_cents: int) -> None:
+    """Write the mutable dbt model used by dbt init E2Es."""
+
+    workspace.joinpath("dbt_project", "models", "dbt_orders.sql").write_text(
+        f"select 1 as order_id, {amount_cents} as amount_cents\n",
+        encoding="utf-8",
+    )
+
+
+def initialize_dbt_init_git_repo(*, workspace: Path, production_ref: str) -> None:
+    """Create a production ref and feature branch for generated reuse config E2Es."""
+
+    _run_git(args=("init",), cwd=workspace)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
+    _run_git(args=("add", "."), cwd=workspace)
+    _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
+    _run_git(args=("branch", production_ref), cwd=workspace)
+    _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
+
+
+def prepare_dbt_diff_workspace(
+    *,
+    tmp_path: Path,
+    workspace_name: str,
+    include_unique_key: bool = True,
+    include_cursor_meta: bool = True,
+    include_reuse_from: bool = True,
+    reuse_git_ref: str = "prod",
+    include_second_model: bool = False,
+) -> Path:
+    """Build a dbt diff workspace with prod and feature branch order tables."""
+
+    workspace: Path = tmp_path / workspace_name
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    (dbt_project_dir / "models").mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = workspace / "warehouse.duckdb"
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "target-path: target\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    write_dbt_diff_orders_model(
+        workspace=workspace,
+        amount_cents=900,
+        order_ids=(1, 2),
+        include_unique_key=include_unique_key,
+        include_cursor_meta=include_cursor_meta,
+    )
+    if include_second_model:
+        _write_dbt_diff_customers_model(workspace=workspace)
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+    reuse_block: str = (
+        "\n[dbt.reuse_from]\n"
+        f'git_ref = "{reuse_git_ref}"\n'
+        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n'
+        if include_reuse_from
+        else ""
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "analytics_sqb"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n\n'
+        "[connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n'
+        f"{reuse_block}\n"
+        "[targets.dev.connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n'
+        'target = "dev"\n',
+        encoding="utf-8",
+    )
+    macro_dir.joinpath("generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    _initialize_dbt_diff_git(workspace=workspace)
+    _run_dbt(
+        args=("run",),
+        dbt_project_dir=dbt_project_dir,
+        profiles_dir=profiles_dir,
+        target="prod",
+    )
+    _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
+    return workspace
+
+
+def _write_dbt_diff_customers_model(*, workspace: Path) -> None:
+    workspace.joinpath("dbt_project", "models", "dbt_customers.sql").write_text(
+        "{{ config(\n"
+        "    materialized='table',\n"
+        "    unique_key='customer_id',\n"
+        "    tags=['finance']\n"
+        ") }}\n\n"
+        "select 1 as customer_id, 'alice' as name\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_diff_orders_model(
+    *,
+    workspace: Path,
+    amount_cents: int,
+    order_ids: tuple[int, ...],
+    include_unique_key: bool,
+    include_cursor_meta: bool,
+) -> None:
+    """Write the dbt orders model used by diff E2Es."""
+
+    config_lines: list[str] = ["    materialized='table'"]
+    if include_unique_key:
+        config_lines.append("    unique_key='order_id'")
+    if include_cursor_meta:
+        config_lines.append(
+            "    meta={'sqlbuild': {'cursor': 'updated_at', 'cursor_type': 'timestamp'}}"
+        )
+    config_block: str = "{{ config(\n" + ",\n".join(config_lines) + "\n) }}\n"
+    selects: tuple[str, ...] = tuple(
+        f"select {order_id} as order_id, {amount_cents} as amount_cents, "
+        f"cast('2026-06-17 0{index}:00:00' as timestamp) as updated_at"
+        for index, order_id in enumerate(order_ids)
+    )
+    workspace.joinpath("dbt_project", "models", "dbt_orders.sql").write_text(
+        config_block + "\n" + "\nunion all\n".join(selects) + "\n",
+        encoding="utf-8",
+    )
+
+
+def build_dbt_diff_current_model(*, workspace: Path) -> None:
+    """Build the current dbt model into the dev schema with dbt directly."""
+
+    _run_dbt(
+        args=("run",),
+        dbt_project_dir=workspace / "dbt_project",
+        profiles_dir=workspace / "profiles",
+        target="dev",
+    )
+
+
+def _initialize_dbt_diff_git(*, workspace: Path) -> None:
+    _run_git(args=("init",), cwd=workspace)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
+    _run_git(args=("add", "."), cwd=workspace)
+    _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
+    _run_git(args=("branch", "prod"), cwd=workspace)
+
+
+def run_sqb_with_pty(
+    *, command: tuple[str, ...], project_dir: Path, input_text: str, timeout_seconds: float = 60.0
+) -> subprocess.CompletedProcess[str]:
+    """Run sqb through a real PTY and return captured terminal output."""
+
+    master_fd: int
+    slave_fd: int
+    master_fd, slave_fd = pty.openpty()
+    process_env: dict[str, str] = dict(os.environ)
+    process_env["TERM"] = "xterm-256color"
+    process: subprocess.Popen[bytes] = subprocess.Popen(
+        ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
+        cwd=REPO_ROOT,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        env=process_env,
+        close_fds=True,
+    )
+    os.close(slave_fd)
+    output_parts: list[bytes] = []
+    input_written: bool = False
+    deadline: float = time.monotonic() + timeout_seconds
+    try:
+        while process.poll() is None:
+            if time.monotonic() > deadline:
+                process.kill()
+                raise subprocess.TimeoutExpired(command, timeout_seconds)
+            readable: list[int]
+            readable, _, _ = select.select([master_fd], [], [], 0.05)
+            if readable:
+                try:
+                    output_parts.append(os.read(master_fd, 4096))
+                except OSError:
+                    break
+            if not input_written:
+                os.write(master_fd, input_text.encode())
+                input_written = True
+        while True:
+            readable, _, _ = select.select([master_fd], [], [], 0)
+            if not readable:
+                break
+            try:
+                output_parts.append(os.read(master_fd, 4096))
+            except OSError:
+                break
+    finally:
+        os.close(master_fd)
+    output: str = b"".join(output_parts).decode(errors="replace")
+    return subprocess.CompletedProcess(
+        args=("sqb", *command), returncode=process.returncode or 0, stdout=output, stderr=""
+    )
 
 
 def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
@@ -57,7 +341,7 @@ def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedPr
     target_path: Path = dbt_project_dir / "target"
     return subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "compile",
             "--project-dir",
             dbt_project_dir.as_posix(),
@@ -78,6 +362,146 @@ def load_json_stdout(stdout: str) -> dict[str, object]:
     payload: object = json.loads(stdout)
     assert isinstance(payload, dict)
     return payload
+
+
+def assert_dbt_lineage_json_payload(
+    *,
+    payload: dict[str, object],
+    expected_node_ids: tuple[str, ...],
+    expected_edges: tuple[tuple[str, str], ...],
+    expected_focus: tuple[str, ...],
+    expected_direction: str,
+    expected_node_metadata: tuple[tuple[str, str, object], ...] = (),
+) -> None:
+    """Assert stable dbt lineage JSON output."""
+
+    nodes_payload: object = payload["nodes"]
+    edges_payload: object = payload["edges"]
+    focus_payload: object = payload["focus"]
+    assert isinstance(nodes_payload, Sequence)
+    assert isinstance(edges_payload, Sequence)
+    assert isinstance(focus_payload, Sequence)
+    nodes: list[Mapping[str, object]] = [
+        cast(Mapping[str, object], node) for node in nodes_payload if isinstance(node, dict)
+    ]
+    assert [node["id"] for node in nodes] == list(expected_node_ids)
+    assert [
+        (cast(Mapping[str, object], edge)["from"], cast(Mapping[str, object], edge)["to"])
+        for edge in edges_payload
+        if isinstance(edge, dict)
+    ] == list(expected_edges)
+    assert list(focus_payload) == list(expected_focus)
+    assert payload["direction"] == expected_direction
+    node_by_id: dict[str, Mapping[str, object]] = {str(node["id"]): node for node in nodes}
+    for node_id, metadata_key, expected_value in expected_node_metadata:
+        assert node_by_id[node_id][metadata_key] == expected_value, (
+            node_id,
+            metadata_key,
+            node_by_id[node_id][metadata_key],
+        )
+
+
+def assert_dbt_column_lineage_json_payload(
+    *,
+    payload: dict[str, object],
+    expected_target: tuple[str, str, str],
+    expected_edges: tuple[tuple[str, str], ...],
+    expected_direction: str,
+    expected_warnings: tuple[str, ...] = (),
+) -> None:
+    """Assert stable dbt column lineage JSON output."""
+
+    target_payload: object = payload["target"]
+    trace_payload: object = payload["trace"]
+    metadata_payload: object = payload["metadata"]
+    assert isinstance(target_payload, dict)
+    assert isinstance(trace_payload, Sequence)
+    assert isinstance(metadata_payload, dict)
+    target: Mapping[str, object] = cast(Mapping[str, object], target_payload)
+    metadata: Mapping[str, object] = cast(Mapping[str, object], metadata_payload)
+    assert (
+        target["resource_type"],
+        target["resource_name"],
+        target["column_name"],
+    ) == expected_target
+    assert [
+        (
+            _column_payload_id(
+                cast(Mapping[str, object], cast(Mapping[str, object], edge)["source"])
+            ),
+            _column_payload_id(
+                cast(Mapping[str, object], cast(Mapping[str, object], edge)["target"])
+            ),
+        )
+        for edge in trace_payload
+        if isinstance(edge, dict)
+    ] == list(expected_edges)
+    assert payload["direction"] == expected_direction
+    assert metadata["warnings"] == list(expected_warnings), metadata["warnings"]
+
+
+def _column_payload_id(column: Mapping[str, object]) -> str:
+    return f"{column['resource_name']}:{column['column_name']}"
+
+
+def remove_dbt_phase11_sqlbuild_models(*, project_dir: Path) -> None:
+    """Remove all SQLBuild model files from the focused dbt fixture."""
+
+    model_path: Path
+    for model_path in (project_dir / "models").glob("*.sql"):
+        model_path.unlink()
+
+
+def write_dbt_phase11_missing_ref_model(project_dir: Path) -> None:
+    """Make dbt compile fail before lineage can load a manifest."""
+
+    (project_dir.parent / "dbt_project" / "models" / "fact_orders.sql").write_text(
+        "select order_id from {{ ref('does_not_exist') }}\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_phase11_invalid_sqlbuild_model(project_dir: Path) -> None:
+    """Add a SQLBuild model that only compiles with SQL validation disabled."""
+
+    (project_dir / "models" / "invalid_sql.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT FROM\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_phase11_star_lineage_models(project_dir: Path) -> None:
+    """Use SELECT * dbt models to exercise adapter-described source schemas."""
+
+    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
+    (dbt_models_dir / "stg_orders.sql").write_text(
+        "select * from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "fact_orders.sql").write_text(
+        "select * from {{ ref('stg_orders') }}\n",
+        encoding="utf-8",
+    )
+
+
+def drop_dbt_phase11_orders_source_table(project_dir: Path) -> None:
+    """Remove the physical source table while keeping the dbt source definition."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    execute_duckdb(
+        db_path=project_dir / "dbt_phase11.duckdb",
+        sql="DROP TABLE IF EXISTS main.raw_orders",
+    )
+
+
+def apply_dbt_lineage_error_setup(
+    *, project_dir: Path, test_case: DbtLineageErrorE2ETestCase
+) -> None:
+    """Apply optional setup for a dbt lineage error E2E."""
+
+    if test_case.setup is not None:
+        test_case.setup(project_dir)
 
 
 def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
@@ -136,6 +560,19 @@ def write_dbt_phase11_invalid_downstream_model(*, project_dir: Path) -> None:
     )
 
 
+def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
+    """Make the dbt fact_orders model fail at run time so the dbt build errors."""
+
+    fact_orders_path: Path = (
+        project_dir.parent / "dbt_project" / "models" / "marts" / "fact_orders.sql"
+    )
+    fact_orders_path.write_text(
+        "{{ config(tags=['finance']) }}\n"
+        "select * from this_relation_does_not_exist_for_failure_test\n",
+        encoding="utf-8",
+    )
+
+
 def add_dbt_phase11_payments_branch(*, project_dir: Path) -> None:
     """Add a dbt model that depends on orders and payments sources."""
 
@@ -146,9 +583,10 @@ def add_dbt_phase11_payments_branch(*, project_dir: Path) -> None:
         sources_path.read_text(encoding="utf-8")
         + "      - name: payments\n"
         + "        identifier: raw_payments\n"
-        + "        loaded_at_field: loaded_at\n"
-        + "        freshness:\n"
-        + "          error_after: {count: 1, period: day}\n",
+        + "        config:\n"
+        + "          loaded_at_field: loaded_at\n"
+        + "          freshness:\n"
+        + "            error_after: {count: 1, period: day}\n",
         encoding="utf-8",
     )
     (dbt_models_dir / "order_payments.sql").write_text(
@@ -174,15 +612,18 @@ def add_dbt_phase11_query_filter_branch(*, project_dir: Path) -> None:
         sources_path.read_text(encoding="utf-8")
         + "      - name: query_events\n"
         + "        identifier: raw_query_events\n"
-        + "        loaded_at_query: SELECT MAX(loaded_at) AS loaded_at FROM main.raw_query_events\n"
-        + "        freshness:\n"
-        + "          error_after: {count: 1, period: day}\n"
+        + "        config:\n"
+        + "          loaded_at_query: SELECT MAX(loaded_at) AS loaded_at "
+        + "FROM main.raw_query_events\n"
+        + "          freshness:\n"
+        + "            error_after: {count: 1, period: day}\n"
         + "      - name: filtered_events\n"
         + "        identifier: raw_filtered_events\n"
-        + "        loaded_at_field: loaded_at\n"
-        + "        freshness:\n"
-        + "          error_after: {count: 1, period: day}\n"
-        + "          filter: include_in_freshness\n",
+        + "        config:\n"
+        + "          loaded_at_field: loaded_at\n"
+        + "          freshness:\n"
+        + "            error_after: {count: 1, period: day}\n"
+        + "            filter: include_in_freshness\n",
         encoding="utf-8",
     )
     (dbt_models_dir / "event_rollup.sql").write_text(
@@ -246,9 +687,10 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "    tables:\n"
         "      - name: orders\n"
         "        identifier: raw_orders\n"
-        "        loaded_at_field: loaded_at\n"
-        "        freshness:\n"
-        "          error_after: {count: 1, period: day}\n"
+        "        config:\n"
+        "          loaded_at_field: loaded_at\n"
+        "          freshness:\n"
+        "            error_after: {count: 1, period: day}\n"
         "      - name: customers\n"
         "        identifier: raw_customers\n",
         encoding="utf-8",
@@ -391,7 +833,7 @@ def prepare_dbt_reuse_from_project(*, tmp_path: Path) -> Path:
     _run_git(args=("branch", "prod"), cwd=root_dir)
     subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "run",
             "--project-dir",
             dbt_project_dir.as_posix(),
@@ -404,7 +846,6 @@ def prepare_dbt_reuse_from_project(*, tmp_path: Path) -> Path:
         check=True,
         text=True,
     )
-    write_dbt_reuse_from_fact_orders_model(project_dir=sqlbuild_project_dir, amount=111)
     return sqlbuild_project_dir
 
 
@@ -493,7 +934,7 @@ def prepare_dbt_seeded_reuse_from_project(*, tmp_path: Path) -> Path:
     _run_git(args=("branch", "prod"), cwd=root_dir)
     subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "run",
             "--project-dir",
             dbt_project_dir.as_posix(),
@@ -564,11 +1005,6 @@ def prepare_dbt_multi_node_reuse_from_project(*, tmp_path: Path) -> Path:
     _run_dbt(
         args=("run",), dbt_project_dir=dbt_project_dir, profiles_dir=profiles_dir, target="prod"
     )
-    for model_name in ("orders_a", "orders_b", "orders_c"):
-        (dbt_models_dir / f"{model_name}.sql").write_text(
-            f"select '{model_name}' as model_name, 111 as amount\n",
-            encoding="utf-8",
-        )
     return sqlbuild_project_dir
 
 
@@ -784,7 +1220,7 @@ def _run_dbt(
 ) -> None:
     subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             *args,
             "--project-dir",
             dbt_project_dir.as_posix(),

@@ -41,3 +41,10 @@ class CliDocumentTestCase:
     description: str
     use_color: bool
     expected_rendered: str
+
+
+@dataclass(frozen=True)
+class ProgressSpinnersDisabledTestCase:
+    description: str
+    env_value: str | None
+    expected_disabled: bool

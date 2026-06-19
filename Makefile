@@ -32,8 +32,52 @@ skills:
 	uv run python -m scripts.skills.update_structure_skill
 
 
+# dbt executable used by interop tests. Defaults to `dbt` on PATH; override with
+# the Fusion binary for faster compiles, e.g. `make test-dbt DBT_EXECUTABLE=dbtf`
+# or by exporting DBT_EXECUTABLE in your shell.
+DBT_EXECUTABLE ?= dbt
+export DBT_EXECUTABLE
+
+
 test-dbt:
-	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv
+	@mkdir -p /tmp/opencode
+	@log=/tmp/opencode/test-dbt-$$(date +%Y%m%d-%H%M%S).log; \
+	echo "Logging to $$log (DBT_EXECUTABLE=$(DBT_EXECUTABLE))"; \
+	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv --color=yes 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "Full output saved to $$log"; \
+	exit $$status
+
+
+DBT_TEST_PATHS := tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt
+
+
+test-dbt-real:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse" -vv
+
+
+test-dbt-real-snowflake:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and snowflake" -vv
+
+
+test-dbt-real-bigquery:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and bigquery" -vv
+
+
+test-dbt-real-databricks:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and databricks" -vv
+
+
+test-dbt-real-postgres:
+	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and postgres" -vv
+
+
+test-dbt-real-sqlserver:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and sqlserver" -vv
+
+
+test-dbt-real-motherduck:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and motherduck" -vv
 
 
 waffle-shop:
@@ -109,16 +153,30 @@ verify:
 	@mkdir -p /tmp/opencode
 	@log="/tmp/opencode/verify-$$(date +%Y%m%d-%H%M%S).log"; \
 	{ \
-		set -e; \
-		uv run ruff format .; \
-		uv run ruff check --fix .; \
-		uv run ty check src tests; \
-		PYTHONUNBUFFERED=1 uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes; \
-		PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
-		PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
-		uv run check-test-conventions tests; \
-		uv run check-structure-conventions src/sqlbuild scripts; \
-		uv run check-type-annotation-conventions src tests; \
+		status=0; \
+		run_verify_step() { \
+			label="$$1"; \
+			shift; \
+			echo; \
+			echo "==> $$label"; \
+			"$$@"; \
+			rc=$$?; \
+			if [ $$rc -ne 0 ]; then \
+				echo "STEP_FAILED[$$rc]: $$label"; \
+				if [ $$status -eq 0 ]; then status=$$rc; fi; \
+			fi; \
+		}; \
+		run_verify_step "ruff format" uv run ruff format .; \
+		run_verify_step "ruff check" uv run ruff check --fix .; \
+		run_verify_step "type check" uv run ty check src tests; \
+		run_verify_step "e2e tests" env PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
+		run_verify_step "performance e2e tests" env PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "integration tests" env PYTHONUNBUFFERED=1 uv run pytest tests/integration -m "not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "unit tests" env PYTHONUNBUFFERED=1 uv run pytest tests/unit -m "not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "test conventions" uv run check-test-conventions tests; \
+		run_verify_step "structure conventions" uv run check-structure-conventions src/sqlbuild scripts; \
+		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
+		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "VERIFY_EXIT=$$status (log: $$log)" | tee -a "$$log"; \

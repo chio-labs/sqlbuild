@@ -206,6 +206,11 @@ def _execute_complete_reuse_entry(
     destination_database, destination_schema, destination_name = _relation_parts(
         relation_name=entry.destination_relation_name or model.relation_name
     )
+    destination_relation: str = adapter.render_qualified_name(
+        database=destination_database,
+        schema=destination_schema,
+        name=destination_name,
+    ) or (entry.destination_relation_name or model.relation_name)
     staging_relation: str = _staging_relation_name(
         adapter=adapter,
         database=destination_database,
@@ -232,7 +237,7 @@ def _execute_complete_reuse_entry(
         adapter=adapter,
         connection=connection,
         origin_relation=staging_relation,
-        destination_relation=entry.destination_relation_name or model.relation_name,
+        destination_relation=destination_relation,
         destination_database=destination_database,
         destination_schema=destination_schema,
         destination_name=destination_name,
@@ -269,6 +274,12 @@ def _write_reuse_fingerprint(
             "fingerprint schema is missing"
         )
         return
+    adapter.ensure_schema(
+        connection,
+        database=fingerprint_database,
+        schema=fingerprint_schema,
+        statement_recorder=StatementRecorder(),
+    )
     definition_hash: str = (
         model.node_checksum or hashlib.sha256(model.query_sql.encode("utf-8")).hexdigest()
     )

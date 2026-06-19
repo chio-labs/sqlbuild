@@ -15,6 +15,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtLsResult,
 )
+from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.types import DbtInvoker
 
 
@@ -102,8 +103,10 @@ def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]:
 class DbtRunner:
     """Small dbt CLI runner with per-invocation dbt ls memoization."""
 
-    def __init__(self, *, dbt_executable: str = "dbt", invoker: DbtInvoker | None = None) -> None:
-        self.dbt_executable = dbt_executable
+    def __init__(
+        self, *, dbt_executable: str | None = None, invoker: DbtInvoker | None = None
+    ) -> None:
+        self.dbt_executable = dbt_executable or resolve_dbt_executable()
         self.invoker = invoker
         self._ls_cache: dict[tuple[str, ...], DbtLsResult] = {}
 

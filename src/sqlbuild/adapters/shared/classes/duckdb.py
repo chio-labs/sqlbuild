@@ -1478,12 +1478,22 @@ class DuckDbBackedAdapter(BaseAdapter):
         return (f"ALTER TABLE {origin} RENAME TO {unqualified_destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
-        staging: str = f"{left}__swap_staging"
+        staging: str = self._with_replaced_relation_name(
+            relation=left, name=f"{self._relation_name(left)}__swap_staging"
+        )
         return (
             *self.render_rename(origin=left, destination=staging),
             *self.render_rename(origin=right, destination=left),
             *self.render_rename(origin=staging, destination=right),
         )
+
+    def _relation_name(self, relation: str) -> str:
+        return _unquote_duckdb_identifier(relation.split(".")[-1])
+
+    def _with_replaced_relation_name(self, *, relation: str, name: str) -> str:
+        parts: list[str] = relation.split(".")
+        parts[-1] = self.render_identifier(name)
+        return ".".join(parts)
 
     def rename(
         self,
@@ -2747,3 +2757,10 @@ class DuckDbBackedAdapter(BaseAdapter):
 
 def _duckdb_string_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def _unquote_duckdb_identifier(part: str) -> str:
+    stripped: str = part.strip()
+    if stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2:
+        return stripped[1:-1].replace('""', '"')
+    return stripped

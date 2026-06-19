@@ -57,6 +57,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import (
     build_dbt_dependency_baseline_plan_output,
     build_dbt_reuse_plan_output,
 )
+from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
@@ -66,7 +67,7 @@ def plan_dbt_interop_from_project(
     project_dir: Path,
     args: tuple[str, ...],
     dbt_runner: DbtRunner | None = None,
-    dbt_executable: str = "dbt",
+    dbt_executable: str | None = None,
     sqlbuild_executable: str = "sqb",
     no_sql_validation: bool = False,
     on_progress: Callable[[str], None] | None = None,
@@ -75,6 +76,7 @@ def plan_dbt_interop_from_project(
 ) -> DbtInteropPlan:
     """Build a dbt interop plan from real project files and dbt artifacts."""
 
+    dbt_executable = dbt_executable or resolve_dbt_executable()
     routed: DbtInteropRoutedArgs = route_dbt_interop_args(
         command=DbtInteropCommand.PLAN,
         args=args,
@@ -200,6 +202,8 @@ def plan_dbt_interop_from_project(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             current_manifest=manifest,
+            adapter=adapter,
+            adapter_name=adapter_name,
             dbt_model_plan=dbt_model_plan,
             plan=plan,
             dbt_options=dbt_options,
@@ -245,6 +249,8 @@ def plan_dbt_interop_from_project(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             current_manifest=manifest,
+            adapter=adapter,
+            adapter_name=adapter_name,
             dbt_model_plan=dependency_baseline_model_plan,
             scoped_unique_ids=dependency_baseline_ids,
             dbt_options=dbt_options,

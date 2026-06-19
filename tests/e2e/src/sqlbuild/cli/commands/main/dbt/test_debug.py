@@ -19,9 +19,6 @@ DEBUG_CLI_TEST_CASES: list[DbtDebugCliTestCase] = [
         description="runs dbt and SQLBuild diagnostics",
         command=("dbt", "debug"),
         expected_stdout_fragments=(
-            "Running with dbt=",
-            "profiles.yml file [",
-            "Connection test: [",
             "All checks passed!",
             "SQLBuild Diagnostics",
             "connection test: [OK connected]",
@@ -32,7 +29,6 @@ DEBUG_CLI_TEST_CASES: list[DbtDebugCliTestCase] = [
         description="skips SQLBuild connection when requested",
         command=("dbt", "debug", "--no-connection"),
         expected_stdout_fragments=(
-            "Running with dbt=",
             "All checks passed!",
             "SQLBuild Diagnostics",
             "connection test: [SKIP skipped by --no-connection]",

@@ -31,6 +31,24 @@ class DbtInteropCommand(StrEnum):
     BUILD = "build"
     TEST = "test"
     DEBUG = "debug"
+    LINEAGE = "lineage"
+    DIFF = "diff"
+
+
+class DbtLineageDirection(StrEnum):
+    """Traversal direction for mixed dbt/SQLBuild lineage."""
+
+    UPSTREAM = "upstream"
+    DOWNSTREAM = "downstream"
+    BOTH = "both"
+
+
+class DbtLineageOutputFormat(StrEnum):
+    """Output format for mixed dbt/SQLBuild lineage."""
+
+    TREE = "tree"
+    JSON = "json"
+    LIST = "list"
 
 
 class DbtInteropSqlbuildTestAction(StrEnum):
@@ -110,6 +128,8 @@ class DbtReusePlanReason(StrEnum):
     NON_PHYSICAL_RESOURCE = "non_physical_resource"
     MANIFEST_NODE_MISSING = "manifest_node_missing"
     REUSE_METADATA_INVALID = "reuse_metadata_invalid"
+    ORIGIN_RELATION_MISSING = "origin_relation_missing"
+    DEFINITION_CHANGED = "definition_changed"
 
 
 class DbtReuseExecutionMode(StrEnum):

@@ -469,12 +469,25 @@ class PostgresAdapter(BaseAdapter):
         return (f"DROP VIEW{exists_clause} {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
-        staging: str = f"{left}__swap_staging"
+        staging: str = self._with_replaced_relation_name(
+            relation=left, name=f"{self._relation_name(left)}__swap_staging"
+        )
         return (
             *self.render_rename(origin=left, destination=staging),
             *self.render_rename(origin=right, destination=left),
             *self.render_rename(origin=staging, destination=right),
         )
+
+    def _relation_name(self, relation: str) -> str:
+        part: str = relation.split(".")[-1].strip()
+        if part.startswith('"') and part.endswith('"') and len(part) >= 2:
+            return part[1:-1].replace('""', '"')
+        return part
+
+    def _with_replaced_relation_name(self, *, relation: str, name: str) -> str:
+        parts: list[str] = relation.split(".")
+        parts[-1] = self.render_identifier(name)
+        return ".".join(parts)
 
     def render_clone(
         self,

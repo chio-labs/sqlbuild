@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbRelationMaxCursorTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
     DuckDbRenderIdentifierTestCase,
+    DuckDbRenderSwapTestCase,
     DuckDbRenderTableFunctionTestCase,
 )
 
@@ -317,3 +318,45 @@ def test_given_metadata_names_with_quotes_when_querying_then_duckdb_escapes_lite
     )
 
     assert tuple(connection.executed_sql) == test_case.expected_sql
+
+
+RENDER_SWAP_TEST_CASES: tuple[DuckDbRenderSwapTestCase, ...] = (
+    DuckDbRenderSwapTestCase(
+        description="renders swap for unquoted qualified relations",
+        left="dev_marts.agg_daily_revenue",
+        right="dev_marts.agg_daily_revenue__stage",
+        expected_statements=(
+            'ALTER TABLE dev_marts.agg_daily_revenue RENAME TO "agg_daily_revenue__swap_staging"',
+            "ALTER TABLE dev_marts.agg_daily_revenue__stage RENAME TO agg_daily_revenue",
+            'ALTER TABLE dev_marts."agg_daily_revenue__swap_staging" '
+            "RENAME TO agg_daily_revenue__stage",
+        ),
+    ),
+    DuckDbRenderSwapTestCase(
+        description="renders swap for quoted qualified relations",
+        left='"dev_marts"."agg_daily_revenue"',
+        right='"dev_marts"."agg_daily_revenue__stage"',
+        expected_statements=(
+            'ALTER TABLE "dev_marts"."agg_daily_revenue" '
+            'RENAME TO "agg_daily_revenue__swap_staging"',
+            'ALTER TABLE "dev_marts"."agg_daily_revenue__stage" RENAME TO "agg_daily_revenue"',
+            'ALTER TABLE "dev_marts"."agg_daily_revenue__swap_staging" '
+            'RENAME TO "agg_daily_revenue__stage"',
+        ),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RENDER_SWAP_TEST_CASES,
+    ids=[case.description for case in RENDER_SWAP_TEST_CASES],
+)
+def test_given_qualified_relations_when_rendering_swap_then_keeps_staging_in_schema(
+    test_case: DuckDbRenderSwapTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    statements: tuple[str, ...] = adapter.render_swap(left=test_case.left, right=test_case.right)
+
+    assert statements == test_case.expected_statements

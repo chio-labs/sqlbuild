@@ -1,0 +1,13 @@
+jaffle_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../warehouse.duckdb"
+      schema: dev_alice
+      threads: 1
+    prod:
+      type: duckdb
+      path: "../warehouse.duckdb"
+      schema: analytics
+      threads: 1

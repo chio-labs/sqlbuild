@@ -39,6 +39,7 @@ def build_source_read_map(
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
     defer_sources_to: str | None,
+    require_source_deferral_config: bool = True,
 ) -> dict[str, SourceEntry]:
     """Resolve the source relation map used when selected SQL reads managed sources."""
 
@@ -63,6 +64,8 @@ def build_source_read_map(
     if source_target_name is None and project.effective_target_name is None:
         return source_map
     if source_target_name is None:
+        if not require_source_deferral_config:
+            return source_map
         raise PlannerInputError(_missing_source_deferral_message(project.effective_target_name))
     if project_config is None or local_config is None:
         raise PlannerInputError(_missing_source_deferral_message(project.effective_target_name))
@@ -101,16 +104,12 @@ def _selected_managed_source_refs(
     for model in project.models:
         if model.key not in selected_keys:
             continue
-        for ref in model.references:
-            if ref.ref_kind == SqlReferenceKind.SOURCE and ref.ref_name in managed_source_names:
-                names.add(ref.ref_name)
+        names.update(_direct_managed_source_refs(model.query_sql, managed_source_names))
     function: CompiledFunction
     for function in project.functions:
         if function.key not in selected_keys:
             continue
-        for ref in function.references:
-            if ref.ref_kind == SqlReferenceKind.SOURCE and ref.ref_name in managed_source_names:
-                names.add(ref.ref_name)
+        names.update(_direct_managed_source_refs(function.body_sql, managed_source_names))
     audit: CompiledAudit
     for audit in project.audits:
         if audit.scope_deps and not any(dep in selected_keys for dep in audit.scope_deps):
@@ -123,6 +122,16 @@ def _selected_managed_source_refs(
             if source_name in managed_source_names:
                 names.add(source_name)
     return tuple(sorted(names))
+
+
+def _direct_managed_source_refs(sql: str, managed_source_names: frozenset[str]) -> frozenset[str]:
+    names: set[str] = set()
+    match: re.Match[str]
+    for match in _SOURCE_PATTERN.finditer(sql):
+        source_name: str = match.group(1)
+        if source_name in managed_source_names:
+            names.add(source_name)
+    return frozenset(names)
 
 
 def _resolve_source_target_name(

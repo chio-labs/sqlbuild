@@ -434,6 +434,106 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
     assert downstream_trace == test_case.expected_downstream_trace
 
 
+RICH_CTE_REGRESSION_TEST_CASES: tuple[ColumnLineageAnalyzerTestCase, ...] = (
+    ColumnLineageAnalyzerTestCase(
+        description="resolves aggregated column sourced through a CTE",
+        model_name="int_order_payments",
+        query_sql=(
+            'WITH payments AS (SELECT * FROM __ref("stg_payments")) '
+            "SELECT COALESCE(SUM(payments.amount_cents), 0) AS order_amount_cents "
+            "FROM payments GROUP BY payments.order_id"
+        ),
+        inferred_columns=("order_amount_cents",),
+        upstream_model_columns={"stg_payments": ("order_id", "amount_cents")},
+        upstream_seed_columns={},
+        expected_column="order_amount_cents",
+        expected_upstream_columns=("model:stg_payments.amount_cents",),
+        expected_transform_kind=ColumnTransformKind.AGGREGATION,
+    ),
+    ColumnLineageAnalyzerTestCase(
+        description="resolves passthrough column sourced through a select-star CTE",
+        model_name="int_orders",
+        query_sql=(
+            'WITH orders AS (SELECT * FROM __ref("stg_orders")) '
+            "SELECT orders.customer_id FROM orders"
+        ),
+        inferred_columns=("customer_id",),
+        upstream_model_columns={"stg_orders": ("order_id", "customer_id")},
+        upstream_seed_columns={},
+        expected_column="customer_id",
+        expected_upstream_columns=("model:stg_orders.customer_id",),
+        expected_transform_kind=ColumnTransformKind.DIRECT,
+    ),
+    ColumnLineageAnalyzerTestCase(
+        description="resolves aggregated column through CTE join with table aliases",
+        model_name="daily_revenue",
+        query_sql=(
+            'WITH orders AS (SELECT * FROM __ref("stg_orders")), '
+            'payments AS (SELECT * FROM __ref("stg_payments")) '
+            "SELECT SUM(p.amount_cents) AS total_revenue_cents "
+            "FROM orders o JOIN payments p ON p.order_id = o.order_id "
+            "GROUP BY o.customer_id"
+        ),
+        inferred_columns=("total_revenue_cents",),
+        upstream_model_columns={
+            "stg_orders": ("order_id", "customer_id"),
+            "stg_payments": ("order_id", "amount_cents"),
+        },
+        upstream_seed_columns={},
+        expected_column="total_revenue_cents",
+        expected_upstream_columns=("model:stg_payments.amount_cents",),
+        expected_transform_kind=ColumnTransformKind.AGGREGATION,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    RICH_CTE_REGRESSION_TEST_CASES,
+    ids=[case.description for case in RICH_CTE_REGRESSION_TEST_CASES],
+)
+def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolves_upstream(
+    test_case: ColumnLineageAnalyzerTestCase,
+) -> None:
+    upstream_models: tuple[CompiledModel, ...] = tuple(
+        make_compiled_model(
+            name=model_name,
+            query_sql="SELECT 1",
+            inferred_columns=columns,
+        )
+        for model_name, columns in test_case.upstream_model_columns.items()
+    )
+    target_model: CompiledModel = make_compiled_model(
+        name=test_case.model_name,
+        query_sql=test_case.query_sql,
+        inferred_columns=test_case.inferred_columns,
+    )
+    project: CompiledProject = make_compiled_project(
+        models=upstream_models + (target_model,),
+    )
+
+    result: ProjectColumnLineage | None = build_project_column_lineage(
+        project,
+        mode=ColumnLineageMode.RICH,
+    )
+
+    assert result is not None
+    model_lineage: ModelColumnLineage = result.models[test_case.model_name]
+    column_lineage: ColumnLineage = next(
+        column
+        for column in model_lineage.columns
+        if column.output_column == test_case.expected_column
+    )
+    upstream_columns: tuple[str, ...] = tuple(
+        sorted(
+            f"{CompiledResourceType(source.resource_type).value}:{source.resource_name}.{source.column_name}"
+            for source in column_lineage.upstream_columns
+        )
+    )
+    assert upstream_columns == tuple(sorted(test_case.expected_upstream_columns))
+    assert column_lineage.transform_kind == test_case.expected_transform_kind
+
+
 @pytest.mark.parametrize(
     "test_case",
     [

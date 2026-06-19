@@ -68,7 +68,10 @@ def execute_dbt_commands(
     argv: tuple[str, ...] = merged_argv
     style: CliStyle = CliStyle(use_color=use_color)
     dbt_execution_label: str = style.dbt_execution_label("dbt execution")
-    dbt_execution_detail_text: str = " ".join(argv[:2]) if len(argv) >= 2 else argv[0]
+    dbt_command_name: str = Path(argv[0]).name
+    dbt_execution_detail_text: str = (
+        f"{dbt_command_name} {argv[1]}" if len(argv) >= 2 else dbt_command_name
+    )
     dbt_execution_detail: str = style.muted(dbt_execution_detail_text)
     progress_stream.write(f"{dbt_execution_label}  {dbt_execution_detail}\n\n")
     progress_stream.flush()
