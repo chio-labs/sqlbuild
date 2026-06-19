@@ -23,6 +23,7 @@ from sqlbuild.integrations.dbt.helpers.reuse_candidates import (
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtModelPlanningResult,
+    DbtReuseCandidate,
     DbtReuseCandidateResolution,
     DbtReusePlanEntry,
     DbtReusePlanningResult,
@@ -42,6 +43,7 @@ from sqlbuild.integrations.dbt.types import (
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtNativeDependencyBaselineConversionTestCase,
     DbtReuseCandidateResolutionTestCase,
+    DbtReuseCascadeTestCase,
     DbtReusePlanningTestCase,
     DbtReuseScopeFromPlanTestCase,
 )
@@ -823,4 +825,98 @@ def test_given_skipped_reuse_candidate_when_planning_then_returns_skipped_entry(
     )
     assert tuple(entry.skip_reason for entry in result.entries) == tuple(
         reason for _unique_id, reason in test_case.expected_skipped
+    )
+
+
+REUSE_CASCADE_TEST_CASES: tuple[DbtReuseCascadeTestCase, ...] = (
+    DbtReuseCascadeTestCase(
+        description="unchanged downstream is upstream-changed when upstream differs",
+        upstream_current_checksum="stg-dev",
+        upstream_reuse_checksum="stg-prod",
+        downstream_current_checksum="fct-shared",
+        downstream_reuse_checksum="fct-shared",
+        expected_downstream_definition_changed=True,
+    ),
+    DbtReuseCascadeTestCase(
+        description="unchanged downstream stays reusable when upstream matches",
+        upstream_current_checksum="stg-shared",
+        upstream_reuse_checksum="stg-shared",
+        downstream_current_checksum="fct-shared",
+        downstream_reuse_checksum="fct-shared",
+        expected_downstream_definition_changed=False,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    REUSE_CASCADE_TEST_CASES,
+    ids=[case.description for case in REUSE_CASCADE_TEST_CASES],
+)
+def test_given_upstream_change_when_resolving_candidates_then_cascades_to_downstream(
+    test_case: DbtReuseCascadeTestCase,
+) -> None:
+    upstream_unique_id: str = "model.analytics.stg_orders"
+    downstream_unique_id: str = "model.analytics.fct_orders"
+    current_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id=upstream_unique_id,
+                    package_name="analytics",
+                    name="stg_orders",
+                    relation_name="dev.stg_orders",
+                    materialized="table",
+                    checksum=test_case.upstream_current_checksum,
+                ),
+                build_manifest_model_node(
+                    unique_id=downstream_unique_id,
+                    package_name="analytics",
+                    name="fct_orders",
+                    relation_name="dev.fct_orders",
+                    materialized="table",
+                    checksum=test_case.downstream_current_checksum,
+                    depends_on_nodes=(upstream_unique_id,),
+                ),
+            )
+        )
+    )
+    reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id=upstream_unique_id,
+                    package_name="analytics",
+                    name="stg_orders",
+                    relation_name="prod.stg_orders",
+                    materialized="table",
+                    checksum=test_case.upstream_reuse_checksum,
+                ),
+                build_manifest_model_node(
+                    unique_id=downstream_unique_id,
+                    package_name="analytics",
+                    name="fct_orders",
+                    relation_name="prod.fct_orders",
+                    materialized="table",
+                    checksum=test_case.downstream_reuse_checksum,
+                    depends_on_nodes=(upstream_unique_id,),
+                ),
+            )
+        )
+    )
+
+    resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
+        current_manifest=current_manifest,
+        reuse_manifest=reuse_manifest,
+        scoped_unique_ids=(upstream_unique_id, downstream_unique_id),
+    )
+
+    downstream_candidate: DbtReuseCandidate = next(
+        candidate
+        for candidate in resolution.candidates
+        if candidate.unique_id == downstream_unique_id
+    )
+    assert (
+        downstream_candidate.definition_changed_from_origin
+        == test_case.expected_downstream_definition_changed
     )

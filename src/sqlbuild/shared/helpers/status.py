@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
@@ -12,6 +13,21 @@ from rich.status import Status
 
 from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.helpers.cli_style import CliStyle
+
+_NO_PROGRESS_ENV_VAR: str = "SQLBUILD_NO_PROGRESS"
+_NO_PROGRESS_TRUTHY: frozenset[str] = frozenset({"1", "true", "yes", "on"})
+
+
+def progress_spinners_disabled() -> bool:
+    """Return True when transient spinners are disabled via the environment.
+
+    Color is unaffected. When disabled, status messages are still printed as
+    plain (dimmed) lines, which avoids the animated spinner redrawing over
+    streaming command output (for example when recording terminal GIFs).
+    """
+
+    value: str | None = os.environ.get(_NO_PROGRESS_ENV_VAR)
+    return value is not None and value.strip().lower() in _NO_PROGRESS_TRUTHY
 
 
 class TransientStatusReporter:
@@ -26,7 +42,12 @@ class TransientStatusReporter:
     ) -> None:
         self._stream: TextIO = stream
         self._style: CliStyle = CliStyle(use_color=use_color)
-        self._enabled: bool = enabled and hasattr(stream, "isatty") and stream.isatty()
+        self._enabled: bool = (
+            enabled
+            and not progress_spinners_disabled()
+            and hasattr(stream, "isatty")
+            and stream.isatty()
+        )
         self._console: Console | None = (
             Console(file=stream, no_color=(not use_color)) if self._enabled else None
         )
@@ -79,7 +100,7 @@ class TransientStatusReporter:
 def maybe_status(message: str, *, enabled: bool) -> Iterator[None]:
     """Render a stderr spinner for long-running interactive operations."""
 
-    if not enabled or not sys.stderr.isatty():
+    if not enabled or progress_spinners_disabled() or not sys.stderr.isatty():
         yield
         return
 
