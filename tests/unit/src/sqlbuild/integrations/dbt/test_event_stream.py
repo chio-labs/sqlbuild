@@ -267,21 +267,57 @@ def test_given_non_result_event_when_parsing_then_returns_none(
     assert test_case.expected_status == ""
 
 
+DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
+    DbtEventStreamTestCase(
+        description="streams node results to callback",
+        stdout_lines=(
+            '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"OK",'
+            '"node_info":{"node_name":"base_orders","resource_type":"model",'
+            '"unique_id":"model.demo.base_orders"}},'
+            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+        ),
+        expected_unique_ids=("model.demo.base_orders",),
+    ),
+    DbtEventStreamTestCase(
+        description="dedupes fusion LogModelResult and NodeFinished for one node",
+        stdout_lines=(
+            '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"success",'
+            '"node_info":{"node_name":"dbt_orders","resource_type":"model",'
+            '"node_status":"success","unique_id":"model.analytics.dbt_orders"}},'
+            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+            '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"SELECT 1",'
+            '"run_result":{"status":"success"},'
+            '"node_info":{"node_name":"dbt_orders","resource_type":"model",'
+            '"unique_id":"model.analytics.dbt_orders"}},'
+            '"info":{"level":"info","name":"NodeFinished","msg":"SELECT 1"}}\n',
+        ),
+        expected_unique_ids=("model.analytics.dbt_orders",),
+    ),
+    DbtEventStreamTestCase(
+        description="records distinct nodes once each across mixed result events",
+        stdout_lines=(
+            '{"data":{"execution_time":0.1,"index":1,"total":2,"status":"success",'
+            '"node_info":{"node_name":"stg_orders","resource_type":"model",'
+            '"node_status":"success","unique_id":"model.analytics.stg_orders"}},'
+            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+            '{"data":{"execution_time":0.2,"index":2,"total":2,"status":"success",'
+            '"run_result":{"status":"success"},'
+            '"node_info":{"node_name":"fact_orders","resource_type":"model",'
+            '"unique_id":"model.analytics.fact_orders"}},'
+            '"info":{"level":"info","name":"NodeFinished","msg":"OK"}}\n',
+        ),
+        expected_unique_ids=(
+            "model.analytics.stg_orders",
+            "model.analytics.fact_orders",
+        ),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        DbtEventStreamTestCase(
-            description="streams node results to callback",
-            stdout_lines=(
-                '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"OK",'
-                '"node_info":{"node_name":"base_orders","resource_type":"model",'
-                '"unique_id":"model.demo.base_orders"}},'
-                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-            ),
-            expected_unique_ids=("model.demo.base_orders",),
-        )
-    ],
-    ids=["streams node results to callback"],
+    DBT_EVENT_STREAM_TEST_CASES,
+    ids=[case.description for case in DBT_EVENT_STREAM_TEST_CASES],
 )
 def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     test_case: DbtEventStreamTestCase,
@@ -314,4 +350,5 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     assert returncode == 0
     assert tuple(result.unique_id for result in results) == test_case.expected_unique_ids
     assert tuple(result.unique_id for result in captured_results) == test_case.expected_unique_ids
-    assert "  1/1   model" in stream.getvalue()
+    rendered_rows: int = stream.getvalue().count("   model")
+    assert rendered_rows == len(test_case.expected_unique_ids)

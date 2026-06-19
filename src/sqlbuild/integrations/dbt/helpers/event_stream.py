@@ -68,6 +68,7 @@ def execute_dbt_json_event_stream(
     style: CliStyle = CliStyle(use_color=use_color)
     pending_messages: dict[str, list[DbtNodeMessage]] = {}
     results: list[DbtNodeExecutionResult] = []
+    recorded_unique_ids: set[str] = set()
     display_index: int = 0
     status: TransientStatusReporter | None = _start_dbt_status(
         stream=stream,
@@ -107,6 +108,9 @@ def execute_dbt_json_event_stream(
                 )
                 if result is None:
                     continue
+                if result.unique_id in recorded_unique_ids:
+                    continue
+                recorded_unique_ids.add(result.unique_id)
                 if status is not None:
                     status.close()
                     status = None

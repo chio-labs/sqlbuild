@@ -446,6 +446,11 @@ def _reason_from_skip_reason(*, reason: DbtReuseCandidateSkipReason) -> DbtReuse
 
 
 def _model_materialization(*, model: DbtManifestModel) -> str | None:
+    resource_type: object | None = model.payload.get("resource_type")
+    if isinstance(resource_type, str) and resource_type.strip().lower() == (
+        DBT_MATERIALIZATION_SNAPSHOT
+    ):
+        return DBT_MATERIALIZATION_SNAPSHOT
     config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
     if not isinstance(config, dict):
         return None

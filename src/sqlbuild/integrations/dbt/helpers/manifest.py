@@ -27,6 +27,7 @@ _DBT_RAW_CODE_KEYS: tuple[str, ...] = ("raw_code", "raw_sql")
 _DBT_DEPENDS_ON_KEY: str = "depends_on"
 _DBT_DEPENDS_ON_MACROS_KEY: str = "macros"
 _DBT_MACRO_SQL_KEY: str = "macro_sql"
+_DBT_USER_MACRO_PREFIX: str = "macro."
 
 
 @dataclass(frozen=True)
@@ -392,6 +393,7 @@ def _model_definition_fingerprint(
     macro_parts: list[str] = [
         hashlib.sha256(macro_index.macro_sql_by_id.get(macro_id, "").encode("utf-8")).hexdigest()
         for macro_id in sorted(macro_ids)
+        if macro_id.startswith(_DBT_USER_MACRO_PREFIX)
     ]
     return "\n".join((body, *config_parts, *macro_parts))
 

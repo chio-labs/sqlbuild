@@ -583,9 +583,10 @@ def add_dbt_phase11_payments_branch(*, project_dir: Path) -> None:
         sources_path.read_text(encoding="utf-8")
         + "      - name: payments\n"
         + "        identifier: raw_payments\n"
-        + "        loaded_at_field: loaded_at\n"
-        + "        freshness:\n"
-        + "          error_after: {count: 1, period: day}\n",
+        + "        config:\n"
+        + "          loaded_at_field: loaded_at\n"
+        + "          freshness:\n"
+        + "            error_after: {count: 1, period: day}\n",
         encoding="utf-8",
     )
     (dbt_models_dir / "order_payments.sql").write_text(
@@ -611,15 +612,18 @@ def add_dbt_phase11_query_filter_branch(*, project_dir: Path) -> None:
         sources_path.read_text(encoding="utf-8")
         + "      - name: query_events\n"
         + "        identifier: raw_query_events\n"
-        + "        loaded_at_query: SELECT MAX(loaded_at) AS loaded_at FROM main.raw_query_events\n"
-        + "        freshness:\n"
-        + "          error_after: {count: 1, period: day}\n"
+        + "        config:\n"
+        + "          loaded_at_query: SELECT MAX(loaded_at) AS loaded_at "
+        + "FROM main.raw_query_events\n"
+        + "          freshness:\n"
+        + "            error_after: {count: 1, period: day}\n"
         + "      - name: filtered_events\n"
         + "        identifier: raw_filtered_events\n"
-        + "        loaded_at_field: loaded_at\n"
-        + "        freshness:\n"
-        + "          error_after: {count: 1, period: day}\n"
-        + "          filter: include_in_freshness\n",
+        + "        config:\n"
+        + "          loaded_at_field: loaded_at\n"
+        + "          freshness:\n"
+        + "            error_after: {count: 1, period: day}\n"
+        + "            filter: include_in_freshness\n",
         encoding="utf-8",
     )
     (dbt_models_dir / "event_rollup.sql").write_text(
@@ -683,9 +687,10 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "    tables:\n"
         "      - name: orders\n"
         "        identifier: raw_orders\n"
-        "        loaded_at_field: loaded_at\n"
-        "        freshness:\n"
-        "          error_after: {count: 1, period: day}\n"
+        "        config:\n"
+        "          loaded_at_field: loaded_at\n"
+        "          freshness:\n"
+        "            error_after: {count: 1, period: day}\n"
         "      - name: customers\n"
         "        identifier: raw_customers\n",
         encoding="utf-8",
