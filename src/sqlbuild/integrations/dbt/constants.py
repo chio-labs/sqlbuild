@@ -7,6 +7,9 @@ DBT_MANIFEST_META_KEY: str = "meta"
 DBT_MANIFEST_SQLBUILD_META_KEY: str = "sqlbuild"
 DBT_MANIFEST_REUSE_CURSOR_KEY: str = "reuse_cursor"
 
+DBT_EXECUTABLE_ENV_VAR: str = "DBT_EXECUTABLE"
+DEFAULT_DBT_EXECUTABLE: str = "dbt"
+
 DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
     {
         "schema",

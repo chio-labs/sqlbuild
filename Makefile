@@ -32,11 +32,18 @@ skills:
 	uv run python -m scripts.skills.update_structure_skill
 
 
+# dbt executable used by interop tests. Defaults to `dbt` on PATH; override with
+# the Fusion binary for faster compiles, e.g. `make test-dbt DBT_EXECUTABLE=dbtf`
+# or by exporting DBT_EXECUTABLE in your shell.
+DBT_EXECUTABLE ?= dbt
+export DBT_EXECUTABLE
+
+
 test-dbt:
 	@mkdir -p /tmp/opencode
 	@log=/tmp/opencode/test-dbt-$$(date +%Y%m%d-%H%M%S).log; \
-	echo "Logging to $$log"; \
-	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv 2>&1 | tee "$$log"; \
+	echo "Logging to $$log (DBT_EXECUTABLE=$(DBT_EXECUTABLE))"; \
+	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv --color=yes 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "Full output saved to $$log"; \
 	exit $$status

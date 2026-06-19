@@ -69,7 +69,7 @@ def build_dbt_lineage_output(
         discovered_inputs=discovered_inputs,
         dbt_args=lineage_args.dbt_args,
     )
-    runner: DbtRunner = DbtRunner(dbt_executable="dbt")
+    runner: DbtRunner = DbtRunner()
     _report_progress(on_progress, "Compiling dbt project...")
     dbt_compile_start: float = time.monotonic()
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)

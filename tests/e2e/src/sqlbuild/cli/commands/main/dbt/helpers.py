@@ -19,11 +19,20 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"
 
 
+def dbt_executable() -> str:
+    """Return the dbt executable for e2e tests, honoring DBT_EXECUTABLE."""
+
+    override: str | None = os.environ.get("DBT_EXECUTABLE")
+    if override is not None and override.strip():
+        return override.strip()
+    return "dbt"
+
+
 def skip_unless_dbt_is_runnable() -> None:
     """Skip e2e dbt tests when the dbt CLI is unavailable."""
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
-        ("dbt", "--version"),
+        (dbt_executable(), "--version"),
         capture_output=True,
         check=False,
         text=True,
@@ -332,7 +341,7 @@ def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedPr
     target_path: Path = dbt_project_dir / "target"
     return subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "compile",
             "--project-dir",
             dbt_project_dir.as_posix(),
@@ -819,7 +828,7 @@ def prepare_dbt_reuse_from_project(*, tmp_path: Path) -> Path:
     _run_git(args=("branch", "prod"), cwd=root_dir)
     subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "run",
             "--project-dir",
             dbt_project_dir.as_posix(),
@@ -920,7 +929,7 @@ def prepare_dbt_seeded_reuse_from_project(*, tmp_path: Path) -> Path:
     _run_git(args=("branch", "prod"), cwd=root_dir)
     subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "run",
             "--project-dir",
             dbt_project_dir.as_posix(),
@@ -1206,7 +1215,7 @@ def _run_dbt(
 ) -> None:
     subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             *args,
             "--project-dir",
             dbt_project_dir.as_posix(),

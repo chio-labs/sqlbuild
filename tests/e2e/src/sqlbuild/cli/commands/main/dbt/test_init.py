@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtInitMissingProdRelationE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    dbt_executable,
     initialize_dbt_init_git_repo,
     prepare_dbt_init_duckdb_workspace,
     run_sqb_with_pty,
@@ -464,7 +465,7 @@ def test_given_generated_dbt_init_config_when_building_then_reuses_production_ta
     initialize_dbt_init_git_repo(workspace=workspace, production_ref="prod")
     prod_result: subprocess.CompletedProcess[str] = subprocess.run(
         (
-            "dbt",
+            dbt_executable(),
             "run",
             "--project-dir",
             (workspace / "dbt_project").as_posix(),
