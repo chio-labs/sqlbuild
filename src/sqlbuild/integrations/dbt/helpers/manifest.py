@@ -10,11 +10,13 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,
+    DbtManifestSeed,
     DbtManifestSource,
 )
 from sqlbuild.shared.types import SqlReferenceKind
 
 _INDEXED_NODE_RESOURCE_TYPES: frozenset[str] = frozenset({"model", "snapshot"})
+_SEED_RESOURCE_TYPE: str = "seed"
 
 
 def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex:
@@ -55,18 +57,23 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
     models_by_name_lists: dict[str, list[DbtManifestModel]] = {}
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel] = {}
     sources_by_unique_id: dict[str, DbtManifestSource] = {}
+    seeds_by_unique_id: dict[str, DbtManifestSeed] = {}
     unique_id: object
     raw_node: object
     for unique_id, raw_node in raw_nodes.items():
         if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
             continue
         node_data: dict[object, object] = cast(dict[object, object], raw_node)
-        if node_data.get("resource_type") not in _INDEXED_NODE_RESOURCE_TYPES:
+        resource_type: object = node_data.get("resource_type")
+        if resource_type in _INDEXED_NODE_RESOURCE_TYPES:
+            model: DbtManifestModel = _parse_model(unique_id=unique_id, raw_node=node_data)
+            models_by_unique_id[model.unique_id] = model
+            models_by_name_lists.setdefault(model.name, []).append(model)
+            models_by_package_and_name[(model.package_name, model.name)] = model
             continue
-        model: DbtManifestModel = _parse_model(unique_id=unique_id, raw_node=node_data)
-        models_by_unique_id[model.unique_id] = model
-        models_by_name_lists.setdefault(model.name, []).append(model)
-        models_by_package_and_name[(model.package_name, model.name)] = model
+        if resource_type == _SEED_RESOURCE_TYPE:
+            seed: DbtManifestSeed = _parse_seed(unique_id=unique_id, raw_node=node_data)
+            seeds_by_unique_id[seed.unique_id] = seed
 
     for unique_id, raw_node in raw_sources.items():
         if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
@@ -82,6 +89,7 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         models_by_name={name: tuple(models) for name, models in models_by_name_lists.items()},
         models_by_package_and_name=models_by_package_and_name,
         sources_by_unique_id=sources_by_unique_id,
+        seeds_by_unique_id=seeds_by_unique_id,
     )
 
 
@@ -182,6 +190,27 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
         loaded_at_query=_optional_str(raw_node.get("loaded_at_query")),
         freshness=freshness,
         freshness_filter=_source_freshness_filter(raw_node=raw_node, freshness=freshness),
+        payload={str(key): value for key, value in raw_node.items()},
+    )
+
+
+def _parse_seed(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifestSeed:
+    package_name: str = _required_str(raw_node.get("package_name"), field_name="package_name")
+    name: str = _required_str(raw_node.get("name"), field_name="name")
+    database: str | None = _optional_str(raw_node.get("database"))
+    schema: str | None = _optional_str(raw_node.get("schema"))
+    alias: str | None = _optional_str(raw_node.get("alias"))
+    relation_name: str | None = _optional_str(raw_node.get("relation_name"))
+    if relation_name is None:
+        relation_name = _render_relation_name(database=database, schema=schema, name=alias or name)
+    return DbtManifestSeed(
+        unique_id=unique_id,
+        package_name=package_name,
+        name=name,
+        database=database,
+        schema=schema,
+        alias=alias,
+        relation_name=relation_name,
         payload={str(key): value for key, value in raw_node.items()},
     )
 

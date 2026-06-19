@@ -28,7 +28,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtReuseFromCompileResult,
     DbtReusePlanningResult,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.spec.models.project import DbtReuseFromConfig
 
 

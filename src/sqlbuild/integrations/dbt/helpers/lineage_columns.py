@@ -37,6 +37,7 @@ from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_mode
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,
+    DbtManifestSeed,
     DbtManifestSource,
 )
 from sqlbuild.integrations.dbt.models import (
@@ -196,8 +197,7 @@ def _with_propagated_columns(
 def inspect_dbt_source_schemas(
     *,
     adapter: BaseAdapter,
-    project: CompiledProject,
-    project_dir: Path,
+    connection_config: dict[str, object],
     manifest: DbtManifestIndex,
 ) -> DbtSourceSchemaInspectionResult:
     """Best-effort source schema inspection for dbt column lineage star expansion."""
@@ -206,7 +206,7 @@ def inspect_dbt_source_schemas(
     warnings: list[str] = []
     connection: Any | None = None
     try:
-        connection = adapter.connect(_resolved_connection(project, project_dir=project_dir))
+        connection = adapter.connect(connection_config)
         source: DbtManifestSource
         for source in manifest.sources_by_unique_id.values():
             columns: tuple[ColumnInfo, ...] | None = None
@@ -225,6 +225,25 @@ def inspect_dbt_source_schemas(
                 continue
             columns_by_unique_id[source.unique_id] = tuple(
                 SourceColumnEntry(name=column.name, type=column.type) for column in columns
+            )
+        seed: DbtManifestSeed
+        for seed in manifest.seeds_by_unique_id.values():
+            seed_columns: tuple[ColumnInfo, ...] | None = None
+            seed_errors: list[str] = []
+            for relation_name in _seed_relation_candidates(seed):
+                try:
+                    seed_columns = adapter.describe_relation(connection, relation_name)
+                    break
+                except Exception as error:  # best-effort metadata path; surfaced as output warning
+                    seed_errors.append(str(error))
+            if seed_columns is None:
+                warnings.append(
+                    f"Could not inspect seed {seed.unique_id}; SELECT * lineage from this "
+                    f"seed may be incomplete: {'; '.join(seed_errors)}"
+                )
+                continue
+            columns_by_unique_id[seed.unique_id] = tuple(
+                SourceColumnEntry(name=column.name, type=column.type) for column in seed_columns
             )
     finally:
         if connection is not None:
@@ -267,6 +286,17 @@ def build_dbt_column_lineage_analysis_project(
             _dbt_source(
                 source=dbt_source,
                 columns=source_columns_by_unique_id.get(dbt_source.unique_id, ()),
+            )
+        )
+    dbt_seed: DbtManifestSeed
+    for dbt_seed in manifest.seeds_by_unique_id.values():
+        key = dbt_source_graph_key(dbt_seed.unique_id)
+        if key not in selected_keys:
+            continue
+        sources.append(
+            _dbt_seed_source(
+                seed=dbt_seed,
+                columns=source_columns_by_unique_id.get(dbt_seed.unique_id, ()),
             )
         )
     return CompiledProject(
@@ -380,6 +410,31 @@ def _dbt_source(
     )
 
 
+def _dbt_seed_source(
+    *, seed: DbtManifestSeed, columns: tuple[SourceColumnEntry, ...]
+) -> CompiledSource:
+    entry: SourceEntry = SourceEntry(
+        name=seed.unique_id,
+        database=seed.database,
+        schema=seed.schema,
+        table=seed.alias or seed.name,
+        columns=columns,
+    )
+    source_file: DiscoveredSourceFile = DiscoveredSourceFile(
+        file_path=Path("/dbt") / f"{seed.unique_id}.yml",
+        relative_path=Path(str(seed.payload.get("original_file_path") or "dbt/seeds.yml")),
+        contents="",
+        source_entries=(entry,),
+    )
+    return CompiledSource(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=seed.unique_id),
+        deps=(),
+        name=seed.unique_id,
+        source_entry=entry,
+        source_file=source_file,
+    )
+
+
 def _rewrite_sqlbuild_dbt_refs(sql: str, *, manifest: DbtManifestIndex) -> str:
     pattern: re.Pattern[str] = re.compile(
         r"__dbt_ref\(\s*(['\"])(?P<first>[^'\"]+)\1"
@@ -412,9 +467,11 @@ def _dbt_model_compiled_sql(model: DbtManifestModel) -> str:
 def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
     rewritten: str = sql
     replacements: dict[str, str] = {}
-    relation_names: tuple[str, ...] = tuple(
-        model.relation_name for model in manifest.models_by_unique_id.values()
-    ) + tuple(source.relation_name for source in manifest.sources_by_unique_id.values())
+    relation_names: tuple[str, ...] = (
+        tuple(model.relation_name for model in manifest.models_by_unique_id.values())
+        + tuple(source.relation_name for source in manifest.sources_by_unique_id.values())
+        + tuple(seed.relation_name for seed in manifest.seeds_by_unique_id.values())
+    )
     relation_table_counts: dict[str, int] = {}
     relation_name: str
     for relation_name in relation_names:
@@ -439,6 +496,17 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
                 source.unique_id,
                 kind="source",
                 include_table_only=relation_table_counts[_relation_table_name(source.relation_name)]
+                == 1,
+            )
+        )
+    seed: DbtManifestSeed
+    for seed in manifest.seeds_by_unique_id.values():
+        replacements.update(
+            _relation_replacements(
+                seed.relation_name,
+                seed.unique_id,
+                kind="source",
+                include_table_only=relation_table_counts[_relation_table_name(seed.relation_name)]
                 == 1,
             )
         )
@@ -503,14 +571,6 @@ def _replace_relation_in_from_or_join(sql: str, relation_name: str, replacement:
     )
 
 
-def _resolved_connection(project: CompiledProject, *, project_dir: Path) -> dict[str, object]:
-    connection: dict[str, object] = dict(project.effective_connection)
-    raw_database: object | None = connection.get("database")
-    if isinstance(raw_database, str) and raw_database and not Path(raw_database).is_absolute():
-        connection["database"] = str(project_dir / raw_database)
-    return connection
-
-
 def _source_relation_candidates(source: DbtManifestSource) -> tuple[str, ...]:
     relation_name: str = source.relation_name
     relation_parts: tuple[str, ...] = tuple(
@@ -527,6 +587,23 @@ def _source_relation_candidates(source: DbtManifestSource) -> tuple[str, ...]:
     if schema is not None:
         candidates.append(f"{schema}.{table_name}")
         candidates.append(f'"{schema}"."{table_name}"')
+    candidates.append(table_name)
+    return tuple(dict.fromkeys(candidates))
+
+
+def _seed_relation_candidates(seed: DbtManifestSeed) -> tuple[str, ...]:
+    relation_name: str = seed.relation_name
+    relation_parts: tuple[str, ...] = tuple(
+        part.strip('"') for part in relation_name.split(".") if part.strip('"')
+    )
+    table_name: str = seed.alias or seed.name
+    candidates: list[str] = [relation_name]
+    if len(relation_parts) >= 2:
+        candidates.append(".".join(relation_parts[-2:]))
+        candidates.append(".".join(f'"{part}"' for part in relation_parts[-2:]))
+    if seed.schema is not None:
+        candidates.append(f"{seed.schema}.{table_name}")
+        candidates.append(f'"{seed.schema}"."{table_name}"')
     candidates.append(table_name)
     return tuple(dict.fromkeys(candidates))
 

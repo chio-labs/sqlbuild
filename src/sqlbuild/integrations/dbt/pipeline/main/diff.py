@@ -41,7 +41,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
     mode_label,
     parse_dbt_diff_options,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
 
