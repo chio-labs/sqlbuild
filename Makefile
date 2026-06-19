@@ -33,7 +33,44 @@ skills:
 
 
 test-dbt:
-	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv
+	@mkdir -p /tmp/opencode
+	@log=/tmp/opencode/test-dbt-$$(date +%Y%m%d-%H%M%S).log; \
+	echo "Logging to $$log"; \
+	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "Full output saved to $$log"; \
+	exit $$status
+
+
+DBT_TEST_PATHS := tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt
+
+
+test-dbt-real:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse" -vv
+
+
+test-dbt-real-snowflake:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and snowflake" -vv
+
+
+test-dbt-real-bigquery:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and bigquery" -vv
+
+
+test-dbt-real-databricks:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and databricks" -vv
+
+
+test-dbt-real-postgres:
+	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and postgres" -vv
+
+
+test-dbt-real-sqlserver:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and sqlserver" -vv
+
+
+test-dbt-real-motherduck:
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and motherduck" -vv
 
 
 waffle-shop:

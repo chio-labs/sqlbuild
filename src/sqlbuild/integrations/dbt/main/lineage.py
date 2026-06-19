@@ -17,6 +17,7 @@ from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceRe
 from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.lineage_args import parse_dbt_lineage_args
 from sqlbuild.integrations.dbt.helpers.lineage_columns import (
+    dbt_column_lineage_selected_keys,
     inspect_dbt_source_schemas,
     select_dbt_column_lineage_target,
 )
@@ -114,6 +115,14 @@ def build_dbt_lineage_output(
             adapter=adapter,
             connection_config=connection_config,
             manifest=manifest,
+            selected_keys=dbt_column_lineage_selected_keys(
+                project=project,
+                manifest=manifest,
+                graph=graph,
+                target=lineage_args.target,
+                direction=lineage_args.direction,
+                depth=lineage_args.depth,
+            ),
         ),
     )
     if column_trace is not None:

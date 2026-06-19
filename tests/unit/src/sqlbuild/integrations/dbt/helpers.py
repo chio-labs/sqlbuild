@@ -557,13 +557,17 @@ def extract_dbt_ls_excludes(argv: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def build_manifest_data(
-    *, nodes: tuple[dict[str, object], ...], sources: tuple[dict[str, object], ...] = ()
+    *,
+    nodes: tuple[dict[str, object], ...],
+    sources: tuple[dict[str, object], ...] = (),
+    macros: tuple[dict[str, object], ...] = (),
 ) -> dict[str, object]:
     """Build a minimal dbt manifest payload for model lookup tests."""
 
     return {
         "nodes": {str(node["unique_id"]): node for node in nodes},
         "sources": {str(source["unique_id"]): source for source in sources},
+        "macros": {str(macro["unique_id"]): macro for macro in macros},
     }
 
 
@@ -581,9 +585,11 @@ def build_manifest_model_node(
     raw_code: str | None = None,
     compiled_code: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
+    depends_on_macro_ids: tuple[str, ...] = (),
     materialized: str | None = "view",
     incremental_strategy: str | None = None,
     meta: dict[str, object] | None = None,
+    config_overrides: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
 
@@ -608,16 +614,34 @@ def build_manifest_model_node(
         node["checksum"] = {"checksum": checksum}
     if fqn:
         node["fqn"] = list(fqn)
-    if depends_on_nodes:
-        node["depends_on"] = {"nodes": list(depends_on_nodes)}
+    if depends_on_nodes or depends_on_macro_ids:
+        node["depends_on"] = {
+            "nodes": list(depends_on_nodes),
+            "macros": list(depends_on_macro_ids),
+        }
     if materialized is not None:
         config: dict[str, object] = {"materialized": materialized}
         if incremental_strategy is not None:
             config["incremental_strategy"] = incremental_strategy
         if meta is not None:
             config["meta"] = meta
+        if config_overrides is not None:
+            config.update(config_overrides)
         node["config"] = config
     return node
+
+
+def build_manifest_macro_node(
+    *, unique_id: str, macro_sql: str, depends_on_macro_ids: tuple[str, ...] = ()
+) -> dict[str, object]:
+    """Build a minimal dbt manifest macro node."""
+
+    return {
+        "unique_id": unique_id,
+        "resource_type": "macro",
+        "macro_sql": macro_sql,
+        "depends_on": {"macros": list(depends_on_macro_ids)},
+    }
 
 
 def build_manifest_source_node(

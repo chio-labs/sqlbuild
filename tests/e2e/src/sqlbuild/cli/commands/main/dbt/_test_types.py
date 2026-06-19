@@ -61,8 +61,10 @@ class DbtExecutionCliTestCase:
 class DbtExecutionFailureCliTestCase:
     description: str
     command: tuple[str, ...]
+    setup: Callable[[Path], None]
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_stdout_fragments: tuple[str, ...]
+    expected_returncode: int = 1
     expected_absent_relations: tuple[str, ...] = ()
 
 
@@ -174,30 +176,21 @@ class DbtLineageErrorE2ETestCase:
 class DbtMultiNodeCompleteReuseFromE2ETestCase:
     description: str
     command: tuple[str, ...]
-    failure_sql: str
-    recovery_sql: str
-    expected_failed_destination_rows: tuple[tuple[str, int], ...]
-    expected_failed_fingerprint_rows: tuple[tuple[str], ...]
-    expected_rerun_downstream_rows: tuple[tuple[str, int], ...]
-    expected_rerun_fingerprint_rows: tuple[tuple[str], ...]
-    expected_absent_failed_relation: tuple[str, str]
-    expected_failed_absent_stdout_fragments: tuple[str, ...]
-    expected_rerun_stdout_fragments: tuple[str, ...]
-    expected_rerun_absent_stdout_fragments: tuple[str, ...]
+    missing_origin_sql: str
+    expected_downstream_rows: tuple[tuple[str, int], ...]
+    expected_fingerprint_rows: tuple[tuple[str], ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_stdout_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class DbtMultiNodeSeededReuseFromE2ETestCase:
     description: str
     command: tuple[str, ...]
-    failure_sql: str
-    recovery_sql: str
-    expected_failed_destination_rows: tuple[tuple[str, int, int], ...]
-    expected_absent_failed_relation: tuple[str, str]
-    expected_failed_absent_stdout_fragments: tuple[str, ...]
-    expected_rerun_stdout_fragments: tuple[str, ...]
-    expected_rerun_absent_stdout_fragments: tuple[str, ...]
-    expected_rerun_downstream_rows: tuple[tuple[str, int, int], ...]
+    missing_origin_sql: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_absent_stdout_fragments: tuple[str, ...]
+    expected_downstream_rows: tuple[tuple[str, int, int], ...]
 
 
 @dataclass(frozen=True)

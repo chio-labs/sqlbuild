@@ -20,7 +20,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     prepare_dbt_init_duckdb_workspace,
     run_sqb_with_pty,
     skip_unless_dbt_is_runnable,
-    write_dbt_init_orders_model,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
 
@@ -479,7 +478,6 @@ def test_given_generated_dbt_init_config_when_building_then_reuses_production_ta
         text=True,
     )
     assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
-    write_dbt_init_orders_model(workspace=workspace, amount_cents=111)
 
     init_result: subprocess.CompletedProcess[str] = run_sqb(
         command=(

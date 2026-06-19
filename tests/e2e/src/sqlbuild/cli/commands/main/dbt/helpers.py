@@ -551,6 +551,19 @@ def write_dbt_phase11_invalid_downstream_model(*, project_dir: Path) -> None:
     )
 
 
+def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
+    """Make the dbt fact_orders model fail at run time so the dbt build errors."""
+
+    fact_orders_path: Path = (
+        project_dir.parent / "dbt_project" / "models" / "marts" / "fact_orders.sql"
+    )
+    fact_orders_path.write_text(
+        "{{ config(tags=['finance']) }}\n"
+        "select * from this_relation_does_not_exist_for_failure_test\n",
+        encoding="utf-8",
+    )
+
+
 def add_dbt_phase11_payments_branch(*, project_dir: Path) -> None:
     """Add a dbt model that depends on orders and payments sources."""
 
@@ -819,7 +832,6 @@ def prepare_dbt_reuse_from_project(*, tmp_path: Path) -> Path:
         check=True,
         text=True,
     )
-    write_dbt_reuse_from_fact_orders_model(project_dir=sqlbuild_project_dir, amount=111)
     return sqlbuild_project_dir
 
 
@@ -979,11 +991,6 @@ def prepare_dbt_multi_node_reuse_from_project(*, tmp_path: Path) -> Path:
     _run_dbt(
         args=("run",), dbt_project_dir=dbt_project_dir, profiles_dir=profiles_dir, target="prod"
     )
-    for model_name in ("orders_a", "orders_b", "orders_c"):
-        (dbt_models_dir / f"{model_name}.sql").write_text(
-            f"select '{model_name}' as model_name, 111 as amount\n",
-            encoding="utf-8",
-        )
     return sqlbuild_project_dir
 
 

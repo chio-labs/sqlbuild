@@ -68,7 +68,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
             "model.analytics.stg_orders",
         ),
         expected_dbt_required_unique_ids=("model.analytics.fact_orders",),
-        expected_dbt_required_selector_terms=("+fact_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.fact_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -80,7 +80,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
                 "--target-path",
                 "{dbt_target_path}",
                 "--select",
-                "+fact_orders",
+                "+fqn:analytics.fact_orders",
             ),
         ),
         expected_dbt_anchor_terms=("tag:nightly+",),
@@ -161,7 +161,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
             "model.analytics.fact_orders",
             "model.analytics.stg_orders",
         ),
-        expected_dbt_required_selector_terms=("+fact_orders",),
+        expected_dbt_required_selector_terms=("+fqn:analytics.fact_orders",),
         expected_supplemental_dbt_command_argvs=(
             (
                 "dbt",
@@ -173,7 +173,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
                 "--target-path",
                 "{dbt_target_path}",
                 "--select",
-                "+fact_orders",
+                "+fqn:analytics.fact_orders",
             ),
         ),
         expected_dbt_anchor_terms=(),

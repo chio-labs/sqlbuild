@@ -41,6 +41,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanReason,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtDefinitionFingerprintTestCase,
     DbtNativeDependencyBaselineConversionTestCase,
     DbtReuseCandidateResolutionTestCase,
     DbtReuseCascadeTestCase,
@@ -51,6 +52,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_dbt_interop_plan_for_reuse_scope,
     build_dbt_model_plan_entry,
     build_manifest_data,
+    build_manifest_macro_node,
     build_manifest_model_node,
 )
 
@@ -385,8 +387,8 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         dbt_plan_reason=DbtModelPlanReason.FIRST_RUN,
         expected_action=DbtReusePlanAction.REBUILD,
         expected_reason=DbtReusePlanReason.DEFINITION_CHANGED,
-        current_checksum="dev-edited-checksum",
-        origin_checksum="prod-checksum",
+        current_raw_sql="select 111 as amount from prod.raw",
+        origin_raw_sql="select 900 as amount from prod.raw",
     ),
     DbtReusePlanningTestCase(
         description="reuses when current definition matches origin",
@@ -395,8 +397,8 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         dbt_plan_reason=DbtModelPlanReason.FIRST_RUN,
         expected_action=DbtReusePlanAction.COMPLETE_REUSE,
         expected_reason=DbtReusePlanReason.FINGERPRINT_MISSING,
-        current_checksum="shared-checksum",
-        origin_checksum="shared-checksum",
+        current_raw_sql="select 900 as amount from prod.raw",
+        origin_raw_sql="select 900 as amount from prod.raw",
     ),
 )
 
@@ -557,7 +559,7 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
                         package_name="analytics",
                         name="orders",
                         relation_name="dev.orders",
-                        checksum=test_case.current_checksum,
+                        raw_code=test_case.current_raw_sql,
                         materialized=(
                             "incremental"
                             if test_case.candidate_materialization == "microbatch"
@@ -587,7 +589,7 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
                         package_name="analytics",
                         name="orders",
                         relation_name="prod.orders",
-                        checksum=test_case.origin_checksum,
+                        raw_code=test_case.origin_raw_sql,
                         materialized=(
                             "incremental"
                             if test_case.candidate_materialization == "microbatch"
@@ -831,18 +833,18 @@ def test_given_skipped_reuse_candidate_when_planning_then_returns_skipped_entry(
 REUSE_CASCADE_TEST_CASES: tuple[DbtReuseCascadeTestCase, ...] = (
     DbtReuseCascadeTestCase(
         description="unchanged downstream is upstream-changed when upstream differs",
-        upstream_current_checksum="stg-dev",
-        upstream_reuse_checksum="stg-prod",
-        downstream_current_checksum="fct-shared",
-        downstream_reuse_checksum="fct-shared",
+        upstream_current_raw_sql="select 111 as amount from prod.raw",
+        upstream_reuse_raw_sql="select 900 as amount from prod.raw",
+        downstream_current_raw_sql="select amount from prod.stg_orders",
+        downstream_reuse_raw_sql="select amount from prod.stg_orders",
         expected_downstream_definition_changed=True,
     ),
     DbtReuseCascadeTestCase(
         description="unchanged downstream stays reusable when upstream matches",
-        upstream_current_checksum="stg-shared",
-        upstream_reuse_checksum="stg-shared",
-        downstream_current_checksum="fct-shared",
-        downstream_reuse_checksum="fct-shared",
+        upstream_current_raw_sql="select 900 as amount from prod.raw",
+        upstream_reuse_raw_sql="select 900 as amount from prod.raw",
+        downstream_current_raw_sql="select amount from prod.stg_orders",
+        downstream_reuse_raw_sql="select amount from prod.stg_orders",
         expected_downstream_definition_changed=False,
     ),
 )
@@ -867,7 +869,7 @@ def test_given_upstream_change_when_resolving_candidates_then_cascades_to_downst
                     name="stg_orders",
                     relation_name="dev.stg_orders",
                     materialized="table",
-                    checksum=test_case.upstream_current_checksum,
+                    raw_code=test_case.upstream_current_raw_sql,
                 ),
                 build_manifest_model_node(
                     unique_id=downstream_unique_id,
@@ -875,7 +877,7 @@ def test_given_upstream_change_when_resolving_candidates_then_cascades_to_downst
                     name="fct_orders",
                     relation_name="dev.fct_orders",
                     materialized="table",
-                    checksum=test_case.downstream_current_checksum,
+                    raw_code=test_case.downstream_current_raw_sql,
                     depends_on_nodes=(upstream_unique_id,),
                 ),
             )
@@ -890,7 +892,7 @@ def test_given_upstream_change_when_resolving_candidates_then_cascades_to_downst
                     name="stg_orders",
                     relation_name="prod.stg_orders",
                     materialized="table",
-                    checksum=test_case.upstream_reuse_checksum,
+                    raw_code=test_case.upstream_reuse_raw_sql,
                 ),
                 build_manifest_model_node(
                     unique_id=downstream_unique_id,
@@ -898,7 +900,7 @@ def test_given_upstream_change_when_resolving_candidates_then_cascades_to_downst
                     name="fct_orders",
                     relation_name="prod.fct_orders",
                     materialized="table",
-                    checksum=test_case.downstream_reuse_checksum,
+                    raw_code=test_case.downstream_reuse_raw_sql,
                     depends_on_nodes=(upstream_unique_id,),
                 ),
             )
@@ -920,3 +922,156 @@ def test_given_upstream_change_when_resolving_candidates_then_cascades_to_downst
         downstream_candidate.definition_changed_from_origin
         == test_case.expected_downstream_definition_changed
     )
+
+
+DEFINITION_FINGERPRINT_TEST_CASES: tuple[DbtDefinitionFingerprintTestCase, ...] = (
+    DbtDefinitionFingerprintTestCase(
+        description="env-only target_schema change does not change the definition",
+        current_raw_code="{{ config(target_schema='main') }}\nselect 1 as id",
+        origin_raw_code="{{ config(target_schema='prod') }}\nselect 1 as id",
+        current_config_overrides={"target_schema": "main"},
+        origin_config_overrides={"target_schema": "prod"},
+        current_macro_ids=(),
+        origin_macro_ids=(),
+        current_macro_sql_by_id={},
+        origin_macro_sql_by_id={},
+        macro_deps_by_id={},
+        expected_definition_changed=False,
+    ),
+    DbtDefinitionFingerprintTestCase(
+        description="logical unique_key config change changes the definition",
+        current_raw_code="select 1 as id",
+        origin_raw_code="select 1 as id",
+        current_config_overrides={"unique_key": "order_id"},
+        origin_config_overrides={"unique_key": "customer_id"},
+        current_macro_ids=(),
+        origin_macro_ids=(),
+        current_macro_sql_by_id={},
+        origin_macro_sql_by_id={},
+        macro_deps_by_id={},
+        expected_definition_changed=True,
+    ),
+    DbtDefinitionFingerprintTestCase(
+        description="changed macro body changes the definition with unchanged call site",
+        current_raw_code="select {{ to_cents('amount') }} as cents",
+        origin_raw_code="select {{ to_cents('amount') }} as cents",
+        current_config_overrides={},
+        origin_config_overrides={},
+        current_macro_ids=("macro.analytics.to_cents",),
+        origin_macro_ids=("macro.analytics.to_cents",),
+        current_macro_sql_by_id={
+            "macro.analytics.to_cents": "{% macro to_cents(c) %}{{ c }} * 100{% endmacro %}"
+        },
+        origin_macro_sql_by_id={
+            "macro.analytics.to_cents": "{% macro to_cents(c) %}{{ c }} * 1000{% endmacro %}"
+        },
+        macro_deps_by_id={},
+        expected_definition_changed=True,
+    ),
+    DbtDefinitionFingerprintTestCase(
+        description="changed nested macro body changes the definition transitively",
+        current_raw_code="select {{ to_cents('amount') }} as cents",
+        origin_raw_code="select {{ to_cents('amount') }} as cents",
+        current_macro_ids=("macro.analytics.to_cents",),
+        origin_macro_ids=("macro.analytics.to_cents",),
+        current_config_overrides={},
+        origin_config_overrides={},
+        current_macro_sql_by_id={
+            "macro.analytics.to_cents": "{% macro to_cents(c) %}{{ inner(c) }}{% endmacro %}",
+            "macro.analytics.inner": "{% macro inner(c) %}{{ c }} * 100{% endmacro %}",
+        },
+        origin_macro_sql_by_id={
+            "macro.analytics.to_cents": "{% macro to_cents(c) %}{{ inner(c) }}{% endmacro %}",
+            "macro.analytics.inner": "{% macro inner(c) %}{{ c }} * 1000{% endmacro %}",
+        },
+        macro_deps_by_id={"macro.analytics.to_cents": ("macro.analytics.inner",)},
+        expected_definition_changed=True,
+    ),
+    DbtDefinitionFingerprintTestCase(
+        description="identical raw code config and macros leave the definition unchanged",
+        current_raw_code="select {{ to_cents('amount') }} as cents",
+        origin_raw_code="select {{ to_cents('amount') }} as cents",
+        current_macro_ids=("macro.analytics.to_cents",),
+        origin_macro_ids=("macro.analytics.to_cents",),
+        current_config_overrides={"unique_key": "order_id"},
+        origin_config_overrides={"unique_key": "order_id"},
+        current_macro_sql_by_id={
+            "macro.analytics.to_cents": "{% macro to_cents(c) %}{{ c }} * 100{% endmacro %}"
+        },
+        origin_macro_sql_by_id={
+            "macro.analytics.to_cents": "{% macro to_cents(c) %}{{ c }} * 100{% endmacro %}"
+        },
+        macro_deps_by_id={},
+        expected_definition_changed=False,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DEFINITION_FINGERPRINT_TEST_CASES,
+    ids=[case.description for case in DEFINITION_FINGERPRINT_TEST_CASES],
+)
+def test_given_dbt_node_changes_when_resolving_candidates_then_detects_definition_change(
+    test_case: DbtDefinitionFingerprintTestCase,
+) -> None:
+    unique_id: str = "model.analytics.orders"
+    current_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id=unique_id,
+                    package_name="analytics",
+                    name="orders",
+                    relation_name="dev.orders",
+                    materialized="table",
+                    raw_code=test_case.current_raw_code,
+                    depends_on_macro_ids=test_case.current_macro_ids,
+                    config_overrides=test_case.current_config_overrides,
+                ),
+            ),
+            macros=tuple(
+                build_manifest_macro_node(
+                    unique_id=macro_id,
+                    macro_sql=macro_sql,
+                    depends_on_macro_ids=test_case.macro_deps_by_id.get(macro_id, ()),
+                )
+                for macro_id, macro_sql in test_case.current_macro_sql_by_id.items()
+            ),
+        )
+    )
+    origin_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id=unique_id,
+                    package_name="analytics",
+                    name="orders",
+                    relation_name="prod.orders",
+                    materialized="table",
+                    raw_code=test_case.origin_raw_code,
+                    depends_on_macro_ids=test_case.origin_macro_ids,
+                    config_overrides=test_case.origin_config_overrides,
+                ),
+            ),
+            macros=tuple(
+                build_manifest_macro_node(
+                    unique_id=macro_id,
+                    macro_sql=macro_sql,
+                    depends_on_macro_ids=test_case.macro_deps_by_id.get(macro_id, ()),
+                )
+                for macro_id, macro_sql in test_case.origin_macro_sql_by_id.items()
+            ),
+        )
+    )
+
+    resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
+        current_manifest=current_manifest,
+        reuse_manifest=origin_manifest,
+        scoped_unique_ids=(unique_id,),
+    )
+
+    candidate: DbtReuseCandidate = next(
+        entry for entry in resolution.candidates if entry.unique_id == unique_id
+    )
+    assert candidate.definition_changed_from_origin == test_case.expected_definition_changed
