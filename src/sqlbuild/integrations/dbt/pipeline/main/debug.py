@@ -19,7 +19,7 @@ def debug_dbt_from_project(
     project_dir: Path,
     args: tuple[str, ...],
     dbt_runner: DbtRunner | None = None,
-    dbt_executable: str = "dbt",
+    dbt_executable: str | None = None,
     stdout_stream: TextIO,
     stderr_stream: TextIO,
 ) -> int:

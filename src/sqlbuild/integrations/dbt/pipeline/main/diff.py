@@ -71,7 +71,7 @@ def run_dbt_diff_from_project(
         discovered_inputs=discovered_inputs,
         dbt_args=options.dbt_args,
     )
-    runner: DbtRunner = DbtRunner(dbt_executable="dbt")
+    runner: DbtRunner = DbtRunner()
     _report_progress(on_progress, "Compiling dbt project...")
     compile_start: float = time.monotonic()
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)

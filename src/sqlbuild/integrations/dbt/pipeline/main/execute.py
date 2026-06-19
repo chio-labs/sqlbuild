@@ -89,6 +89,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
 )
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
@@ -106,7 +107,7 @@ def execute_dbt_interop_from_project(
     project_dir: Path,
     args: tuple[str, ...],
     dbt_runner: DbtRunner | None = None,
-    dbt_executable: str = "dbt",
+    dbt_executable: str | None = None,
     sqlbuild_executable: str = "sqb",
     no_sql_validation: bool = False,
     fail_fast: bool = False,
@@ -121,6 +122,8 @@ def execute_dbt_interop_from_project(
 
     if command not in (DbtInteropCommand.RUN, DbtInteropCommand.BUILD, DbtInteropCommand.TEST):
         raise DbtInteropArgumentError(f"unsupported dbt interop execution command: {command}")
+
+    dbt_executable = dbt_executable or resolve_dbt_executable()
 
     output_stream: TextIO = progress_stream or sys.stdout
     dbt_output_stream: TextIO = dbt_stdout_stream or output_stream
