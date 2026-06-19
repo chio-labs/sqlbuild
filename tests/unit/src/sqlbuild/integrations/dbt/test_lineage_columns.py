@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from pathlib import Path
 from typing import cast
 
 import pytest
@@ -716,7 +715,6 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
     manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=build_column_lineage_manifest_data()
     )
-    project: CompiledProject = build_compiled_project_with_models({})
     adapter_by_description: dict[str, FakeLineageSourceSchemaAdapter] = {
         "inspects source schema with fallback relation name": FakeLineageSourceSchemaAdapter(
             {
@@ -735,8 +733,7 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
 
     result: DbtSourceSchemaInspectionResult = inspect_dbt_source_schemas(
         adapter=adapter_by_description[test_case.description],
-        project=project,
-        project_dir=Path("/repo"),
+        connection_config={},
         manifest=manifest,
     )
 

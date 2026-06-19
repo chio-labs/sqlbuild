@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -11,7 +10,6 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -26,14 +24,13 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
-from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCommandResult,
     DbtModelPlanningResult,
-    NormalizedDbtProfileConnection,
 )
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.shared.types import SqlReferenceKind
 
 
@@ -235,39 +232,6 @@ def _parse_cursor_overrides(args: tuple[str, ...]) -> CursorOverrides:
         start_int=_parse_value(args, "--start-cursor-int"),
         end_int=_parse_value(args, "--end-cursor-int"),
     )
-
-
-def resolve_connection_config(
-    *,
-    raw_config: dict[str, object],
-    project_dir: Path,
-    adapter_name: str,
-    discovered_inputs: DiscoveredProjectInputs,
-) -> dict[str, object]:
-    """Resolve dbt interop connection config without importing CLI helpers."""
-
-    config: dict[str, object] = dict(raw_config)
-    resolved_dbt_profile: NormalizedDbtProfileConnection | None = (
-        resolve_raw_dbt_profile_connection(
-            raw_config=config,
-            project_dir=project_dir,
-            adapter_name=adapter_name,
-            project_config=discovered_inputs.project_config,
-        )
-    )
-    if resolved_dbt_profile is not None:
-        for warning in resolved_dbt_profile.warnings:
-            print(f"Warning: {warning}", file=sys.stderr)
-        config = resolved_dbt_profile.connection
-    database: object | None = config.get("database")
-    if (
-        adapter_name == BuiltinAdapter.DUCKDB
-        and isinstance(database, str)
-        and not Path(database).is_absolute()
-        and database != ":memory:"
-    ):
-        config["database"] = str(project_dir / database)
-    return config
 
 
 def _parse_value(args: tuple[str, ...], flag: str) -> str | None:

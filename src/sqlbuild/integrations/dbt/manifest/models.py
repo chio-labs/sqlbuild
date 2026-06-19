@@ -43,6 +43,20 @@ class DbtManifestSource:
 
 
 @dataclass(frozen=True)
+class DbtManifestSeed:
+    """One dbt seed node, a leaf data relation used for column lineage."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    relation_name: str
+    database: str | None = None
+    schema: str | None = None
+    alias: str | None = None
+    payload: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class DbtManifestIndex:
     """Lookup indexes for dbt model and source nodes in a manifest."""
 
@@ -50,3 +64,4 @@ class DbtManifestIndex:
     models_by_name: dict[str, tuple[DbtManifestModel, ...]]
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
     sources_by_unique_id: dict[str, DbtManifestSource] = field(default_factory=dict)
+    seeds_by_unique_id: dict[str, DbtManifestSeed] = field(default_factory=dict)

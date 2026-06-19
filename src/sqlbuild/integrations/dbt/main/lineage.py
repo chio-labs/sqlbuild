@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -45,6 +46,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageArgs,
     DbtLineageGraph,
 )
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.types import DbtLineageOutputFormat
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -95,6 +97,12 @@ def build_dbt_lineage_output(
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    connection_config: dict[str, object] = resolve_connection_config(
+        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
+        project_dir=project_dir,
+        adapter_name=adapter_name,
+        discovered_inputs=discovered_inputs,
+    )
     column_trace: DbtColumnLineageTrace | None = select_dbt_column_lineage_target(
         project=project,
         manifest=manifest,
@@ -104,8 +112,7 @@ def build_dbt_lineage_output(
         depth=lineage_args.depth,
         source_schemas=inspect_dbt_source_schemas(
             adapter=adapter,
-            project=project,
-            project_dir=project_dir,
+            connection_config=connection_config,
             manifest=manifest,
         ),
     )

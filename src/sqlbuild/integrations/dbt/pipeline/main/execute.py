@@ -71,7 +71,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_dbt_model_plan_output,
     build_sqlbuild_plan_output,
     dbt_failure_detail,
-    resolve_connection_config,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_execute import (
     execute_dbt_complete_reuse_plan,
@@ -89,6 +88,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
     append_dbt_source_freshness_records,
 )
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
+from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
