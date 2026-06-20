@@ -765,6 +765,10 @@ def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtMani
         )
     if manifest_kind == "chain_seed_dependency":
         return build_dbt_sql_test_model_chain_manifest(dependency_kind="seed")
+    if manifest_kind == "chain_snapshot_boundary":
+        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="snapshot")
+    if manifest_kind == "chain_ephemeral_boundary":
+        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="ephemeral")
     if manifest_kind == "unquoted":
         return build_dbt_sql_test_target_manifest(
             dep_relation_name="analytics.stg_orders",
@@ -807,6 +811,10 @@ def build_dbt_sql_test_target_error_manifest(*, manifest_kind: str) -> DbtManife
             dependency_kind="source",
             upstream_compiled_code="select * from raw.unexpected_orders",
         )
+    if manifest_kind == "chain_snapshot_boundary":
+        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="snapshot")
+    if manifest_kind == "chain_ephemeral_boundary":
+        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="ephemeral")
     if manifest_kind in {"seed_dependency", "seed_ambiguous_fixture"}:
         return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
     if manifest_kind == "seed_unresolved_relation":
@@ -975,6 +983,58 @@ def build_dbt_sql_test_model_chain_manifest(
     )
 
 
+def build_dbt_sql_test_boundary_chain_manifest(*, boundary_kind: str) -> DbtManifestIndex:
+    """Build a dbt chain manifest whose intermediate node is a snapshot or ephemeral."""
+
+    intermediate_node: dict[str, object] = (
+        build_manifest_model_node(
+            unique_id="model.analytics.stg_orders",
+            package_name="analytics",
+            name="stg_orders",
+            relation_name='"analytics"."stg_orders"',
+            compiled_code='select order_id from "raw"."orders"',
+            materialized="ephemeral",
+            depends_on_nodes=("source.analytics.raw.orders",),
+        )
+        if boundary_kind == "ephemeral"
+        else build_manifest_model_node(
+            unique_id="snapshot.analytics.stg_orders",
+            package_name="analytics",
+            name="stg_orders",
+            relation_name='"analytics"."stg_orders"',
+            compiled_code='select order_id from "raw"."orders"',
+            resource_type="snapshot",
+            materialized="table",
+            depends_on_nodes=("source.analytics.raw.orders",),
+        )
+    )
+    intermediate_unique_id: str = str(intermediate_node["unique_id"])
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                intermediate_node,
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    relation_name='"analytics"."fact_orders"',
+                    compiled_code='select order_id from "analytics"."stg_orders"',
+                    depends_on_nodes=(intermediate_unique_id,),
+                ),
+            ),
+            sources=(
+                build_manifest_source_node(
+                    unique_id="source.analytics.raw.orders",
+                    package_name="analytics",
+                    source_name="raw",
+                    name="orders",
+                    relation_name='"raw"."orders"',
+                ),
+            ),
+        )
+    )
+
+
 def build_project_with_source_relation_collision() -> CompiledProject:
     """Build a minimal project whose SQLBuild source matches the dbt source relation."""
 
@@ -1127,6 +1187,7 @@ def build_manifest_model_node(
     compiled_code: str | None = None,
     depends_on_nodes: tuple[str, ...] = (),
     depends_on_macro_ids: tuple[str, ...] = (),
+    resource_type: str = "model",
     materialized: str | None = "view",
     incremental_strategy: str | None = None,
     meta: dict[str, object] | None = None,
@@ -1136,7 +1197,7 @@ def build_manifest_model_node(
 
     node: dict[str, object] = {
         "unique_id": unique_id,
-        "resource_type": "model",
+        "resource_type": resource_type,
         "package_name": package_name,
         "name": name,
         "raw_code": raw_code if raw_code is not None else f"select * from {name}",
