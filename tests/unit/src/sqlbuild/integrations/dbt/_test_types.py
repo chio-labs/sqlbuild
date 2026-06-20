@@ -680,9 +680,23 @@ class DbtSqlTestTargetTestCase:
     expected_target_names: tuple[str, ...]
     expected_model_names: tuple[str, ...]
     expected_query_fragments: tuple[str, ...]
+    expected_adapted_model_names: tuple[str, ...] | None = None
     expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
     manifest_kind: str = "default"
     sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def adapted_model_names(self) -> tuple[str, ...]:
+        return self.expected_adapted_model_names or self.expected_model_names
+
+
+@dataclass(frozen=True)
+class DbtSqlTestMultipleBoundaryTestCase:
+    description: str
+    expected_test_model_names: tuple[tuple[str, ...], ...]
+    expected_query_fragments_by_test: tuple[tuple[str, ...], ...]
+    expected_absent_fragments_by_test: tuple[tuple[str, ...], ...]
 
 
 @dataclass(frozen=True)

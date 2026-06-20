@@ -94,8 +94,12 @@ def format_dbt_interop_plan(
 ) -> str:
     """Format a dbt interop plan for human CLI output."""
 
-    lines: list[str] = []
     resolved_display_options: DisplayOptions = display_options or DisplayOptions()
+    if plan.command == DbtInteropCommand.TEST:
+        return _format_dbt_test_plan(
+            plan, use_color=use_color, display_options=resolved_display_options
+        )
+    lines: list[str] = []
     dbt_selected_count: int = len(plan.dbt_selected_unique_ids)
     dbt_required_count: int = len(plan.selection.dbt_required_unique_ids)
     sqlbuild_count: int = len(plan.selection.sqlbuild_model_names)
@@ -1025,6 +1029,178 @@ def _format_sqlbuild_section(
     line: str
     for line in sqlbuild_lines:
         lines.append(f"  {line}" if line else "")
+
+
+def _format_dbt_test_plan(
+    plan: DbtInteropPlan,
+    *,
+    use_color: bool,
+    display_options: DisplayOptions,
+) -> str:
+    style: CliStyle = CliStyle(use_color=True)
+    dbt_model_names: tuple[str, ...] = _dbt_test_model_names(plan)
+    dbt_test_node_count: int = len(_dbt_test_nodes(plan))
+    sqlbuild_test_count: int = (
+        len(plan.sqlbuild_plan_output.test_entries) if plan.sqlbuild_plan_output is not None else 0
+    )
+    sqlbuild_audit_count: int = (
+        len(plan.sqlbuild_plan_output.audit_entries) if plan.sqlbuild_plan_output is not None else 0
+    )
+    lines: list[str] = []
+    lines.append(
+        style.success_strong(
+            "Plan ready ("
+            + _format_test_plan_ready_counts(
+                dbt_model_count=len(dbt_model_names),
+                sqlbuild_test_count=sqlbuild_test_count,
+                sqlbuild_audit_count=sqlbuild_audit_count,
+            )
+            + ")"
+        )
+    )
+    _format_dbt_test_section(
+        lines,
+        plan,
+        dbt_model_names=dbt_model_names,
+        dbt_test_node_count=dbt_test_node_count,
+        display_options=display_options,
+    )
+    _format_sqlbuild_test_section(
+        lines,
+        plan,
+        sqlbuild_test_count=sqlbuild_test_count,
+        sqlbuild_audit_count=sqlbuild_audit_count,
+        display_options=display_options,
+    )
+    _format_warning_section(lines, plan)
+    result: str = "\n".join(lines)
+    return result if use_color else _strip_ansi(result)
+
+
+def _format_test_plan_ready_counts(
+    *, dbt_model_count: int, sqlbuild_test_count: int, sqlbuild_audit_count: int
+) -> str:
+    parts: list[str] = []
+    if dbt_model_count:
+        parts.append(f"{dbt_model_count} dbt {_pluralize('model', dbt_model_count)}")
+    if sqlbuild_test_count:
+        parts.append(f"{sqlbuild_test_count} SQLBuild {_pluralize('test', sqlbuild_test_count)}")
+    if sqlbuild_audit_count:
+        parts.append(f"{sqlbuild_audit_count} {_pluralize('audit', sqlbuild_audit_count)}")
+    if not parts:
+        return "nothing selected"
+    return ", ".join(parts)
+
+
+def _format_dbt_test_section(
+    lines: list[str],
+    plan: DbtInteropPlan,
+    *,
+    dbt_model_names: tuple[str, ...],
+    dbt_test_node_count: int,
+    display_options: DisplayOptions,
+) -> None:
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append("")
+    lines.append(
+        style.dbt_section(
+            f"dbt ({len(dbt_model_names)} {_pluralize('model', len(dbt_model_names))})"
+        )
+    )
+    if not dbt_model_names:
+        lines.append(style.muted("  no dbt models selected"))
+        return
+    visible_models: Sequence[str] = visible_entries(dbt_model_names, options=display_options)
+    model_name: str
+    for model_name in visible_models:
+        lines.append(f"  {style.dbt_object_name(model_name)}")
+    _append_dbt_overflow_line(
+        lines,
+        total_count=len(dbt_model_names),
+        visible_count=len(visible_models),
+        indent="  ",
+        options=display_options,
+    )
+    if dbt_test_node_count:
+        lines.append(style.muted(f"  dbt tests: {dbt_test_node_count}"))
+    else:
+        lines.append(style.muted("  dbt tests: none"))
+
+
+def _format_sqlbuild_test_section(
+    lines: list[str],
+    plan: DbtInteropPlan,
+    *,
+    sqlbuild_test_count: int,
+    sqlbuild_audit_count: int,
+    display_options: DisplayOptions,
+) -> None:
+    style: CliStyle = CliStyle(use_color=True)
+    if sqlbuild_test_count:
+        lines.append("")
+        lines.append(
+            style.object_name(
+                f"SQLBuild tests ({sqlbuild_test_count} {_pluralize('test', sqlbuild_test_count)})"
+            )
+        )
+        _format_sqlbuild_test_groups(
+            lines,
+            plan.sqlbuild_plan_output,
+            display_options=display_options,
+        )
+    if sqlbuild_audit_count:
+        audit_label: str = _pluralize("audit", sqlbuild_audit_count)
+        lines.append("")
+        lines.append(style.object_name(f"SQLBuild audits ({sqlbuild_audit_count} {audit_label})"))
+
+
+def _format_sqlbuild_test_groups(
+    lines: list[str],
+    plan_output: PlanOutput | None,
+    *,
+    display_options: DisplayOptions,
+) -> None:
+    if plan_output is None:
+        return
+    style: CliStyle = CliStyle(use_color=True)
+    tests_by_target: dict[str, list[str]] = defaultdict(list)
+    entry: object
+    for entry in plan_output.test_entries:
+        target_name: str = _sqlbuild_test_target_name(entry)
+        tests_by_target[target_name].append(getattr(entry, "name", ""))
+    target: str
+    for target in tests_by_target:
+        lines.append(f"  {style.object_name(target)}")
+        test_name: str
+        for test_name in tests_by_target[target]:
+            lines.append(f"    {style.muted(test_name)}")
+
+
+def _sqlbuild_test_target_name(entry: object) -> str:
+    chain: object = getattr(entry, "chain", ())
+    if not isinstance(chain, tuple) or not chain:
+        return "(unknown)"
+    expected_steps: tuple[object, ...] = tuple(
+        step for step in chain if getattr(step, "expected_cte_sql", None) is not None
+    )
+    if expected_steps:
+        return getattr(expected_steps[-1], "model_name", "(unknown)")
+    return getattr(chain[-1], "model_name", "(unknown)")
+
+
+def _dbt_test_model_names(plan: DbtInteropPlan) -> tuple[str, ...]:
+    names: list[str] = []
+    node: DbtLsNode
+    for node in plan.dbt_selected_nodes:
+        if node.resource_type == "model":
+            names.append(_dbt_node_display_name(node))
+    return tuple(dict.fromkeys(names))
+
+
+def _dbt_test_nodes(plan: DbtInteropPlan) -> tuple[DbtLsNode, ...]:
+    return tuple(
+        node for node in plan.dbt_selected_nodes if node.resource_type in {"test", "unit_test"}
+    )
 
 
 def _format_sqlbuild_model_fallback(

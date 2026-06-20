@@ -226,6 +226,30 @@ PLAN_TEST_CASES: list[PlanTestChainTestCase] = [
         },
     ),
     PlanTestChainTestCase(
+        description="model query overrides drive dependency order",
+        model_queries={
+            "stg_orders": 'SELECT id FROM __source("raw")',
+            "fact_orders": "SELECT id, 1 AS flag FROM staging.stg_orders",
+        },
+        model_query_overrides={
+            "fact_orders": 'SELECT id, 1 AS flag FROM __ref("stg_orders")',
+        },
+        mock_ref_ctes={},
+        mock_source_ctes={
+            "raw": "SELECT 1 AS id",
+        },
+        helper_ctes={},
+        expected_model_names=("fact_orders", "stg_orders"),
+        expected_chain_length=2,
+        expected_sql_fragments={
+            "fact_orders": "SELECT 1 AS id",
+        },
+        expected_cte_bodies={
+            "stg_orders": "SELECT 1 AS id",
+            "fact_orders": "SELECT 1 AS id, 1 AS flag",
+        },
+    ),
+    PlanTestChainTestCase(
         description="three model chain A to B to C",
         model_queries={
             "A": 'SELECT id FROM __source("raw")',

@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload
+from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.manifest.models import (
@@ -35,6 +35,10 @@ def resolve_dbt_sql_test_target_names(
     """Return expected CTE suffixes that target selected dbt models."""
 
     sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
+    _validate_model_name_collisions(
+        manifest=manifest,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
     selected_ids: frozenset[str] = frozenset(selected_dbt_unique_ids)
     include_all: bool = not select
     target_names: list[str] = []
@@ -72,7 +76,11 @@ def adapt_project_for_dbt_sql_tests(
     _validate_source_relation_collisions(project=project, manifest=manifest)
     _validate_seed_relation_collisions(project=project, manifest=manifest)
     sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
-    adapted_models: list[CompiledModel] = []
+    _validate_model_name_collisions(
+        manifest=manifest,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
+    target_models_by_name: dict[str, DbtManifestModel] = {}
     for target_name in target_names:
         if target_name in sqlbuild_model_names:
             continue
@@ -83,16 +91,308 @@ def adapt_project_for_dbt_sql_tests(
         )
         if dbt_model is None:
             continue
-        adapted_models.append(
-            _adapt_dbt_model(
+        target_models_by_name[target_name] = dbt_model
+    if not target_models_by_name:
+        return project
+    model_name_by_unique_id: dict[str, str] = _build_dbt_test_model_names(
+        manifest=manifest,
+        target_models_by_name=target_models_by_name,
+        sql_tests=project.sql_tests,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
+    adapted_models: tuple[CompiledModel, ...] = tuple(
+        _adapt_dbt_model(
+            manifest=manifest,
+            dbt_model=manifest.models_by_unique_id[unique_id],
+            target_name=target_name,
+            model_name_by_unique_id={},
+        )
+        for unique_id, target_name in model_name_by_unique_id.items()
+    )
+    return replace(
+        project,
+        models=(*project.models, *adapted_models),
+        sql_tests=tuple(
+            _expand_dbt_sql_test_expected_chain(
+                sql_test=sql_test,
+                manifest=manifest,
+                target_models_by_name=target_models_by_name,
+                model_name_by_unique_id=model_name_by_unique_id,
+            )
+            for sql_test in project.sql_tests
+        ),
+    )
+
+
+def _build_dbt_test_model_names(
+    *,
+    manifest: DbtManifestIndex,
+    target_models_by_name: dict[str, DbtManifestModel],
+    sql_tests: tuple[CompiledSqlTest, ...],
+    sqlbuild_model_names: frozenset[str],
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for sql_test in sql_tests:
+        if not isinstance(sql_test.payload, CompiledModelSqlTestPayload):
+            continue
+        for expected_name in sql_test.payload.expected_model_names:
+            dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
+            if dbt_model is None:
+                continue
+            _collect_dbt_test_model_names(
                 manifest=manifest,
                 dbt_model=dbt_model,
-                target_name=target_name,
+                target_name=expected_name,
+                mock_model_names=frozenset(sql_test.payload.mock_model_names),
+                sqlbuild_model_names=sqlbuild_model_names,
+                result=result,
+            )
+    for target_name, dbt_model in target_models_by_name.items():
+        result.setdefault(dbt_model.unique_id, target_name)
+    return result
+
+
+def _validate_model_name_collisions(
+    *, manifest: DbtManifestIndex, sqlbuild_model_names: frozenset[str]
+) -> None:
+    duplicate_names: tuple[str, ...] = tuple(
+        sorted(name for name in sqlbuild_model_names if name in manifest.models_by_name)
+    )
+    if duplicate_names:
+        raise DbtInteropRuntimeError(
+            f"dbt and SQLBuild models share names: {', '.join(duplicate_names)}",
+            help=(
+                "Rename either the dbt model or SQLBuild model; shared model names are "
+                "not supported."
+            ),
+        )
+
+
+def _dbt_chain_unique_ids(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    mock_model_names: frozenset[str],
+) -> tuple[str, ...]:
+    unique_ids: list[str] = []
+    for dep_unique_id in dbt_model.depends_on_nodes:
+        dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
+        if dep_model is None:
+            continue
+        if _dbt_model_mock_name(
+            manifest=manifest,
+            dbt_model=dep_model,
+            mock_model_names=mock_model_names,
+        ):
+            continue
+        unique_ids.extend(
+            _dbt_chain_unique_ids(
+                manifest=manifest,
+                dbt_model=dep_model,
+                mock_model_names=mock_model_names,
             )
         )
-    if not adapted_models:
-        return project
-    return replace(project, models=(*project.models, *adapted_models))
+        unique_ids.append(dep_model.unique_id)
+    unique_ids.append(dbt_model.unique_id)
+    return tuple(dict.fromkeys(unique_ids))
+
+
+def _collect_dbt_test_model_names(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    target_name: str,
+    mock_model_names: frozenset[str],
+    sqlbuild_model_names: frozenset[str],
+    result: dict[str, str],
+) -> None:
+    result.setdefault(dbt_model.unique_id, target_name)
+    for dep_unique_id in dbt_model.depends_on_nodes:
+        dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
+        if dep_model is None:
+            continue
+        if _dbt_model_mock_name(
+            manifest=manifest,
+            dbt_model=dep_model,
+            mock_model_names=mock_model_names,
+        ):
+            continue
+        dep_target_name: str = _dbt_internal_model_name(
+            manifest=manifest,
+            dbt_model=dep_model,
+            sqlbuild_model_names=sqlbuild_model_names,
+        )
+        if dep_target_name in sqlbuild_model_names:
+            raise DbtInteropRuntimeError(
+                f"dbt model '{dep_model.unique_id}' cannot be added to SQLBuild test chain because "
+                f"SQLBuild model '{dep_target_name}' already exists"
+            )
+        _collect_dbt_test_model_names(
+            manifest=manifest,
+            dbt_model=dep_model,
+            target_name=dep_target_name,
+            mock_model_names=mock_model_names,
+            sqlbuild_model_names=sqlbuild_model_names,
+            result=result,
+        )
+
+
+def _dbt_internal_model_name(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    sqlbuild_model_names: frozenset[str],
+) -> str:
+    matches: tuple[DbtManifestModel, ...] = manifest.models_by_name.get(dbt_model.name, ())
+    if len(matches) == 1 and dbt_model.name not in sqlbuild_model_names:
+        return dbt_model.name
+    return f"{dbt_model.package_name}__{dbt_model.name}"
+
+
+def _expand_dbt_sql_test_expected_chain(
+    *,
+    sql_test: CompiledSqlTest,
+    manifest: DbtManifestIndex,
+    target_models_by_name: dict[str, DbtManifestModel],
+    model_name_by_unique_id: dict[str, str],
+) -> CompiledSqlTest:
+    if not isinstance(sql_test.payload, CompiledModelSqlTestPayload):
+        return sql_test
+    expected_model_names: list[str] = []
+    model_query_overrides: dict[str, str] = dict(sql_test.payload.model_query_overrides)
+    mock_model_names: frozenset[str] = frozenset(sql_test.payload.mock_model_names)
+    for expected_name in sql_test.payload.expected_model_names:
+        dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
+        if dbt_model is None:
+            expected_model_names.append(expected_name)
+            continue
+        chain_unique_ids: tuple[str, ...] = _dbt_chain_unique_ids(
+            manifest=manifest,
+            dbt_model=dbt_model,
+            mock_model_names=mock_model_names,
+        )
+        chain_model_name_by_unique_id: dict[str, str] = {
+            unique_id: model_name_by_unique_id[unique_id] for unique_id in chain_unique_ids
+        }
+        chain_model_name_by_unique_id.update(
+            _dbt_mock_model_name_by_unique_id(
+                manifest=manifest,
+                dbt_model=dbt_model,
+                mock_model_names=mock_model_names,
+            )
+        )
+        for unique_id in chain_unique_ids:
+            chain_model: DbtManifestModel = manifest.models_by_unique_id[unique_id]
+            query_sql: str = _compiled_query_sql(dbt_model=chain_model)
+            if not query_sql.strip():
+                raise DbtInteropRuntimeError(
+                    f"dbt model '{chain_model.unique_id}' has no compiled SQL for SQLBuild testing"
+                )
+            model_query_overrides[model_name_by_unique_id[unique_id]] = (
+                _rewrite_direct_dbt_model_refs(
+                    manifest=manifest,
+                    dbt_model=chain_model,
+                    query_sql=query_sql,
+                    model_name_by_unique_id=chain_model_name_by_unique_id,
+                )
+            )
+        expected_model_names.extend(
+            _dbt_chain_model_names(
+                manifest=manifest,
+                dbt_model=dbt_model,
+                mock_model_names=mock_model_names,
+                model_name_by_unique_id=model_name_by_unique_id,
+            )
+        )
+    return replace(
+        sql_test,
+        payload=replace(
+            sql_test.payload,
+            model_query_overrides=model_query_overrides,
+            expected_model_names=tuple(dict.fromkeys(expected_model_names)),
+        ),
+    )
+
+
+def _dbt_chain_model_names(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    mock_model_names: frozenset[str],
+    model_name_by_unique_id: dict[str, str],
+) -> tuple[str, ...]:
+    names: list[str] = []
+    for dep_unique_id in dbt_model.depends_on_nodes:
+        dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
+        if dep_model is None:
+            continue
+        if _dbt_model_mock_name(
+            manifest=manifest,
+            dbt_model=dep_model,
+            mock_model_names=mock_model_names,
+        ):
+            continue
+        names.extend(
+            _dbt_chain_model_names(
+                manifest=manifest,
+                dbt_model=dep_model,
+                mock_model_names=mock_model_names,
+                model_name_by_unique_id=model_name_by_unique_id,
+            )
+        )
+        names.append(model_name_by_unique_id[dep_model.unique_id])
+    names.append(model_name_by_unique_id[dbt_model.unique_id])
+    return tuple(dict.fromkeys(names))
+
+
+def _dbt_mock_model_name_by_unique_id(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    mock_model_names: frozenset[str],
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for dep_unique_id in dbt_model.depends_on_nodes:
+        dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
+        if dep_model is None:
+            continue
+        mock_model_name: str | None = _dbt_model_mock_name(
+            manifest=manifest,
+            dbt_model=dep_model,
+            mock_model_names=mock_model_names,
+        )
+        if mock_model_name is not None:
+            result[dep_model.unique_id] = mock_model_name
+            continue
+        result.update(
+            _dbt_mock_model_name_by_unique_id(
+                manifest=manifest,
+                dbt_model=dep_model,
+                mock_model_names=mock_model_names,
+            )
+        )
+    return result
+
+
+def _dbt_model_mock_name(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    mock_model_names: frozenset[str],
+) -> str | None:
+    qualified_name: str = f"{dbt_model.package_name}__{dbt_model.name}"
+    if qualified_name in mock_model_names:
+        return qualified_name
+    if dbt_model.name not in mock_model_names:
+        return None
+    matches: tuple[DbtManifestModel, ...] = manifest.models_by_name.get(dbt_model.name, ())
+    if len(matches) == 1:
+        return dbt_model.name
+    packages: str = ", ".join(sorted(model.package_name for model in matches))
+    raise DbtInteropRuntimeError(
+        f"dbt model mock '__ref__{dbt_model.name}' is ambiguous across packages: {packages}",
+        help=f"Use __ref__<package>__{dbt_model.name} to choose one dbt model.",
+    )
 
 
 def _expected_model_names(*, project: CompiledProject) -> tuple[str, ...]:
@@ -155,6 +455,7 @@ def _adapt_dbt_model(
     manifest: DbtManifestIndex,
     dbt_model: DbtManifestModel,
     target_name: str,
+    model_name_by_unique_id: dict[str, str],
 ) -> CompiledModel:
     query_sql: str = _compiled_query_sql(dbt_model=dbt_model)
     if not query_sql.strip():
@@ -165,6 +466,7 @@ def _adapt_dbt_model(
         manifest=manifest,
         dbt_model=dbt_model,
         query_sql=query_sql,
+        model_name_by_unique_id=model_name_by_unique_id,
     )
     references: tuple[CompileSqlReference, ...] = _dbt_ref_references(
         manifest=manifest,
@@ -203,6 +505,7 @@ def _rewrite_direct_dbt_model_refs(
     manifest: DbtManifestIndex,
     dbt_model: DbtManifestModel,
     query_sql: str,
+    model_name_by_unique_id: dict[str, str],
 ) -> str:
     result: str = query_sql
     dep_unique_id: str
@@ -214,7 +517,10 @@ def _rewrite_direct_dbt_model_refs(
         replacement: str | None = None
         if dep_model is not None:
             dep_relation_name = dep_model.relation_name
-            replacement = f'__dbt_ref("{dep_model.package_name}", "{dep_model.name}")'
+            if dep_model.unique_id in model_name_by_unique_id:
+                replacement = f'__ref("{model_name_by_unique_id[dep_model.unique_id]}")'
+            else:
+                replacement = f'__dbt_ref("{dep_model.package_name}", "{dep_model.name}")'
         elif dep_source is not None:
             dep_relation_name = dep_source.relation_name
             replacement = (

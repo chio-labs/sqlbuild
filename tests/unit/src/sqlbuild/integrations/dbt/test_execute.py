@@ -192,14 +192,28 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
             name="demo",
             adapter="duckdb",
             settings=SettingsConfig(query_change_tracking=False),
-            dbt=DbtConfig(project_dir="../dbt_project"),
+            dbt=DbtConfig(
+                project_dir="../dbt_project",
+                reuse_from=DbtReuseFromConfig(
+                    git_ref="main",
+                    generate_schema_name_override="dbt/macros/prod_generate_schema_name.sql",
+                ),
+            ),
         ),
         local_config=LocalConfig(),
     )
     plan: DbtInteropPlan = build_dbt_interop_plan(
         command=DbtInteropCommand(test_case.command),
         dbt_command_argv=("dbt", "test", "--select", "missing"),
-        dbt_ls_nodes=(),
+        dbt_ls_nodes=(
+            DbtLsNode(
+                unique_id="model.analytics.orders",
+                resource_type="model",
+                package_name="analytics",
+                name="orders",
+                fqn=("analytics", "orders"),
+            ),
+        ),
         sqlbuild_command_argvs=(),
         selection=DbtInteropSelectionResult(),
     )
@@ -240,6 +254,16 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     monkeypatch.setattr(execute_module, "build_dbt_combined_graph", lambda **kwargs: object())
     monkeypatch.setattr(execute_module, "plan_dbt_interop_command", lambda **kwargs: plan)
     monkeypatch.setattr(execute_module, "build_dbt_model_plan_output", lambda **kwargs: None)
+    monkeypatch.setattr(
+        execute_module,
+        "build_dbt_reuse_plan_output",
+        lambda **kwargs: pytest.fail("dbt test should not plan dbt reuse"),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "build_dbt_dependency_baseline_plan_output",
+        lambda **kwargs: pytest.fail("dbt test should not plan dependency baseline reuse"),
+    )
     monkeypatch.setattr(execute_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ())
     monkeypatch.setattr(execute_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ())
     monkeypatch.setattr(execute_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ())
@@ -257,18 +281,21 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
         lambda **kwargs: DbtExecutionOutcome(),
     )
 
+    output_stream: StringIO = StringIO()
+
     exit_code: int = execute_module.execute_dbt_interop_from_project(
         command=DbtInteropCommand(test_case.command),
         project_dir=Path("/sqlbuild_project"),
         args=("--select", "missing"),
         dbt_runner=runner,
-        progress_stream=StringIO(),
+        progress_stream=output_stream,
         dbt_stdout_stream=StringIO(),
         use_color=False,
     )
 
     assert exit_code == 0
     assert tuple(runner.compile_full_refresh_values) == test_case.expected_full_refresh_values
+    assert "dbt reuse" not in output_stream.getvalue()
 
 
 @pytest.mark.parametrize(

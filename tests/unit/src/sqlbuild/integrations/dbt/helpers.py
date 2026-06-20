@@ -554,7 +554,10 @@ def build_dbt_plan_mapping_invoker(
 
 
 def build_project_with_expected_sql_test_targets(
-    *, expected_model_names: tuple[str, ...], sqlbuild_model_names: tuple[str, ...] = ()
+    *,
+    expected_model_names: tuple[str, ...],
+    sqlbuild_model_names: tuple[str, ...] = (),
+    mock_model_names: tuple[str, ...] = (),
 ) -> CompiledProject:
     """Build a minimal project with one model-mode SQL test."""
 
@@ -580,7 +583,10 @@ def build_project_with_expected_sql_test_targets(
         test_file=test_file,
         test_block=test_block,
         sql_body="TEST();",
-        payload=CompiledModelSqlTestPayload(expected_model_names=expected_model_names),
+        payload=CompiledModelSqlTestPayload(
+            expected_model_names=expected_model_names,
+            mock_model_names=mock_model_names,
+        ),
     )
     models: tuple[CompiledModel, ...] = tuple(
         CompiledModel(
@@ -606,6 +612,55 @@ def build_project_with_expected_sql_test_targets(
         effective_vars={},
         models=models,
         sql_tests=(sql_test,),
+    )
+
+
+def build_project_with_multiple_dbt_sql_test_boundaries() -> CompiledProject:
+    """Build two dbt-targeting SQL tests with different mock boundaries."""
+
+    test_specs: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("test_dbt_fact_orders_chain", ()),
+        ("test_dbt_fact_orders_boundary", ("analytics__stg_orders",)),
+    )
+    sql_tests: list[CompiledSqlTest] = []
+    test_name: str
+    mock_model_names: tuple[str, ...]
+    for index, (test_name, mock_model_names) in enumerate(test_specs):
+        test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+            test_index=index,
+            header_values={},
+            sql_body="select 1",
+            name=test_name,
+        )
+        test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+            file_path=Path(f"/repo/tests/unit/{test_name}.sql"),
+            relative_path=Path(f"tests/unit/{test_name}.sql"),
+            contents="TEST();",
+            blocks=(test_block,),
+        )
+        sql_tests.append(
+            CompiledSqlTest(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SQL_TEST,
+                    name=test_name,
+                ),
+                scope_deps=(),
+                name=test_name,
+                test_file=test_file,
+                test_block=test_block,
+                sql_body="TEST();",
+                payload=CompiledModelSqlTestPayload(
+                    expected_model_names=("fact_orders",),
+                    mock_model_names=mock_model_names,
+                ),
+            )
+        )
+    return CompiledProject(
+        run_id="run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        sql_tests=tuple(sql_tests),
     )
 
 
@@ -681,6 +736,8 @@ def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtMani
             dependency_kind="source",
             include_ambiguous_package=True,
         )
+    if manifest_kind == "chain_source_dependency":
+        return build_dbt_sql_test_model_chain_manifest(dependency_kind="source")
     if manifest_kind == "seed_dependency":
         return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
     if manifest_kind == "seed_unquoted":
@@ -706,6 +763,8 @@ def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtMani
             dependency_kind="seed",
             include_ambiguous_package=True,
         )
+    if manifest_kind == "chain_seed_dependency":
+        return build_dbt_sql_test_model_chain_manifest(dependency_kind="seed")
     if manifest_kind == "unquoted":
         return build_dbt_sql_test_target_manifest(
             dep_relation_name="analytics.stg_orders",
@@ -723,6 +782,8 @@ def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtMani
             dep_relation_name='"analytics"."stg_orders_alias"',
             fact_compiled_code='select * from "analytics"."stg_orders_alias"',
         )
+    if manifest_kind == "ambiguous":
+        return build_dbt_sql_test_target_manifest(include_ambiguous_package=True)
     return build_dbt_sql_test_target_manifest()
 
 
@@ -735,6 +796,16 @@ def build_dbt_sql_test_target_error_manifest(*, manifest_kind: str) -> DbtManife
         return build_dbt_sql_test_source_seed_manifest(
             dependency_kind="source",
             compiled_code="select * from raw.unexpected_orders",
+        )
+    if manifest_kind == "chain_missing_compiled_sql":
+        return build_dbt_sql_test_model_chain_manifest(
+            dependency_kind="source",
+            upstream_compiled_code=None,
+        )
+    if manifest_kind == "chain_unresolved_relation":
+        return build_dbt_sql_test_model_chain_manifest(
+            dependency_kind="source",
+            upstream_compiled_code="select * from raw.unexpected_orders",
         )
     if manifest_kind in {"seed_dependency", "seed_ambiguous_fixture"}:
         return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
@@ -836,6 +907,74 @@ def build_dbt_sql_test_source_seed_manifest(
     )
 
 
+def build_dbt_sql_test_model_chain_manifest(
+    *, dependency_kind: str, upstream_compiled_code: str | None | object = "default"
+) -> DbtManifestIndex:
+    """Build a dbt SQL test manifest with a dbt model chain."""
+
+    source_nodes: tuple[dict[str, object], ...] = (
+        (
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                package_name="analytics",
+                source_name="raw",
+                name="orders",
+                relation_name='"raw"."orders"',
+            ),
+        )
+        if dependency_kind == "source"
+        else ()
+    )
+    seed_nodes: tuple[dict[str, object], ...] = (
+        (
+            build_manifest_seed_node(
+                unique_id="seed.analytics.countries",
+                package_name="analytics",
+                name="countries",
+                relation_name='"analytics"."countries"',
+            ),
+        )
+        if dependency_kind == "seed"
+        else ()
+    )
+    upstream_dependency_unique_id: str = (
+        "source.analytics.raw.orders" if dependency_kind == "source" else "seed.analytics.countries"
+    )
+    compiled_code: str | None = (
+        (
+            'select order_id from "raw"."orders"'
+            if dependency_kind == "source"
+            else 'select country_code from "analytics"."countries"'
+        )
+        if upstream_compiled_code == "default"
+        else cast(str | None, upstream_compiled_code)
+    )
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.stg_orders",
+                    package_name="analytics",
+                    name="stg_orders",
+                    relation_name='"analytics"."stg_orders"',
+                    compiled_code=compiled_code,
+                    depends_on_nodes=(upstream_dependency_unique_id,),
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    relation_name='"analytics"."fact_orders"',
+                    compiled_code='select order_id from "analytics"."stg_orders"',
+                    depends_on_nodes=("model.analytics.stg_orders",),
+                ),
+                *seed_nodes,
+            ),
+            sources=source_nodes,
+        )
+    )
+
+
 def build_project_with_source_relation_collision() -> CompiledProject:
     """Build a minimal project whose SQLBuild source matches the dbt source relation."""
 
@@ -902,6 +1041,11 @@ def build_project_with_seed_relation_collision(
 def build_dbt_sql_test_target_error_project(*, project_kind: str) -> CompiledProject:
     """Build an error project variant for dbt SQL test target tests."""
 
+    if project_kind == "model_name_collision":
+        return build_project_with_expected_sql_test_targets(
+            expected_model_names=("fact_orders",),
+            sqlbuild_model_names=("fact_orders",),
+        )
     if project_kind == "source_relation_collision":
         return build_project_with_source_relation_collision()
     if project_kind == "seed_relation_collision":
@@ -920,6 +1064,8 @@ def resolve_dbt_sql_test_fixture_names(
     """Resolve dbt-backed SQL test fixture names for a source or seed."""
 
     resolver: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=manifest)
+    if fixture_kind == "model":
+        return resolver.extend_sql_test_model_names(known_model_names=known_names)
     if fixture_kind == "source":
         return resolver.extend_sql_test_source_names(known_source_names=known_names)
     return resolver.extend_sql_test_seed_names(known_seed_names=known_names)
