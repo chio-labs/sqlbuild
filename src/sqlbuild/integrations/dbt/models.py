@@ -581,6 +581,7 @@ class DbtModelPlanningResult:
     stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
     blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
     source_freshness: StandardSourceFreshnessPlanningResult | None = None
+    selected_unique_ids: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def run_unique_ids(self) -> tuple[str, ...]:
@@ -604,6 +605,43 @@ class DbtModelPlanningResult:
     def blocked_unique_ids(self) -> tuple[str, ...]:
         return tuple(
             entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.BLOCKED
+        )
+
+    @property
+    def displayed_entries(self) -> tuple[DbtModelPlanEntry, ...]:
+        """Plan entries that should be shown to the user.
+
+        Restricts to originally-selected candidates when known; upstream nodes
+        pulled in only for change propagation are kept out of the display.
+        """
+
+        if not self.selected_unique_ids:
+            return self.entries
+        selected: frozenset[str] = frozenset(self.selected_unique_ids)
+        return tuple(entry for entry in self.entries if entry.unique_id in selected)
+
+    @property
+    def displayed_run_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.displayed_entries
+            if entry.action == DbtModelPlanAction.RUN
+        )
+
+    @property
+    def displayed_current_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.displayed_entries
+            if entry.action == DbtModelPlanAction.CURRENT
+        )
+
+    @property
+    def displayed_blocked_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.displayed_entries
+            if entry.action == DbtModelPlanAction.BLOCKED
         )
 
 
