@@ -95,6 +95,13 @@ class DbtExecutionSpacingTestCase:
 
 
 @dataclass(frozen=True)
+class DbtCompileFullRefreshPipelineTestCase:
+    description: str
+    command: str
+    expected_full_refresh_values: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
 class DbtReuseExecutionOutputTestCase:
     description: str
     reused_unique_ids: tuple[str, ...]
@@ -663,3 +670,25 @@ class DbtDiffExecuteErrorTestCase:
     create_reuse_relation: bool
     expected_error_fragment: str
     expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtSqlTestTargetTestCase:
+    description: str
+    selected_dbt_unique_ids: tuple[str, ...]
+    select: tuple[str, ...]
+    expected_target_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...]
+    expected_query_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
+    manifest_kind: str = "default"
+    sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtSqlTestTargetErrorTestCase:
+    description: str
+    manifest_kind: str
+    expected_model_names: tuple[str, ...]
+    target_names: tuple[str, ...]
+    expected_error_fragment: str

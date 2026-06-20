@@ -123,6 +123,33 @@ def test_given_dbt_options_when_building_compile_argv_then_returns_expected_comm
     "test_case",
     [
         DbtArgvTestCase(
+            description="builds compile argv with full refresh",
+            select=(),
+            exclude=(),
+            resource_types=(),
+            expected_argv=("dbt", "compile", *OPTIONS_ARGV_SUFFIX, "--full-refresh"),
+        )
+    ],
+    ids=["builds compile argv with full refresh"],
+)
+def test_given_full_refresh_when_building_compile_argv_then_includes_full_refresh(
+    test_case: DbtArgvTestCase,
+) -> None:
+    options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
+
+    result: tuple[str, ...] = build_dbt_compile_argv(
+        dbt_executable="dbt",
+        options=options,
+        full_refresh=True,
+    )
+
+    assert result == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtArgvTestCase(
             description="builds debug argv with common options",
             select=(),
             exclude=(),

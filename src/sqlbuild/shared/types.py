@@ -100,6 +100,9 @@ class ExternalSqlReferenceResolver(Protocol):
     def validate_model_names(self, *, known_model_names: set[str]) -> None:
         """Validate SQLBuild model names against external integration resources."""
 
+    def extend_sql_test_model_names(self, *, known_model_names: set[str]) -> set[str]:
+        """Return extra model names valid for SQL-native test targets."""
+
     def validate_reference(
         self,
         *,

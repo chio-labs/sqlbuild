@@ -13,6 +13,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     compile_dbt_interop_manifest,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
+    write_dbt_model_sqlbuild_unit_test,
+    write_incremental_dbt_model_sqlbuild_unit_test,
+    write_qualified_dbt_model_sqlbuild_unit_test,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     query_duckdb,
@@ -183,6 +186,127 @@ def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
     project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
     setup_result: subprocess.CompletedProcess[str] = compile_dbt_interop_manifest(
         project_dir=project_dir
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtTestCliTestCase(
+            description="SQLBuild unit test targets dbt model with mocked upstream",
+            setup_command=("dbt", "build", "--select", "fact_orders"),
+            command=("dbt", "test", "--select", "fact_orders"),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "SQLBuild execution  sqb test",
+                "test_dbt_fact_orders",
+                "PASS",
+            ),
+        )
+    ],
+    ids=["SQLBuild unit test targets dbt model with mocked upstream"],
+)
+def test_given_sqlbuild_test_targets_dbt_model_when_running_dbt_test_then_uses_mocked_upstream(
+    test_case: DbtTestCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_dbt_model_sqlbuild_unit_test(project_dir=project_dir)
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtTestCliTestCase(
+            description="SQLBuild unit test targets package-qualified dbt model",
+            setup_command=("dbt", "build", "--select", "fact_orders"),
+            command=("dbt", "test", "--select", "fact_orders"),
+            expected_stdout_fragments=(
+                "SQLBuild execution  sqb test",
+                "test_dbt_fact_orders",
+                "PASS",
+            ),
+        )
+    ],
+    ids=["SQLBuild unit test targets package-qualified dbt model"],
+)
+def test_given_sqlbuild_test_targets_qualified_dbt_model_when_running_dbt_test_then_passes(
+    test_case: DbtTestCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_qualified_dbt_model_sqlbuild_unit_test(project_dir=project_dir)
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtTestCliTestCase(
+            description="SQLBuild dbt test compiles incremental target with full refresh",
+            setup_command=("dbt", "build", "--select", "fact_orders"),
+            command=("dbt", "test", "--select", "fact_orders"),
+            expected_stdout_fragments=(
+                "SQLBuild execution  sqb test",
+                "test_dbt_fact_orders",
+                "PASS",
+            ),
+        )
+    ],
+    ids=["SQLBuild dbt test compiles incremental target with full refresh"],
+)
+def test_given_incremental_dbt_test_target_when_running_dbt_test_then_uses_full_refresh_sql(
+    test_case: DbtTestCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_incremental_dbt_model_sqlbuild_unit_test(project_dir=project_dir)
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
     )
     assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
 

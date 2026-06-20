@@ -139,7 +139,10 @@ def execute_dbt_interop_from_project(
 
     dbt_compile_start: float = time.monotonic()
     _report_progress(on_progress, "Compiling dbt project...")
-    compile_result: DbtCommandResult = runner.compile(options=dbt_options)
+    compile_result: DbtCommandResult = runner.compile(
+        options=dbt_options,
+        full_refresh=command == DbtInteropCommand.TEST,
+    )
     if compile_result.returncode != 0:
         raise DbtInteropRuntimeError("dbt compile failed", help=dbt_failure_detail(compile_result))
     _report_progress(
@@ -414,6 +417,7 @@ def execute_dbt_interop_from_project(
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
             dependency_baseline_entries=dependency_baseline_entries,
             disable_scope_pruning=command == DbtInteropCommand.TEST,
+            manifest=manifest if command == DbtInteropCommand.TEST else None,
         )
         if sqlbuild_plan_output is not None:
             plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
@@ -595,6 +599,7 @@ def execute_dbt_interop_from_project(
             deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
             dependency_baseline_entries=dependency_baseline_entries,
             disable_scope_pruning=command == DbtInteropCommand.TEST,
+            manifest=manifest if command == DbtInteropCommand.TEST else None,
         )
     if plan_output is None:
         exit_code: int = max(

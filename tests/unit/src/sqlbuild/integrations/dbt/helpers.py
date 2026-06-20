@@ -14,6 +14,7 @@ from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -21,8 +22,17 @@ from sqlbuild.compiler.compile.models.core import (
     CompileModelInput,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.models.sql_tests import (
+    CompiledModelSqlTestPayload,
+    CompiledSqlTest,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+)
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -432,8 +442,12 @@ class MappingDbtInvoker:
 class CompileOnlyDbtRunner(DbtRunner):
     """Minimal dbt runner for execution-pipeline tests that only compile."""
 
-    def compile(self, *, options: DbtCliOptions) -> DbtCommandResult:
+    def __init__(self) -> None:
+        self.compile_full_refresh_values: list[bool] = []
+
+    def compile(self, *, options: DbtCliOptions, full_refresh: bool = False) -> DbtCommandResult:
         del options
+        self.compile_full_refresh_values.append(full_refresh)
         return DbtCommandResult(argv=("dbt", "compile"), returncode=0)
 
 
@@ -528,6 +542,141 @@ def build_dbt_plan_mapping_invoker(
             unique_ids=unique_ids,
         )
     return MappingDbtInvoker(results_by_argv=results_by_argv)
+
+
+def build_project_with_expected_sql_test_targets(
+    *, expected_model_names: tuple[str, ...], sqlbuild_model_names: tuple[str, ...] = ()
+) -> CompiledProject:
+    """Build a minimal project with one model-mode SQL test."""
+
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=0,
+        header_values={},
+        sql_body="select 1",
+        name="test_dbt_fact_orders",
+    )
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path("/repo/tests/unit/test_dbt_fact_orders.sql"),
+        relative_path=Path("tests/unit/test_dbt_fact_orders.sql"),
+        contents="TEST();",
+        blocks=(test_block,),
+    )
+    sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="test_dbt_fact_orders",
+        ),
+        scope_deps=(),
+        name="test_dbt_fact_orders",
+        test_file=test_file,
+        test_block=test_block,
+        sql_body="TEST();",
+        payload=CompiledModelSqlTestPayload(expected_model_names=expected_model_names),
+    )
+    models: tuple[CompiledModel, ...] = tuple(
+        CompiledModel(
+            key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
+            deps=(),
+            name=model_name,
+            relative_path=Path(f"models/{model_name}.sql"),
+            query_sql="select 1",
+            config=CompileModelConfig(),
+            destination=CompiledRelationLocation(
+                database=None,
+                schema=None,
+                name=model_name,
+                qualified_name=model_name,
+            ),
+        )
+        for model_name in sqlbuild_model_names
+    )
+    return CompiledProject(
+        run_id="run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=models,
+        sql_tests=(sql_test,),
+    )
+
+
+def build_dbt_sql_test_target_manifest(
+    *,
+    dep_relation_name: str = '"analytics"."stg_orders"',
+    fact_compiled_code: str
+    | None = 'select * from "analytics"."stg_orders" where amount_cents > 0',
+    include_ambiguous_package: bool = False,
+) -> DbtManifestIndex:
+    """Build a manifest fixture for dbt SQL test target adaptation."""
+
+    fact_node: dict[str, object] = build_manifest_model_node(
+        unique_id="model.analytics.fact_orders",
+        package_name="analytics",
+        name="fact_orders",
+        relation_name='"analytics"."fact_orders"',
+        raw_code="select * from {{ ref('stg_orders') }}",
+        compiled_code=fact_compiled_code,
+        depends_on_nodes=("model.analytics.stg_orders",),
+    )
+    if fact_compiled_code is None:
+        fact_node.pop("compiled_code", None)
+    nodes: tuple[dict[str, object], ...] = (
+        build_manifest_model_node(
+            unique_id="model.analytics.stg_orders",
+            package_name="analytics",
+            name="stg_orders",
+            relation_name=dep_relation_name,
+            compiled_code="select * from raw.orders",
+        ),
+        fact_node,
+    )
+    if include_ambiguous_package:
+        nodes = (
+            *nodes,
+            build_manifest_model_node(
+                unique_id="model.finance.fact_orders",
+                package_name="finance",
+                name="fact_orders",
+                relation_name='"finance"."fact_orders"',
+                compiled_code="select 1 as order_id",
+            ),
+        )
+    return build_dbt_manifest_index(raw_data=build_manifest_data(nodes=nodes))
+
+
+def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtManifestIndex:
+    """Build a success manifest variant for dbt SQL test target tests."""
+
+    if manifest_kind == "unquoted":
+        return build_dbt_sql_test_target_manifest(
+            dep_relation_name="analytics.stg_orders",
+            fact_compiled_code="select * from analytics.stg_orders where amount_cents > 0",
+        )
+    if manifest_kind == "three_part":
+        return build_dbt_sql_test_target_manifest(
+            dep_relation_name='"warehouse"."analytics"."stg_orders"',
+            fact_compiled_code=(
+                'select * from "warehouse"."analytics"."stg_orders" where amount_cents > 0'
+            ),
+        )
+    if manifest_kind == "alias":
+        return build_dbt_sql_test_target_manifest(
+            dep_relation_name='"analytics"."stg_orders_alias"',
+            fact_compiled_code='select * from "analytics"."stg_orders_alias"',
+        )
+    return build_dbt_sql_test_target_manifest()
+
+
+def build_dbt_sql_test_target_error_manifest(*, manifest_kind: str) -> DbtManifestIndex:
+    """Build an error manifest variant for dbt SQL test target tests."""
+
+    if manifest_kind == "ambiguous":
+        return build_dbt_sql_test_target_manifest(include_ambiguous_package=True)
+    if manifest_kind == "missing_compiled_sql":
+        return build_dbt_sql_test_target_manifest(fact_compiled_code=None)
+    return build_dbt_sql_test_target_manifest(
+        fact_compiled_code="select * from analytics.unexpected_orders"
+    )
 
 
 def extract_dbt_ls_selects(argv: tuple[str, ...]) -> tuple[str, ...]:

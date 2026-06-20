@@ -333,6 +333,67 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     return root_dir / "sqlbuild_project"
 
 
+def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a SQLBuild unit test that targets a dbt model directly."""
+
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__analytics__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a SQLBuild unit test with a package-qualified dbt expected target."""
+
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__analytics__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__analytics__fact_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_incremental_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write an incremental dbt model and unit test that require full-refresh compile."""
+
+    project_dir.parent.joinpath("dbt_project", "models", "marts", "fact_orders.sql").write_text(
+        "{{ config(materialized='incremental', unique_key='order_id', tags=['finance']) }}\n\n"
+        "select order_id, ordered_at, 'full' as branch from {{ ref('stg_orders') }}\n"
+        "{% if is_incremental() %}\n"
+        "union all select 999 as order_id, cast('2026-01-01 00:00:00' as timestamp) "
+        "as ordered_at, 'incremental' as branch\n"
+        "{% endif %}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__analytics__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at, "
+        "'full' AS branch\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
 def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run dbt compile so plain SQLBuild commands can validate dbt refs."""
 

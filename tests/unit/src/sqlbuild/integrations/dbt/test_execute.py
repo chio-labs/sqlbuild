@@ -37,6 +37,7 @@ from sqlbuild.spec.models.project import (
     SettingsConfig,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSpacingTestCase,
     DbtReuseExecutionOrderingTestCase,
     DbtReuseExecutionOutputTestCase,
@@ -169,6 +170,105 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
     assert test_case.unexpected_no_work_no_blank_fragment not in rendered
     assert test_case.unexpected_extra_blank_fragment not in rendered
     assert test_case.unexpected_no_work_extra_blank_fragment not in rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtCompileFullRefreshPipelineTestCase(
+            description="dbt test compiles with full refresh",
+            command="test",
+            expected_full_refresh_values=(True,),
+        )
+    ],
+    ids=["dbt test compiles with full refresh"],
+)
+def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
+    test_case: DbtCompileFullRefreshPipelineTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            settings=SettingsConfig(query_change_tracking=False),
+            dbt=DbtConfig(project_dir="../dbt_project"),
+        ),
+        local_config=LocalConfig(),
+    )
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=DbtInteropCommand(test_case.command),
+        dbt_command_argv=("dbt", "test", "--select", "missing"),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+    )
+    runner: CompileOnlyDbtRunner = CompileOnlyDbtRunner()
+
+    monkeypatch.setattr(
+        execute_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "resolve_dbt_plan_options",
+        lambda **kwargs: DbtCliOptions(project_dir=Path("/dbt_project")),
+    )
+    monkeypatch.setattr(
+        execute_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "load_dbt_manifest_index",
+        lambda *, manifest_path: SimpleNamespace(models_by_unique_id={}),
+    )
+    monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
+    monkeypatch.setattr(
+        execute_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "build_compiled_project",
+        lambda **kwargs: SimpleNamespace(
+            settings=SimpleNamespace(query_change_tracking=False),
+            run_id="run",
+            effective_target_database=None,
+            effective_target_schema="main",
+            effective_target_name="dev",
+            models=(),
+        ),
+    )
+    monkeypatch.setattr(execute_module, "build_dbt_combined_graph", lambda **kwargs: object())
+    monkeypatch.setattr(execute_module, "plan_dbt_interop_command", lambda **kwargs: plan)
+    monkeypatch.setattr(execute_module, "build_dbt_model_plan_output", lambda **kwargs: None)
+    monkeypatch.setattr(execute_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ())
+    monkeypatch.setattr(execute_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ())
+    monkeypatch.setattr(execute_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ())
+    monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
+    monkeypatch.setattr(execute_module, "build_effective_connection_config", lambda **kwargs: {})
+    monkeypatch.setattr(execute_module, "resolve_connection_config", lambda **kwargs: {})
+    monkeypatch.setattr(
+        execute_module,
+        "execute_dbt_commands",
+        lambda **kwargs: DbtCommandExecutionResult(returncode=0),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "build_dbt_execution_outcome",
+        lambda **kwargs: DbtExecutionOutcome(),
+    )
+
+    exit_code: int = execute_module.execute_dbt_interop_from_project(
+        command=DbtInteropCommand(test_case.command),
+        project_dir=Path("/sqlbuild_project"),
+        args=("--select", "missing"),
+        dbt_runner=runner,
+        progress_stream=StringIO(),
+        dbt_stdout_stream=StringIO(),
+        use_color=False,
+    )
+
+    assert exit_code == 0
+    assert tuple(runner.compile_full_refresh_values) == test_case.expected_full_refresh_values
 
 
 @pytest.mark.parametrize(
