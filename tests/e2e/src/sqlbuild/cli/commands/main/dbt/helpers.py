@@ -339,7 +339,7 @@ def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__ref__stg_orders AS (\n"
+        "__dbt_ref__stg_orders AS (\n"
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders AS (\n"
@@ -356,7 +356,7 @@ def write_qualified_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__ref__stg_orders AS (\n"
+        "__dbt_ref__stg_orders AS (\n"
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__analytics__fact_orders AS (\n"
@@ -382,7 +382,7 @@ def write_incremental_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__ref__stg_orders AS (\n"
+        "__dbt_ref__stg_orders AS (\n"
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders AS (\n"
@@ -597,6 +597,32 @@ def write_chained_dbt_scenario_targeting_dbt_model(*, project_dir: Path) -> None
     )
 
 
+def write_spanning_sqlbuild_dbt_ref_scenario(*, project_dir: Path) -> None:
+    """Write a scenario over a SQLBuild model whose chain crosses a dbt ref boundary.
+
+    mart_orders -> downstream_orders (both SQLBuild) -> __dbt_ref(analytics, fact_orders).
+    The dbt ref is mocked; downstream_orders resolves from its real SQL.
+    """
+
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("mart_orders_spanning.sql").write_text(
+        'SCENARIO (description: "mixed dbt and SQLBuild graph scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__dbt_ref__analytics__fact_orders AS (\n"
+        "  SELECT 42 AS order_id\n"
+        "),\n"
+        "__expected__mart_orders AS (\n"
+        "  SELECT 42 AS order_id\n"
+        "),\n"
+        "__assert__mart_orders_nonzero AS (\n"
+        '  SELECT * FROM __ref("mart_orders") WHERE order_id = 0\n'
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
 def write_real_source_fixture_dbt_scenario(*, project_dir: Path) -> None:
     """Write a dbt source-backed model and a scenario whose fixture reads the real source."""
 
@@ -767,7 +793,7 @@ def write_ref_boundary_dbt_scenario(*, project_dir: Path) -> None:
     scenarios_dir.joinpath("dbt_fact_scenario_boundary.sql").write_text(
         'SCENARIO (description: "dbt ref boundary scenario", tags: ["dbt"]);\n\n'
         "WITH\n"
-        "__ref__analytics__stg_scenario_boundary AS (\n"
+        "__dbt_ref__analytics__stg_scenario_boundary AS (\n"
         "  SELECT 90 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_scenario_boundary AS (\n"
@@ -822,7 +848,7 @@ def write_snapshot_boundary_dbt_scenario(*, project_dir: Path) -> None:
     scenarios_dir.joinpath("dbt_fact_orders_snapshot_scenario.sql").write_text(
         'SCENARIO (description: "dbt snapshot boundary scenario", tags: ["dbt"]);\n\n'
         "WITH\n"
-        "__ref__analytics__orders_snapshot AS (\n"
+        "__dbt_ref__analytics__orders_snapshot AS (\n"
         "  SELECT 11 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders_snapshot AS (\n"
@@ -866,7 +892,7 @@ def write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test(project_dir: Path) -
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_snapshot.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__ref__analytics__stg_snapshot_orders AS (\n"
+        "__dbt_ref__analytics__stg_snapshot_orders AS (\n"
         "  SELECT 1 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders_snapshot AS (\n"
@@ -884,7 +910,7 @@ def write_mocked_snapshot_boundary_dbt_sqlbuild_unit_test(*, project_dir: Path) 
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_snapshot.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__ref__analytics__orders_snapshot AS (\n"
+        "__dbt_ref__analytics__orders_snapshot AS (\n"
         "  SELECT 7 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders_snapshot AS (\n"

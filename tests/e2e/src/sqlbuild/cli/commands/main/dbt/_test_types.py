@@ -221,6 +221,7 @@ class DbtScenarioCliTestCase:
     expected_absent_relations: tuple[str, ...] = ()
     expected_returncode: int = 0
     expected_absent_stdout_fragments: tuple[str, ...] = ()
+    expected_json_command: str | None = None
 
 
 @dataclass(frozen=True)
