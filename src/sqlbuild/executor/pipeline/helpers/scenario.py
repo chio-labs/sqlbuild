@@ -34,6 +34,18 @@ from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
+_SCENARIO_INTERNAL_ERROR_HELP: str = (
+    "This is likely a SQLBuild bug. Please file an issue with the scenario name."
+)
+
+
+def _scenario_failure_help(exc: Exception) -> str | None:
+    explicit_help: str | None = error_help(exc)
+    if explicit_help is not None:
+        return explicit_help
+    if getattr(exc, "code", None) is not None:
+        return None
+    return _SCENARIO_INTERNAL_ERROR_HELP
 
 
 def run_scenario_test_pipeline(
@@ -93,11 +105,7 @@ def run_scenario_test_pipeline(
                     status=ExecutionStatus.FAILED,
                     retained=retain,
                     error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
-                    error_help=error_help(exc)
-                    or (
-                        "This is likely a SQLBuild bug. Please file an issue with the "
-                        "scenario name."
-                    ),
+                    error_help=_scenario_failure_help(exc),
                     error_message=error_message(exc),
                 )
             results.append(result)
@@ -154,8 +162,7 @@ def run_scenario_local_test_pipeline(
                 local_status=ScenarioLocalRunStatus.ERROR,
                 retained=False,
                 error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
-                error_help=error_help(exc)
-                or ("This is likely a SQLBuild bug. Please file an issue with the scenario name."),
+                error_help=_scenario_failure_help(exc),
                 error_message=error_message(exc),
             )
         results.append(result)
@@ -236,11 +243,7 @@ def run_scenario_capture_pipeline(
                     status=ExecutionStatus.FAILED,
                     retained=retain,
                     error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
-                    error_help=error_help(exc)
-                    or (
-                        "This is likely a SQLBuild bug. Please file an issue with the "
-                        "scenario name."
-                    ),
+                    error_help=_scenario_failure_help(exc),
                     error_message=error_message(exc),
                 )
             results.append(result)

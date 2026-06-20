@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
@@ -515,6 +516,16 @@ class DbtLineageArgs:
     depth: int | None = None
     no_sql_validation: bool = False
     dbt_args: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtScenarioBuild:
+    """Adapted SQLBuild project and connection inputs for a dbt scenario run."""
+
+    project: CompiledProject
+    adapter_name: str
+    connection_config: dict[str, object]
+    project_name: str
 
 
 @dataclass(frozen=True)

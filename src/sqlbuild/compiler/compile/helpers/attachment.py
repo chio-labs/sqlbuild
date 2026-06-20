@@ -1340,12 +1340,19 @@ def build_scenario_inputs(
     *,
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlScenarioInput, ...]:
     """Build compile-time scenario inputs from discovered SQL-native scenario files."""
 
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     vars_for_substitution: dict[str, object] = effective_vars or {}
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
+    if external_sql_reference_resolver is not None:
+        known_source_names.update(
+            external_sql_reference_resolver.extend_sql_test_source_names(
+                known_source_names=known_source_names
+            )
+        )
     scenario_inputs: list[CompileSqlScenarioInput] = []
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:

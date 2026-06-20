@@ -30,6 +30,7 @@ class DbtInteropCommand(StrEnum):
     RUN = "run"
     BUILD = "build"
     TEST = "test"
+    SCENARIO = "scenario"
     DEBUG = "debug"
     LINEAGE = "lineage"
     DIFF = "diff"

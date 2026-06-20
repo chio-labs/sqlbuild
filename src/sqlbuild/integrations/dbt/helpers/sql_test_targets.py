@@ -11,11 +11,19 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
+    CompiledSource,
+    CompiledSqlScenario,
     CompileModelConfig,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSourceFile,
+)
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
@@ -32,6 +40,8 @@ from sqlbuild.integrations.dbt.manifest.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtChainNodeBoundaryKind
 from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.spec.models.schema import SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def resolve_dbt_sql_test_target_names(
@@ -72,6 +82,44 @@ def resolve_dbt_sql_test_target_names(
     return tuple(target_names)
 
 
+def resolve_dbt_scenario_target_names(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    selected_dbt_unique_ids: tuple[str, ...],
+    select: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return expected CTE suffixes from scenarios that target selected dbt models."""
+
+    sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
+    _validate_model_name_collisions(
+        manifest=manifest,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
+    selected_ids: frozenset[str] = frozenset(selected_dbt_unique_ids)
+    include_all: bool = not select
+    target_names: list[str] = []
+    seen: set[str] = set()
+    for expected_name in _scenario_expected_model_names(project=project):
+        if expected_name in sqlbuild_model_names:
+            continue
+        dbt_model: DbtManifestModel | None = _resolve_expected_model(
+            manifest=manifest,
+            expected_name=expected_name,
+            require_match=False,
+        )
+        if dbt_model is None:
+            continue
+        if not include_all and dbt_model.unique_id not in selected_ids:
+            if not _select_matches_expected_model(select=select, dbt_model=dbt_model):
+                continue
+        if expected_name in seen:
+            continue
+        seen.add(expected_name)
+        target_names.append(expected_name)
+    return tuple(target_names)
+
+
 def adapt_project_for_dbt_sql_tests(
     *,
     project: CompiledProject,
@@ -89,18 +137,11 @@ def adapt_project_for_dbt_sql_tests(
         manifest=manifest,
         sqlbuild_model_names=sqlbuild_model_names,
     )
-    target_models_by_name: dict[str, DbtManifestModel] = {}
-    for target_name in target_names:
-        if target_name in sqlbuild_model_names:
-            continue
-        dbt_model: DbtManifestModel | None = _resolve_expected_model(
-            manifest=manifest,
-            expected_name=target_name,
-            require_match=True,
-        )
-        if dbt_model is None:
-            continue
-        target_models_by_name[target_name] = dbt_model
+    target_models_by_name: dict[str, DbtManifestModel] = _resolve_target_models_by_name(
+        manifest=manifest,
+        target_names=target_names,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
     if not target_models_by_name:
         return project
     model_name_by_unique_id: dict[str, str] = _build_dbt_test_model_names(
@@ -131,6 +172,245 @@ def adapt_project_for_dbt_sql_tests(
             for sql_test in project.sql_tests
         ),
     )
+
+
+def adapt_project_for_dbt_scenarios(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    target_names: tuple[str, ...],
+) -> CompiledProject:
+    """Return a project with selected dbt models exposed as scenario targets."""
+
+    if not target_names:
+        return project
+    _validate_source_relation_collisions(project=project, manifest=manifest)
+    _validate_seed_relation_collisions(project=project, manifest=manifest)
+    sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
+    _validate_model_name_collisions(
+        manifest=manifest,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
+    target_models_by_name: dict[str, DbtManifestModel] = _resolve_target_models_by_name(
+        manifest=manifest,
+        target_names=target_names,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
+    if not target_models_by_name:
+        return project
+    chain_model_name_by_unique_id: dict[str, str] = _build_dbt_scenario_model_names(
+        manifest=manifest,
+        target_models_by_name=target_models_by_name,
+        scenarios=project.sql_scenarios,
+        sqlbuild_model_names=sqlbuild_model_names,
+    )
+    boundary_model_name_by_unique_id: dict[str, str] = _build_dbt_scenario_boundary_names(
+        manifest=manifest,
+        target_models_by_name=target_models_by_name,
+        scenarios=project.sql_scenarios,
+    )
+    rewrite_model_name_by_unique_id: dict[str, str] = {
+        **boundary_model_name_by_unique_id,
+        **chain_model_name_by_unique_id,
+    }
+    adapted_models: tuple[CompiledModel, ...] = tuple(
+        _adapt_dbt_model(
+            manifest=manifest,
+            dbt_model=manifest.models_by_unique_id[unique_id],
+            target_name=target_name,
+            model_name_by_unique_id=rewrite_model_name_by_unique_id,
+        )
+        for unique_id, target_name in chain_model_name_by_unique_id.items()
+    )
+    boundary_models: tuple[CompiledModel, ...] = tuple(
+        _adapt_dbt_boundary_model(
+            dbt_model=manifest.models_by_unique_id[unique_id],
+            target_name=target_name,
+        )
+        for unique_id, target_name in boundary_model_name_by_unique_id.items()
+    )
+    adapted_sources, adapted_seeds = _build_dbt_scenario_source_seed_entries(
+        manifest=manifest,
+        chain_unique_ids=tuple(chain_model_name_by_unique_id),
+        existing_source_names=frozenset(source.name for source in project.sources),
+        existing_seed_names=frozenset(seed.name for seed in project.seeds),
+    )
+    return replace(
+        project,
+        models=(*project.models, *adapted_models, *boundary_models),
+        sources=(*project.sources, *adapted_sources),
+        seeds=(*project.seeds, *adapted_seeds),
+    )
+
+
+def _adapt_dbt_boundary_model(*, dbt_model: DbtManifestModel, target_name: str) -> CompiledModel:
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=target_name),
+        deps=(),
+        name=target_name,
+        relative_path=Path("dbt") / dbt_model.package_name / f"{dbt_model.name}.sql",
+        query_sql="SELECT 1",
+        config=CompileModelConfig(),
+        destination=CompiledRelationLocation(
+            database=dbt_model.database,
+            schema=dbt_model.schema,
+            name=dbt_model.alias or dbt_model.name,
+            qualified_name=dbt_model.relation_name,
+        ),
+    )
+
+
+def _build_dbt_scenario_source_seed_entries(
+    *,
+    manifest: DbtManifestIndex,
+    chain_unique_ids: tuple[str, ...],
+    existing_source_names: frozenset[str],
+    existing_seed_names: frozenset[str],
+) -> tuple[tuple[CompiledSource, ...], tuple[CompiledSeed, ...]]:
+    sources_by_name: dict[str, CompiledSource] = {}
+    seeds_by_name: dict[str, CompiledSeed] = {}
+    for unique_id in chain_unique_ids:
+        dbt_model: DbtManifestModel = manifest.models_by_unique_id[unique_id]
+        for dep_unique_id in dbt_model.depends_on_nodes:
+            dep_source: DbtManifestSource | None = manifest.sources_by_unique_id.get(dep_unique_id)
+            dep_seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(dep_unique_id)
+            if dep_source is not None:
+                fixture_name: str = _source_fixture_name(manifest=manifest, source=dep_source)
+                if fixture_name not in existing_source_names:
+                    sources_by_name[fixture_name] = _build_dbt_source_entry(
+                        fixture_name=fixture_name, source=dep_source
+                    )
+            elif dep_seed is not None:
+                seed_fixture_name: str = _seed_fixture_name(manifest=manifest, seed=dep_seed)
+                if seed_fixture_name not in existing_seed_names:
+                    seeds_by_name[seed_fixture_name] = _build_dbt_seed_entry(
+                        fixture_name=seed_fixture_name, seed=dep_seed
+                    )
+    return tuple(sources_by_name.values()), tuple(seeds_by_name.values())
+
+
+def _build_dbt_source_entry(*, fixture_name: str, source: DbtManifestSource) -> CompiledSource:
+    source_entry: SourceEntry = SourceEntry(
+        name=fixture_name,
+        database=source.database,
+        schema=source.schema,
+        table=source.identifier or source.name,
+    )
+    return CompiledSource(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=fixture_name),
+        deps=(),
+        name=fixture_name,
+        source_entry=source_entry,
+        source_file=DiscoveredSourceFile(
+            file_path=Path("dbt") / f"{fixture_name}.yml",
+            relative_path=Path("dbt") / f"{fixture_name}.yml",
+            contents="",
+            source_entries=(source_entry,),
+        ),
+    )
+
+
+def _build_dbt_seed_entry(*, fixture_name: str, seed: DbtManifestSeed) -> CompiledSeed:
+    return CompiledSeed(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name=fixture_name),
+        deps=(),
+        name=fixture_name,
+        seed_file=DiscoveredSeedFile(
+            file_path=Path("dbt") / f"{fixture_name}.csv",
+            relative_path=Path("dbt") / f"{fixture_name}.csv",
+        ),
+        schema_entry=SchemaSeedEntry(name=fixture_name),
+        schema_file=DiscoveredSchemaFile(
+            file_path=Path("dbt") / f"{fixture_name}.yml",
+            relative_path=Path("dbt") / f"{fixture_name}.yml",
+            contents="",
+            model_entries=(),
+            seed_entries=(SchemaSeedEntry(name=fixture_name),),
+        ),
+        destination=CompiledRelationLocation(
+            database=seed.database,
+            schema=seed.schema,
+            name=seed.alias or seed.name,
+            qualified_name=seed.relation_name,
+        ),
+    )
+
+
+def _resolve_target_models_by_name(
+    *,
+    manifest: DbtManifestIndex,
+    target_names: tuple[str, ...],
+    sqlbuild_model_names: frozenset[str],
+) -> dict[str, DbtManifestModel]:
+    target_models_by_name: dict[str, DbtManifestModel] = {}
+    for target_name in target_names:
+        if target_name in sqlbuild_model_names:
+            continue
+        dbt_model: DbtManifestModel | None = _resolve_expected_model(
+            manifest=manifest,
+            expected_name=target_name,
+            require_match=True,
+        )
+        if dbt_model is None:
+            continue
+        target_models_by_name[target_name] = dbt_model
+    return target_models_by_name
+
+
+def _build_dbt_scenario_model_names(
+    *,
+    manifest: DbtManifestIndex,
+    target_models_by_name: dict[str, DbtManifestModel],
+    scenarios: tuple[CompiledSqlScenario, ...],
+    sqlbuild_model_names: frozenset[str],
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for scenario in scenarios:
+        for expected_name in scenario.expected_model_names:
+            dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
+            if dbt_model is None:
+                continue
+            _collect_dbt_test_model_names(
+                manifest=manifest,
+                dbt_model=dbt_model,
+                target_name=expected_name,
+                mock_model_names=frozenset(scenario.ref_fixture_names),
+                sqlbuild_model_names=sqlbuild_model_names,
+                result=result,
+            )
+    for target_name, dbt_model in target_models_by_name.items():
+        result.setdefault(dbt_model.unique_id, target_name)
+    return result
+
+
+def _build_dbt_scenario_boundary_names(
+    *,
+    manifest: DbtManifestIndex,
+    target_models_by_name: dict[str, DbtManifestModel],
+    scenarios: tuple[CompiledSqlScenario, ...],
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for scenario in scenarios:
+        mock_model_names: frozenset[str] = frozenset(scenario.ref_fixture_names)
+        for expected_name in scenario.expected_model_names:
+            dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
+            if dbt_model is None:
+                continue
+            result.update(
+                _dbt_mock_model_name_by_unique_id(
+                    manifest=manifest,
+                    dbt_model=dbt_model,
+                    mock_model_names=mock_model_names,
+                )
+            )
+    return result
+
+
+def _scenario_expected_model_names(*, project: CompiledProject) -> tuple[str, ...]:
+    names: list[str] = []
+    for scenario in project.sql_scenarios:
+        names.extend(scenario.expected_model_names)
+    return tuple(dict.fromkeys(names))
 
 
 def _build_dbt_test_model_names(
@@ -507,9 +787,14 @@ def _adapt_dbt_model(
         manifest=manifest,
         dbt_model=dbt_model,
     )
+    deps: tuple[CompiledObjectKey, ...] = _adapted_dbt_model_deps(
+        manifest=manifest,
+        dbt_model=dbt_model,
+        model_name_by_unique_id=model_name_by_unique_id,
+    )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=target_name),
-        deps=(),
+        deps=deps,
         name=target_name,
         relative_path=Path("dbt") / dbt_model.package_name / f"{dbt_model.name}.sql",
         query_sql=rewritten_sql,
@@ -592,6 +877,49 @@ def _relation_variants(*, relation_name: str) -> tuple[str, ...]:
         variants.append(".".join(parts[-2:]))
         variants.append(".".join(f'"{part}"' for part in parts[-2:]))
     return tuple(dict.fromkeys(variant for variant in variants if variant))
+
+
+def _adapted_dbt_model_deps(
+    *,
+    manifest: DbtManifestIndex,
+    dbt_model: DbtManifestModel,
+    model_name_by_unique_id: dict[str, str],
+) -> tuple[CompiledObjectKey, ...]:
+    deps: list[CompiledObjectKey] = []
+    for dep_unique_id in dbt_model.depends_on_nodes:
+        dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
+        dep_source: DbtManifestSource | None = manifest.sources_by_unique_id.get(dep_unique_id)
+        dep_seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(dep_unique_id)
+        if dep_model is not None:
+            if dep_model.unique_id in model_name_by_unique_id:
+                deps.append(
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.MODEL,
+                        name=model_name_by_unique_id[dep_model.unique_id],
+                    )
+                )
+            else:
+                deps.append(
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.DBT_REF,
+                        name=f"{dep_model.package_name}.{dep_model.name}",
+                    )
+                )
+        elif dep_source is not None:
+            deps.append(
+                CompiledObjectKey(
+                    resource_type=CompiledResourceType.SOURCE,
+                    name=_source_fixture_name(manifest=manifest, source=dep_source),
+                )
+            )
+        elif dep_seed is not None:
+            deps.append(
+                CompiledObjectKey(
+                    resource_type=CompiledResourceType.SEED,
+                    name=_seed_fixture_name(manifest=manifest, seed=dep_seed),
+                )
+            )
+    return tuple(dict.fromkeys(deps))
 
 
 def _dbt_ref_references(
