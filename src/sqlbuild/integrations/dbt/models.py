@@ -529,6 +529,36 @@ class DbtScenarioBuild:
 
 
 @dataclass(frozen=True)
+class DbtInteropParsedArgs:
+    """Declared `sqb dbt` flags parsed by argparse, before routing to buckets."""
+
+    select: tuple[str, ...] = field(default_factory=tuple)
+    exclude: tuple[str, ...] = field(default_factory=tuple)
+    vars: str | None = None
+    threads: str | None = None
+    full_refresh: bool = False
+    event_time_start: str | None = None
+    event_time_end: str | None = None
+    project_dir: str | None = None
+    profiles_dir: str | None = None
+    profile: str | None = None
+    target: str | None = None
+    target_path: str | None = None
+    state: str | None = None
+    indirect_selection: str | None = None
+    defer: bool = False
+    start_cursor_ts: str | None = None
+    end_cursor_ts: str | None = None
+    start_cursor_int: str | None = None
+    end_cursor_int: str | None = None
+    defer_to: str | None = None
+    fail_fast: bool = False
+    force: bool = False
+    hard_copy: bool = False
+    dbt_passthrough: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DbtInteropRoutedArgs:
     """Arguments split for a future `sqb dbt` command execution."""
 

@@ -20,6 +20,7 @@ from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_proj
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry, PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.helpers.arg_parser import parse_dbt_execution_args
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
@@ -127,7 +128,10 @@ def execute_dbt_interop_from_project(
 
     output_stream: TextIO = progress_stream or sys.stdout
     dbt_output_stream: TextIO = dbt_stdout_stream or output_stream
-    routed: DbtInteropRoutedArgs = route_dbt_interop_args(command=command, args=args)
+    routed: DbtInteropRoutedArgs = route_dbt_interop_args(
+        command=command,
+        parsed=parse_dbt_execution_args(command=command, args=args),
+    )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
