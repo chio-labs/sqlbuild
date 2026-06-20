@@ -236,17 +236,18 @@ def execute_dbt_interop_from_project(
     reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
     if reuse_from.git_ref is not None and reuse_from.generate_schema_name_override is not None:
         reuse_git_ref = reuse_from.git_ref
+    dbt_reuse_enabled: bool = command != DbtInteropCommand.TEST
     has_explicit_dbt_reuse_scope: bool = bool(
         plan.dbt_selected_unique_ids
         or plan.selection.dbt_required_unique_ids
         or plan.selection.dbt_anchor_unique_ids_by_term
     )
     reuse_plan_start: float | None = None
-    if reuse_git_ref is not None and has_explicit_dbt_reuse_scope:
+    if dbt_reuse_enabled and reuse_git_ref is not None and has_explicit_dbt_reuse_scope:
         reuse_plan_start = time.monotonic()
         _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
     dbt_reuse_plan: DbtReusePlanningResult | None = None
-    if has_explicit_dbt_reuse_scope:
+    if dbt_reuse_enabled and has_explicit_dbt_reuse_scope:
         dbt_reuse_plan = build_dbt_reuse_plan_output(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -287,8 +288,9 @@ def execute_dbt_interop_from_project(
             on_connection_complete=connection_progress.on_connection_complete,
             on_connection_error=connection_progress.on_connection_error,
         )
-    dbt_dependency_baseline_plan: DbtReusePlanningResult | None = (
-        build_dbt_dependency_baseline_plan_output(
+    dbt_dependency_baseline_plan: DbtReusePlanningResult | None = None
+    if dbt_reuse_enabled:
+        dbt_dependency_baseline_plan = build_dbt_dependency_baseline_plan_output(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             current_manifest=manifest,
@@ -299,7 +301,6 @@ def execute_dbt_interop_from_project(
             dbt_options=dbt_options,
             runner=runner,
         )
-    )
     if dbt_dependency_baseline_plan is not None:
         plan = replace(plan, dbt_dependency_baseline_plan=dbt_dependency_baseline_plan)
     dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
@@ -497,6 +498,11 @@ def execute_dbt_interop_from_project(
             stdout_stream=dbt_output_stream,
             stderr_stream=output_stream,
             use_color=use_color,
+            skip_message=(
+                "Skipping dbt tests: no dbt tests for the selection."
+                if command == DbtInteropCommand.TEST
+                else "Skipping dbt: no dbt work selected."
+            ),
             on_node_result=record_dbt_node_result,
         )
     finally:

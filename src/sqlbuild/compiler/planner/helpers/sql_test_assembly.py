@@ -103,6 +103,7 @@ def plan_test(
     ordered_names: tuple[str, ...] = _topo_sort_expected(
         expected_names=expected_names,
         model_map=model_map,
+        model_query_overrides=model_payload.model_query_overrides,
     )
 
     warnings: list[PlanWarning] = []
@@ -566,6 +567,7 @@ def _topo_sort_expected(
     *,
     expected_names: tuple[str, ...],
     model_map: dict[str, CompiledModel],
+    model_query_overrides: dict[str, str],
 ) -> tuple[str, ...]:
     """Sort expected model names in dependency order."""
 
@@ -577,9 +579,10 @@ def _topo_sort_expected(
         if model is None:
             deps[name] = set()
             continue
+        query_sql: str = model_query_overrides.get(name, model.query_sql)
         model_refs: set[str] = set()
         match: re.Match[str]
-        for match in _REF_PATTERN.finditer(model.query_sql):
+        for match in _REF_PATTERN.finditer(query_sql):
             ref_name: str = match.group(1)
             if ref_name in expected_set:
                 model_refs.add(ref_name)

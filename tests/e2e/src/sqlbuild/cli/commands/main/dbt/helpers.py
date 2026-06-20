@@ -339,7 +339,7 @@ def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__dbt_ref__analytics__stg_orders AS (\n"
+        "__ref__stg_orders AS (\n"
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders AS (\n"
@@ -356,7 +356,7 @@ def write_qualified_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__dbt_ref__analytics__stg_orders AS (\n"
+        "__ref__stg_orders AS (\n"
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__analytics__fact_orders AS (\n"
@@ -382,7 +382,7 @@ def write_incremental_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None
     project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
         "TEST();\n\n"
         "WITH\n"
-        "__dbt_ref__analytics__stg_orders AS (\n"
+        "__ref__stg_orders AS (\n"
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         "),\n"
         "__expected__fact_orders AS (\n"
@@ -454,6 +454,140 @@ def write_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
     )
 
 
+def write_chained_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a two-model dbt source chain and SQLBuild unit test targeting the final model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_orders_from_source.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "fact_orders_from_source.sql").write_text(
+        "select order_id, ordered_at from {{ ref('stg_orders_from_source') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_from_source.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 30 AS order_id, cast('2026-03-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_from_source AS (\n"
+        "  SELECT 30 AS order_id, cast('2026-03-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_chained_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a two-model dbt seed chain and SQLBuild unit test targeting the final model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "staging", "stg_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_country_names.sql").write_text(
+        "select country_code, country_name from {{ ref('stg_countries') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_country_names.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__countries AS (\n"
+        "  SELECT 'MX' AS country_code, 'Mexico' AS country_name\n"
+        "),\n"
+        "__expected__dim_country_names AS (\n"
+        "  SELECT 'MX' AS country_code, 'Mexico' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write colliding dbt package sources and a qualified SQLBuild source fixture test."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    _write_local_dbt_package(project_dir=project_dir)
+    dbt_project_dir.joinpath(
+        "models", "staging", "stg_orders_from_qualified_source.sql"
+    ).write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath(
+        "tests", "unit", "test_dbt_stg_orders_from_qualified_source.sql"
+    ).write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__analytics__raw__orders AS (\n"
+        "  SELECT 40 AS order_id, cast('2026-04-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_orders_from_qualified_source AS (\n"
+        "  SELECT 40 AS order_id, cast('2026-04-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write colliding dbt package seeds and a qualified SQLBuild seed fixture test."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    _write_local_dbt_package(project_dir=project_dir, include_seed=True)
+    dbt_project_dir.joinpath("models", "marts", "dim_qualified_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_qualified_countries.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__analytics__countries AS (\n"
+        "  SELECT 'BR' AS country_code, 'Brazil' AS country_name\n"
+        "),\n"
+        "__expected__dim_qualified_countries AS (\n"
+        "  SELECT 'BR' AS country_code, 'Brazil' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
 def write_dbt_source_relation_collision_sqlbuild_unit_test(project_dir: Path) -> None:
     """Write a dbt source test with a colliding SQLBuild source relation."""
 
@@ -468,6 +602,42 @@ def write_dbt_source_relation_collision_sqlbuild_unit_test(project_dir: Path) ->
         "    table: orders\n",
         encoding="utf-8",
     )
+
+
+def _write_local_dbt_package(*, project_dir: Path, include_seed: bool = False) -> None:
+    """Write a local dbt package used to create package-qualified fixture names."""
+
+    root_dir: Path = project_dir.parent
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    package_dir: Path = root_dir / "finance_package"
+    package_models_dir: Path = package_dir / "models"
+    package_models_dir.mkdir(parents=True)
+    dbt_project_dir.joinpath("packages.yml").write_text(
+        "packages:\n  - local: ../finance_package\n",
+        encoding="utf-8",
+    )
+    package_dir.joinpath("dbt_project.yml").write_text(
+        "name: finance\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "seed-paths: ['seeds']\n"
+        "seeds:\n"
+        "  finance:\n"
+        "    +schema: finance\n",
+        encoding="utf-8",
+    )
+    package_models_dir.joinpath("schema.yml").write_text(
+        "sources:\n  - name: raw\n    schema: finance_raw\n    tables:\n      - name: orders\n",
+        encoding="utf-8",
+    )
+    if include_seed:
+        package_seeds_dir: Path = package_dir / "seeds"
+        package_seeds_dir.mkdir()
+        package_seeds_dir.joinpath("countries.csv").write_text(
+            "country_code,country_name\nFR,France\n",
+            encoding="utf-8",
+        )
 
 
 def write_dbt_source_fixture_name_collision_sqlbuild_unit_test(project_dir: Path) -> None:
@@ -576,6 +746,26 @@ def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedPr
             profiles_dir.as_posix(),
             "--target-path",
             target_path.as_posix(),
+        ),
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+
+def install_dbt_interop_packages(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run dbt deps for E2E fixtures that add local packages."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    profiles_dir: Path = project_dir.parent / "profiles"
+    return subprocess.run(
+        (
+            dbt_executable(),
+            "deps",
+            "--project-dir",
+            dbt_project_dir.as_posix(),
+            "--profiles-dir",
+            profiles_dir.as_posix(),
         ),
         capture_output=True,
         check=False,

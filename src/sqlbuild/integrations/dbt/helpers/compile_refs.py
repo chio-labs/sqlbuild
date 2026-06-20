@@ -35,15 +35,25 @@ class DbtCompileReferenceResolver:
         )
 
     def extend_sql_test_model_names(self, *, known_model_names: set[str]) -> set[str]:
-        del known_model_names
         if self._dbt_manifest is None:
             return set()
         names: set[str] = set()
-        model_name: str
-        for model_name in self._dbt_manifest.models_by_name:
-            names.add(model_name)
+        for model_name, matches in self._dbt_manifest.models_by_name.items():
+            if len(matches) == 1:
+                if model_name in known_model_names:
+                    raise CompileInputError(
+                        f"dbt model fixture '__ref__{model_name}' conflicts with a SQLBuild model",
+                        code="C218",
+                    )
+                names.add(model_name)
         for package_name, name in self._dbt_manifest.models_by_package_and_name:
-            names.add(f"{package_name}__{name}")
+            qualified_name: str = f"{package_name}__{name}"
+            if qualified_name in known_model_names:
+                raise CompileInputError(
+                    f"dbt model fixture '__ref__{qualified_name}' conflicts with a SQLBuild model",
+                    code="C218",
+                )
+            names.add(qualified_name)
         return names
 
     def extend_sql_test_source_names(self, *, known_source_names: set[str]) -> set[str]:

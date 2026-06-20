@@ -190,6 +190,13 @@ class PlanningProgressTestCase:
 
 
 @dataclass(frozen=True)
+class PlanningCompletionMessageTestCase:
+    description: str
+    message: str
+    expected_is_completion: bool
+
+
+@dataclass(frozen=True)
 class ResolveProjectConnectionConfigTestCase:
     description: str
     project_dir_name: str

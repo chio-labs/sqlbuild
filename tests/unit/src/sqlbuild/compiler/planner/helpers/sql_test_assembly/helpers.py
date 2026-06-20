@@ -211,9 +211,9 @@ def _build_model_query_overrides(
 ) -> dict[str, str]:
     """Build model query overrides for planner tests with macro mocks."""
 
+    overrides: dict[str, str] = dict(test_case.model_query_overrides)
     if not test_case.macro_mocks:
-        return {}
-    overrides: dict[str, str] = {}
+        return overrides
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_macro_source_queries.items():
