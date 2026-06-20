@@ -585,7 +585,7 @@ def build_project_with_expected_sql_test_targets(
         sql_body="TEST();",
         payload=CompiledModelSqlTestPayload(
             expected_model_names=expected_model_names,
-            mock_model_names=mock_model_names,
+            mock_dbt_ref_names=mock_model_names,
         ),
     )
     models: tuple[CompiledModel, ...] = tuple(
@@ -651,7 +651,7 @@ def build_project_with_multiple_dbt_sql_test_boundaries() -> CompiledProject:
                 sql_body="TEST();",
                 payload=CompiledModelSqlTestPayload(
                     expected_model_names=("fact_orders",),
-                    mock_model_names=mock_model_names,
+                    mock_dbt_ref_names=mock_model_names,
                 ),
             )
         )
@@ -788,6 +788,15 @@ def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtMani
         )
     if manifest_kind == "ambiguous":
         return build_dbt_sql_test_target_manifest(include_ambiguous_package=True)
+    if manifest_kind == "relation_in_string_and_comment":
+        return build_dbt_sql_test_target_manifest(
+            dep_relation_name="analytics.stg_orders",
+            fact_compiled_code=(
+                "-- upstream analytics.stg_orders\n"
+                "select *, 'analytics.stg_orders' as src "
+                "from analytics.stg_orders where amount_cents > 0"
+            ),
+        )
     return build_dbt_sql_test_target_manifest()
 
 

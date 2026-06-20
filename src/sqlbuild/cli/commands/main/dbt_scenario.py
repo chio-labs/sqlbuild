@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 from typing import TextIO
@@ -10,6 +11,10 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.main.helpers.scenario.warehouse_run import run_warehouse_scenarios
 from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+    add_execution_json_output_arg,
+    add_select_args,
+)
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
@@ -24,13 +29,20 @@ def run_dbt_scenario_command(
 ) -> int:
     """Execute `sqb dbt scenario test`."""
 
-    json_output: bool = "--json" in args
-    retain: bool = "--retain" in args
-    selectors: tuple[str, ...] = tuple(
-        arg
-        for index, arg in enumerate(args)
-        if arg not in {"--json", "--retain"} and not (index == 0 and arg == "test")
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(prog="sqb dbt scenario test")
+    parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
+    parser.add_argument("--retain", action="store_true", default=False)
+    parser.add_argument("--json", action="store_true", default=False)
+    add_execution_json_output_arg(parser)
+    add_select_args(parser)
+    parsed: argparse.Namespace = parser.parse_args(
+        list(args[1:]) if args and args[0] == "test" else list(args)
     )
+    json_output: bool = bool(parsed.json)
+    retain: bool = bool(parsed.retain)
+    json_output_path: Path | None = parsed.json_output
+    selectors: tuple[str, ...] = (*parsed.scenario_selector, *parsed.select)
+    exclude: tuple[str, ...] = tuple(parsed.exclude)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     use_color: bool = not no_color and not json_output and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
@@ -50,6 +62,7 @@ def run_dbt_scenario_command(
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=discovery.project,
         selectors=selectors,
+        exclude=exclude,
         project_dir=effective_project_dir,
     )
     if not scenarios:
@@ -75,4 +88,5 @@ def run_dbt_scenario_command(
         progress_stream=progress_stream,
         use_color=use_color,
         json_output=json_output,
+        json_output_path=json_output_path,
     )

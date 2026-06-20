@@ -27,7 +27,9 @@ def build_seed_identity_metadata_json(seed: CompiledSeed) -> str:
         "name": seed.name,
         "csv_settings": _normalize_json_value(asdict(seed.schema_entry.csv_settings)),
         "columns": [_column_identity(column) for column in seed.schema_entry.columns],
-        "rows": _read_seed_rows(
+        "rows": []
+        if seed.external
+        else _read_seed_rows(
             file_path=seed.seed_file.file_path,
             csv_settings=seed.schema_entry.csv_settings,
         ),

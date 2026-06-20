@@ -159,9 +159,17 @@ def adapt_project_for_dbt_sql_tests(
         )
         for unique_id, target_name in model_name_by_unique_id.items()
     )
+    adapted_sources, adapted_seeds = _build_dbt_source_seed_entries(
+        manifest=manifest,
+        chain_unique_ids=tuple(model_name_by_unique_id),
+        existing_source_names=frozenset(source.name for source in project.sources),
+        existing_seed_names=frozenset(seed.name for seed in project.seeds),
+    )
     return replace(
         project,
         models=(*project.models, *adapted_models),
+        sources=(*project.sources, *adapted_sources),
+        seeds=(*project.seeds, *adapted_seeds),
         sql_tests=tuple(
             _expand_dbt_sql_test_expected_chain(
                 sql_test=sql_test,
@@ -204,32 +212,20 @@ def adapt_project_for_dbt_scenarios(
         scenarios=project.sql_scenarios,
         sqlbuild_model_names=sqlbuild_model_names,
     )
-    boundary_model_name_by_unique_id: dict[str, str] = _build_dbt_scenario_boundary_names(
-        manifest=manifest,
-        target_models_by_name=target_models_by_name,
-        scenarios=project.sql_scenarios,
+    mock_model_names: frozenset[str] = frozenset(
+        name for scenario in project.sql_scenarios for name in scenario.dbt_ref_fixture_names
     )
-    rewrite_model_name_by_unique_id: dict[str, str] = {
-        **boundary_model_name_by_unique_id,
-        **chain_model_name_by_unique_id,
-    }
     adapted_models: tuple[CompiledModel, ...] = tuple(
         _adapt_dbt_model(
             manifest=manifest,
             dbt_model=manifest.models_by_unique_id[unique_id],
             target_name=target_name,
-            model_name_by_unique_id=rewrite_model_name_by_unique_id,
+            model_name_by_unique_id=chain_model_name_by_unique_id,
+            mock_model_names=mock_model_names,
         )
         for unique_id, target_name in chain_model_name_by_unique_id.items()
     )
-    boundary_models: tuple[CompiledModel, ...] = tuple(
-        _adapt_dbt_boundary_model(
-            dbt_model=manifest.models_by_unique_id[unique_id],
-            target_name=target_name,
-        )
-        for unique_id, target_name in boundary_model_name_by_unique_id.items()
-    )
-    adapted_sources, adapted_seeds = _build_dbt_scenario_source_seed_entries(
+    adapted_sources, adapted_seeds = _build_dbt_source_seed_entries(
         manifest=manifest,
         chain_unique_ids=tuple(chain_model_name_by_unique_id),
         existing_source_names=frozenset(source.name for source in project.sources),
@@ -237,30 +233,13 @@ def adapt_project_for_dbt_scenarios(
     )
     return replace(
         project,
-        models=(*project.models, *adapted_models, *boundary_models),
+        models=(*project.models, *adapted_models),
         sources=(*project.sources, *adapted_sources),
         seeds=(*project.seeds, *adapted_seeds),
     )
 
 
-def _adapt_dbt_boundary_model(*, dbt_model: DbtManifestModel, target_name: str) -> CompiledModel:
-    return CompiledModel(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=target_name),
-        deps=(),
-        name=target_name,
-        relative_path=Path("dbt") / dbt_model.package_name / f"{dbt_model.name}.sql",
-        query_sql="SELECT 1",
-        config=CompileModelConfig(),
-        destination=CompiledRelationLocation(
-            database=dbt_model.database,
-            schema=dbt_model.schema,
-            name=dbt_model.alias or dbt_model.name,
-            qualified_name=dbt_model.relation_name,
-        ),
-    )
-
-
-def _build_dbt_scenario_source_seed_entries(
+def _build_dbt_source_seed_entries(
     *,
     manifest: DbtManifestIndex,
     chain_unique_ids: tuple[str, ...],
@@ -333,6 +312,7 @@ def _build_dbt_seed_entry(*, fixture_name: str, seed: DbtManifestSeed) -> Compil
             name=seed.alias or seed.name,
             qualified_name=seed.relation_name,
         ),
+        external=True,
     )
 
 
@@ -374,35 +354,12 @@ def _build_dbt_scenario_model_names(
                 manifest=manifest,
                 dbt_model=dbt_model,
                 target_name=expected_name,
-                mock_model_names=frozenset(scenario.ref_fixture_names),
+                mock_model_names=frozenset(scenario.dbt_ref_fixture_names),
                 sqlbuild_model_names=sqlbuild_model_names,
                 result=result,
             )
     for target_name, dbt_model in target_models_by_name.items():
         result.setdefault(dbt_model.unique_id, target_name)
-    return result
-
-
-def _build_dbt_scenario_boundary_names(
-    *,
-    manifest: DbtManifestIndex,
-    target_models_by_name: dict[str, DbtManifestModel],
-    scenarios: tuple[CompiledSqlScenario, ...],
-) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for scenario in scenarios:
-        mock_model_names: frozenset[str] = frozenset(scenario.ref_fixture_names)
-        for expected_name in scenario.expected_model_names:
-            dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
-            if dbt_model is None:
-                continue
-            result.update(
-                _dbt_mock_model_name_by_unique_id(
-                    manifest=manifest,
-                    dbt_model=dbt_model,
-                    mock_model_names=mock_model_names,
-                )
-            )
     return result
 
 
@@ -432,7 +389,7 @@ def _build_dbt_test_model_names(
                 manifest=manifest,
                 dbt_model=dbt_model,
                 target_name=expected_name,
-                mock_model_names=frozenset(sql_test.payload.mock_model_names),
+                mock_model_names=frozenset(sql_test.payload.mock_dbt_ref_names),
                 sqlbuild_model_names=sqlbuild_model_names,
                 result=result,
             )
@@ -550,7 +507,7 @@ def _expand_dbt_sql_test_expected_chain(
         return sql_test
     expected_model_names: list[str] = []
     model_query_overrides: dict[str, str] = dict(sql_test.payload.model_query_overrides)
-    mock_model_names: frozenset[str] = frozenset(sql_test.payload.mock_model_names)
+    mock_model_names: frozenset[str] = frozenset(sql_test.payload.mock_dbt_ref_names)
     for expected_name in sql_test.payload.expected_model_names:
         dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
         if dbt_model is None:
@@ -564,13 +521,6 @@ def _expand_dbt_sql_test_expected_chain(
         chain_model_name_by_unique_id: dict[str, str] = {
             unique_id: model_name_by_unique_id[unique_id] for unique_id in chain_unique_ids
         }
-        chain_model_name_by_unique_id.update(
-            _dbt_mock_model_name_by_unique_id(
-                manifest=manifest,
-                dbt_model=dbt_model,
-                mock_model_names=mock_model_names,
-            )
-        )
         for unique_id in chain_unique_ids:
             chain_model: DbtManifestModel = manifest.models_by_unique_id[unique_id]
             query_sql: str = _compiled_query_sql(dbt_model=chain_model)
@@ -584,6 +534,7 @@ def _expand_dbt_sql_test_expected_chain(
                     dbt_model=chain_model,
                     query_sql=query_sql,
                     model_name_by_unique_id=chain_model_name_by_unique_id,
+                    mock_model_names=mock_model_names,
                 )
             )
         expected_model_names.extend(
@@ -635,35 +586,6 @@ def _dbt_chain_model_names(
     return tuple(dict.fromkeys(names))
 
 
-def _dbt_mock_model_name_by_unique_id(
-    *,
-    manifest: DbtManifestIndex,
-    dbt_model: DbtManifestModel,
-    mock_model_names: frozenset[str],
-) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for dep_unique_id in dbt_model.depends_on_nodes:
-        dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
-        if dep_model is None:
-            continue
-        mock_model_name: str | None = _dbt_model_mock_name(
-            manifest=manifest,
-            dbt_model=dep_model,
-            mock_model_names=mock_model_names,
-        )
-        if mock_model_name is not None:
-            result[dep_model.unique_id] = mock_model_name
-            continue
-        result.update(
-            _dbt_mock_model_name_by_unique_id(
-                manifest=manifest,
-                dbt_model=dep_model,
-                mock_model_names=mock_model_names,
-            )
-        )
-    return result
-
-
 def _dbt_model_mock_name(
     *,
     manifest: DbtManifestIndex,
@@ -680,8 +602,8 @@ def _dbt_model_mock_name(
         return dbt_model.name
     packages: str = ", ".join(sorted(model.package_name for model in matches))
     raise DbtInteropRuntimeError(
-        f"dbt model mock '__ref__{dbt_model.name}' is ambiguous across packages: {packages}",
-        help=f"Use __ref__<package>__{dbt_model.name} to choose one dbt model.",
+        f"dbt model mock '__dbt_ref__{dbt_model.name}' is ambiguous across packages: {packages}",
+        help=f"Use __dbt_ref__<package>__{dbt_model.name} to choose one dbt model.",
     )
 
 
@@ -693,7 +615,7 @@ def _require_chainable_dbt_node(*, dbt_model: DbtManifestModel) -> None:
         f"dbt {boundary_kind.value} '{dbt_model.unique_id}' cannot be resolved inside a SQLBuild "
         f"test chain",
         help=(
-            f"Mock it as a boundary with __ref__{dbt_model.package_name}__{dbt_model.name} "
+            f"Mock it as a boundary with __dbt_ref__{dbt_model.package_name}__{dbt_model.name} "
             "instead of resolving it."
         ),
     )
@@ -771,6 +693,7 @@ def _adapt_dbt_model(
     dbt_model: DbtManifestModel,
     target_name: str,
     model_name_by_unique_id: dict[str, str],
+    mock_model_names: frozenset[str] = frozenset(),
 ) -> CompiledModel:
     query_sql: str = _compiled_query_sql(dbt_model=dbt_model)
     if not query_sql.strip():
@@ -782,6 +705,7 @@ def _adapt_dbt_model(
         dbt_model=dbt_model,
         query_sql=query_sql,
         model_name_by_unique_id=model_name_by_unique_id,
+        mock_model_names=mock_model_names,
     )
     references: tuple[CompileSqlReference, ...] = _dbt_ref_references(
         manifest=manifest,
@@ -820,12 +744,25 @@ def _compiled_query_sql(*, dbt_model: DbtManifestModel) -> str:
     return ""
 
 
+def _dbt_ref_boundary_call(
+    *, manifest: DbtManifestIndex, dbt_model: DbtManifestModel, mock_model_names: frozenset[str]
+) -> str:
+    qualified_name: str = f"{dbt_model.package_name}__{dbt_model.name}"
+    if qualified_name in mock_model_names and dbt_model.name not in mock_model_names:
+        return f'__dbt_ref("{dbt_model.package_name}", "{dbt_model.name}")'
+    matches: tuple[DbtManifestModel, ...] = manifest.models_by_name.get(dbt_model.name, ())
+    if len(matches) == 1:
+        return f'__dbt_ref("{dbt_model.name}")'
+    return f'__dbt_ref("{dbt_model.package_name}", "{dbt_model.name}")'
+
+
 def _rewrite_direct_dbt_model_refs(
     *,
     manifest: DbtManifestIndex,
     dbt_model: DbtManifestModel,
     query_sql: str,
     model_name_by_unique_id: dict[str, str],
+    mock_model_names: frozenset[str],
 ) -> str:
     result: str = query_sql
     dep_unique_id: str
@@ -840,7 +777,9 @@ def _rewrite_direct_dbt_model_refs(
             if dep_model.unique_id in model_name_by_unique_id:
                 replacement = f'__ref("{model_name_by_unique_id[dep_model.unique_id]}")'
             else:
-                replacement = f'__dbt_ref("{dep_model.package_name}", "{dep_model.name}")'
+                replacement = _dbt_ref_boundary_call(
+                    manifest=manifest, dbt_model=dep_model, mock_model_names=mock_model_names
+                )
         elif dep_source is not None:
             dep_relation_name = dep_source.relation_name
             replacement = (
@@ -854,7 +793,7 @@ def _rewrite_direct_dbt_model_refs(
         before: str = result
         variant: str
         for variant in _relation_variants(relation_name=dep_relation_name):
-            result = result.replace(variant, replacement)
+            result = _replace_in_sql_code(sql=result, target=variant, replacement=replacement)
         if result == before:
             raise DbtInteropRuntimeError(
                 f"dbt model '{dbt_model.unique_id}' compiled SQL did not contain upstream relation "
@@ -865,6 +804,53 @@ def _rewrite_direct_dbt_model_refs(
                 ),
             )
     return result
+
+
+def _replace_in_sql_code(*, sql: str, target: str, replacement: str) -> str:
+    if not target:
+        return sql
+    out: list[str] = []
+    index: int = 0
+    length: int = len(sql)
+    while index < length:
+        char: str = sql[index]
+        if char == "'":
+            end: int = _scan_single_quote(sql=sql, start=index)
+            out.append(sql[index:end])
+            index = end
+            continue
+        if char == "-" and sql.startswith("--", index):
+            end = sql.find("\n", index)
+            end = length if end == -1 else end
+            out.append(sql[index:end])
+            index = end
+            continue
+        if char == "/" and sql.startswith("/*", index):
+            end = sql.find("*/", index + 2)
+            end = length if end == -1 else end + 2
+            out.append(sql[index:end])
+            index = end
+            continue
+        if sql.startswith(target, index):
+            out.append(replacement)
+            index += len(target)
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def _scan_single_quote(*, sql: str, start: int) -> int:
+    index: int = start + 1
+    length: int = len(sql)
+    while index < length:
+        if sql[index] == "'":
+            if index + 1 < length and sql[index + 1] == "'":
+                index += 2
+                continue
+            return index + 1
+        index += 1
+    return length
 
 
 def _relation_variants(*, relation_name: str) -> tuple[str, ...]:
