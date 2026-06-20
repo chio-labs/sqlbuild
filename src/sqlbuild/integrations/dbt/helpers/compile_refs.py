@@ -46,6 +46,50 @@ class DbtCompileReferenceResolver:
             names.add(f"{package_name}__{name}")
         return names
 
+    def extend_sql_test_source_names(self, *, known_source_names: set[str]) -> set[str]:
+        if self._dbt_manifest is None:
+            return set()
+        names: set[str] = set()
+        seen_bare: set[tuple[str, str]] = set()
+        duplicate_bare: set[tuple[str, str]] = set()
+        for source in self._dbt_manifest.sources_by_unique_id.values():
+            key: tuple[str, str] = (source.source_name, source.name)
+            if key in seen_bare:
+                duplicate_bare.add(key)
+            seen_bare.add(key)
+        for source in self._dbt_manifest.sources_by_unique_id.values():
+            bare_name: str = f"{source.source_name}__{source.name}"
+            if bare_name in known_source_names:
+                raise CompileInputError(
+                    f"dbt source fixture '__source__{bare_name}' conflicts with a SQLBuild source",
+                    code="C216",
+                )
+            if (source.source_name, source.name) not in duplicate_bare:
+                names.add(bare_name)
+            names.add(f"{source.package_name}__{source.source_name}__{source.name}")
+        return names
+
+    def extend_sql_test_seed_names(self, *, known_seed_names: set[str]) -> set[str]:
+        if self._dbt_manifest is None:
+            return set()
+        names: set[str] = set()
+        seen_bare: set[str] = set()
+        duplicate_bare: set[str] = set()
+        for seed in self._dbt_manifest.seeds_by_unique_id.values():
+            if seed.name in seen_bare:
+                duplicate_bare.add(seed.name)
+            seen_bare.add(seed.name)
+        for seed in self._dbt_manifest.seeds_by_unique_id.values():
+            if seed.name in known_seed_names:
+                raise CompileInputError(
+                    f"dbt seed fixture '__seed__{seed.name}' conflicts with a SQLBuild seed",
+                    code="C217",
+                )
+            if seed.name not in duplicate_bare:
+                names.add(seed.name)
+            names.add(f"{seed.package_name}__{seed.name}")
+        return names
+
     def validate_reference(
         self,
         *,

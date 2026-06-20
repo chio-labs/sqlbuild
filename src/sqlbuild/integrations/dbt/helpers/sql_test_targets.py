@@ -16,7 +16,12 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import (
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSeed,
+    DbtManifestSource,
+)
 from sqlbuild.shared.types import SqlReferenceKind
 
 
@@ -64,6 +69,8 @@ def adapt_project_for_dbt_sql_tests(
 
     if not target_names:
         return project
+    _validate_source_relation_collisions(project=project, manifest=manifest)
+    _validate_seed_relation_collisions(project=project, manifest=manifest)
     sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
     adapted_models: list[CompiledModel] = []
     for target_name in target_names:
@@ -201,17 +208,31 @@ def _rewrite_direct_dbt_model_refs(
     dep_unique_id: str
     for dep_unique_id in dbt_model.depends_on_nodes:
         dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
-        if dep_model is None:
+        dep_source: DbtManifestSource | None = manifest.sources_by_unique_id.get(dep_unique_id)
+        dep_seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(dep_unique_id)
+        dep_relation_name: str | None = None
+        replacement: str | None = None
+        if dep_model is not None:
+            dep_relation_name = dep_model.relation_name
+            replacement = f'__dbt_ref("{dep_model.package_name}", "{dep_model.name}")'
+        elif dep_source is not None:
+            dep_relation_name = dep_source.relation_name
+            replacement = (
+                f'__source("{_source_fixture_name(manifest=manifest, source=dep_source)}")'
+            )
+        elif dep_seed is not None:
+            dep_relation_name = dep_seed.relation_name
+            replacement = f'__seed("{_seed_fixture_name(manifest=manifest, seed=dep_seed)}")'
+        if dep_relation_name is None or replacement is None:
             continue
         before: str = result
-        replacement: str = f'__dbt_ref("{dep_model.package_name}", "{dep_model.name}")'
         variant: str
-        for variant in _relation_variants(relation_name=dep_model.relation_name):
+        for variant in _relation_variants(relation_name=dep_relation_name):
             result = result.replace(variant, replacement)
         if result == before:
             raise DbtInteropRuntimeError(
                 f"dbt model '{dbt_model.unique_id}' compiled SQL did not contain upstream relation "
-                f"'{dep_model.relation_name}' needed for SQLBuild testing",
+                f"'{dep_relation_name}' needed for SQLBuild testing",
                 help=(
                     "Recompile dbt and verify the manifest compiled SQL contains physical "
                     "relation names."
@@ -249,3 +270,90 @@ def _dbt_ref_references(
             )
         )
     return tuple(references)
+
+
+def _source_fixture_name(*, manifest: DbtManifestIndex, source: DbtManifestSource) -> str:
+    matches: tuple[DbtManifestSource, ...] = tuple(
+        candidate
+        for candidate in manifest.sources_by_unique_id.values()
+        if candidate.source_name == source.source_name and candidate.name == source.name
+    )
+    if len(matches) == 1:
+        return f"{source.source_name}__{source.name}"
+    return f"{source.package_name}__{source.source_name}__{source.name}"
+
+
+def _seed_fixture_name(*, manifest: DbtManifestIndex, seed: DbtManifestSeed) -> str:
+    matches: tuple[DbtManifestSeed, ...] = tuple(
+        candidate
+        for candidate in manifest.seeds_by_unique_id.values()
+        if candidate.name == seed.name
+    )
+    if len(matches) == 1:
+        return seed.name
+    return f"{seed.package_name}__{seed.name}"
+
+
+def _validate_source_relation_collisions(
+    *, project: CompiledProject, manifest: DbtManifestIndex
+) -> None:
+    sqlbuild_relations: dict[str, str] = {}
+    for source in project.sources:
+        relation_key: str | None = _sqlbuild_source_relation_key(source.source_entry)
+        if relation_key is None:
+            continue
+        sqlbuild_relations[relation_key] = source.name
+    for dbt_source in manifest.sources_by_unique_id.values():
+        relation_key = _normalize_relation_name(dbt_source.relation_name)
+        sqlbuild_source_name: str | None = sqlbuild_relations.get(relation_key)
+        if sqlbuild_source_name is None:
+            continue
+        raise DbtInteropRuntimeError(
+            f"dbt source '{dbt_source.unique_id}' resolves to the same relation as SQLBuild "
+            f"source '{sqlbuild_source_name}'",
+            help="Rename or remove one source before using dbt source mocks in SQLBuild tests.",
+        )
+
+
+def _validate_seed_relation_collisions(
+    *, project: CompiledProject, manifest: DbtManifestIndex
+) -> None:
+    sqlbuild_relations: dict[str, str] = {
+        _compiled_relation_key(relation=seed.destination): seed.name for seed in project.seeds
+    }
+    for dbt_seed in manifest.seeds_by_unique_id.values():
+        relation_key: str = _normalize_relation_name(dbt_seed.relation_name)
+        sqlbuild_seed_name: str | None = sqlbuild_relations.get(relation_key)
+        if sqlbuild_seed_name is None:
+            continue
+        raise DbtInteropRuntimeError(
+            f"dbt seed '{dbt_seed.unique_id}' resolves to the same relation as SQLBuild seed "
+            f"'{sqlbuild_seed_name}'",
+            help="Rename or remove one seed before using dbt seed mocks in SQLBuild tests.",
+        )
+
+
+def _sqlbuild_source_relation_key(source_entry: object) -> str | None:
+    database: object | None = getattr(source_entry, "database", None)
+    schema: object | None = getattr(source_entry, "schema", None)
+    table: object | None = getattr(source_entry, "table", None)
+    name: object | None = getattr(source_entry, "name", None)
+    relation_parts: tuple[str, ...] = tuple(
+        str(part) for part in (database, schema, table or name) if isinstance(part, str) and part
+    )
+    if not relation_parts:
+        return None
+    return _normalize_relation_name(".".join(relation_parts))
+
+
+def _compiled_relation_key(*, relation: CompiledRelationLocation) -> str:
+    if relation.qualified_name is not None:
+        return _normalize_relation_name(relation.qualified_name)
+    relation_parts: tuple[str, ...] = tuple(
+        part for part in (relation.database, relation.schema, relation.name) if part
+    )
+    return _normalize_relation_name(".".join(relation_parts))
+
+
+def _normalize_relation_name(relation_name: str) -> str:
+    return relation_name.replace('"', "").lower()

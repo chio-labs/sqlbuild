@@ -394,6 +394,172 @@ def write_incremental_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None
     )
 
 
+def write_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a dbt source-backed model and SQLBuild unit test targeting it."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_orders_from_source.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_stg_orders_from_source.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 20 AS order_id, cast('2026-02-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_orders_from_source AS (\n"
+        "  SELECT 20 AS order_id, cast('2026-02-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a dbt seed-backed model and SQLBuild unit test targeting it."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_countries.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        "),\n"
+        "__expected__dim_countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_source_relation_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt source test with a colliding SQLBuild source relation."""
+
+    write_dbt_source_sqlbuild_unit_test(project_dir=project_dir)
+    sources_dir: Path = project_dir / "sources"
+    sources_dir.mkdir()
+    sources_dir.joinpath("local.yml").write_text(
+        "sources:\n"
+        "  - name: local_orders\n"
+        "    database: dbt_interop\n"
+        "    schema: raw\n"
+        "    table: orders\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_source_fixture_name_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt source test with a colliding SQLBuild source fixture name."""
+
+    write_dbt_source_sqlbuild_unit_test(project_dir=project_dir)
+    sources_dir: Path = project_dir / "sources"
+    sources_dir.mkdir()
+    sources_dir.joinpath("local.yml").write_text(
+        "sources:\n  - name: raw__orders\n    schema: local_raw\n    table: orders\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_seed_relation_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt seed test with a colliding SQLBuild seed relation."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_path: Path = dbt_project_dir / "dbt_project.yml"
+    dbt_project_path.write_text(
+        dbt_project_path.read_text(encoding="utf-8")
+        + "\nseeds:\n"
+        + "  analytics:\n"
+        + "    local_countries:\n"
+        + "      +alias: countries\n",
+        encoding="utf-8",
+    )
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("local_countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_local_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('local_countries') }}\n",
+        encoding="utf-8",
+    )
+    project_seed_dir: Path = project_dir / "seeds"
+    project_seed_dir.mkdir()
+    project_seed_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nCA,Canada\n",
+        encoding="utf-8",
+    )
+    project_seed_dir.joinpath("schema.yml").write_text(
+        "seeds:\n"
+        "  - name: countries\n"
+        "    database: dbt_interop\n"
+        "    schema: main\n"
+        "    columns:\n"
+        "      - name: country_code\n"
+        "        type: VARCHAR\n"
+        "      - name: country_name\n"
+        "        type: VARCHAR\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_local_countries.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__local_countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        "),\n"
+        "__expected__dim_local_countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_seed_fixture_name_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt seed test with a colliding SQLBuild seed fixture name."""
+
+    write_dbt_seed_sqlbuild_unit_test(project_dir=project_dir)
+    project_seed_dir: Path = project_dir / "seeds"
+    project_seed_dir.mkdir()
+    project_seed_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nCA,Canada\n",
+        encoding="utf-8",
+    )
+    project_seed_dir.joinpath("schema.yml").write_text(
+        "seeds:\n"
+        "  - name: countries\n"
+        "    schema: local_seed\n"
+        "    columns:\n"
+        "      - name: country_code\n"
+        "        type: VARCHAR\n"
+        "      - name: country_name\n"
+        "        type: VARCHAR\n",
+        encoding="utf-8",
+    )
+
+
 def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run dbt compile so plain SQLBuild commands can validate dbt refs."""
 

@@ -1093,6 +1093,17 @@ def build_test_inputs(
         )
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
+    if external_sql_reference_resolver is not None:
+        known_seed_names.update(
+            external_sql_reference_resolver.extend_sql_test_seed_names(
+                known_seed_names=known_seed_names
+            )
+        )
+        known_source_names.update(
+            external_sql_reference_resolver.extend_sql_test_source_names(
+                known_source_names=known_source_names
+            )
+        )
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
     test_inputs: list[CompileSqlTestInput] = []
