@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import StandardScopePruning
 from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
+from sqlbuild.integrations.dbt.helpers.sql_test_targets import adapt_project_for_dbt_sql_tests
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
@@ -120,11 +121,21 @@ def build_sqlbuild_plan_output(
     deferred_relations: dict[str, RelationInfo] | None = None,
     dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
     disable_scope_pruning: bool = False,
+    manifest: DbtManifestIndex | None = None,
 ) -> PlanOutput | None:
     del required_dbt_unique_ids
     if not selected_model_names:
         return None
     cursor_overrides: CursorOverrides = _parse_cursor_overrides(sqlbuild_args)
+    planning_project: CompiledProject = (
+        project
+        if manifest is None
+        else adapt_project_for_dbt_sql_tests(
+            project=project,
+            manifest=manifest,
+            target_names=selected_model_names,
+        )
+    )
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
         project_dir=project_dir,
@@ -145,7 +156,7 @@ def build_sqlbuild_plan_output(
     try:
         try:
             plan_output: PlanOutput = build_execution_plan(
-                project=project,
+                project=planning_project,
                 adapter=adapter,
                 connection=connection,
                 select=selected_model_names,
@@ -170,7 +181,7 @@ def build_sqlbuild_plan_output(
             )
         except PlannerInputError:
             return build_display_only_sqlbuild_plan(
-                project=project,
+                project=planning_project,
                 selected_model_names=selected_model_names,
                 full_refresh="--full-refresh" in sqlbuild_args,
             )

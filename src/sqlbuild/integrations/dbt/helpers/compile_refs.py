@@ -34,6 +34,18 @@ class DbtCompileReferenceResolver:
             dbt_manifest=self._dbt_manifest,
         )
 
+    def extend_sql_test_model_names(self, *, known_model_names: set[str]) -> set[str]:
+        del known_model_names
+        if self._dbt_manifest is None:
+            return set()
+        names: set[str] = set()
+        model_name: str
+        for model_name in self._dbt_manifest.models_by_name:
+            names.add(model_name)
+        for package_name, name in self._dbt_manifest.models_by_package_and_name:
+            names.add(f"{package_name}__{name}")
+        return names
+
     def validate_reference(
         self,
         *,

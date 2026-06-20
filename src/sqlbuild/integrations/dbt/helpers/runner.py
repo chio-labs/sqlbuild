@@ -19,10 +19,15 @@ from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_exec
 from sqlbuild.integrations.dbt.types import DbtInvoker
 
 
-def build_dbt_compile_argv(*, dbt_executable: str, options: DbtCliOptions) -> tuple[str, ...]:
+def build_dbt_compile_argv(
+    *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
+) -> tuple[str, ...]:
     """Build argv for dbt compile."""
 
-    return _append_common_options((dbt_executable, "compile"), options=options)
+    argv: tuple[str, ...] = _append_common_options((dbt_executable, "compile"), options=options)
+    if full_refresh:
+        argv = (*argv, "--full-refresh")
+    return argv
 
 
 def build_dbt_debug_argv(
@@ -110,11 +115,11 @@ class DbtRunner:
         self.invoker = invoker
         self._ls_cache: dict[tuple[str, ...], DbtLsResult] = {}
 
-    def compile(self, *, options: DbtCliOptions) -> DbtCommandResult:
+    def compile(self, *, options: DbtCliOptions, full_refresh: bool = False) -> DbtCommandResult:
         """Run dbt compile."""
 
         argv: tuple[str, ...] = build_dbt_compile_argv(
-            dbt_executable=self.dbt_executable, options=options
+            dbt_executable=self.dbt_executable, options=options, full_refresh=full_refresh
         )
         return self._invoke(argv=argv, cwd=options.project_dir)
 
