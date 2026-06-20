@@ -692,3 +692,14 @@ class DbtSqlTestTargetErrorTestCase:
     expected_model_names: tuple[str, ...]
     target_names: tuple[str, ...]
     expected_error_fragment: str
+    project_kind: str = "default"
+
+
+@dataclass(frozen=True)
+class DbtSqlTestFixtureNameTestCase:
+    description: str
+    fixture_kind: str
+    known_names: set[str]
+    expected_names: set[str]
+    expected_error_fragment: str | None = None
+    manifest_kind: str = "source_dependency"

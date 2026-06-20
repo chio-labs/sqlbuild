@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
@@ -18,6 +19,8 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
+    CompiledSource,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
@@ -29,6 +32,9 @@ from sqlbuild.compiler.compile.models.sql_tests import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSourceFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -45,6 +51,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import (
     build_dbt_combined_graph,
     dbt_model_graph_key,
@@ -86,6 +93,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanReason,
 )
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.models.schema import SchemaSeedEntry
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def build_cli_overrides(
@@ -647,6 +656,56 @@ def build_dbt_sql_test_target_manifest(
 def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtManifestIndex:
     """Build a success manifest variant for dbt SQL test target tests."""
 
+    if manifest_kind == "source_dependency":
+        return build_dbt_sql_test_source_seed_manifest(dependency_kind="source")
+    if manifest_kind == "source_unquoted":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="source",
+            relation_name="raw.orders",
+            compiled_code="select * from raw.orders",
+        )
+    if manifest_kind == "source_three_part":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="source",
+            relation_name='"warehouse"."raw"."orders"',
+            compiled_code='select * from "warehouse"."raw"."orders"',
+        )
+    if manifest_kind == "source_alias":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="source",
+            relation_name='"raw"."orders_alias"',
+            compiled_code='select * from "raw"."orders_alias"',
+        )
+    if manifest_kind == "source_ambiguous_fixture":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="source",
+            include_ambiguous_package=True,
+        )
+    if manifest_kind == "seed_dependency":
+        return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
+    if manifest_kind == "seed_unquoted":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="seed",
+            relation_name="analytics.countries",
+            compiled_code="select * from analytics.countries",
+        )
+    if manifest_kind == "seed_three_part":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="seed",
+            relation_name='"warehouse"."analytics"."countries"',
+            compiled_code='select * from "warehouse"."analytics"."countries"',
+        )
+    if manifest_kind == "seed_alias":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="seed",
+            relation_name='"analytics"."countries_alias"',
+            compiled_code='select * from "analytics"."countries_alias"',
+        )
+    if manifest_kind == "seed_ambiguous_fixture":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="seed",
+            include_ambiguous_package=True,
+        )
     if manifest_kind == "unquoted":
         return build_dbt_sql_test_target_manifest(
             dep_relation_name="analytics.stg_orders",
@@ -670,6 +729,20 @@ def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtMani
 def build_dbt_sql_test_target_error_manifest(*, manifest_kind: str) -> DbtManifestIndex:
     """Build an error manifest variant for dbt SQL test target tests."""
 
+    if manifest_kind in {"source_dependency", "source_ambiguous_fixture"}:
+        return build_dbt_sql_test_source_seed_manifest(dependency_kind="source")
+    if manifest_kind == "source_unresolved_relation":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="source",
+            compiled_code="select * from raw.unexpected_orders",
+        )
+    if manifest_kind in {"seed_dependency", "seed_ambiguous_fixture"}:
+        return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
+    if manifest_kind == "seed_unresolved_relation":
+        return build_dbt_sql_test_source_seed_manifest(
+            dependency_kind="seed",
+            compiled_code="select * from analytics.unexpected_countries",
+        )
     if manifest_kind == "ambiguous":
         return build_dbt_sql_test_target_manifest(include_ambiguous_package=True)
     if manifest_kind == "missing_compiled_sql":
@@ -677,6 +750,179 @@ def build_dbt_sql_test_target_error_manifest(*, manifest_kind: str) -> DbtManife
     return build_dbt_sql_test_target_manifest(
         fact_compiled_code="select * from analytics.unexpected_orders"
     )
+
+
+def build_dbt_sql_test_source_seed_manifest(
+    *,
+    dependency_kind: str,
+    relation_name: str | None = None,
+    compiled_code: str | None = None,
+    include_ambiguous_package: bool = False,
+) -> DbtManifestIndex:
+    """Build a dbt SQL test manifest with a source or seed dependency."""
+
+    dependency_unique_id: str = (
+        "source.analytics.raw.orders" if dependency_kind == "source" else "seed.analytics.countries"
+    )
+    default_relation_name: str = (
+        '"raw"."orders"' if dependency_kind == "source" else '"analytics"."countries"'
+    )
+    default_compiled_code: str = (
+        'select * from "raw"."orders"'
+        if dependency_kind == "source"
+        else 'select * from "analytics"."countries"'
+    )
+    source_nodes: tuple[dict[str, object], ...] = (
+        (
+            build_manifest_source_node(
+                unique_id="source.analytics.raw.orders",
+                package_name="analytics",
+                source_name="raw",
+                name="orders",
+                relation_name=relation_name or default_relation_name,
+            ),
+        )
+        if dependency_kind == "source"
+        else ()
+    )
+    if dependency_kind == "source" and include_ambiguous_package:
+        source_nodes = (
+            *source_nodes,
+            build_manifest_source_node(
+                unique_id="source.finance.raw.orders",
+                package_name="finance",
+                source_name="raw",
+                name="orders",
+                relation_name='"finance_raw"."orders"',
+            ),
+        )
+    seed_nodes: tuple[dict[str, object], ...] = (
+        (
+            build_manifest_seed_node(
+                unique_id="seed.analytics.countries",
+                package_name="analytics",
+                name="countries",
+                relation_name=relation_name or default_relation_name,
+            ),
+        )
+        if dependency_kind == "seed"
+        else ()
+    )
+    if dependency_kind == "seed" and include_ambiguous_package:
+        seed_nodes = (
+            *seed_nodes,
+            build_manifest_seed_node(
+                unique_id="seed.finance.countries",
+                package_name="finance",
+                name="countries",
+                relation_name='"finance"."countries"',
+            ),
+        )
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    relation_name='"analytics"."fact_orders"',
+                    compiled_code=compiled_code or default_compiled_code,
+                    depends_on_nodes=(dependency_unique_id,),
+                ),
+                *seed_nodes,
+            ),
+            sources=source_nodes,
+        )
+    )
+
+
+def build_project_with_source_relation_collision() -> CompiledProject:
+    """Build a minimal project whose SQLBuild source matches the dbt source relation."""
+
+    source_entry: SourceEntry = SourceEntry(name="raw__orders", schema="raw", table="orders")
+    source_file: DiscoveredSourceFile = DiscoveredSourceFile(
+        file_path=Path("/repo/sources/raw.yml"),
+        relative_path=Path("sources/raw.yml"),
+        contents="",
+        source_entries=(source_entry,),
+    )
+    return replace(
+        build_project_with_expected_sql_test_targets(expected_model_names=("fact_orders",)),
+        sources=(
+            CompiledSource(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SOURCE, name="raw__orders"
+                ),
+                deps=(),
+                name="raw__orders",
+                source_entry=source_entry,
+                source_file=source_file,
+            ),
+        ),
+    )
+
+
+def build_project_with_seed_relation_collision(
+    *, qualified_name: str | None = '"analytics"."countries"'
+) -> CompiledProject:
+    """Build a minimal project whose SQLBuild seed matches the dbt seed relation."""
+
+    seed_file: DiscoveredSeedFile = DiscoveredSeedFile(
+        file_path=Path("/repo/seeds/countries.csv"),
+        relative_path=Path("seeds/countries.csv"),
+    )
+    schema_file: DiscoveredSchemaFile = DiscoveredSchemaFile(
+        file_path=Path("/repo/seeds/schema.yml"),
+        relative_path=Path("seeds/schema.yml"),
+        contents="",
+        model_entries=(),
+        seed_entries=(SchemaSeedEntry(name="countries"),),
+    )
+    return replace(
+        build_project_with_expected_sql_test_targets(expected_model_names=("fact_orders",)),
+        seeds=(
+            CompiledSeed(
+                key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="countries"),
+                deps=(),
+                name="countries",
+                seed_file=seed_file,
+                schema_entry=SchemaSeedEntry(name="countries"),
+                schema_file=schema_file,
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="analytics",
+                    name="countries",
+                    qualified_name=qualified_name,
+                ),
+            ),
+        ),
+    )
+
+
+def build_dbt_sql_test_target_error_project(*, project_kind: str) -> CompiledProject:
+    """Build an error project variant for dbt SQL test target tests."""
+
+    if project_kind == "source_relation_collision":
+        return build_project_with_source_relation_collision()
+    if project_kind == "seed_relation_collision":
+        return build_project_with_seed_relation_collision()
+    if project_kind == "seed_relation_collision_unqualified":
+        return build_project_with_seed_relation_collision(qualified_name=None)
+    return build_project_with_expected_sql_test_targets(expected_model_names=("fact_orders",))
+
+
+def resolve_dbt_sql_test_fixture_names(
+    *,
+    manifest: DbtManifestIndex,
+    fixture_kind: str,
+    known_names: set[str],
+) -> set[str]:
+    """Resolve dbt-backed SQL test fixture names for a source or seed."""
+
+    resolver: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=manifest)
+    if fixture_kind == "source":
+        return resolver.extend_sql_test_source_names(known_source_names=known_names)
+    return resolver.extend_sql_test_seed_names(known_seed_names=known_names)
 
 
 def extract_dbt_ls_selects(argv: tuple[str, ...]) -> tuple[str, ...]:
@@ -833,6 +1079,26 @@ def build_manifest_source_node(
         node["freshness"] = freshness
     if freshness_filter is not None:
         node["filter"] = freshness_filter
+    return node
+
+
+def build_manifest_seed_node(
+    *,
+    unique_id: str,
+    package_name: str = "analytics",
+    name: str = "countries",
+    relation_name: str | None = None,
+) -> dict[str, object]:
+    """Build a minimal dbt manifest seed node."""
+
+    node: dict[str, object] = {
+        "unique_id": unique_id,
+        "resource_type": "seed",
+        "package_name": package_name,
+        "name": name,
+    }
+    if relation_name is not None:
+        node["relation_name"] = relation_name
     return node
 
 
