@@ -14,6 +14,7 @@ from sqlbuild.cli.commands.main.helpers.dbt_auto_init import (
     ensure_sqlbuild_project_for_dbt_command,
 )
 from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.integrations.dbt.main.validate_execution_args import validate_dbt_execution_args
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project
 from sqlbuild.integrations.dbt.pipeline.main.plan import plan_dbt_interop_from_project
@@ -30,6 +31,7 @@ def run_dbt_command(
 ) -> int:
     """Execute one `sqb dbt` interop command."""
 
+    validate_dbt_execution_args(command=command, args=args)
     effective_project_dir: Path
     forwarded_args: tuple[str, ...]
     effective_project_dir, forwarded_args = ensure_sqlbuild_project_for_dbt_command(

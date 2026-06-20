@@ -402,10 +402,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     dbt_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DBT)
     dbt_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     dbt_subparsers = dbt_parser.add_subparsers(dest="dbt_command")
-    dbt_subparsers.add_parser("plan")
-    dbt_subparsers.add_parser("run")
-    dbt_subparsers.add_parser("build")
-    dbt_subparsers.add_parser("test")
+    dbt_subparsers.add_parser("plan", add_help=False)
+    dbt_subparsers.add_parser("run", add_help=False)
+    dbt_subparsers.add_parser("build", add_help=False)
+    dbt_subparsers.add_parser("test", add_help=False)
     dbt_subparsers.add_parser("scenario")
     dbt_subparsers.add_parser("debug")
     dbt_subparsers.add_parser("lineage")
@@ -1023,6 +1023,10 @@ def _main_with_dependencies(
                 code=SCENARIO_CLI_MISSING_SUBCOMMAND,
             )
         return 0
+    except SystemExit as error:
+        if isinstance(error.code, int):
+            return error.code
+        return 1
     except CliUserError as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")
         print(

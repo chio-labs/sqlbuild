@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
+from sqlbuild.integrations.dbt.models import (
+    DbtCliOptions,
+    DbtCommandResult,
+    DbtInteropParsedArgs,
+    DbtLsNode,
+)
 from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,
     DbtLineageOutputFormat,
@@ -485,7 +490,7 @@ class DbtColumnLineageOutputTestCase:
 class DbtArgRoutingTestCase:
     description: str
     command: str
-    args: tuple[str, ...]
+    parsed: DbtInteropParsedArgs
     expected_select: tuple[str, ...]
     expected_exclude: tuple[str, ...]
     expected_dbt_args: tuple[str, ...]
@@ -494,6 +499,26 @@ class DbtArgRoutingTestCase:
 
 @dataclass(frozen=True)
 class DbtArgRoutingErrorTestCase:
+    description: str
+    command: str
+    parsed: DbtInteropParsedArgs
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtArgParseTestCase:
+    description: str
+    command: str
+    args: tuple[str, ...]
+    expected_select: tuple[str, ...]
+    expected_exclude: tuple[str, ...]
+    expected_full_refresh: bool
+    expected_target: str | None
+    expected_dbt_passthrough: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtArgParseErrorTestCase:
     description: str
     command: str
     args: tuple[str, ...]
