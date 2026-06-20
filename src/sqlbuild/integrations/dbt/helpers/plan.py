@@ -390,20 +390,21 @@ def _format_dbt_model_plan(
     if plan.dbt_model_plan is None:
         return
     style: CliStyle = CliStyle(use_color=True)
-    run_ids: tuple[str, ...] = plan.dbt_model_plan.run_unique_ids
-    current_ids: tuple[str, ...] = plan.dbt_model_plan.current_unique_ids
-    blocked_ids: tuple[str, ...] = plan.dbt_model_plan.blocked_unique_ids
+    run_ids: tuple[str, ...] = plan.dbt_model_plan.displayed_run_unique_ids
+    current_ids: tuple[str, ...] = plan.dbt_model_plan.displayed_current_unique_ids
+    blocked_ids: tuple[str, ...] = plan.dbt_model_plan.displayed_blocked_unique_ids
     blocked_sqlbuild: tuple[str, ...] = plan.dbt_model_plan.blocked_sqlbuild_model_names
     if not run_ids and not current_ids and not blocked_ids:
         return
+    displayed_entries: tuple[DbtModelPlanEntry, ...] = plan.dbt_model_plan.displayed_entries
     entries_by_action: dict[DbtModelPlanAction, tuple[DbtModelPlanEntry, ...]] = {
-        action: tuple(entry for entry in plan.dbt_model_plan.entries if entry.action == action)
+        action: tuple(entry for entry in displayed_entries if entry.action == action)
         for action in DbtModelPlanAction
     }
     lines.append("")
     lines.append(f"  {style.plan_section('Model plan')}")
     name_column_width: int = resolve_name_column_width(
-        tuple(entry.unique_id for entry in plan.dbt_model_plan.entries)
+        tuple(entry.unique_id for entry in displayed_entries)
     )
     if run_ids:
         _format_dbt_run_reason_sections(
@@ -515,7 +516,7 @@ def _format_dbt_resource_summary(lines: list[str], plan: DbtInteropPlan) -> None
         return
     selected_resource_count: int = len(plan.dbt_selected_unique_ids)
     required_resource_count: int = len(plan.selection.dbt_required_unique_ids)
-    planned_model_count: int = len(plan.dbt_model_plan.entries)
+    planned_model_count: int = len(plan.dbt_model_plan.displayed_entries)
     non_model_count: int = len(plan.dbt_non_model_run_unique_ids)
     if not selected_resource_count and not planned_model_count and not non_model_count:
         return
@@ -524,9 +525,9 @@ def _format_dbt_resource_summary(lines: list[str], plan: DbtInteropPlan) -> None
         _dbt_resource_type_display_label(node.resource_type) for node in plan.dbt_selected_nodes
     )
     selected_breakdown: str = _format_count_breakdown(resource_counts)
-    run_count: int = len(plan.dbt_model_plan.run_unique_ids)
-    current_count: int = len(plan.dbt_model_plan.current_unique_ids)
-    blocked_count: int = len(plan.dbt_model_plan.blocked_unique_ids)
+    run_count: int = len(plan.dbt_model_plan.displayed_run_unique_ids)
+    current_count: int = len(plan.dbt_model_plan.displayed_current_unique_ids)
+    blocked_count: int = len(plan.dbt_model_plan.displayed_blocked_unique_ids)
     lines.append(
         style.muted(
             "  selected by dbt selector: "
