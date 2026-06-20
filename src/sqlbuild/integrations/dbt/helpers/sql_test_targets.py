@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -15,6 +16,13 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.integrations.dbt.constants import (
+    DBT_MANIFEST_CONFIG_KEY,
+    DBT_MANIFEST_MATERIALIZED_KEY,
+    DBT_MANIFEST_RESOURCE_TYPE_KEY,
+    DBT_MATERIALIZATION_EPHEMERAL,
+    DBT_RESOURCE_TYPE_SNAPSHOT,
+)
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
@@ -22,6 +30,7 @@ from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestSeed,
     DbtManifestSource,
 )
+from sqlbuild.integrations.dbt.types import DbtChainNodeBoundaryKind
 from sqlbuild.shared.types import SqlReferenceKind
 
 
@@ -217,6 +226,7 @@ def _collect_dbt_test_model_names(
             mock_model_names=mock_model_names,
         ):
             continue
+        _require_chainable_dbt_node(dbt_model=dep_model)
         dep_target_name: str = _dbt_internal_model_name(
             manifest=manifest,
             dbt_model=dep_model,
@@ -393,6 +403,31 @@ def _dbt_model_mock_name(
         f"dbt model mock '__ref__{dbt_model.name}' is ambiguous across packages: {packages}",
         help=f"Use __ref__<package>__{dbt_model.name} to choose one dbt model.",
     )
+
+
+def _require_chainable_dbt_node(*, dbt_model: DbtManifestModel) -> None:
+    boundary_kind: DbtChainNodeBoundaryKind | None = _dbt_node_boundary_kind(dbt_model=dbt_model)
+    if boundary_kind is None:
+        return
+    raise DbtInteropRuntimeError(
+        f"dbt {boundary_kind.value} '{dbt_model.unique_id}' cannot be resolved inside a SQLBuild "
+        f"test chain",
+        help=(
+            f"Mock it as a boundary with __ref__{dbt_model.package_name}__{dbt_model.name} "
+            "instead of resolving it."
+        ),
+    )
+
+
+def _dbt_node_boundary_kind(*, dbt_model: DbtManifestModel) -> DbtChainNodeBoundaryKind | None:
+    if dbt_model.payload.get(DBT_MANIFEST_RESOURCE_TYPE_KEY) == DBT_RESOURCE_TYPE_SNAPSHOT:
+        return DbtChainNodeBoundaryKind.SNAPSHOT
+    config: object = dbt_model.payload.get(DBT_MANIFEST_CONFIG_KEY)
+    if isinstance(config, dict):
+        materialized: object = cast(dict[str, object], config).get(DBT_MANIFEST_MATERIALIZED_KEY)
+        if materialized == DBT_MATERIALIZATION_EPHEMERAL:
+            return DbtChainNodeBoundaryKind.EPHEMERAL
+    return None
 
 
 def _expected_model_names(*, project: CompiledProject) -> tuple[str, ...]:

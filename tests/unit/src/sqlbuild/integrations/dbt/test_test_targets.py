@@ -208,6 +208,26 @@ TEST_TARGET_TEST_CASES: list[DbtSqlTestTargetTestCase] = [
         manifest_kind="chain_source_dependency",
         mock_model_names=("stg_orders",),
     ),
+    DbtSqlTestTargetTestCase(
+        description="allows mocked dbt snapshot boundary in dbt model chain",
+        selected_dbt_unique_ids=("model.analytics.fact_orders",),
+        select=("fact_orders",),
+        expected_target_names=("fact_orders",),
+        expected_model_names=("fact_orders",),
+        expected_query_fragments=('__ref("analytics__stg_orders")',),
+        manifest_kind="chain_snapshot_boundary",
+        mock_model_names=("analytics__stg_orders",),
+    ),
+    DbtSqlTestTargetTestCase(
+        description="allows mocked dbt ephemeral boundary in dbt model chain",
+        selected_dbt_unique_ids=("model.analytics.fact_orders",),
+        select=("fact_orders",),
+        expected_target_names=("fact_orders",),
+        expected_model_names=("fact_orders",),
+        expected_query_fragments=('__ref("analytics__stg_orders")',),
+        manifest_kind="chain_ephemeral_boundary",
+        mock_model_names=("analytics__stg_orders",),
+    ),
 ]
 
 TEST_TARGET_ERROR_TEST_CASES: list[DbtSqlTestTargetErrorTestCase] = [
@@ -267,6 +287,20 @@ TEST_TARGET_ERROR_TEST_CASES: list[DbtSqlTestTargetErrorTestCase] = [
         expected_model_names=("fact_orders",),
         target_names=("fact_orders",),
         expected_error_fragment="compiled SQL did not contain upstream relation",
+    ),
+    DbtSqlTestTargetErrorTestCase(
+        description="errors when upstream dbt snapshot is resolved inside a chain",
+        manifest_kind="chain_snapshot_boundary",
+        expected_model_names=("fact_orders",),
+        target_names=("fact_orders",),
+        expected_error_fragment="snapshot 'snapshot.analytics.stg_orders' cannot be resolved",
+    ),
+    DbtSqlTestTargetErrorTestCase(
+        description="errors when upstream dbt ephemeral model is resolved inside a chain",
+        manifest_kind="chain_ephemeral_boundary",
+        expected_model_names=("fact_orders",),
+        target_names=("fact_orders",),
+        expected_error_fragment="ephemeral 'model.analytics.stg_orders' cannot be resolved",
     ),
     DbtSqlTestTargetErrorTestCase(
         description="errors when dbt source relation clashes with SQLBuild source",

@@ -25,9 +25,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_dbt_source_relation_collision_sqlbuild_unit_test,
     write_dbt_source_sqlbuild_unit_test,
     write_incremental_dbt_model_sqlbuild_unit_test,
+    write_mocked_snapshot_boundary_dbt_sqlbuild_unit_test,
     write_qualified_dbt_model_sqlbuild_unit_test,
     write_qualified_dbt_seed_sqlbuild_unit_test,
     write_qualified_dbt_source_sqlbuild_unit_test,
+    write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     query_duckdb,
@@ -148,6 +150,13 @@ DBT_SQL_TEST_TARGET_FAILURE_TEST_CASES: list[DbtExecutionFailureCliTestCase] = [
         command=("dbt", "test", "--select", "dim_local_countries"),
         setup=write_dbt_seed_relation_collision_sqlbuild_unit_test,
         expected_stdout_fragments=("same relation as SQLBuild seed",),
+        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
+    ),
+    DbtExecutionFailureCliTestCase(
+        description="unmocked dbt snapshot in chain fails SQLBuild dbt test target",
+        command=("dbt", "test", "--select", "fact_orders_snapshot"),
+        setup=write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test,
+        expected_stdout_fragments=("snapshot",),
         expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
     ),
 ]
@@ -508,6 +517,46 @@ def test_given_chained_dbt_seed_model_when_running_dbt_test_then_resolves_chain(
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
     write_chained_dbt_seed_sqlbuild_unit_test(project_dir=project_dir)
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtTestCliTestCase(
+            description="SQLBuild unit test mocks dbt snapshot boundary",
+            setup_command=("dbt", "plan", "--select", "fact_orders_snapshot"),
+            command=("dbt", "test", "--select", "fact_orders_snapshot"),
+            expected_stdout_fragments=(
+                "SQLBuild execution  sqb test",
+                "test_dbt_fact_orders_snapshot",
+                "PASS",
+            ),
+        )
+    ],
+    ids=["SQLBuild unit test mocks dbt snapshot boundary"],
+)
+def test_given_mocked_snapshot_boundary_when_running_dbt_test_then_uses_mock_boundary(
+    test_case: DbtTestCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_mocked_snapshot_boundary_dbt_sqlbuild_unit_test(project_dir=project_dir)
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.setup_command,
         project_dir=project_dir,

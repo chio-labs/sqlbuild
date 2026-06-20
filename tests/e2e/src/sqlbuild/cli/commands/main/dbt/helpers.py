@@ -522,6 +522,68 @@ def write_chained_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
     )
 
 
+def _write_dbt_snapshot_chain(*, project_dir: Path) -> None:
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    project_path: Path = dbt_project_dir / "dbt_project.yml"
+    project_path.write_text(
+        project_path.read_text(encoding="utf-8") + "snapshot-paths: ['snapshots']\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "staging", "stg_snapshot_orders.sql").write_text(
+        "select 1 as order_id, cast('2026-06-01 00:00:00' as timestamp) as ordered_at\n",
+        encoding="utf-8",
+    )
+    snapshots_dir: Path = dbt_project_dir / "snapshots"
+    snapshots_dir.mkdir()
+    snapshots_dir.joinpath("orders_snapshot.sql").write_text(
+        "{% snapshot orders_snapshot %}\n"
+        "{{ config(unique_key='order_id', strategy='check', check_cols=['ordered_at']) }}\n"
+        "select order_id, ordered_at from {{ ref('stg_snapshot_orders') }}\n"
+        "{% endsnapshot %}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "fact_orders_snapshot.sql").write_text(
+        "select order_id, ordered_at from {{ ref('orders_snapshot') }}\n",
+        encoding="utf-8",
+    )
+
+
+def write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt chain through a snapshot with no mock boundary for the snapshot."""
+
+    _write_dbt_snapshot_chain(project_dir=project_dir)
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_snapshot.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__ref__analytics__stg_snapshot_orders AS (\n"
+        "  SELECT 1 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_snapshot AS (\n"
+        "  SELECT 1 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_mocked_snapshot_boundary_dbt_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a dbt chain through a snapshot mocked as a boundary."""
+
+    _write_dbt_snapshot_chain(project_dir=project_dir)
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_snapshot.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__ref__analytics__orders_snapshot AS (\n"
+        "  SELECT 7 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_snapshot AS (\n"
+        "  SELECT 7 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
 def write_qualified_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
     """Write colliding dbt package sources and a qualified SQLBuild source fixture test."""
 

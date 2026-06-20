@@ -58,6 +58,13 @@ class DbtInteropSqlbuildTestAction(StrEnum):
     AUDIT = "audit"
 
 
+class DbtChainNodeBoundaryKind(StrEnum):
+    """dbt node kinds that must be mocked as boundaries in a SQLBuild test chain."""
+
+    SNAPSHOT = "snapshot"
+    EPHEMERAL = "ephemeral"
+
+
 class DbtInteropSkipReason(StrEnum):
     """Reason one side of a dbt interop plan has no work."""
 
