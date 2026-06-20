@@ -219,6 +219,8 @@ class DbtScenarioCliTestCase:
     command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_relations: tuple[str, ...] = ()
+    expected_returncode: int = 0
+    expected_absent_stdout_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

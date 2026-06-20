@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.main.helpers.scenario.capture import _write_capture_result
-from sqlbuild.cli.commands.main.helpers.scenario.runner import _write_scenario_result
+from sqlbuild.cli.commands.main.helpers.scenario.result_output import write_scenario_result
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
     ScenarioExpectedExpectationExecutionResult,
@@ -65,7 +65,7 @@ def test_given_scenario_result_when_writing_output_then_styles_statuses(
     test_case: ScenarioRunOutputTestCase,
 ) -> None:
     stream: StringIO = StringIO()
-    _write_scenario_result(
+    write_scenario_result(
         result=ScenarioRunResult(
             scenario_name="orders_paid",
             status=ExecutionStatus.SUCCESS,

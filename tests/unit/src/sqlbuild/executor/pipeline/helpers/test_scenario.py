@@ -21,6 +21,7 @@ from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_SNAPSHOT_STALE,
 )
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
+    ScenarioFailureHelpTestCase,
     ScenarioLocalPipelineTestCase,
     ScenarioTestPipelineTestCase,
 )
@@ -237,3 +238,52 @@ def test_given_selected_scenarios_when_running_local_scenario_pipeline_then_load
     assert result.retained is test_case.expected_retained
     assert duckdb_path.exists() is test_case.expected_duckdb_exists
     assert result.error_code == test_case.expected_error_code
+
+
+SCENARIO_FAILURE_HELP_TEST_CASES: tuple[ScenarioFailureHelpTestCase, ...] = (
+    ScenarioFailureHelpTestCase(
+        description="coded user error keeps no bug help when help is absent",
+        code="S504",
+        explicit_help=None,
+        expected_help=None,
+    ),
+    ScenarioFailureHelpTestCase(
+        description="coded user error preserves explicit help",
+        code="S504",
+        explicit_help="Rename the source.",
+        expected_help="Rename the source.",
+    ),
+    ScenarioFailureHelpTestCase(
+        description="uncoded error keeps the internal bug help",
+        code=None,
+        explicit_help=None,
+        expected_help=(
+            "This is likely a SQLBuild bug. Please file an issue with the scenario name."
+        ),
+    ),
+)
+
+
+class _CodedScenarioError(Exception):
+    def __init__(self, *, code: str, message: str, help: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.help = help
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SCENARIO_FAILURE_HELP_TEST_CASES,
+    ids=[case.description for case in SCENARIO_FAILURE_HELP_TEST_CASES],
+)
+def test_given_scenario_exception_when_resolving_help_then_avoids_bug_help_for_user_errors(
+    test_case: ScenarioFailureHelpTestCase,
+) -> None:
+    exc: Exception = (
+        _CodedScenarioError(code=test_case.code, message="boom", help=test_case.explicit_help)
+        if test_case.code is not None
+        else RuntimeError("boom")
+    )
+
+    assert scenario_pipeline._scenario_failure_help(exc) == test_case.expected_help
