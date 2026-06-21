@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -56,6 +57,7 @@ def execute_source_load(
     connection_config: dict[str, object],
     connection: Any,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str | None,
     vars: dict[str, object],
     is_reload: bool,
@@ -100,6 +102,7 @@ def execute_source_load(
                 destination_relation=destination_relation,
                 destination_name=destination_name,
                 run_id=run_id,
+                runtime_dir=runtime_dir,
                 target=target,
                 vars=vars,
                 is_reload=is_reload,
@@ -147,6 +150,7 @@ def execute_source_load(
             destination_schema=source_entry.schema,
             destination_name=destination_name,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             target=target,
             vars=vars,
             is_reload=is_reload,

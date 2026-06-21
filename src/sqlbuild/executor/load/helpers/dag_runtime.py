@@ -5,6 +5,7 @@ from __future__ import annotations
 import queue
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -99,6 +100,7 @@ def execute_ready_dag_source(
     connection_config: dict[str, object],
     connection: Any,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str | None,
     vars: dict[str, object],
     is_reload: bool,
@@ -136,6 +138,7 @@ def execute_ready_dag_source(
         connection_config=connection_config,
         connection=connection,
         run_id=run_id,
+        runtime_dir=runtime_dir,
         target=target,
         vars=vars,
         is_reload=is_reload,
@@ -173,6 +176,7 @@ def load_dag_worker(
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
+    runtime_dir: Path = Path("target"),
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
 
@@ -187,6 +191,7 @@ def load_dag_worker(
             connection_config=connection_config,
             connection=connection,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             target=target,
             vars=vars,
             is_reload=is_reload,

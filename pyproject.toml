@@ -43,6 +43,9 @@ sqlserver = [
 ingestr = [
   "ingestr>=1.0.0",
 ]
+dlt = [
+  "dlt[duckdb,filesystem,sql_database]>=1.28.0,<2",
+]
 rivers = [
   "rivers>=0.1.4",
 ]
@@ -64,6 +67,7 @@ dev = [
   "dbt-postgres>=1.9.0,<1.11",
   "dbt-snowflake==1.12.0b1",
   "dbt-sqlserver>=1.9.0,<1.11",
+  "dlt[duckdb,filesystem,sql_database]>=1.28.0,<2",
   "ingestr>=1.0.0",
   "jsonschema>=4.23.0",
   "pre-commit>=4.3.0",

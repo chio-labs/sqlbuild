@@ -11,6 +11,7 @@ from yaml import YAMLError
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
 from sqlbuild.compiler.discovery.helpers.integration_loaders import (
     integration_loader_name,
+    parse_dlt_sources,
     parse_source_integration_loader,
 )
 from sqlbuild.compiler.discovery.helpers.yml_primitives import (
@@ -61,6 +62,7 @@ def parse_sources_yml(contents: str, file_path: Path) -> tuple[SourceEntry, ...]
         parsed_sources.append(
             _parse_source_entry(entry=cast(dict[str, object], raw_source), file_path=file_path)
         )
+    parsed_sources.extend(parse_dlt_sources(payload=payload, file_path=file_path))
     return tuple(parsed_sources)
 
 
