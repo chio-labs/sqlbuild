@@ -476,6 +476,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
             contents="""
             dlt_sources:
               - type: sql_database
+                schema: raw
                 config:
                   credentials: duckdb:///source.duckdb
                   schema: main
@@ -485,6 +486,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
                     write_disposition: merge
                     primary_key: order_id
                   - name: raw_customers
+                    schema: raw_customers_override
                     table: customers
                     write_disposition: append
             """,
@@ -492,6 +494,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
             expected_loaders=("raw_orders", "raw_customers"),
             expected_kind="dlt",
             expected_dlt_names=("orders", "customers"),
+            expected_schemas=("raw", "raw_customers_override"),
         )
     ],
     ids=["expands dlt sources into managed source entries"],
@@ -521,6 +524,11 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
     assert tuple(
         config.resource.dlt_name for config in configs if isinstance(config, DltSourceConfig)
     ) == (test_case.expected_dlt_names)
+    assert tuple(entry.schema for entry in source_entries) == test_case.expected_schemas
+    assert (
+        tuple(config.resource.schema for config in configs if isinstance(config, DltSourceConfig))
+        == test_case.expected_schemas
+    )
 
 
 ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [

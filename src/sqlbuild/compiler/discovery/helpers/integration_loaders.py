@@ -181,6 +181,13 @@ def _parse_dlt_source_group(
     if not isinstance(raw_config, dict):
         raise SourceParseError(f"{file_path} dlt source config must be a mapping")
     group_config: dict[str, object] = cast(dict[str, object], raw_config)
+    group_schema: str | None = optional_non_empty_string(
+        entry=group,
+        key="schema",
+        file_path=file_path,
+        label="dlt source",
+        error_class=SourceParseError,
+    )
     _validate_dlt_group_config(source_type=source_type, config=group_config, file_path=file_path)
     raw_resources: object = group.get("resources")
     if not isinstance(raw_resources, list) or not raw_resources:
@@ -193,6 +200,7 @@ def _parse_dlt_source_group(
         sources.append(
             _parse_dlt_resource_entry(
                 source_type=source_type,
+                group_schema=group_schema,
                 group_config=group_config,
                 resource=cast(dict[str, object], raw_resource),
                 file_path=file_path,
@@ -205,6 +213,7 @@ def _parse_dlt_source_group(
 def _parse_dlt_resource_entry(
     *,
     source_type: str,
+    group_schema: str | None,
     group_config: dict[str, object],
     resource: dict[str, object],
     file_path: Path,
@@ -231,9 +240,20 @@ def _parse_dlt_resource_entry(
         )
     if write_disposition == "merge" and resource.get("primary_key") is None:
         raise SourceParseError(f"{file_path} dlt resource '{name}' merge requires primary_key")
+    schema: str | None = (
+        optional_non_empty_string(
+            entry=resource,
+            key="schema",
+            file_path=file_path,
+            label=f"dlt resource '{name}'",
+            error_class=SourceParseError,
+        )
+        or group_schema
+    )
     dlt_resource: DltResourceConfig = DltResourceConfig(
         name=name,
         dlt_name=dlt_name,
+        schema=schema,
         raw_config=_raw_dlt_resource_config(source_type=source_type, resource=resource),
         write_disposition=write_disposition,
         primary_key=resource.get("primary_key"),
@@ -244,6 +264,7 @@ def _parse_dlt_resource_entry(
     )
     return SourceEntry(
         name=name,
+        schema=schema,
         table=name,
         managed=True,
         loader=integration_loader_name(kind="dlt", source_name=name),
@@ -251,6 +272,7 @@ def _parse_dlt_resource_entry(
             kind="dlt",
             config=DltSourceConfig(
                 source_type=source_type,
+                schema=schema,
                 config=group_config,
                 resource=dlt_resource,
                 group_index=group_index,
@@ -316,6 +338,7 @@ def _raw_dlt_resource_config(*, source_type: str, resource: dict[str, object]) -
         "primary_key",
         "merge_key",
         "incremental",
+        "schema",
     }
     if source_type == "rest_api":
         return {"endpoint": resource["endpoint"]}

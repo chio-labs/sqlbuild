@@ -13,6 +13,7 @@ class DltResourceConfig:
     name: str
     dlt_name: str
     raw_config: dict[str, object]
+    schema: str | None = None
     write_disposition: object | None = None
     primary_key: object | None = None
     merge_key: object | None = None
@@ -27,6 +28,7 @@ class DltSourceConfig:
     config: dict[str, object]
     resource: DltResourceConfig
     group_index: int
+    schema: str | None = None
 
 
 @dataclass(frozen=True)

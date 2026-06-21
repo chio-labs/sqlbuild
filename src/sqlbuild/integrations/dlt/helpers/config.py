@@ -17,7 +17,9 @@ def resolve_dlt_config(
     values: object = expand_template_data(
         {
             "config": config.config,
+            "schema": config.schema,
             "resource": config.resource.raw_config,
+            "resource_schema": config.resource.schema,
             "write_disposition": config.resource.write_disposition,
             "primary_key": config.resource.primary_key,
             "merge_key": config.resource.merge_key,
@@ -35,6 +37,7 @@ def resolve_dlt_config(
     resolved_values: dict[str, object] = cast(dict[str, object], values)
     resolved_resource: DltResourceConfig = replace(
         config.resource,
+        schema=_optional_string(resolved_values.get("resource_schema")),
         raw_config=_mapping(resolved_values.get("resource")),
         write_disposition=resolved_values.get("write_disposition"),
         primary_key=resolved_values.get("primary_key"),
@@ -43,6 +46,7 @@ def resolve_dlt_config(
     )
     return replace(
         config,
+        schema=_optional_string(resolved_values.get("schema")),
         config=_mapping(resolved_values.get("config")),
         resource=resolved_resource,
     )
@@ -52,3 +56,9 @@ def _mapping(value: object | None) -> dict[str, object]:
     if not isinstance(value, dict):
         return {}
     return dict(cast(dict[str, object], value))
+
+
+def _optional_string(value: object | None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
