@@ -9,6 +9,7 @@ from sqlbuild.integrations.dbt.types import DbtReusePlanAction
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 
 def format_dbt_reuse_execution_output(
@@ -57,9 +58,14 @@ def format_dbt_reuse_execution_output(
     )
     lines.append("")
     lines.append(
-        f"REUSED={len(reused_unique_ids)}  "
-        f"BASELINE_REUSED={len(baseline_reused_unique_ids)}  "
-        f"TOTAL={len(executed_ids)}"
+        format_summary_footer(
+            counts=(
+                ("REUSED", len(reused_unique_ids)),
+                ("BASELINE_REUSED", len(baseline_reused_unique_ids)),
+                ("TOTAL", len(executed_ids)),
+            ),
+            use_color=use_color,
+        )
     )
     return "\n".join(lines)
 

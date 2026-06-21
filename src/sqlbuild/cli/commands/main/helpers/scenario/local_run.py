@@ -18,6 +18,7 @@ from sqlbuild.executor.scenario.models import ScenarioRunResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 
 def run_local_scenarios(
@@ -73,7 +74,9 @@ def run_local_scenarios(
         ),
     )
     scenario_status.close()
-    exit_code: int = _write_local_summary(results=results, stream=progress_stream)
+    exit_code: int = _write_local_summary(
+        results=results, stream=progress_stream, use_color=use_color
+    )
     write_execution_json_output(
         payload=format_scenario_execution_json(results=results, local=True),
         json_output=json_output,
@@ -82,7 +85,9 @@ def run_local_scenarios(
     return exit_code
 
 
-def _write_local_summary(*, results: tuple[ScenarioRunResult, ...], stream: TextIO) -> int:
+def _write_local_summary(
+    *, results: tuple[ScenarioRunResult, ...], stream: TextIO, use_color: bool
+) -> int:
     pass_count: int = sum(
         1 for result in results if result.local_status == ScenarioLocalRunStatus.PASS
     )
@@ -96,8 +101,18 @@ def _write_local_summary(*, results: tuple[ScenarioRunResult, ...], stream: Text
         1 for result in results if result.local_status == ScenarioLocalRunStatus.SKIP
     )
     stream.write(
-        f"\nPASS={pass_count}  FAIL={fail_count}  ERROR={error_count}  "
-        f"SKIP={skip_count}  TOTAL={len(results)}\n"
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("FAIL", fail_count),
+                ("ERROR", error_count),
+                ("SKIP", skip_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n"
     )
     stream.flush()
     return 0 if fail_count == 0 and error_count == 0 else 1
