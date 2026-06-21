@@ -40,6 +40,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -89,7 +90,20 @@ def run_load(
         message: str = "  No managed sources selected."
         progress_stream.write(style.muted(message) + "\n")
         progress_stream.write("\nCompleted successfully.\n")
-        progress_stream.write("PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0  (0.00s)\n")
+        progress_stream.write(
+            format_summary_footer(
+                counts=(
+                    ("PASS", 0),
+                    ("WARN", 0),
+                    ("FAIL", 0),
+                    ("SKIP", 0),
+                    ("TOTAL", 0),
+                ),
+                use_color=use_color,
+                elapsed="0.00s",
+            )
+            + "\n"
+        )
         progress_stream.flush()
         write_execution_json_output(
             payload=format_load_execution_json(results=()),

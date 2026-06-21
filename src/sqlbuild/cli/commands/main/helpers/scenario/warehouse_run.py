@@ -19,6 +19,7 @@ from sqlbuild.executor.pipeline.main.run import run_scenario_test_pipeline
 from sqlbuild.executor.scenario.models import ScenarioRunResult
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 
 def run_warehouse_scenarios(
@@ -80,7 +81,9 @@ def run_warehouse_scenarios(
         ),
     )
     scenario_status.close()
-    exit_code: int = _write_remote_summary(results=results, stream=progress_stream)
+    exit_code: int = _write_remote_summary(
+        results=results, stream=progress_stream, use_color=use_color
+    )
     write_execution_json_output(
         payload=format_scenario_execution_json(results=results, local=False),
         json_output=json_output,
@@ -89,9 +92,22 @@ def run_warehouse_scenarios(
     return exit_code
 
 
-def _write_remote_summary(*, results: tuple[ScenarioRunResult, ...], stream: TextIO) -> int:
+def _write_remote_summary(
+    *, results: tuple[ScenarioRunResult, ...], stream: TextIO, use_color: bool
+) -> int:
     pass_count: int = sum(1 for result in results if result.status == SUCCESS_STATUS)
     fail_count: int = len(results) - pass_count
-    stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
+    stream.write(
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n"
+    )
     stream.flush()
     return 0 if fail_count == 0 else 1
