@@ -9,6 +9,7 @@ from sqlbuild.executor.load.models import LoaderContext
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError
 from sqlbuild.integrations.dlt.helpers.config import resolve_dlt_config
 from sqlbuild.integrations.dlt.helpers.destination import build_dlt_destination
+from sqlbuild.integrations.dlt.helpers.progress import SqlbuildDltProgressCollector
 from sqlbuild.integrations.dlt.helpers.source import build_dlt_source
 from sqlbuild.integrations.dlt.models import DltDestinationConfig, DltSourceConfig
 
@@ -38,11 +39,15 @@ def run_dlt_source(*, config: DltSourceConfig, ctx: LoaderContext) -> None:
     dlt_source: Any = build_dlt_source(resolved)
     pipelines_dir: Path = ctx.runtime_dir / "dlt"
     pipelines_dir.mkdir(parents=True, exist_ok=True)
+    progress_collector: SqlbuildDltProgressCollector = SqlbuildDltProgressCollector(
+        on_progress=ctx.progress
+    )
     pipeline: Any = dlt.pipeline(
         pipeline_name=_pipeline_name(config=resolved, target=ctx.target),
         pipelines_dir=str(pipelines_dir),
         destination=destination.destination,
         dataset_name=cast(str, destination.dataset_name),
+        progress=cast(Any, progress_collector),
     )
     pipeline.drop()
     load_info: Any = pipeline.run(
@@ -55,6 +60,9 @@ def run_dlt_source(*, config: DltSourceConfig, ctx: LoaderContext) -> None:
         refresh=cast(Any, "drop_resources" if ctx.is_reload else None),
     )
     load_info.raise_on_failed_jobs()
+    progress_summary: str = progress_collector.format_summary()
+    if progress_summary:
+        ctx.log(progress_summary)
     ctx.log(str(load_info))
     return None
 

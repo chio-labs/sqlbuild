@@ -50,6 +50,7 @@ def run_load_pipeline(
     end_cursor_int: int | None = None,
     max_concurrency: int = 1,
     on_load_start: Callable[[SourceEntry], None] | None = None,
+    on_load_progress: Callable[[SourceEntry, str], None] | None = None,
     on_load_complete: Callable[[LoadExecutionResult], None] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
@@ -107,6 +108,11 @@ def run_load_pipeline(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            on_progress=(
+                None
+                if on_load_progress is None
+                else lambda message, source=external_source: on_load_progress(source, message)
+            ),
             providers=providers,
             result_store=result_store,
         )
@@ -226,6 +232,7 @@ def run_load_pipeline(
                         end_cursor_int,
                         use_color,
                         state.completion_queue,
+                        on_load_progress,
                         providers,
                         result_store,
                         runtime_dir,

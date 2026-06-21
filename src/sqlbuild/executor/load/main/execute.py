@@ -69,6 +69,7 @@ def execute_source_load(
     use_color: bool = False,
     loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None,
     source_ref_entries: Mapping[str, SourceEntry] | None = None,
+    on_progress: Callable[[str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
 ) -> LoadExecutionResult:
@@ -114,6 +115,7 @@ def execute_source_load(
                 use_color=use_color,
                 resource_kind=resource_kind,
                 start=start,
+                on_progress=on_progress,
                 providers=providers,
                 result_store=result_store,
             )
@@ -183,6 +185,7 @@ def execute_source_load(
             ),
             providers=providers if providers is not None else _empty_provider_container(),
             result_store=result_store,
+            on_progress=on_progress,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,

@@ -40,6 +40,7 @@ def run_external_source_loads_before_connections(
     on_progress: Callable[[str], None] | None,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
+    on_sub_progress: Callable[[str], None] | None = None,
     use_color: bool,
     precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
     providers: ProviderContainer | None = None,
@@ -99,6 +100,7 @@ def run_external_source_loads_before_connections(
             end_cursor_int=end_cursor_int,
             on_progress=on_progress,
             on_node_start=on_node_start,
+            on_sub_progress=on_sub_progress,
             use_color=use_color,
             providers=providers,
         )

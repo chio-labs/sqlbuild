@@ -35,3 +35,24 @@ class DltDestinationConfig:
 
     destination: Any
     dataset_name: str | None
+
+
+@dataclass(frozen=True)
+class DltProgressEvent:
+    step: str
+    name: str
+    inc: int
+    total: int | None
+    inc_total: int | None
+    message: str | None
+    label: str | None
+
+
+@dataclass
+class DltProgressCounter:
+    step: str
+    name: str
+    label: str | None
+    count: int = 0
+    total: int | None = None
+    message: str | None = None

@@ -44,6 +44,7 @@ def execute_build_source_node(
     end_cursor_int: int | None,
     on_progress: Callable[[str], None] | None,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
+    on_sub_progress: Callable[[str], None] | None = None,
     use_color: bool = False,
     providers: ProviderContainer | None = None,
 ) -> LoadExecutionResult:
@@ -90,6 +91,7 @@ def execute_build_source_node(
         use_color=use_color,
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
+        on_progress=on_sub_progress,
         providers=providers,
         result_store=result_store,
     )

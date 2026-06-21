@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,7 @@ def execute_external_source_load(
     use_color: bool,
     resource_kind: ExecutionResourceKind,
     start: float,
+    on_progress: Callable[[str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
 ) -> LoadExecutionResult:
@@ -79,6 +81,7 @@ def execute_external_source_load(
             end_cursor_int=end_cursor_int,
             providers=providers if providers is not None else _empty_provider_container(),
             result_store=result_store,
+            on_progress=on_progress,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
