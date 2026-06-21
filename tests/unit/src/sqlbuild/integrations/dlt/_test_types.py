@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.shared.types import BuiltinAdapter
+
 
 @dataclass(frozen=True)
 class DltLoaderDiscoveryTestCase:
@@ -21,6 +23,21 @@ class DltDestinationTestCase:
     dataset_name: str | None
     expected_destination_name: str
     expected_dataset_name: str | None
+
+
+@dataclass(frozen=True)
+class DltDestinationErrorTestCase:
+    description: str
+    adapter_name: str
+    connection_config: dict[str, object]
+    dataset_name: str | None
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DltDestinationCoverageTestCase:
+    description: str
+    expected_adapters: frozenset[BuiltinAdapter]
 
 
 @dataclass(frozen=True)

@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import subprocess
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 from tests.e2e.src.sqlbuild.cli.commands.main.load._test_types import (
     SourceOnlyIngressDependencyE2ETestCase,
@@ -113,6 +119,41 @@ def write_sqlite_orders_source_database(db_path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+@contextmanager
+def serve_orders_api() -> Iterator[str]:
+    class OrdersHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path != "/orders":
+                self.send_response(404)
+                self.end_headers()
+                return
+            payload: bytes = json.dumps(
+                [
+                    {"order_id": 1, "amount": 10},
+                    {"order_id": 2, "amount": 20},
+                    {"order_id": 3, "amount": 30},
+                ]
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return None
+
+    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), OrdersHandler)
+    thread: threading.Thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = cast(tuple[str, int], server.server_address)
+        yield f"http://{host}:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -> dict[str, str]:

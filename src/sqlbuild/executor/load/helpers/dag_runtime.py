@@ -13,6 +13,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
     should_skip_due_to_hard_dependency,
@@ -132,6 +133,14 @@ def execute_ready_dag_source(
             reason="All upstream loaders were soft-skipped",
             mode=SkipMode.SOFT,
         )
+    resolved_result_store: Any | None = result_store
+    if resolved_result_store is None and connection is not None:
+        resolved_result_store = build_standard_node_result_store(
+            adapter=adapter,
+            connection=connection,
+            database=adapter.default_database(),
+            schema=adapter.default_schema(),
+        )
     return execute_source_load(
         source_entry=source,
         loader_function=indexes.loader_by_name[source.loader or ""],
@@ -153,7 +162,7 @@ def execute_ready_dag_source(
         source_ref_entries=indexes.source_by_name,
         on_progress=on_progress,
         providers=providers,
-        result_store=result_store,
+        result_store=resolved_result_store,
     )
 
 

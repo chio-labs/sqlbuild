@@ -231,6 +231,7 @@ class ParseSourcesYamlDltTestCase:
     expected_loaders: tuple[str, ...]
     expected_kind: str
     expected_dlt_names: tuple[str, ...]
+    expected_schemas: tuple[str | None, ...]
 
 
 @dataclass(frozen=True)
