@@ -243,7 +243,7 @@ PLAN_TEST_CASES: list[RealDbtInteropPlanTestCase] = [
     ),
     RealDbtInteropPlanTestCase(
         description="preserves routed SQLBuild cursor args in real plan argv",
-        args=("--select", "local_only", "--sqb-start-cursor-int", "10"),
+        args=("--select", "local_only", "--start-cursor-int", "10"),
         sqlbuild_model_sql_by_relative_path={
             "local_only.sql": "select 1 as order_id",
         },
