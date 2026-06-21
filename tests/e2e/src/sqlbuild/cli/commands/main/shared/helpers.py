@@ -176,7 +176,28 @@ def prepare_dbt_profile_workspace(*, tmp_path: Path, profiles_yml: str) -> Path:
     )
     (profiles_dir / "profiles.yml").write_text(profiles_yml, encoding="utf-8")
     write_dbt_profile_orders_model(workspace=workspace, order_id=1)
+    _init_workspace_git_repo(workspace=workspace, production_ref="main")
     return workspace
+
+
+def _init_workspace_git_repo(*, workspace: Path, production_ref: str) -> None:
+    """Initialize a git repo with a committed production ref on a side branch.
+
+    dbt reuse_from (scaffolded by sqb dbt init) archives the configured git_ref to
+    plan dependency-baseline reuse, so the dbt project must be committed under a ref
+    that is not the active branch.
+    """
+
+    def run_git(*args: str) -> None:
+        subprocess.run(("git", *args), cwd=workspace, capture_output=True, check=True, text=True)
+
+    run_git("init")
+    run_git("config", "user.email", "sqlbuild@example.invalid")
+    run_git("config", "user.name", "SQLBuild Test")
+    run_git("checkout", "-b", "work")
+    run_git("add", ".")
+    run_git("commit", "-m", "baseline")
+    run_git("branch", production_ref)
 
 
 def write_dbt_profile_orders_model(*, workspace: Path, order_id: int) -> None:
@@ -387,10 +408,6 @@ def assert_dbt_complete_reuse_from_lifecycle(
         env=process_env,
         text=True,
     )
-    (dbt_models_dir / "fact_orders.sql").write_text(
-        "select 1 as order_id, 111 as amount\n",
-        encoding="utf-8",
-    )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
@@ -422,6 +439,8 @@ def assert_dbt_seeded_reuse_from_lifecycle(
     profiles_yml: str,
     project_toml: str,
     fetch_rows: Callable[[str], tuple[tuple[object, ...], ...]],
+    execute_sql: Callable[[str], None],
+    raw_orders_relation: str,
     destination_rows_sql: str,
     downstream_rows_sql: str,
     expected_rows: tuple[tuple[object, ...], ...],
@@ -442,7 +461,11 @@ def assert_dbt_seeded_reuse_from_lifecycle(
     dbt_models_dir: Path = dbt_project_dir / "models"
     _write_incremental_orders_model(
         dbt_models_dir=dbt_models_dir,
-        include_catchup_row=False,
+        raw_orders_relation=raw_orders_relation,
+    )
+    _seed_reuse_raw_orders(
+        execute_sql=execute_sql,
+        raw_orders_relation=raw_orders_relation,
         timestamp_type=timestamp_type,
     )
     _initialize_reuse_workspace_git(workspace=workspace)
@@ -453,9 +476,9 @@ def assert_dbt_seeded_reuse_from_lifecycle(
         target="prod",
         env=env,
     )
-    _write_incremental_orders_model(
-        dbt_models_dir=dbt_models_dir,
-        include_catchup_row=True,
+    _append_reuse_catchup_raw_orders(
+        execute_sql=execute_sql,
+        raw_orders_relation=raw_orders_relation,
         timestamp_type=timestamp_type,
     )
 
@@ -491,6 +514,8 @@ def assert_dbt_snapshot_seeded_reuse_from_lifecycle(
     origin_snapshot_schema: str,
     destination_snapshot_schema: str,
     fetch_rows: Callable[[str], tuple[tuple[object, ...], ...]],
+    execute_sql: Callable[[str], None],
+    raw_orders_relation: str,
     destination_rows_sql: str,
     downstream_rows_sql: str,
     expected_rows: tuple[tuple[object, ...], ...],
@@ -517,7 +542,11 @@ def assert_dbt_snapshot_seeded_reuse_from_lifecycle(
     _write_snapshot_orders_model(
         snapshots_dir=snapshots_dir,
         target_schema_expression=f"'{origin_snapshot_schema}'",
-        include_catchup_row=False,
+        raw_orders_relation=raw_orders_relation,
+    )
+    _seed_reuse_raw_orders(
+        execute_sql=execute_sql,
+        raw_orders_relation=raw_orders_relation,
         timestamp_type=timestamp_type,
     )
     _initialize_reuse_workspace_git(workspace=workspace)
@@ -531,7 +560,11 @@ def assert_dbt_snapshot_seeded_reuse_from_lifecycle(
     _write_snapshot_orders_model(
         snapshots_dir=snapshots_dir,
         target_schema_expression=f"'{destination_snapshot_schema}'",
-        include_catchup_row=True,
+        raw_orders_relation=raw_orders_relation,
+    )
+    _append_reuse_catchup_raw_orders(
+        execute_sql=execute_sql,
+        raw_orders_relation=raw_orders_relation,
         timestamp_type=timestamp_type,
     )
 
@@ -611,23 +644,38 @@ def _prepare_dbt_reuse_workspace(
     return workspace
 
 
-def _write_incremental_orders_model(
-    *, dbt_models_dir: Path, include_catchup_row: bool, timestamp_type: str
+def _seed_reuse_raw_orders(
+    *,
+    execute_sql: Callable[[str], None],
+    raw_orders_relation: str,
+    timestamp_type: str,
 ) -> None:
-    catchup_row_sql: str = (
-        "UNION ALL SELECT 2 AS order_id, 901 AS amount, "
-        f"CAST('2026-01-02 00:00:00' AS {timestamp_type}) AS event_time\n"
-        if include_catchup_row
-        else ""
+    execute_sql(f"DROP TABLE IF EXISTS {raw_orders_relation}")
+    execute_sql(
+        f"CREATE TABLE {raw_orders_relation} AS "
+        "SELECT 1 AS order_id, 900 AS amount, "
+        f"CAST('2026-01-01 00:00:00' AS {timestamp_type}) AS event_time"
     )
+
+
+def _append_reuse_catchup_raw_orders(
+    *,
+    execute_sql: Callable[[str], None],
+    raw_orders_relation: str,
+    timestamp_type: str,
+) -> None:
+    execute_sql(
+        f"INSERT INTO {raw_orders_relation} "
+        "SELECT 2 AS order_id, 901 AS amount, "
+        f"CAST('2026-01-02 00:00:00' AS {timestamp_type}) AS event_time"
+    )
+
+
+def _write_incremental_orders_model(*, dbt_models_dir: Path, raw_orders_relation: str) -> None:
     (dbt_models_dir / "fact_orders.sql").write_text(
         "{{ config(materialized='incremental', "
         "meta={'sqlbuild': {'reuse_cursor': 'event_time'}}) }}\n"
-        "SELECT * FROM (\n"
-        "  SELECT 1 AS order_id, 900 AS amount, "
-        f"CAST('2026-01-01 00:00:00' AS {timestamp_type}) AS event_time\n"
-        f"  {catchup_row_sql}"
-        ") AS src\n"
+        f"SELECT order_id, amount, event_time FROM {raw_orders_relation}\n"
         "{% if is_incremental() %}\n"
         "WHERE event_time > (SELECT MAX(event_time) FROM {{ this }})\n"
         "{% endif %}\n",
@@ -639,15 +687,8 @@ def _write_snapshot_orders_model(
     *,
     snapshots_dir: Path,
     target_schema_expression: str,
-    include_catchup_row: bool,
-    timestamp_type: str,
+    raw_orders_relation: str,
 ) -> None:
-    catchup_row_sql: str = (
-        "UNION ALL SELECT 2 AS order_id, 901 AS amount, "
-        f"CAST('2026-01-02 00:00:00' AS {timestamp_type}) AS event_time\n"
-        if include_catchup_row
-        else ""
-    )
     (snapshots_dir / "orders_snapshot.sql").write_text(
         "{% snapshot orders_snapshot %}\n"
         "{{ config(\n"
@@ -657,11 +698,7 @@ def _write_snapshot_orders_model(
         "  updated_at='event_time',\n"
         "  meta={'sqlbuild': {'reuse_cursor': 'event_time'}}\n"
         ") }}\n"
-        "SELECT * FROM (\n"
-        "  SELECT 1 AS order_id, 900 AS amount, "
-        f"CAST('2026-01-01 00:00:00' AS {timestamp_type}) AS event_time\n"
-        f"  {catchup_row_sql}"
-        ") AS src\n"
+        f"SELECT order_id, amount, event_time FROM {raw_orders_relation}\n"
         "{% endsnapshot %}\n",
         encoding="utf-8",
     )

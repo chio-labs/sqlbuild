@@ -201,6 +201,7 @@ def assert_sqlserver_seeded_reuse_case(
             f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
             "ORDER BY order_id"
         )
+        raw_orders_relation: str = relation_name(schema_name=dev_schema_name, name="raw_orders")
         if snapshot:
             assert_dbt_snapshot_seeded_reuse_from_lifecycle(
                 tmp_path=tmp_path,
@@ -209,6 +210,8 @@ def assert_sqlserver_seeded_reuse_case(
                 origin_snapshot_schema=prod_schema_name,
                 destination_snapshot_schema=dev_schema_name,
                 fetch_rows=lambda sql: fetch_sqlserver_rows(config=config, sql=sql),
+                execute_sql=lambda sql: execute_sqlserver_sql(config=config, sql=sql),
+                raw_orders_relation=raw_orders_relation,
                 destination_rows_sql=destination_rows_sql,
                 downstream_rows_sql=downstream_rows_sql,
                 expected_rows=expected_rows,
@@ -220,6 +223,8 @@ def assert_sqlserver_seeded_reuse_case(
                 profiles_yml=profiles_yml,
                 project_toml=project_toml,
                 fetch_rows=lambda sql: fetch_sqlserver_rows(config=config, sql=sql),
+                execute_sql=lambda sql: execute_sqlserver_sql(config=config, sql=sql),
+                raw_orders_relation=raw_orders_relation,
                 destination_rows_sql=destination_rows_sql,
                 downstream_rows_sql=downstream_rows_sql,
                 expected_rows=expected_rows,
