@@ -505,6 +505,23 @@ DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
         expected_project_dir=Path("/tmp/demo"),
         expected_dbt_args=("--select", "dbt_orders", "--schema-only"),
     ),
+    MainTestCase(
+        description="dispatches dbt clone and preserves dbt args",
+        argv=[
+            "--project-dir",
+            "/tmp/demo",
+            "dbt",
+            "clone",
+            "--select",
+            "dbt_orders",
+            "--hard-copy",
+            "--target",
+            "dev",
+        ],
+        expected_exit_code=43,
+        expected_project_dir=Path("/tmp/demo"),
+        expected_dbt_args=("--select", "dbt_orders", "--hard-copy", "--target", "dev"),
+    ),
 ]
 
 DBT_INIT_DISPATCH_TEST_CASES: list[MainTestCase] = [
@@ -716,6 +733,7 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_debug=run_dbt_execution,
             run_dbt_lineage=run_dbt_execution,
             run_dbt_diff=run_dbt_execution,
+            run_dbt_clone=run_dbt_execution,
         ),
     )
 

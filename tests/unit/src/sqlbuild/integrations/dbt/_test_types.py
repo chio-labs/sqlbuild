@@ -629,6 +629,32 @@ class DbtDiffOptionsTestCase:
 
 
 @dataclass(frozen=True)
+class DbtCloneOptionsTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_select: tuple[str, ...]
+    expected_exclude: tuple[str, ...]
+    expected_hard_copy: bool
+    expected_no_sql_validation: bool
+    expected_dbt_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtCloneExecuteTestCase:
+    description: str
+    current_materialized: str
+    reuse_materialized: str
+    create_destination_relation: bool
+    create_origin_relation: bool
+    include_reuse_manifest_model: bool
+    expected_item_count: int
+    expected_action: str | None
+    expected_status: str | None
+    expected_destination_rows: tuple[tuple[object, ...], ...]
+    selected_resource_type: str = "model"
+
+
+@dataclass(frozen=True)
 class DbtDiffOptionsErrorTestCase:
     description: str
     args: tuple[str, ...]
