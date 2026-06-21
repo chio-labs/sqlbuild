@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.models import (
+    DiscoveredPythonLoaderMetadata,
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
@@ -20,6 +22,7 @@ def build_python_sql_run_lifecycle_plan(
         name
         for name in selected_python_names
         if python_graph.nodes_by_name[name].kind == PythonNodeKind.LOADER
+        if not _is_external_loader(node_name=name, python_graph=python_graph)
     )
     ingress_names: frozenset[str] = selected_loader_names | frozenset(
         upstream_name
@@ -40,6 +43,11 @@ def build_python_sql_run_lifecycle_plan(
         read_side_sql_keys=selection.sql_keys,
         read_side_python_node_names=read_side_names,
     )
+
+
+def _is_external_loader(*, node_name: str, python_graph: PythonNodeGraph) -> bool:
+    loader: DiscoveredPythonLoaderMetadata | None = python_graph.nodes_by_name[node_name].loader
+    return loader is not None and loader.connection_mode == LoaderConnectionMode.EXTERNAL
 
 
 def _upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:
