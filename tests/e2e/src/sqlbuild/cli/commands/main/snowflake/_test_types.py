@@ -9,6 +9,17 @@ class SnowflakeDbtReuseFromE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeDbtCloneE2ETestCase:
+    description: str
+    schema_prefix: str
+    command: tuple[str, ...]
+    prod_model_sql: str
+    feature_model_sql: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class SnowflakeDependencyBaselineE2ETestCase:
     description: str
     schema_prefix: str

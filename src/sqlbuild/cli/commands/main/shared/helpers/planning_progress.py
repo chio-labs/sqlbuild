@@ -19,14 +19,32 @@ class PlanningProgressReporter:
 
     def on_progress(self, message: str) -> None:
         if _is_planning_completion_message(message):
-            self._status.complete(message)
-            self._active = False
+            self.complete(message)
             return
         if not self._active:
-            self._status.start(message)
-            self._active = True
+            self.start(message)
+            return
+        self.update(message)
+
+    def start(self, message: str) -> None:
+        self._status.start(message)
+        self._active = True
+
+    def update(self, message: str) -> None:
+        if not self._active:
+            self.start(message)
             return
         self._status.update(message)
+
+    def complete(self, message: str) -> None:
+        self._status.complete(message)
+        self._active = False
+
+    def finish(self, *, blank_line_after: bool = False) -> None:
+        self._status.close()
+        self._active = False
+        if blank_line_after:
+            self._status.write_blank_line()
 
 
 def _is_planning_completion_message(message: str) -> bool:
@@ -34,11 +52,13 @@ def _is_planning_completion_message(message: str) -> bool:
         (
             "Built ",
             "Compiled ",
+            "Applied ",
             "Generated ",
             "Inspected ",
             "Loaded ",
             "Planned ",
             "Refreshed ",
             "Resolved ",
+            "Cloned ",
         )
     )

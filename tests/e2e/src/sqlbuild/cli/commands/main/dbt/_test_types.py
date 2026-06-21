@@ -276,6 +276,20 @@ class DbtDiffE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtCloneE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...] = ()
+    expected_stderr_fragments: tuple[str, ...] = ()
+    expected_absent_stdout_fragments: tuple[str, ...] = ()
+    expected_rows: tuple[tuple[object, ...], ...] = ()
+    rows_sql: str = "SELECT order_id, amount_cents FROM main.dbt_orders ORDER BY order_id"
+    expected_absent_relations: tuple[tuple[str, str], ...] = ()
+    include_reuse_from: bool = True
+
+
+@dataclass(frozen=True)
 class DbtDiffErrorE2ETestCase:
     description: str
     command: tuple[str, ...]
