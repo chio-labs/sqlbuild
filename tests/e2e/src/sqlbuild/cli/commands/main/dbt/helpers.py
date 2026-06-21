@@ -2118,3 +2118,58 @@ def seed_dbt_phase11_sources(*, project_dir: Path, stale_orders: bool) -> None:
             "SELECT 10 AS customer_id, 'Ada' AS customer_name"
         ),
     )
+
+
+def assert_dbt_scenario_snapshot(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    source_file: str,
+    expected_row_count: int,
+    expected_column_names: set[str],
+) -> None:
+    """Assert a captured dbt scenario snapshot manifest and source JSONL file."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
+    manifest_path: Path = snapshot_root / "scenario.json"
+    jsonl_path: Path = snapshot_root / "sources" / source_file
+    assert manifest_path.exists()
+    assert jsonl_path.exists()
+    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest_data, dict)
+    assert manifest_data["scenario_name"] == scenario_name
+    assert manifest_data["format"] == "jsonl"
+    assert manifest_data["total_rows"] == expected_row_count
+    relation: object = manifest_data["relations"][0]
+    assert isinstance(relation, dict)
+    assert relation["file"] == f"sources/{source_file}"
+    assert relation["row_count"] == expected_row_count
+    columns: object = relation["columns"]
+    assert isinstance(columns, list)
+    column_names: set[str] = {str(column["name"]) for column in columns}
+    assert expected_column_names.issubset(column_names)
+    column: object
+    for column in columns:
+        assert isinstance(column, dict)
+        assert column["warehouse_type"]
+        assert column["local_type"]
+    rows: list[str] = jsonl_path.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == expected_row_count
+
+
+def assert_dbt_local_replay_rows(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    rows_sql: str,
+    expected_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert replayed rows in the retained local DuckDB for a dbt scenario."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+
+    if not rows_sql:
+        return
+    db_path: Path = project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb"
+    rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
+    assert tuple(rows) == expected_rows

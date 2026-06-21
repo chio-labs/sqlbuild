@@ -34,7 +34,10 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import dbt_failure_detail
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.project import (
+    resolve_effective_adapter_name,
+    resolve_effective_scenario_config,
+)
 
 
 def build_dbt_scenario_project(
@@ -99,6 +102,10 @@ def build_dbt_scenario_project(
         adapter_name=adapter_name,
         connection_config=connection_config,
         project_name=discovered_inputs.project_config.name,
+        scenario_config=resolve_effective_scenario_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+        ),
     )
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.helpers.scenario.capture import _write_capture_result
+from sqlbuild.cli.commands.main.helpers.scenario.capture_run import _write_capture_result
 from sqlbuild.cli.commands.main.helpers.scenario.result_output import write_scenario_result
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import (
