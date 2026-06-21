@@ -39,6 +39,7 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -177,7 +178,18 @@ def run_test(
 
     pass_count: int = sum(1 for r in results if r.outcome == SqlTestOutcome.PASS)
     fail_count: int = len(results) - pass_count
-    progress_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
+    progress_stream.write(
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n"
+    )
     progress_stream.flush()
     write_execution_json_output(
         payload=format_test_execution_json(results=results),

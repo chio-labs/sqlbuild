@@ -6,6 +6,7 @@ from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 
 def render_clone_output(
@@ -60,13 +61,18 @@ def render_clone_output(
     else:
         print(style.warning_strong("Completed with warnings."))
     print(
-        f"{style.label('CLONED=')}{style.value(str(cloned_count))}  "
-        f"{style.label('COPIED=')}{style.value(str(copied_count))}  "
-        f"{style.label('RECREATED_VIEWS=')}{style.value(str(recreated_count))}  "
-        f"{style.label('PASS=')}{style.success(str(success_count))}  "
-        f"{style.label('WARN=')}{style.warning(str(warning_count))}  "
-        f"{style.label('FAIL=')}{style.error(str(fail_count))}  "
-        f"{style.label('TOTAL=')}{style.value(str(len(result.item_results)))}"
+        format_summary_footer(
+            counts=(
+                ("CLONED", cloned_count),
+                ("COPIED", copied_count),
+                ("RECREATED_VIEWS", recreated_count),
+                ("PASS", success_count),
+                ("WARN", warning_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(result.item_results)),
+            ),
+            use_color=use_color,
+        )
     )
 
 

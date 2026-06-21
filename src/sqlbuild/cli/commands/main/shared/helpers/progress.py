@@ -38,6 +38,7 @@ from sqlbuild.shared.helpers.materialization_labels import (
     model_execution_annotation,
     model_resource_type,
 )
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 from sqlbuild.shared.types import ExecutionResourceKind
 
 _TYPE_WIDTH: int = 10
@@ -633,8 +634,17 @@ def format_build_footer(
     total_count: int = pass_count + warn_count + fail_count + skip_count
     elapsed_str: str = f"{elapsed:.2f}s"
     lines.append(
-        f"PASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  "
-        f"SKIP={skip_count}  TOTAL={total_count}  ({elapsed_str})"
+        format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("WARN", warn_count),
+                ("FAIL", fail_count),
+                ("SKIP", skip_count),
+                ("TOTAL", total_count),
+            ),
+            use_color=style.use_color,
+            elapsed=elapsed_str,
+        )
     )
 
     failure_lines: list[str] = _format_failure_details(result, style=style)

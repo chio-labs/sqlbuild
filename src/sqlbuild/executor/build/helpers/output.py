@@ -26,6 +26,7 @@ from sqlbuild.shared.helpers.materialization_labels import (
     model_execution_annotation,
     model_resource_type,
 )
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 
 @dataclass(frozen=True)
@@ -446,12 +447,17 @@ def _format_summary_counts(
 
     total: int = pass_count + warn_count + fail_count + skip_count
     elapsed_str: str = f"{elapsed_seconds:.2f}s" if elapsed_seconds > 0 else ""
-    time_part: str = f"  ({elapsed_str})" if elapsed_str else ""
-    counts: str = (
-        f"PASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  "
-        f"SKIP={skip_count}  TOTAL={total}{time_part}"
+    return format_summary_footer(
+        counts=(
+            ("PASS", pass_count),
+            ("WARN", warn_count),
+            ("FAIL", fail_count),
+            ("SKIP", skip_count),
+            ("TOTAL", total),
+        ),
+        use_color=False,
+        elapsed=elapsed_str or None,
     )
-    return counts
 
 
 def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:

@@ -9,6 +9,7 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 from sqlbuild.spec.models.source import SourceEntry
 
 _SPINNER_TICK_SECONDS: float = 0.1
@@ -173,6 +174,16 @@ def format_load_footer(
     )
     return (
         f"\n{completion_message}\n"
-        f"PASS={success_count}  WARN=0  FAIL={fail_count}  SKIP={skip_count}  "
-        f"TOTAL={total_count}  ({elapsed:.2f}s)\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", success_count),
+                ("WARN", 0),
+                ("FAIL", fail_count),
+                ("SKIP", skip_count),
+                ("TOTAL", total_count),
+            ),
+            use_color=use_color,
+            elapsed=f"{elapsed:.2f}s",
+        )
+        + "\n"
     )
