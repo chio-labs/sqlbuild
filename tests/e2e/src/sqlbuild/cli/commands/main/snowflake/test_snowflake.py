@@ -6,6 +6,9 @@ from textwrap import dedent
 
 import pytest
 
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    assert_dbt_local_replay_rows,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     build_loader_waffle_shop_project_files,
     build_schema_behavior_project_files,
@@ -27,6 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     build_historical_timestamp_extracts_model_sql,
     build_real_warehouse_existing_snapshot_project_files,
     build_real_warehouse_snapshot_project_files,
+    prepare_dbt_profile_workspace,
     prepare_inline_project,
     query_duckdb,
     run_sqb,
@@ -38,6 +42,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeCloneE2ETestCase,
     SnowflakeDbtProfileE2ETestCase,
     SnowflakeDbtReuseFromE2ETestCase,
+    SnowflakeDbtScenarioLocalReplayE2ETestCase,
     SnowflakeDependencyBaselineE2ETestCase,
     SnowflakeDiffE2ETestCase,
     SnowflakeIntermediateDagStrategyE2ETestCase,
@@ -59,6 +64,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     assert_snowflake_seeded_reuse_case,
     assert_snowflake_snapshot_apply_rows,
     assert_snowflake_snapshot_matrix_rows,
+    build_snowflake_dbt_profiles_yml,
     build_snowflake_dependency_baseline_project_toml,
     build_snowflake_local_config,
     build_snowflake_project_toml,
@@ -77,6 +83,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     virtual_seed_orders_model,
     virtual_seed_source_yml,
     write_local_environment_override,
+    write_snowflake_dbt_scenario_date_trunc_model,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
@@ -1386,6 +1393,112 @@ def test_given_snowflake_scenario_capture_when_replaying_locally_then_transpilab
             scenario_name=test_case.scenario_name,
             local_rows_sql=test_case.local_rows_sql,
             expected_local_rows=test_case.expected_local_rows,
+        )
+    finally:
+        cleanup_snowflake_schema(schema_name=schema_name)
+
+
+SNOWFLAKE_DBT_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[
+    SnowflakeDbtScenarioLocalReplayE2ETestCase
+] = [
+    SnowflakeDbtScenarioLocalReplayE2ETestCase(
+        description="captures snowflake dbt scenario and replays date_trunc locally",
+        scenario_name="dbt_event_rollup",
+        expected_stdout_fragments=(
+            "dbt_event_rollup",
+            "expect    expected event_rollup",
+            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        expected_local_rows=((10, 2),),
+        local_rows_sql=(
+            "SELECT customer_id, event_count "
+            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+        ),
+    ),
+    SnowflakeDbtScenarioLocalReplayE2ETestCase(
+        description="reports snowflake dbt local transpilation failure as X607",
+        scenario_name="dbt_event_rollup",
+        expected_stdout_fragments=(
+            "dbt_event_rollup",
+            "ERROR",
+            "error[X607]",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+        expected_return_code=1,
+        corrupt_capture_dialect=True,
+    ),
+]
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_DBT_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_DBT_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+)
+def test_given_snowflake_dbt_scenario_capture_when_replaying_locally_then_transpiles_to_duckdb(
+    tmp_path: Path,
+    test_case: SnowflakeDbtScenarioLocalReplayE2ETestCase,
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_dbt_scenario_local")
+    config: dict[str, object] = build_snowflake_connection_config(schema=schema_name)
+    workspace: Path = prepare_dbt_profile_workspace(
+        tmp_path=tmp_path,
+        profiles_yml=build_snowflake_dbt_profiles_yml(schema_name=schema_name, config=config),
+    )
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    try:
+        ensure_query_schema_ready(schema_name=schema_name)
+        init_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=(
+                "--no-color",
+                "dbt",
+                "init",
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--skip-dbt-debug",
+            ),
+            project_dir=workspace,
+        )
+        assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+        write_snowflake_dbt_scenario_date_trunc_model(sqlbuild_project_dir=sqlbuild_project_dir)
+        execute_snowflake_sql(
+            schema_name=schema_name,
+            sql=(
+                f"CREATE TABLE {relation_name(schema_name=schema_name, name='events')} "
+                "(customer_id INTEGER, event_ts TIMESTAMP_NTZ)"
+            ),
+        )
+
+        capture_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "scenario", "capture", test_case.scenario_name),
+            project_dir=sqlbuild_project_dir,
+        )
+        assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+        maybe_corrupt_scenario_snapshot_dialect(
+            project_dir=sqlbuild_project_dir,
+            scenario_name=test_case.scenario_name,
+            enabled=test_case.corrupt_capture_dialect,
+        )
+
+        replay_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "scenario", "test", test_case.scenario_name, "--local"),
+            project_dir=sqlbuild_project_dir,
+        )
+
+        assert replay_result.returncode == test_case.expected_return_code, (
+            replay_result.stdout + replay_result.stderr
+        )
+        fragment: str
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in replay_result.stdout
+        assert_dbt_local_replay_rows(
+            project_dir=sqlbuild_project_dir,
+            scenario_name=test_case.scenario_name,
+            rows_sql=test_case.local_rows_sql,
+            expected_rows=test_case.expected_local_rows,
         )
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)

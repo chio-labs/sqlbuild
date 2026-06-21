@@ -777,7 +777,7 @@ def test_given_dbt_interop_inputs_when_planning_then_returns_expected_plan(
         full_dbt_ls_unique_ids=test_case.full_dbt_ls_unique_ids,
         anchor_dbt_ls_unique_ids_by_term=test_case.anchor_dbt_ls_unique_ids_by_term,
     )
-    runner: DbtRunner = DbtRunner(invoker=invoker)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoker)
 
     plan: DbtInteropPlan = plan_dbt_interop_command(
         command=test_case.command,
@@ -842,7 +842,7 @@ def test_given_failing_dbt_ls_when_planning_then_raises_coded_error(
             )
         }
     )
-    runner: DbtRunner = DbtRunner(invoker=invoker)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoker)
 
     with pytest.raises(DbtInteropRuntimeError, match=test_case.expected_error_fragment) as captured:
         plan_dbt_interop_command(

@@ -21,7 +21,12 @@ from sqlbuild.cli.commands.main.shared.helpers.progress import (
 from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
+    ChainStep,
+    PlanOutput,
+    SqlTestPlanEntry,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
@@ -113,6 +118,8 @@ def execute_sqlbuild_test_work(
     action: DbtInteropSqlbuildTestAction
     for action in actions:
         if action == DbtInteropSqlbuildTestAction.TEST:
+            if not plan_output.test_entries:
+                continue
             exit_code = max(
                 exit_code,
                 _execute_sqlbuild_tests(
@@ -125,6 +132,8 @@ def execute_sqlbuild_test_work(
                 ),
             )
         elif action == DbtInteropSqlbuildTestAction.AUDIT:
+            if not plan_output.audit_entries:
+                continue
             exit_code = max(
                 exit_code,
                 _execute_sqlbuild_audits(
@@ -154,9 +163,11 @@ def _execute_sqlbuild_tests(
     header_detail: str = style.muted(header)
     output_stream.write(f"{execution_label}  {header_detail}\n\n")
     test_count: int = len(plan_output.test_entries)
-    model_count: int = len({step.model_name for e in plan_output.test_entries for step in e.chain})
-    output_stream.write(f"Test ({test_count} selected, {model_count} models)\n\n")
+    output_stream.write(f"{style.success_strong(f'Test ({test_count} selected)')}\n\n")
     output_stream.flush()
+    target_by_test_name: dict[str, str] = {
+        entry.name: _test_group_name_from_entry(entry) for entry in plan_output.test_entries
+    }
     progress: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
         total=test_count,
         label="test",
@@ -178,7 +189,7 @@ def _execute_sqlbuild_tests(
 
     def on_test_progress(message: str) -> None:
         if message.startswith("Prepared "):
-            preflight_progress.complete(message)
+            preflight_progress.complete(message, blank_line_after=True)
             preflight_active[0] = False
             return
         if not preflight_active[0]:
@@ -199,7 +210,9 @@ def _execute_sqlbuild_tests(
             group_name=_test_group_name_from_entry(entry),
             item_name=entry.name,
         ),
-        on_test_complete=_build_test_on_complete(progress=progress),
+        on_test_complete=_build_test_on_complete(
+            progress=progress, target_by_test_name=target_by_test_name
+        ),
     )
     pass_count: int = sum(1 for r in results if r.outcome == SqlTestOutcome.PASS)
     fail_count: int = len(results) - pass_count
@@ -230,7 +243,9 @@ def _execute_sqlbuild_audits(
             if entry.attached_target_name
         }
     )
-    output_stream.write(f"Audit ({audit_count} selected, {model_count} models)\n\n")
+    output_stream.write(
+        f"{style.success_strong(f'Audit ({audit_count} selected, {model_count} models)')}\n\n"
+    )
     output_stream.flush()
     progress: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
         total=audit_count,
@@ -268,15 +283,17 @@ def _execute_sqlbuild_audits(
 
 
 def _build_test_on_complete(
-    *, progress: NestedCommandProgressCallbacks
+    *,
+    progress: NestedCommandProgressCallbacks,
+    target_by_test_name: dict[str, str],
 ) -> Callable[[SqlTestExecutionResult], None]:
     def _on_complete(result: SqlTestExecutionResult) -> None:
-        model_name: str = ""
-        if result.step_results:
-            model_name = result.step_results[0].model_name
+        group_name: str = target_by_test_name.get(result.test_name, "")
+        if not group_name and result.step_results:
+            group_name = result.step_results[0].model_name
         status_text: str = "PASS" if result.outcome == SqlTestOutcome.PASS else "FAIL"
         progress.on_item_complete(
-            group_name=model_name or "(unknown)",
+            group_name=group_name or "(unknown)",
             item_name=result.test_name,
             status_text=status_text,
             child_rows=build_test_expectation_rows(result),
@@ -314,9 +331,14 @@ def _build_audit_on_complete(
 
 
 def _test_group_name_from_entry(entry: SqlTestPlanEntry) -> str:
-    if entry.chain:
-        return entry.chain[0].model_name
-    return "(unknown)"
+    if not entry.chain:
+        return "(unknown)"
+    expected_steps: tuple[ChainStep, ...] = tuple(
+        step for step in entry.chain if step.expected_cte_sql is not None
+    )
+    if expected_steps:
+        return expected_steps[-1].model_name
+    return entry.chain[-1].model_name
 
 
 def _audit_display_name_from_entry(entry: AuditPlanEntry) -> str:

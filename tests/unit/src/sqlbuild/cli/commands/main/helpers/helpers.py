@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import ChainStep, ModelPlanEntry, SqlTestPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
@@ -72,6 +72,21 @@ def model_entry(name: str) -> ModelPlanEntry:
         fingerprint_query_sql="SELECT 1",
         resolved_sql="SELECT 1",
         logical_ddl="",
+    )
+
+
+def chained_sql_test_entry() -> SqlTestPlanEntry:
+    return SqlTestPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name="test_orders"),
+        name="test_orders",
+        chain=(
+            ChainStep(model_name="stg_orders", resolved_sql="select 1"),
+            ChainStep(
+                model_name="fct_orders",
+                resolved_sql="select 1",
+                expected_cte_sql="select 1",
+            ),
+        ),
     )
 
 

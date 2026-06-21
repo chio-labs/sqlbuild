@@ -581,3 +581,62 @@ def assert_snowflake_snapshot_apply_rows(
     assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
     assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
     assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
+
+
+def build_snowflake_dbt_profiles_yml(*, schema_name: str, config: dict[str, object]) -> str:
+    """Build a dbt profiles.yml pointing analytics/dev at the Snowflake warehouse."""
+
+    return (
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: snowflake\n"
+        f"      account: {config['account']}\n"
+        f"      user: {config['user']}\n"
+        "      authenticator: programmatic_access_token\n"
+        f"      token: {config['token']}\n"
+        f"      role: {config['role']}\n"
+        f"      warehouse: {config['warehouse']}\n"
+        f"      database: {config['database']}\n"
+        f"      schema: {schema_name}\n"
+    )
+
+
+def write_snowflake_dbt_scenario_date_trunc_model(*, sqlbuild_project_dir: Path) -> None:
+    """Write a Snowflake-flavored DATE_TRUNC dbt model and a scenario targeting it."""
+
+    dbt_models_dir: Path = sqlbuild_project_dir.parent / "dbt_project" / "models"
+    dbt_models_dir.joinpath("event_rollup.sql").write_text(
+        "select\n"
+        "  customer_id,\n"
+        "  date_trunc('DAY', event_ts) as event_day,\n"
+        "  count(*) as event_count\n"
+        "from {{ source('raw', 'events') }}\n"
+        "group by customer_id, date_trunc('DAY', event_ts)\n",
+        encoding="utf-8",
+    )
+    dbt_models_dir.joinpath("schema.yml").write_text(
+        "version: 2\nsources:\n  - name: raw\n    tables:\n      - name: events\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = sqlbuild_project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_event_rollup.sql").write_text(
+        'SCENARIO (description: "dbt date_trunc scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__raw__events AS (\n"
+        "  SELECT 10 AS customer_id,"
+        " TO_TIMESTAMP_NTZ('2026-01-01 08:15:00') AS event_ts\n"
+        "  UNION ALL\n"
+        "  SELECT 10 AS customer_id,"
+        " TO_TIMESTAMP_NTZ('2026-01-01 10:30:00') AS event_ts\n"
+        "),\n"
+        "__expected__event_rollup AS (\n"
+        "  SELECT 10 AS customer_id,"
+        " DATE_TRUNC('DAY', TO_TIMESTAMP_NTZ('2026-01-01 00:00:00')) AS event_day,"
+        " 2 AS event_count\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )

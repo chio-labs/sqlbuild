@@ -120,6 +120,17 @@ class SnowflakeScenarioLocalReplayE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeDbtScenarioLocalReplayE2ETestCase:
+    description: str
+    scenario_name: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int = 0
+    expected_local_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    local_rows_sql: str = ""
+    corrupt_capture_dialect: bool = False
+
+
+@dataclass(frozen=True)
 class SnowflakeScenarioRemoteE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]

@@ -15,6 +15,16 @@ class SqlTestFunctionPreflightTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioFailureHelpTestCase:
+    """One scenario failure help resolution case."""
+
+    description: str
+    code: str | None
+    explicit_help: str | None
+    expected_help: str | None
+
+
+@dataclass(frozen=True)
 class ScenarioTestPipelineTestCase:
     """One scenario test pipeline orchestration case."""
 
