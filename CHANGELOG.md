@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.36.0](https://github.com/chio-labs/sqlbuild/compare/v0.35.0...v0.36.0) (2026-06-21)
+
+
+### Features
+
+* add dbt column lineage ([457af59](https://github.com/chio-labs/sqlbuild/commit/457af59dac5dd2c596ce742eceaa2d31aa1d31cd))
+* add dbt mixed lineage ([0a438a4](https://github.com/chio-labs/sqlbuild/commit/0a438a4d5b44b75c5174d66f4c6fad6ac74d85f8))
+* add dependency baseline reuse ([6fa023d](https://github.com/chio-labs/sqlbuild/commit/6fa023d600b3e9dfdf69e4b3e7dac35cbc3a08ce))
+* **dbt:** add dbt clone command ([dad43fa](https://github.com/chio-labs/sqlbuild/commit/dad43fa41e4a64b0e9968a2ab845fa4310b01ffa))
+* **dbt:** add dbt clone command ([9aa8bcc](https://github.com/chio-labs/sqlbuild/commit/9aa8bcc8ad13cc648e81bb993bdc629407947532))
+* **dbt:** add dbt reuse playground and fix reuse defects ([190260e](https://github.com/chio-labs/sqlbuild/commit/190260e76efd0f2de73fc7bc25cd4e5da88aa5b1))
+* **dbt:** add sqb dbt diff against production reuse ref ([ae9d0db](https://github.com/chio-labs/sqlbuild/commit/ae9d0dbe93b4d1cc78e93c8d3d37d3d35608caa4))
+* **dbt:** add sqb dbt scenario capture and test --local replay ([3f0fde1](https://github.com/chio-labs/sqlbuild/commit/3f0fde100114a0af03c49373173b236fef386dee))
+* **dbt:** add sqb dbt scenario test for warehouse-direct dbt scenarios ([cfa761e](https://github.com/chio-labs/sqlbuild/commit/cfa761eadb4843c30c002a1352559d21397679cc))
+* **dbt:** declare sqb dbt execution flags with -- passthrough ([5a18910](https://github.com/chio-labs/sqlbuild/commit/5a18910dc0b314993cd6523f5f2b06772058154e))
+* **dbt:** enforce snapshot and ephemeral chain boundaries in dbt tests ([68e4a3f](https://github.com/chio-labs/sqlbuild/commit/68e4a3fd8e29c799854973d17cb904226d0a4a09))
+* **dbt:** make dbt executable configurable via DBT_EXECUTABLE ([70e98f9](https://github.com/chio-labs/sqlbuild/commit/70e98f939da1402cc6e0518a6da6604e4374dda2))
+* **dbt:** polish dbt init/auto-init reuse setup and harden plan UX ([4fe1b41](https://github.com/chio-labs/sqlbuild/commit/4fe1b41f8720a54c51827565a08ca24adc47ee6c))
+* **dbt:** rich column lineage via SQLGlot, fix CTE and seed lineage ([e3dc014](https://github.com/chio-labs/sqlbuild/commit/e3dc0147e4f47de4ffa9d885a563bdd7f7130354))
+* **dbt:** support chained dbt model unit tests with cleaner test output ([346402c](https://github.com/chio-labs/sqlbuild/commit/346402c9cb89839117180537b9eecb882d74977d))
+* **dbt:** support SQLBuild source and seed mocks ([8267b41](https://github.com/chio-labs/sqlbuild/commit/8267b41cd63ff96ca7793349a61d8af7540efff3))
+* **dbt:** support SQLBuild tests targeting dbt models ([d61f404](https://github.com/chio-labs/sqlbuild/commit/d61f404fbe4a83daba20c9ec780ef7daf9bf2499))
+* **dbt:** unify __dbt_ref spelling and extend dbt scenario tests ([3da04ab](https://github.com/chio-labs/sqlbuild/commit/3da04ab1f54418d73cb2b74a01339caffe3403aa))
+
+
+### Bug Fixes
+
+* **dbt:** capture dbt_ref scenario fixtures for local replay ([15e0aa3](https://github.com/chio-labs/sqlbuild/commit/15e0aa3726ed9a3c55937519425f61c492e81591))
+* **dbt:** cascade upstream changes into reuse eligibility ([a0d4056](https://github.com/chio-labs/sqlbuild/commit/a0d4056016c68c9d39cb62e6561f3b44c4db2e70))
+* **dbt:** correct reuse change-detection, block guard, lineage scope, test pruning ([ddce3c4](https://github.com/chio-labs/sqlbuild/commit/ddce3c4eba5da59362214695b35c5fe8c9e603ca))
+* **dbt:** make dbt interop tests and reuse compatible with the Fusion engine ([e5a6bb7](https://github.com/chio-labs/sqlbuild/commit/e5a6bb7fbfb814a9036880cc9e2df916a274b341))
+* **dbt:** show only selected models in dbt plan, not passive upstreams ([4289c2b](https://github.com/chio-labs/sqlbuild/commit/4289c2b48bf587eba99b66ad3e54e5e49f4692cb))
+* **dbt:** stabilize runner tests with configured executable ([555af17](https://github.com/chio-labs/sqlbuild/commit/555af1794a522e47b9444a4fdefb7f9330201e03))
+* run all verify phases ([9b14147](https://github.com/chio-labs/sqlbuild/commit/9b141470386de276d7063d13f577f2cec41d7874))
+
+
+### Documentation
+
+* refresh README positioning ([49de44a](https://github.com/chio-labs/sqlbuild/commit/49de44ad531d2969b01c7eb340d55928c29d41e7))
+
 ## [0.35.0](https://github.com/chio-labs/sqlbuild/compare/v0.34.0...v0.35.0) (2026-06-17)
 
 
