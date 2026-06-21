@@ -477,6 +477,9 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
             dlt_sources:
               - type: sql_database
                 schema: raw
+                destination:
+                  naming_convention: sql_cs_v1
+                  create_indexes: true
                 config:
                   credentials: duckdb:///source.duckdb
                   schema: main
@@ -495,6 +498,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
             expected_kind="dlt",
             expected_dlt_names=("orders", "customers"),
             expected_schemas=("raw", "raw_customers_override"),
+            expected_destination_config={"naming_convention": "sql_cs_v1", "create_indexes": True},
         )
     ],
     ids=["expands dlt sources into managed source entries"],
@@ -529,6 +533,9 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
         tuple(config.resource.schema for config in configs if isinstance(config, DltSourceConfig))
         == test_case.expected_schemas
     )
+    assert tuple(
+        config.destination for config in configs if isinstance(config, DltSourceConfig)
+    ) == (test_case.expected_destination_config, test_case.expected_destination_config)
 
 
 ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
@@ -703,6 +710,21 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
                 write_strategy: table
         """,
         expected_error_fragment="must use dlt write_disposition",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when dlt destination overrides credentials",
+        contents="""
+        dlt_sources:
+          - type: sql_database
+            destination:
+              credentials: other
+            config:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+        """,
+        expected_error_fragment="dlt source destination cannot define 'credentials'",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when write strategy is unknown",

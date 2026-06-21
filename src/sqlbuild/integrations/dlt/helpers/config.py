@@ -17,6 +17,7 @@ def resolve_dlt_config(
     values: object = expand_template_data(
         {
             "config": config.config,
+            "destination": config.destination,
             "schema": config.schema,
             "resource": config.resource.raw_config,
             "resource_schema": config.resource.schema,
@@ -48,6 +49,7 @@ def resolve_dlt_config(
         config,
         schema=_optional_string(resolved_values.get("schema")),
         config=_mapping(resolved_values.get("config")),
+        destination=_mapping(resolved_values.get("destination")),
         resource=resolved_resource,
     )
 

@@ -42,6 +42,7 @@ def test_given_dlt_source_when_building_loader_functions_then_name_is_determinis
                     config=DltSourceConfig(
                         source_type="sql_database",
                         config={"credentials": "duckdb:///source.duckdb"},
+                        destination={},
                         resource=DltResourceConfig(
                             name="raw_orders", dlt_name="orders", raw_config={}
                         ),

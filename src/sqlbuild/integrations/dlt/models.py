@@ -26,6 +26,7 @@ class DltSourceConfig:
 
     source_type: str
     config: dict[str, object]
+    destination: dict[str, object]
     resource: DltResourceConfig
     group_index: int
     schema: str | None = None

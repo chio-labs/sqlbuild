@@ -181,6 +181,10 @@ def _parse_dlt_source_group(
     if not isinstance(raw_config, dict):
         raise SourceParseError(f"{file_path} dlt source config must be a mapping")
     group_config: dict[str, object] = cast(dict[str, object], raw_config)
+    destination_config: dict[str, object] = _optional_mapping_value(
+        entry=group, key="destination", file_path=file_path, label="dlt source"
+    )
+    _validate_dlt_destination_config(config=destination_config, file_path=file_path)
     group_schema: str | None = optional_non_empty_string(
         entry=group,
         key="schema",
@@ -202,6 +206,7 @@ def _parse_dlt_source_group(
                 source_type=source_type,
                 group_schema=group_schema,
                 group_config=group_config,
+                destination_config=destination_config,
                 resource=cast(dict[str, object], raw_resource),
                 file_path=file_path,
                 group_index=group_index,
@@ -215,6 +220,7 @@ def _parse_dlt_resource_entry(
     source_type: str,
     group_schema: str | None,
     group_config: dict[str, object],
+    destination_config: dict[str, object],
     resource: dict[str, object],
     file_path: Path,
     group_index: int,
@@ -274,6 +280,7 @@ def _parse_dlt_resource_entry(
                 source_type=source_type,
                 schema=schema,
                 config=group_config,
+                destination=destination_config,
                 resource=dlt_resource,
                 group_index=group_index,
             ),
@@ -295,6 +302,16 @@ def _validate_dlt_group_config(
         raise SourceParseError(f"{file_path} dlt sql_database config requires credentials")
     if source_type == "filesystem" and not isinstance(config.get("bucket_url"), str):
         raise SourceParseError(f"{file_path} dlt filesystem config requires bucket_url")
+
+
+def _validate_dlt_destination_config(*, config: dict[str, object], file_path: Path) -> None:
+    blocked_keys: tuple[str, ...] = ("credentials", "dataset_name", "default_schema_name")
+    blocked_key: str
+    for blocked_key in blocked_keys:
+        if blocked_key in config:
+            raise SourceParseError(
+                f"{file_path} dlt source destination cannot define '{blocked_key}'"
+            )
 
 
 def _dlt_resource_name(*, source_type: str, resource: dict[str, object], file_path: Path) -> str:

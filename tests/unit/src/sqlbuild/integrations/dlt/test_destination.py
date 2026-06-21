@@ -23,6 +23,7 @@ DESTINATION_TEST_CASES: list[DltDestinationTestCase] = [
         dataset_name="raw",
         expected_destination_name="duckdb",
         expected_dataset_name="raw",
+        expected_caps_params={"naming_convention": "sql_ci_v1"},
     ),
     DltDestinationTestCase(
         description="defaults duckdb dataset to main",
@@ -31,6 +32,18 @@ DESTINATION_TEST_CASES: list[DltDestinationTestCase] = [
         dataset_name=None,
         expected_destination_name="duckdb",
         expected_dataset_name="main",
+        expected_caps_params={"naming_convention": "sql_ci_v1"},
+    ),
+    DltDestinationTestCase(
+        description="allows destination overrides",
+        adapter_name="duckdb",
+        connection_config={"database": "warehouse.duckdb"},
+        dataset_name="raw",
+        destination_config={"naming_convention": "sql_cs_v1", "create_indexes": True},
+        expected_destination_name="duckdb",
+        expected_dataset_name="raw",
+        expected_config_params={"create_indexes": True},
+        expected_caps_params={"naming_convention": "sql_cs_v1"},
     ),
     DltDestinationTestCase(
         description="maps motherduck destination",
@@ -93,6 +106,24 @@ DESTINATION_TEST_CASES: list[DltDestinationTestCase] = [
     ),
 ]
 
+DESTINATION_ERROR_TEST_CASES: list[DltDestinationErrorTestCase] = [
+    DltDestinationErrorTestCase(
+        description="requires schema for real warehouse",
+        adapter_name="postgres",
+        connection_config={"host": "localhost", "dbname": "db", "user": "user"},
+        dataset_name=None,
+        expected_error_fragment="requires an explicit dlt source schema",
+    ),
+    DltDestinationErrorTestCase(
+        description="rejects sqlbuild owned destination keys",
+        adapter_name="duckdb",
+        connection_config={"database": "warehouse.duckdb"},
+        dataset_name="raw",
+        destination_config={"credentials": "other.duckdb"},
+        expected_error_fragment="cannot define SQLBuild-owned key",
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -105,25 +136,23 @@ def test_given_sqlbuild_connection_when_building_dlt_destination_then_maps_desti
     result: DltDestinationConfig = build_dlt_destination(
         adapter_name=test_case.adapter_name,
         connection_config=test_case.connection_config,
+        destination_config=test_case.destination_config,
         dataset_name=test_case.dataset_name,
     )
 
     assert result.destination.destination_name == test_case.expected_destination_name
     assert result.dataset_name == test_case.expected_dataset_name
+    expected_key: str
+    for expected_key, expected_value in test_case.expected_config_params.items():
+        assert result.destination.config_params[expected_key] == expected_value
+    for expected_key, expected_value in test_case.expected_caps_params.items():
+        assert result.destination.caps_params[expected_key] == expected_value
 
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        DltDestinationErrorTestCase(
-            description="requires schema for real warehouse",
-            adapter_name="postgres",
-            connection_config={"host": "localhost", "dbname": "db", "user": "user"},
-            dataset_name=None,
-            expected_error_fragment="requires an explicit dlt source schema",
-        )
-    ],
-    ids=["requires schema for real warehouse"],
+    DESTINATION_ERROR_TEST_CASES,
+    ids=[case.description for case in DESTINATION_ERROR_TEST_CASES],
 )
 def test_given_real_warehouse_without_schema_when_building_dlt_destination_then_raises(
     test_case: DltDestinationErrorTestCase,
@@ -132,6 +161,7 @@ def test_given_real_warehouse_without_schema_when_building_dlt_destination_then_
         build_dlt_destination(
             adapter_name=test_case.adapter_name,
             connection_config=test_case.connection_config,
+            destination_config=test_case.destination_config,
             dataset_name=test_case.dataset_name,
         )
 
