@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import sys
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import LifeCycleEvent
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.cli.commands.main.helpers.load_progress import (
+    LoadProgressReporter,
+    format_load_footer,
+)
 from sqlbuild.cli.commands.main.helpers.load_references import validate_reference_source_targets
 from sqlbuild.cli.commands.main.helpers.load_selection import (
     select_load_entries,
@@ -36,7 +37,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
@@ -161,7 +161,7 @@ def run_load(
     progress_stream.write("\n")
     progress_stream.flush()
     start: float = time.monotonic()
-    on_complete: Callable[[LoadExecutionResult], None] = _build_on_complete(
+    load_progress: LoadProgressReporter = LoadProgressReporter(
         stream=progress_stream,
         use_color=use_color,
         source_order={source.name: index for index, source in enumerate(selected_sources, start=1)},
@@ -187,7 +187,6 @@ def run_load(
         use_color=use_color,
     )
     provider_session: Any = build_provider_session(discovered_inputs.providers)
-    result_store_connection: Any = adapter.connect(connection_config)
     try:
         results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
             sources=selected_sources,
@@ -196,6 +195,7 @@ def run_load(
             connection_config=connection_config,
             adapter=adapter,
             run_id=run_id,
+            runtime_dir=effective_project_dir / "target",
             target=target_name,
             vars=effective_vars,
             is_reload=reload,
@@ -204,40 +204,28 @@ def run_load(
             start_cursor_int=parse_cursor_integer(effective_cursor_overrides.start_int),
             end_cursor_int=parse_cursor_integer(effective_cursor_overrides.end_int),
             max_concurrency=effective_concurrency,
-            on_load_complete=on_complete,
+            on_load_start=load_progress.on_start,
+            on_load_progress=load_progress.on_progress,
+            on_load_complete=load_progress.on_complete,
             on_connection_start=connection_progress.on_connection_start,
             on_connection_complete=connection_progress.on_connection_complete,
             on_connection_error=connection_progress.on_connection_error,
             use_color=use_color,
             providers=provider_session.providers,
-            result_store=build_standard_node_result_store(
-                adapter=adapter,
-                connection=result_store_connection,
-                database=adapter.default_database(),
-                schema=adapter.default_schema(),
-            ),
         )
         elapsed: float = time.monotonic() - start
         success_count: int = sum(1 for result in results if result.status.value == "success")
         fail_count: int = sum(1 for result in results if result.status.value == "failed")
         skip_count: int = sum(1 for result in results if result.status.value == "skipped")
-        completion_message: str = (
-            "Completed successfully." if fail_count == 0 else "Completed with errors."
-        )
-        progress_stream.write(f"\n{completion_message}\n")
         progress_stream.write(
-            format_summary_footer(
-                counts=(
-                    ("PASS", success_count),
-                    ("WARN", 0),
-                    ("FAIL", fail_count),
-                    ("SKIP", skip_count),
-                    ("TOTAL", len(results)),
-                ),
+            format_load_footer(
+                success_count=success_count,
+                fail_count=fail_count,
+                skip_count=skip_count,
+                total_count=len(results),
+                elapsed=elapsed,
                 use_color=use_color,
-                elapsed=f"{elapsed:.2f}s",
             )
-            + "\n"
         )
         progress_stream.flush()
         write_execution_json_output(
@@ -247,49 +235,7 @@ def run_load(
         )
         return 0 if fail_count == 0 else 1
     finally:
-        adapter.close(result_store_connection)
         provider_session.close()
-
-
-def _build_on_complete(
-    *,
-    stream: TextIO,
-    use_color: bool,
-    source_order: dict[str, int],
-    total_count: int,
-) -> Callable[[LoadExecutionResult], None]:
-    def _on_complete(result: LoadExecutionResult) -> None:
-        status_text: str = (
-            "OK"
-            if result.status.value == "success"
-            else "SKIP"
-            if result.status.value == "skipped"
-            else "FAIL"
-        )
-        style: CliStyle = CliStyle(use_color=use_color)
-        status: str = style.status(status_text)
-        duration: str = ""
-        if result.duration_ms is not None:
-            duration = f"{result.duration_ms / 1000.0:.2f}s"
-        rows_loaded: str = f"rows={result.rows_loaded:,}"
-        ordinal: int = source_order[result.source_name]
-        stream.write(
-            f"  {ordinal}/{total_count}  {result.resource_kind.value:<10}"
-            f"{result.source_name:<30} {status:<6} {duration}  {rows_loaded}\n"
-        )
-        event: LifeCycleEvent
-        for event in result.lifecycle_events:
-            if event.kind == LifeCycleEventKind.LOG:
-                lines: list[str] = event.content.splitlines() or [""]
-                stream.write(f"    log  {lines[0]}\n")
-                line: str
-                for line in lines[1:]:
-                    stream.write(f"         {line}\n")
-        if result.error_message is not None:
-            stream.write(f"    {result.error_message}\n")
-        stream.flush()
-
-    return _on_complete
 
 
 def _is_loader_node(source: SourceEntry) -> bool:

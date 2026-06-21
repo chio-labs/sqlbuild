@@ -5,10 +5,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
+from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
+    ParseSourcesYamlDltTestCase,
     ParseSourcesYamlErrorTestCase,
     ParseSourcesYamlIngestrTestCase,
     ParseSourcesYamlTestCase,
@@ -466,6 +468,76 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
     assert ingestr_config.extra_args == test_case.expected_extra_args
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSourcesYamlDltTestCase(
+            description="expands dlt sources into managed source entries",
+            contents="""
+            dlt_sources:
+              - type: sql_database
+                schema: raw
+                destination:
+                  naming_convention: sql_cs_v1
+                  create_indexes: true
+                config:
+                  credentials: duckdb:///source.duckdb
+                  schema: main
+                resources:
+                  - name: raw_orders
+                    table: orders
+                    write_disposition: merge
+                    primary_key: order_id
+                  - name: raw_customers
+                    schema: raw_customers_override
+                    table: customers
+                    write_disposition: append
+            """,
+            expected_source_names=("raw_orders", "raw_customers"),
+            expected_loaders=("raw_orders", "raw_customers"),
+            expected_kind="dlt",
+            expected_dlt_names=("orders", "customers"),
+            expected_schemas=("raw", "raw_customers_override"),
+            expected_destination_config={"naming_convention": "sql_cs_v1", "create_indexes": True},
+        )
+    ],
+    ids=["expands dlt sources into managed source entries"],
+)
+def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
+    test_case: ParseSourcesYamlDltTestCase,
+) -> None:
+    source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
+        test_case.contents,
+        Path("sources/raw.yml"),
+    )
+
+    assert tuple(entry.name for entry in source_entries) == test_case.expected_source_names
+    assert tuple(entry.loader for entry in source_entries) == test_case.expected_loaders
+    assert all(entry.managed for entry in source_entries)
+    assert all(entry.integration_loader is not None for entry in source_entries)
+    assert tuple(
+        entry.integration_loader.kind for entry in source_entries if entry.integration_loader
+    ) == (
+        test_case.expected_kind,
+        test_case.expected_kind,
+    )
+    configs: tuple[object, ...] = tuple(
+        entry.integration_loader.config for entry in source_entries if entry.integration_loader
+    )
+    assert all(isinstance(config, DltSourceConfig) for config in configs)
+    assert tuple(
+        config.resource.dlt_name for config in configs if isinstance(config, DltSourceConfig)
+    ) == (test_case.expected_dlt_names)
+    assert tuple(entry.schema for entry in source_entries) == test_case.expected_schemas
+    assert (
+        tuple(config.resource.schema for config in configs if isinstance(config, DltSourceConfig))
+        == test_case.expected_schemas
+    )
+    assert tuple(
+        config.destination for config in configs if isinstance(config, DltSourceConfig)
+    ) == (test_case.expected_destination_config, test_case.expected_destination_config)
+
+
 ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
     ParseSourcesYamlErrorTestCase(
         description="raises when the file does not contain a top-level mapping",
@@ -610,6 +682,49 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               strategy: nope
         """,
         expected_error_fragment="ingestr strategy must be one of",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when dlt merge omits primary key",
+        contents="""
+        dlt_sources:
+          - type: sql_database
+            config:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+                write_disposition: merge
+        """,
+        expected_error_fragment="merge requires primary_key",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when dlt uses sqlbuild write strategy",
+        contents="""
+        dlt_sources:
+          - type: sql_database
+            config:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+                write_strategy: table
+        """,
+        expected_error_fragment="must use dlt write_disposition",
+    ),
+    ParseSourcesYamlErrorTestCase(
+        description="raises when dlt destination overrides credentials",
+        contents="""
+        dlt_sources:
+          - type: sql_database
+            destination:
+              credentials: other
+            config:
+              credentials: duckdb:///source.duckdb
+            resources:
+              - name: raw_orders
+                table: orders
+        """,
+        expected_error_fragment="dlt source destination cannot define 'credentials'",
     ),
     ParseSourcesYamlErrorTestCase(
         description="raises when write strategy is unknown",

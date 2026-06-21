@@ -10,6 +10,7 @@ from collections import deque
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -109,6 +110,7 @@ class BuildScheduler:
         scheduler_connection: Any,
         promotion_mode: TablePromotionMode,
         run_id: str,
+        runtime_dir: Path,
         query_change_tracking: bool,
         snapshots: SnapshotsConfig,
         allow_snapshot_schema_change: bool,
@@ -147,6 +149,7 @@ class BuildScheduler:
         self._scheduler_connection: Any = scheduler_connection
         self._promotion_mode: TablePromotionMode = promotion_mode
         self._run_id: str = run_id
+        self._runtime_dir: Path = runtime_dir
         self._query_change_tracking: bool = query_change_tracking
         self._snapshots: SnapshotsConfig = snapshots
         self._allow_snapshot_schema_change: bool = allow_snapshot_schema_change
@@ -458,6 +461,7 @@ class BuildScheduler:
             connection_config=self._connection_config,
             connection=connection,
             run_id=self._run_id,
+            runtime_dir=self._runtime_dir,
             target=self._target,
             effective_vars=self._effective_vars,
             is_reload=self._loader_is_reload,
@@ -467,6 +471,7 @@ class BuildScheduler:
             end_cursor_int=self._end_cursor_int,
             on_progress=self._on_progress,
             on_node_start=self._on_node_start,
+            on_sub_progress=self._on_sub_progress,
             use_color=self._use_color,
             providers=self._providers,
         )

@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
+from sqlbuild.compiler.discovery.helpers.integration_loaders import integration_loader_name
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -222,15 +223,21 @@ def _validate_source_loader_references(
     for source_file in source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
-            if source_entry.managed and source_entry.loader != source_entry.name:
+            expected_loader: str | None = source_entry.name
+            if source_entry.integration_loader is not None:
+                expected_loader = integration_loader_name(
+                    kind=source_entry.integration_loader.kind,
+                    source_name=source_entry.name,
+                )
+            if source_entry.managed and source_entry.loader != expected_loader:
                 raise DiscoveryConflictError(
                     f"Managed source '{source_entry.name}' in {source_file.relative_path} must "
-                    f"use terminal loader '{source_entry.name}'"
+                    f"use terminal loader '{expected_loader}'"
                 )
-            if source_entry.managed and source_entry.name not in loader_names:
+            if source_entry.managed and expected_loader not in loader_names:
                 raise DiscoveryConflictError(
                     f"Managed source '{source_entry.name}' in {source_file.relative_path} "
-                    f"requires loader '{source_entry.name}'"
+                    f"requires loader '{expected_loader}'"
                 )
             if source_entry.loader is None or source_entry.loader in loader_names:
                 continue

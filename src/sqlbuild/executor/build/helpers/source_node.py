@@ -6,6 +6,7 @@ import dataclasses
 import time
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -33,6 +34,7 @@ def execute_build_source_node(
     connection_config: dict[str, object],
     connection: Any,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str,
     effective_vars: dict[str, object],
     is_reload: bool,
@@ -42,6 +44,7 @@ def execute_build_source_node(
     end_cursor_int: int | None,
     on_progress: Callable[[str], None] | None,
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
+    on_sub_progress: Callable[[str], None] | None = None,
     use_color: bool = False,
     providers: ProviderContainer | None = None,
 ) -> LoadExecutionResult:
@@ -76,6 +79,7 @@ def execute_build_source_node(
         connection_config=connection_config,
         connection=connection,
         run_id=run_id,
+        runtime_dir=runtime_dir,
         target=target,
         vars=effective_vars,
         is_reload=is_reload,
@@ -87,6 +91,7 @@ def execute_build_source_node(
         use_color=use_color,
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
+        on_progress=on_sub_progress,
         providers=providers,
         result_store=result_store,
     )
@@ -112,6 +117,8 @@ def _persist_loader_result(
     run_id: str,
     result_store: StandardNodeResultStore | None = None,
 ) -> None:
+    if connection is None and (result_store is None or result_store.connection is None):
+        return
     resolved_result_store: StandardNodeResultStore = (
         result_store
         or build_standard_node_result_store(
