@@ -2124,15 +2124,15 @@ def assert_dbt_scenario_snapshot(
     *,
     project_dir: Path,
     scenario_name: str,
-    source_file: str,
+    relation_file: str,
     expected_row_count: int,
     expected_column_names: set[str],
 ) -> None:
-    """Assert a captured dbt scenario snapshot manifest and source JSONL file."""
+    """Assert a captured dbt scenario snapshot manifest and relation JSONL file."""
 
     snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
     manifest_path: Path = snapshot_root / "scenario.json"
-    jsonl_path: Path = snapshot_root / "sources" / source_file
+    jsonl_path: Path = snapshot_root / relation_file
     assert manifest_path.exists()
     assert jsonl_path.exists()
     manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -2142,7 +2142,7 @@ def assert_dbt_scenario_snapshot(
     assert manifest_data["total_rows"] == expected_row_count
     relation: object = manifest_data["relations"][0]
     assert isinstance(relation, dict)
-    assert relation["file"] == f"sources/{source_file}"
+    assert relation["file"] == relation_file
     assert relation["row_count"] == expected_row_count
     columns: object = relation["columns"]
     assert isinstance(columns, list)

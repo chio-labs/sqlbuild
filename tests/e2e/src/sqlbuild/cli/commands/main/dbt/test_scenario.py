@@ -432,7 +432,7 @@ def test_given_captured_snapshot_when_running_dbt_scenario_local_then_replays_on
     assert_dbt_scenario_snapshot(
         project_dir=project_dir,
         scenario_name="dbt_stg_scenario_orders",
-        source_file="raw__orders.jsonl",
+        relation_file="sources/raw__orders.jsonl",
         expected_row_count=1,
         expected_column_names={"order_id", "ordered_at"},
     )
@@ -680,6 +680,70 @@ def test_given_spanning_sqlbuild_dbt_graph_when_running_scenario_then_resolves_c
     absent_relation: str
     for absent_relation in test_case.expected_absent_relations:
         assert not table_exists(db_path=db_path, table_name=absent_relation)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtScenarioCliTestCase(
+            description="mocked dbt ref scenario captures and replays on local DuckDB",
+            command=(
+                "--no-color",
+                "dbt",
+                "scenario",
+                "test",
+                "mart_orders_spanning",
+                "--local",
+            ),
+            expected_stdout_fragments=(
+                "mart_orders_spanning",
+                "expect    expected mart_orders",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+        )
+    ],
+    ids=["mocked dbt ref scenario captures and replays on local DuckDB"],
+)
+def test_given_mocked_dbt_ref_scenario_when_capturing_then_replays_dbt_ref_on_local_duckdb(
+    test_case: DbtScenarioCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    setup_result: subprocess.CompletedProcess[str] = compile_dbt_interop_manifest(
+        project_dir=project_dir
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    write_spanning_sqlbuild_dbt_ref_scenario(project_dir=project_dir)
+
+    capture_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "scenario", "capture", "mart_orders_spanning"),
+        project_dir=project_dir,
+    )
+    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+    assert_dbt_scenario_snapshot(
+        project_dir=project_dir,
+        scenario_name="mart_orders_spanning",
+        relation_file="dbt_refs/analytics__fact_orders.jsonl",
+        expected_row_count=1,
+        expected_column_names={"order_id"},
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    assert_dbt_local_replay_rows(
+        project_dir=project_dir,
+        scenario_name="mart_orders_spanning",
+        rows_sql='SELECT order_id FROM "__sqb_local__dbt_ref__analytics__fact_orders"',
+        expected_rows=((42,),),
+    )
 
 
 @pytest.mark.parametrize(
