@@ -82,6 +82,64 @@ def test_given_postgres_source_when_loading_with_ingestr_then_duckdb_target_has_
     "test_case",
     [
         IngestrE2ETestCase(
+            description="loads duckdb source into duckdb destination without destination lock",
+            expected_rows=((1, "new"), (2, "paid")),
+            expected_stdout_fragments=("ingestr execution", "raw_duckdb_orders", "OK"),
+        )
+    ],
+    ids=["loads duckdb source into duckdb destination without destination lock"],
+)
+def test_given_duckdb_source_when_loading_with_ingestr_to_duckdb_then_target_has_rows(
+    tmp_path: Path,
+    test_case: IngestrE2ETestCase,
+) -> None:
+    import duckdb
+
+    source_duckdb_path: Path = tmp_path / "source.duckdb"
+    source_connection: duckdb.DuckDBPyConnection = duckdb.connect(str(source_duckdb_path))
+    try:
+        source_connection.execute("CREATE TABLE orders (order_id INTEGER, status VARCHAR)")
+        source_connection.execute("INSERT INTO orders VALUES (1, 'new'), (2, 'paid')")
+    finally:
+        source_connection.close()
+    project_dir: Path = tmp_path / "duckdb_to_duckdb"
+    target_duckdb_path: Path = project_dir / "target.duckdb"
+    write_project_files(
+        project_dir=project_dir,
+        files={
+            "sqlbuild_project.toml": duckdb_project_toml(
+                project_name="duckdb_to_duckdb", database_path=target_duckdb_path
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_duckdb_orders\n"
+                "    ingestr:\n"
+                f'      source_uri: "duckdb:///{source_duckdb_path}"\n'
+                "      source_table: orders\n"
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb_with_ingestr(
+        command=("--no-color", "load"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    assert (
+        fetch_duckdb_rows(
+            database_path=target_duckdb_path,
+            sql="SELECT order_id, status FROM raw_duckdb_orders ORDER BY order_id",
+        )
+        == test_case.expected_rows
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IngestrE2ETestCase(
             description="build loads postgres source with ingestr before building model",
             expected_rows=((1, "new"), (2, "paid")),
             expected_stdout_fragments=("ingestr execution", "raw_pg_orders", "stg_pg_orders"),

@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -39,6 +40,7 @@ def run_load_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str | None,
     vars: dict[str, object],
     is_reload: bool,
@@ -47,6 +49,8 @@ def run_load_pipeline(
     start_cursor_int: int | None = None,
     end_cursor_int: int | None = None,
     max_concurrency: int = 1,
+    on_load_start: Callable[[SourceEntry], None] | None = None,
+    on_load_progress: Callable[[SourceEntry, str], None] | None = None,
     on_load_complete: Callable[[LoadExecutionResult], None] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
     on_connection_complete: Callable[[int, float], None] | None = None,
@@ -83,6 +87,8 @@ def run_load_pipeline(
     source_by_name: dict[str, SourceEntry] = {source.name: source for source in index_sources}
     external_source: SourceEntry
     for external_source in external_sources:
+        if on_load_start is not None:
+            on_load_start(external_source)
         result: LoadExecutionResult = execute_ready_dag_source(
             source_name=external_source.name,
             source_by_name=source_by_name,
@@ -93,6 +99,7 @@ def run_load_pipeline(
             connection_config=connection_config,
             connection=None,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             target=target,
             vars=vars,
             is_reload=is_reload,
@@ -101,6 +108,11 @@ def run_load_pipeline(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            on_progress=(
+                None
+                if on_load_progress is None
+                else lambda message, source=external_source: on_load_progress(source, message)
+            ),
             providers=providers,
             result_store=result_store,
         )
@@ -174,6 +186,7 @@ def run_load_pipeline(
                         connection_config=connection_config,
                         connection=sequential_connection,
                         run_id=run_id,
+                        runtime_dir=runtime_dir,
                         target=target,
                         vars=vars,
                         is_reload=is_reload,
@@ -197,6 +210,8 @@ def run_load_pipeline(
                 while state.ready and len(state.in_flight) < effective_concurrency:
                     source_name = state.ready.pop(0)
                     state.in_flight.add(source_name)
+                    if on_load_start is not None:
+                        on_load_start(source_by_name[source_name])
                     pool.submit(
                         load_dag_worker,
                         source_name,
@@ -217,8 +232,10 @@ def run_load_pipeline(
                         end_cursor_int,
                         use_color,
                         state.completion_queue,
+                        on_load_progress,
                         providers,
                         result_store,
+                        runtime_dir,
                     )
                 if not state.in_flight:
                     break

@@ -5,6 +5,7 @@ from __future__ import annotations
 import queue
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -12,6 +13,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
     should_skip_due_to_hard_dependency,
@@ -99,6 +101,7 @@ def execute_ready_dag_source(
     connection_config: dict[str, object],
     connection: Any,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str | None,
     vars: dict[str, object],
     is_reload: bool,
@@ -107,6 +110,7 @@ def execute_ready_dag_source(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
     use_color: bool = False,
+    on_progress: Callable[[str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
 ) -> LoadExecutionResult:
@@ -129,6 +133,14 @@ def execute_ready_dag_source(
             reason="All upstream loaders were soft-skipped",
             mode=SkipMode.SOFT,
         )
+    resolved_result_store: Any | None = result_store
+    if resolved_result_store is None and connection is not None:
+        resolved_result_store = build_standard_node_result_store(
+            adapter=adapter,
+            connection=connection,
+            database=adapter.default_database(),
+            schema=adapter.default_schema(),
+        )
     return execute_source_load(
         source_entry=source,
         loader_function=indexes.loader_by_name[source.loader or ""],
@@ -136,6 +148,7 @@ def execute_ready_dag_source(
         connection_config=connection_config,
         connection=connection,
         run_id=run_id,
+        runtime_dir=runtime_dir,
         target=target,
         vars=vars,
         is_reload=is_reload,
@@ -147,8 +160,9 @@ def execute_ready_dag_source(
         use_color=use_color,
         loader_ref_entries=indexes.loader_ref_entries,
         source_ref_entries=indexes.source_by_name,
+        on_progress=on_progress,
         providers=providers,
-        result_store=result_store,
+        result_store=resolved_result_store,
     )
 
 
@@ -171,8 +185,10 @@ def load_dag_worker(
     end_cursor_int: int | None,
     use_color: bool,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
+    on_load_progress: Callable[[SourceEntry, str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
+    runtime_dir: Path = Path("target"),
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
 
@@ -187,6 +203,7 @@ def load_dag_worker(
             connection_config=connection_config,
             connection=connection,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             target=target,
             vars=vars,
             is_reload=is_reload,
@@ -195,6 +212,11 @@ def load_dag_worker(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            on_progress=(
+                None
+                if on_load_progress is None
+                else lambda message: on_load_progress(source_by_name[source_name], message)
+            ),
             providers=providers,
             result_store=result_store,
         )

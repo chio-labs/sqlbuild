@@ -7,6 +7,7 @@ import queue
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -114,6 +115,8 @@ class LoaderContext:
     source_refs: Mapping[str, LoaderRelationRef] = field(default_factory=dict)
     providers: ProviderContainer = field(default_factory=_empty_provider_container)
     result_store: Any | None = None
+    runtime_dir: Path = Path("target")
+    on_progress: Callable[[str], None] | None = None
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
@@ -125,6 +128,10 @@ class LoaderContext:
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
+
+    def progress(self, message: str) -> None:
+        if self.on_progress is not None:
+            self.on_progress(message)
 
     def skip(self, reason: str, *, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
         """Return a skip signal for the current source loader."""

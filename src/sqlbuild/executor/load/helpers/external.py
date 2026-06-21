@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -37,6 +39,7 @@ def execute_external_source_load(
     destination_relation: str,
     destination_name: str,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str | None,
     vars: dict[str, object],
     is_reload: bool,
@@ -48,6 +51,7 @@ def execute_external_source_load(
     use_color: bool,
     resource_kind: ExecutionResourceKind,
     start: float,
+    on_progress: Callable[[str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
 ) -> LoadExecutionResult:
@@ -63,6 +67,7 @@ def execute_external_source_load(
             destination_schema=source_entry.schema,
             destination_name=destination_name,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             target=target,
             vars=vars,
             is_reload=is_reload,
@@ -76,6 +81,7 @@ def execute_external_source_load(
             end_cursor_int=end_cursor_int,
             providers=providers if providers is not None else _empty_provider_container(),
             result_store=result_store,
+            on_progress=on_progress,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,

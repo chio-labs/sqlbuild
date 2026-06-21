@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -46,6 +47,7 @@ def execute_build_plan(
     scheduler_connection: Any,
     promotion_mode: TablePromotionMode,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     query_change_tracking: bool = True,
     snapshots: SnapshotsConfig | None = None,
     allow_snapshot_schema_change: bool = False,
@@ -88,6 +90,7 @@ def execute_build_plan(
         scheduler_connection=scheduler_connection,
         promotion_mode=promotion_mode,
         run_id=run_id,
+        runtime_dir=runtime_dir,
         query_change_tracking=query_change_tracking,
         snapshots=snapshots or SnapshotsConfig(),
         allow_snapshot_schema_change=allow_snapshot_schema_change,
