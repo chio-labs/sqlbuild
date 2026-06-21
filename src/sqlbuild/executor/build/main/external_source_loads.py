@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.helpers.external_source_loads import (
@@ -23,6 +25,7 @@ def run_external_source_loads_before_connections(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     run_id: str,
+    runtime_dir: Path = Path("target"),
     target: str,
     effective_vars: dict[str, object] | None,
     is_reload: bool,
@@ -34,6 +37,7 @@ def run_external_source_loads_before_connections(
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
     on_node_complete: Callable[[object], None] | None,
     use_color: bool,
+    precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
     providers: ProviderContainer | None = None,
 ) -> ExternalSourceLoadResults:
     """Run external source-load nodes before SQLBuild opens warehouse connections."""
@@ -44,6 +48,7 @@ def run_external_source_loads_before_connections(
         adapter=adapter,
         connection_config=connection_config,
         run_id=run_id,
+        runtime_dir=runtime_dir,
         target=target,
         effective_vars=effective_vars,
         is_reload=is_reload,
@@ -55,5 +60,6 @@ def run_external_source_loads_before_connections(
         on_node_start=on_node_start,
         on_node_complete=on_node_complete,
         use_color=use_color,
+        precompleted_keys=precompleted_keys,
         providers=providers,
     )

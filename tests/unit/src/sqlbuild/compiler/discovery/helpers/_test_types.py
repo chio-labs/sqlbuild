@@ -224,6 +224,16 @@ class ParseSqlScenarioFileErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSourcesYamlDltTestCase:
+    description: str
+    contents: str
+    expected_source_names: tuple[str, ...]
+    expected_loaders: tuple[str, ...]
+    expected_kind: str
+    expected_dlt_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ParseSqlAuditFileTestCase:
     description: str
     contents: str

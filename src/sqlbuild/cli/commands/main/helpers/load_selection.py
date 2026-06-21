@@ -130,7 +130,11 @@ def select_load_reference_entries(
     for source in selected_sources:
         if source.loader is None or source.loader not in upstream_loaders:
             continue
-        reference_loader_names.update(_upstream_loader_closure(source.loader, upstream_loaders))
+        dependency_name: str
+        for dependency_name in upstream_loaders[source.loader]:
+            reference_loader_names.update(
+                _upstream_loader_closure(dependency_name, upstream_loaders)
+            )
     return tuple(
         _loader_to_source_entry(loaders[loader_name], target_config)
         for loader_name in _topological_loader_order(

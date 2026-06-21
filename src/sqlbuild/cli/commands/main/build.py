@@ -298,6 +298,7 @@ def run_build(
             snapshots=discovered_inputs.project_config.snapshots,
             allow_snapshot_schema_change=allow_snapshot_schema_change,
             run_id=pipeline_result.project.run_id,
+            runtime_dir=effective_project_dir / "target",
             run_tests=run_tests,
             run_audits=run_audits,
             fail_fast=fail_fast,

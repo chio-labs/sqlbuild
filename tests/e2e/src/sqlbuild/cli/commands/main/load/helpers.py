@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -102,6 +103,16 @@ def build_schema_behavior_project_files(*, source_yaml: str, loader_py: str) -> 
         "sources/raw.yml": source_yaml,
         "loaders/source_rows.py": loader_py,
     }
+
+
+def write_sqlite_orders_source_database(db_path: Path) -> None:
+    connection: sqlite3.Connection = sqlite3.connect(str(db_path))
+    try:
+        connection.execute("CREATE TABLE orders (order_id INTEGER, amount INTEGER)")
+        connection.execute("INSERT INTO orders VALUES (1, 10), (2, 20), (3, 30)")
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -> dict[str, str]:

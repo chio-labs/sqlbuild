@@ -605,6 +605,15 @@ def format_build_footer(
             skip_count += 1
         warn_count += len(function_result.warning_messages)
 
+    load_result: LoadExecutionResult
+    for load_result in result.load_results:
+        if load_result.status == ExecutionStatus.SUCCESS:
+            pass_count += 1
+        elif load_result.status == ExecutionStatus.FAILED:
+            fail_count += 1
+        elif load_result.status == ExecutionStatus.SKIPPED:
+            skip_count += 1
+
     test_r: SqlTestExecutionResult
     for test_r in result.test_results:
         if test_r.outcome == SqlTestOutcome.PASS:

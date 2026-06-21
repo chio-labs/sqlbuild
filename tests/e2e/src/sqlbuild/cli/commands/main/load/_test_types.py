@@ -102,3 +102,10 @@ class SourceLoaderErrorE2ETestCase:
     command: tuple[str, ...]
     expected_error_fragment: str
     expected_return_code: int = 1
+
+
+@dataclass(frozen=True)
+class DltSqlDatabaseE2ETestCase:
+    description: str
+    expected_loaded_rows: tuple[tuple[object, ...], ...]
+    expected_model_rows: tuple[tuple[object, ...], ...]

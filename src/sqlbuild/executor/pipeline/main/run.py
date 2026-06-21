@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -55,6 +56,7 @@ def run_build_pipeline(
     adapter: BaseAdapter,
     settings: SettingsConfig,
     run_id: str,
+    runtime_dir: Path = Path("target"),
     snapshots: SnapshotsConfig | None = None,
     allow_snapshot_schema_change: bool = False,
     run_tests: bool = True,
@@ -100,6 +102,7 @@ def run_build_pipeline(
             adapter=adapter,
             connection_config=connection_config,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             target=target,
             effective_vars=effective_vars,
             is_reload=loader_is_reload,
@@ -111,6 +114,7 @@ def run_build_pipeline(
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
             use_color=use_color,
+            precompleted_keys=precompleted_keys,
             providers=providers,
         )
     )
@@ -148,6 +152,7 @@ def run_build_pipeline(
             scheduler_connection=scheduler_connection,
             promotion_mode=promotion_mode,
             run_id=run_id,
+            runtime_dir=runtime_dir,
             query_change_tracking=(
                 settings.query_change_tracking
                 if query_change_tracking is None
