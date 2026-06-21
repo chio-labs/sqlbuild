@@ -31,6 +31,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_audit_pipeline
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
@@ -151,7 +152,17 @@ def run_audit(
     warn_count: int = sum(1 for r in results if r.outcome == AuditOutcome.WARN)
     fail_count: int = sum(1 for r in results if r.outcome == AuditOutcome.ERROR)
     progress_stream.write(
-        f"\nPASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  TOTAL={len(results)}\n"
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("WARN", warn_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n"
     )
     progress_stream.flush()
     write_execution_json_output(

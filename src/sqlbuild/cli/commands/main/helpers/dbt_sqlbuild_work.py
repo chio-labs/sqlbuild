@@ -40,6 +40,7 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 
 def execute_sqlbuild_build_work(
@@ -216,7 +217,18 @@ def _execute_sqlbuild_tests(
     )
     pass_count: int = sum(1 for r in results if r.outcome == SqlTestOutcome.PASS)
     fail_count: int = len(results) - pass_count
-    output_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n\n")
+    output_stream.write(
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n\n"
+    )
     output_stream.flush()
     return 0 if fail_count == 0 else 1
 
@@ -276,7 +288,17 @@ def _execute_sqlbuild_audits(
     warn_count: int = sum(1 for r in results if r.outcome == AuditOutcome.WARN)
     fail_count: int = sum(1 for r in results if r.outcome == AuditOutcome.ERROR)
     output_stream.write(
-        f"\nPASS={pass_count}  WARN={warn_count}  FAIL={fail_count}  TOTAL={len(results)}\n\n"
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("WARN", warn_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n\n"
     )
     output_stream.flush()
     return 0 if fail_count == 0 else 1

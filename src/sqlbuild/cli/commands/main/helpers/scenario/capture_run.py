@@ -25,6 +25,7 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 _SCENARIO_NAME_WIDTH: int = 64
 _CAPTURE_RELATION_KIND_WIDTH: int = 8
@@ -101,7 +102,18 @@ def run_scenario_capture_run(
         capture_results_out.extend(results)
     pass_count: int = sum(1 for result in results if result.status == SUCCESS_STATUS)
     fail_count: int = len(results) - pass_count
-    progress_stream.write(f"\nPASS={pass_count}  FAIL={fail_count}  TOTAL={len(results)}\n")
+    progress_stream.write(
+        "\n"
+        + format_summary_footer(
+            counts=(
+                ("PASS", pass_count),
+                ("FAIL", fail_count),
+                ("TOTAL", len(results)),
+            ),
+            use_color=use_color,
+        )
+        + "\n"
+    )
     progress_stream.flush()
     return 0 if fail_count == 0 else 1
 
