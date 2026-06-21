@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.37.0](https://github.com/chio-labs/sqlbuild/compare/v0.36.0...v0.37.0) (2026-06-21)
+
+
+### Features
+
+* **dlt:** cover real warehouse destinations ([0a595b6](https://github.com/chio-labs/sqlbuild/commit/0a595b62c436cbe6b6a6440c7b475b5b3f9a5f4c))
+* **dlt:** expose destination settings ([1fa1cd8](https://github.com/chio-labs/sqlbuild/commit/1fa1cd8f272e9c31c1730e3f5a0668b079dba962))
+* **dlt:** report live source progress ([de4609b](https://github.com/chio-labs/sqlbuild/commit/de4609bd2d9dcc7d0061fcaedadcdc257ab8e303))
+* **integrations:** add declarative dlt sources ([c25d721](https://github.com/chio-labs/sqlbuild/commit/c25d721a57cc5aa83724495cc796d9679a5f9dc9))
+
 ## [0.36.0](https://github.com/chio-labs/sqlbuild/compare/v0.35.0...v0.36.0) (2026-06-21)
 
 
