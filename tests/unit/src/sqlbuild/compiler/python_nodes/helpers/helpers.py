@@ -26,6 +26,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredTaskFunction,
 )
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
@@ -85,6 +86,24 @@ def notify_orders(_ctx: object, slack_provider: SlackProvider) -> None:
 
 def check_loaded_orders(_ctx: object) -> bool:
     return True
+
+
+def build_external_loader_python_node_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            loader_functions=(
+                DiscoveredLoaderFunction(
+                    file_path=Path("/project/loaders/events.py"),
+                    relative_path=Path("loaders/events.py"),
+                    name="load_events",
+                    function=load_events,
+                    connection_mode=LoaderConnectionMode.EXTERNAL,
+                ),
+            ),
+        )
+    )
 
 
 def build_orders_python_node_graph() -> PythonNodeGraph:
@@ -384,6 +403,8 @@ def build_python_node_graph_for_case(case_name: str) -> PythonNodeGraph:
         return build_intermediate_loader_asset_dependency_python_node_graph()
     if case_name == "intermediate_loader_check_dependency":
         return build_intermediate_loader_check_dependency_python_node_graph()
+    if case_name == "external_loader":
+        return build_external_loader_python_node_graph()
     return build_orders_python_node_graph()
 
 
