@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.1](https://github.com/chio-labs/sqlbuild/compare/v0.37.0...v0.37.1) (2026-06-21)
+
+
+### Bug Fixes
+
+* **loaders:** run external loaders before opening warehouse connection ([582b089](https://github.com/chio-labs/sqlbuild/commit/582b08964843636569c1058d72cd49e1f6345496))
+* **loaders:** run external loaders before opening warehouse connection ([32710f7](https://github.com/chio-labs/sqlbuild/commit/32710f794f512fef4634696be19c087cf118a7fa))
+
 ## [0.37.0](https://github.com/chio-labs/sqlbuild/compare/v0.36.0...v0.37.0) (2026-06-21)
 
 
