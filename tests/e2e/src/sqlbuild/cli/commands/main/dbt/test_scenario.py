@@ -8,6 +8,8 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtScenarioCliTestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    assert_dbt_local_replay_rows,
+    assert_dbt_scenario_snapshot,
     compile_dbt_interop_manifest,
     install_dbt_interop_packages,
     prepare_dbt_interop_project,
@@ -385,6 +387,174 @@ def test_given_json_flag_when_running_dbt_scenario_then_emits_json(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtScenarioCliTestCase(
+            description="dbt scenario capture then test --local replays on DuckDB",
+            command=(
+                "--no-color",
+                "dbt",
+                "scenario",
+                "test",
+                "dbt_stg_scenario_orders",
+                "--local",
+            ),
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "dbt_stg_scenario_orders",
+                "expect    expected stg_scenario_orders",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+        )
+    ],
+    ids=["dbt scenario capture then test --local replays on DuckDB"],
+)
+def test_given_captured_snapshot_when_running_dbt_scenario_local_then_replays_on_duckdb(
+    test_case: DbtScenarioCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_dbt_scenario_targeting_dbt_model(project_dir=project_dir)
+
+    capture_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "scenario", "capture", "dbt_stg_scenario_orders"),
+        project_dir=project_dir,
+    )
+    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+    assert "Scenario Capture (1 selected)" in capture_result.stdout
+    assert_dbt_scenario_snapshot(
+        project_dir=project_dir,
+        scenario_name="dbt_stg_scenario_orders",
+        source_file="raw__orders.jsonl",
+        expected_row_count=1,
+        expected_column_names={"order_id", "ordered_at"},
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+    assert_dbt_local_replay_rows(
+        project_dir=project_dir,
+        scenario_name="dbt_stg_scenario_orders",
+        rows_sql='SELECT order_id FROM "__sqb_local__source__raw__orders" ORDER BY order_id',
+        expected_rows=((60,),),
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtScenarioCliTestCase(
+            description="dbt scenario test --local --sync-snapshots captures then replays",
+            command=(
+                "--no-color",
+                "dbt",
+                "scenario",
+                "test",
+                "dbt_stg_scenario_orders",
+                "--local",
+                "--sync-snapshots",
+            ),
+            expected_stdout_fragments=(
+                "Scenario Capture (1 selected)",
+                "Scenario (1 selected)",
+                "expect    expected stg_scenario_orders",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+        )
+    ],
+    ids=["dbt scenario test --local --sync-snapshots captures then replays"],
+)
+def test_given_sync_snapshots_when_running_dbt_scenario_local_then_captures_and_replays(
+    test_case: DbtScenarioCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_dbt_scenario_targeting_dbt_model(project_dir=project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_stdout_fragment: str
+    for expected_stdout_fragment in test_case.expected_stdout_fragments:
+        assert expected_stdout_fragment in result.stdout
+
+
+DBT_SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES: list[DbtScenarioCliTestCase] = [
+    DbtScenarioCliTestCase(
+        description="dbt scenario test --local skips when no snapshot exists",
+        command=(
+            "--no-color",
+            "dbt",
+            "scenario",
+            "test",
+            "dbt_stg_scenario_orders",
+            "--local",
+        ),
+        expected_returncode=0,
+        expected_stdout_fragments=(
+            "dbt_stg_scenario_orders",
+            "SKIP",
+            "PASS=0  FAIL=0  ERROR=0  SKIP=1  TOTAL=1",
+        ),
+    ),
+    DbtScenarioCliTestCase(
+        description="dbt scenario test --local --strict errors when no snapshot exists",
+        command=(
+            "--no-color",
+            "dbt",
+            "scenario",
+            "test",
+            "dbt_stg_scenario_orders",
+            "--local",
+            "--strict",
+        ),
+        expected_returncode=1,
+        expected_stdout_fragments=(
+            "dbt_stg_scenario_orders",
+            "ERROR",
+            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DBT_SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES,
+    ids=[case.description for case in DBT_SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES],
+)
+def test_given_missing_snapshot_when_running_dbt_scenario_local_then_reports_expected_status(
+    test_case: DbtScenarioCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_dbt_scenario_targeting_dbt_model(project_dir=project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
     expected_stdout_fragment: str
     for expected_stdout_fragment in test_case.expected_stdout_fragments:
         assert expected_stdout_fragment in result.stdout

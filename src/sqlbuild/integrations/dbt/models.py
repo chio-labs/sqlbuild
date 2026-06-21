@@ -26,6 +26,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
+from sqlbuild.spec.models.project import ScenarioConfig
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 
@@ -526,6 +527,7 @@ class DbtScenarioBuild:
     adapter_name: str
     connection_config: dict[str, object]
     project_name: str
+    scenario_config: ScenarioConfig
 
 
 @dataclass(frozen=True)

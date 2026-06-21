@@ -9,12 +9,11 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.main.helpers.scenario.dialect import require_scenario_capture_dialect
-from sqlbuild.cli.commands.main.helpers.scenario.result_output import (
-    complete_scenario_run,
-    render_result_error,
-)
+from sqlbuild.cli.commands.main.helpers.scenario.local_run import run_local_scenarios
+from sqlbuild.cli.commands.main.helpers.scenario.result_output import render_result_error
 from sqlbuild.cli.commands.main.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
@@ -26,7 +25,6 @@ from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
 from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
-    format_scenario_execution_json,
     format_scenario_snapshot_execution_json,
     write_execution_json_output,
 )
@@ -40,19 +38,15 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.pipeline.main.run import (
     run_scenario_capture_pipeline,
-    run_scenario_local_test_pipeline,
     select_scenario_snapshot_capture_candidates,
 )
 from sqlbuild.executor.scenario.models import (
-    ScenarioRunResult,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
 )
-from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
@@ -122,7 +116,7 @@ def run_scenario(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter_name: str = "duckdb" if local else project_adapter_name
+    adapter_name: str = BuiltinAdapter.DUCKDB.value if local else project_adapter_name
     adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
     project_adapter: BaseAdapter = resolve_adapter(
         project_adapter_name,
@@ -235,20 +229,7 @@ def run_scenario(
             json_output=json_output,
             json_output_path=json_output_path,
         )
-    header: str = f"Scenario ({len(scenarios)} selected)"
-    style: CliStyle = CliStyle(use_color=use_color)
-    styled_header: str = style.success_strong(header)
-    progress_stream.write(f"\n{styled_header}\n\n")
-    progress_stream.flush()
-    scenario_status: TransientStatusReporter = TransientStatusReporter(
-        stream=progress_stream,
-        use_color=use_color,
-    )
-    status_is_tty: bool = hasattr(progress_stream, "isatty") and progress_stream.isatty()
-    if not status_is_tty:
-        progress_stream.write("Running scenarios...\n\n")
-        progress_stream.flush()
-    results: tuple[ScenarioRunResult, ...] = run_scenario_local_test_pipeline(
+    return run_local_scenarios(
         project_dir=effective_project_dir,
         pipeline_result=pipeline_result,
         scenarios=scenarios,
@@ -257,28 +238,12 @@ def run_scenario(
         strict=strict,
         capture_adapter=project_adapter_name,
         capture_dialect=local_capture_dialect,
-        on_scenario_start=lambda _scenario: (
-            scenario_status.start("Running scenarios...") if status_is_tty else None
-        ),
-        on_scenario_complete=lambda _scenario, scenario_plan, result: _complete_local_scenario_run(
-            scenario_status=scenario_status,
-            status_is_tty=status_is_tty,
-            target_dir=effective_project_dir / "target",
-            adapter=adapter,
-            scenario_plan=scenario_plan,
-            result=result,
-            progress_stream=progress_stream,
-            use_color=use_color,
-        ),
-    )
-    scenario_status.close()
-    exit_code: int = _write_local_summary(results=results, stream=progress_stream)
-    write_execution_json_output(
-        payload=format_scenario_execution_json(results=results, local=local),
+        target_dir=effective_project_dir / "target",
+        progress_stream=progress_stream,
+        use_color=use_color,
         json_output=json_output,
         json_output_path=json_output_path,
     )
-    return exit_code
 
 
 def _validate_local_scenario_sql_analysis_enabled(
@@ -547,50 +512,6 @@ def _display_snapshot_path(*, manifest_path: Path, project_dir: Path) -> str:
         return manifest_path.relative_to(project_dir).as_posix()
     except ValueError:
         return manifest_path.as_posix()
-
-
-def _write_local_summary(*, results: tuple[ScenarioRunResult, ...], stream: TextIO) -> int:
-    pass_count: int = sum(
-        1 for result in results if result.local_status == ScenarioLocalRunStatus.PASS
-    )
-    fail_count: int = sum(
-        1 for result in results if result.local_status == ScenarioLocalRunStatus.FAIL
-    )
-    error_count: int = sum(
-        1 for result in results if result.local_status == ScenarioLocalRunStatus.ERROR
-    )
-    skip_count: int = sum(
-        1 for result in results if result.local_status == ScenarioLocalRunStatus.SKIP
-    )
-    stream.write(
-        f"\nPASS={pass_count}  FAIL={fail_count}  ERROR={error_count}  "
-        f"SKIP={skip_count}  TOTAL={len(results)}\n"
-    )
-    stream.flush()
-    return 0 if fail_count == 0 and error_count == 0 else 1
-
-
-def _complete_local_scenario_run(
-    *,
-    scenario_status: TransientStatusReporter,
-    status_is_tty: bool,
-    target_dir: Path,
-    adapter: BaseAdapter,
-    scenario_plan: ScenarioExecutionPlan | None,
-    result: ScenarioRunResult,
-    progress_stream: TextIO,
-    use_color: bool,
-) -> None:
-    complete_scenario_run(
-        scenario_status=scenario_status,
-        status_is_tty=status_is_tty,
-        target_dir=target_dir,
-        adapter=adapter,
-        scenario_plan=scenario_plan,
-        result=result,
-        progress_stream=progress_stream,
-        use_color=use_color,
-    )
 
 
 def _captured_at() -> str:
