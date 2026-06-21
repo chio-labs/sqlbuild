@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from sqlbuild.adapters.postgres.client import PostgresAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
@@ -19,6 +23,40 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
 def build_unique_schema_name(*, prefix: str) -> str:
     suffix: str = uuid.uuid4().hex[:10]
     return f"{prefix}_{suffix}"
+
+
+def postgres_dbt_core_executable() -> str:
+    """Return a dbt-core executable for Postgres dbt tests, skipping otherwise.
+
+    dbt Fusion does not support the Postgres adapter, so these tests must pin to
+    the dbt-core CLI installed in the project virtual environment rather than
+    honoring any DBT_EXECUTABLE override that may point at Fusion.
+    """
+
+    candidate: Path = Path(sys.prefix) / "bin" / "dbt"
+    if not candidate.exists():
+        pytest.skip("dbt-core CLI is not installed in the project virtual environment")
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        (str(candidate), "--version"),
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    output: str = result.stdout + result.stderr
+    if result.returncode != 0:
+        pytest.skip(f"dbt-core CLI is not runnable: {output}")
+    if "fusion" in output.lower():
+        pytest.skip("project virtual environment dbt resolves to Fusion, which lacks Postgres")
+    return str(candidate)
+
+
+def postgres_dbt_env(*, password: str) -> dict[str, str]:
+    """Return the subprocess env for Postgres dbt tests pinned to dbt-core."""
+
+    return {
+        "DBT_POSTGRES_PASSWORD": password,
+        "DBT_EXECUTABLE": postgres_dbt_core_executable(),
+    }
 
 
 def build_postgres_project_toml(
@@ -80,7 +118,7 @@ def assert_postgres_seeded_reuse_case(
     schema_base: str = build_unique_schema_name(prefix=schema_prefix)
     dev_schema_name: str = f"{schema_base}_dev"
     prod_schema_name: str = f"{schema_base}_prod"
-    env: dict[str, str] = {"DBT_POSTGRES_PASSWORD": str(postgres_e2e_config["password"])}
+    env: dict[str, str] = postgres_dbt_env(password=str(postgres_e2e_config["password"]))
     try:
         ensure_postgres_schema_ready(schema_name=dev_schema_name, config=postgres_e2e_config)
         ensure_postgres_schema_ready(schema_name=prod_schema_name, config=postgres_e2e_config)
@@ -105,6 +143,7 @@ def assert_postgres_seeded_reuse_case(
             f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
             "ORDER BY order_id"
         )
+        raw_orders_relation: str = relation_name(schema_name=dev_schema_name, name="raw_orders")
         if snapshot:
             assert_dbt_snapshot_seeded_reuse_from_lifecycle(
                 tmp_path=tmp_path,
@@ -113,6 +152,8 @@ def assert_postgres_seeded_reuse_case(
                 origin_snapshot_schema=prod_schema_name,
                 destination_snapshot_schema=dev_schema_name,
                 fetch_rows=lambda sql: fetch_postgres_rows(config=postgres_e2e_config, sql=sql),
+                execute_sql=lambda sql: execute_postgres_sql(config=postgres_e2e_config, sql=sql),
+                raw_orders_relation=raw_orders_relation,
                 destination_rows_sql=destination_rows_sql,
                 downstream_rows_sql=downstream_rows_sql,
                 expected_rows=expected_rows,
@@ -124,6 +165,8 @@ def assert_postgres_seeded_reuse_case(
                 profiles_yml=profiles_yml,
                 project_toml=project_toml,
                 fetch_rows=lambda sql: fetch_postgres_rows(config=postgres_e2e_config, sql=sql),
+                execute_sql=lambda sql: execute_postgres_sql(config=postgres_e2e_config, sql=sql),
+                raw_orders_relation=raw_orders_relation,
                 destination_rows_sql=destination_rows_sql,
                 downstream_rows_sql=downstream_rows_sql,
                 expected_rows=expected_rows,

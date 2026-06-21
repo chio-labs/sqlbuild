@@ -38,6 +38,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     ensure_postgres_schema_ready,
     execute_postgres_sql,
     fetch_postgres_rows,
+    postgres_dbt_env,
     prepare_postgres_source_loader_strategies,
     prepare_postgres_waffle_shop,
     relation_name,
@@ -169,7 +170,7 @@ def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_
         ),
     )
     sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
-    env: dict[str, str] = {"DBT_POSTGRES_PASSWORD": str(postgres_e2e_config["password"])}
+    env: dict[str, str] = postgres_dbt_env(password=str(postgres_e2e_config["password"]))
     try:
         init_result: subprocess.CompletedProcess[str] = run_sqb(
             command=(
@@ -307,7 +308,7 @@ def test_given_postgres_dbt_reuse_from_when_plain_build_then_reuses_prod_table(
     schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
     dev_schema_name: str = f"{schema_base}_dev"
     prod_schema_name: str = f"{schema_base}_prod"
-    env: dict[str, str] = {"DBT_POSTGRES_PASSWORD": str(postgres_e2e_config["password"])}
+    env: dict[str, str] = postgres_dbt_env(password=str(postgres_e2e_config["password"]))
     try:
         ensure_postgres_schema_ready(schema_name=dev_schema_name, config=postgres_e2e_config)
         ensure_postgres_schema_ready(schema_name=prod_schema_name, config=postgres_e2e_config)
