@@ -471,6 +471,7 @@ class BuildScheduler:
             end_cursor_int=self._end_cursor_int,
             on_progress=self._on_progress,
             on_node_start=self._on_node_start,
+            on_sub_progress=self._on_sub_progress,
             use_color=self._use_color,
             providers=self._providers,
         )

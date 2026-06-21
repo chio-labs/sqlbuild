@@ -205,6 +205,7 @@ def run_load(
             end_cursor_int=parse_cursor_integer(effective_cursor_overrides.end_int),
             max_concurrency=effective_concurrency,
             on_load_start=load_progress.on_start,
+            on_load_progress=load_progress.on_progress,
             on_load_complete=load_progress.on_complete,
             on_connection_start=connection_progress.on_connection_start,
             on_connection_complete=connection_progress.on_connection_complete,

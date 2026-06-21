@@ -44,6 +44,7 @@ class LoadProgressReporter:
         self._total_count: int = total_count
         self._is_tty: bool = stream.isatty()
         self._current_source: SourceEntry | None = None
+        self._current_sub_message: str = ""
         self._spinner_frame_index: int = 0
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
@@ -54,9 +55,18 @@ class LoadProgressReporter:
         if not self._is_tty:
             return
         self._current_source = source
+        self._current_sub_message = ""
         self._hide_cursor()
         self._write_spinner_line()
         self._start_spinner_loop()
+
+    def on_progress(self, source: SourceEntry, message: str) -> None:
+        if not self._is_tty or self._current_source is None:
+            return
+        if source.name != self._current_source.name:
+            return
+        self._current_sub_message = message
+        self._write_spinner_line()
 
     def on_complete(self, result: LoadExecutionResult) -> None:
         self._stop_spinner_loop()
@@ -100,8 +110,11 @@ class LoadProgressReporter:
         resource_kind: str = (
             "loader" if source.meta.get("sqlbuild_loader_node") is True else "source"
         )
+        name_display: str = source.name
+        if self._current_sub_message:
+            name_display = f"{source.name}  {self._current_sub_message}"
         line: str = (
-            f"  {ordinal}/{self._total_count}  {resource_kind:<10}{source.name:<30} {status}"
+            f"  {ordinal}/{self._total_count}  {resource_kind:<10}{name_display:<48} {status}"
         )
         with self._write_lock:
             self._stream.write(f"\r\033[K{line}")

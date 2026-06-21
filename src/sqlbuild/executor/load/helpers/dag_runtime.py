@@ -109,6 +109,7 @@ def execute_ready_dag_source(
     start_cursor_int: int | None,
     end_cursor_int: int | None,
     use_color: bool = False,
+    on_progress: Callable[[str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
 ) -> LoadExecutionResult:
@@ -150,6 +151,7 @@ def execute_ready_dag_source(
         use_color=use_color,
         loader_ref_entries=indexes.loader_ref_entries,
         source_ref_entries=indexes.source_by_name,
+        on_progress=on_progress,
         providers=providers,
         result_store=result_store,
     )
@@ -174,6 +176,7 @@ def load_dag_worker(
     end_cursor_int: int | None,
     use_color: bool,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
+    on_load_progress: Callable[[SourceEntry, str], None] | None = None,
     providers: ProviderContainer | None = None,
     result_store: Any | None = None,
     runtime_dir: Path = Path("target"),
@@ -200,6 +203,11 @@ def load_dag_worker(
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
             use_color=use_color,
+            on_progress=(
+                None
+                if on_load_progress is None
+                else lambda message: on_load_progress(source_by_name[source_name], message)
+            ),
             providers=providers,
             result_store=result_store,
         )

@@ -21,3 +21,11 @@ class DltDestinationTestCase:
     dataset_name: str | None
     expected_destination_name: str
     expected_dataset_name: str | None
+
+
+@dataclass(frozen=True)
+class DltProgressCollectorTestCase:
+    description: str
+    updates: tuple[tuple[str, str, int, int | None], ...]
+    expected_fragments: tuple[str, ...]
+    expected_live_fragments: tuple[str, ...]

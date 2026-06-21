@@ -113,6 +113,7 @@ def run_build_pipeline(
             on_progress=on_progress,
             on_node_start=on_node_start,
             on_node_complete=on_node_complete,
+            on_sub_progress=on_sub_progress,
             use_color=use_color,
             precompleted_keys=precompleted_keys,
             providers=providers,
