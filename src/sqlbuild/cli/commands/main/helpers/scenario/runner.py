@@ -55,6 +55,7 @@ from sqlbuild.shared.constants import (
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
@@ -414,7 +415,15 @@ def _sync_local_snapshots(
     fail_count: int = len(results) - pass_count
     summary_prefix: str = "REFRESH" if refresh else "SYNC"
     progress_stream.write(
-        f"\n{summary_prefix}_PASS={pass_count}  {summary_prefix}_FAIL={fail_count}\n"
+        "\n"
+        + format_summary_footer(
+            counts=(
+                (f"{summary_prefix}_PASS", pass_count),
+                (f"{summary_prefix}_FAIL", fail_count),
+            ),
+            use_color=use_color,
+        )
+        + "\n"
     )
     progress_stream.flush()
     return 0 if fail_count == 0 else 1

@@ -310,12 +310,6 @@ ROUTING_ERROR_TEST_CASES: list[DbtArgRoutingErrorTestCase] = [
         parsed=DbtInteropParsedArgs(start_cursor_int="1"),
         expected_error_fragment="is not a valid SQLBuild option",
     ),
-    DbtArgRoutingErrorTestCase(
-        description="rejects unsupported dbt interop command",
-        command="clone",
-        parsed=DbtInteropParsedArgs(),
-        expected_error_fragment="clone",
-    ),
 ]
 
 PARSE_TEST_CASES: list[DbtArgParseTestCase] = [

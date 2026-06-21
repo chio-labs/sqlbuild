@@ -48,3 +48,12 @@ class ProgressSpinnersDisabledTestCase:
     description: str
     env_value: str | None
     expected_disabled: bool
+
+
+@dataclass(frozen=True)
+class SummaryFooterTestCase:
+    description: str
+    counts: tuple[tuple[str, int], ...]
+    elapsed: str | None
+    expected_no_color: str
+    expected_color_fragments: tuple[str, ...]
