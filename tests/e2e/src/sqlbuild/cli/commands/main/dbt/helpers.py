@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtLineageErrorE2ETestCase
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT, execute_duckdb
 
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"
 
@@ -109,6 +109,7 @@ def prepare_dbt_diff_workspace(
     include_reuse_from: bool = True,
     reuse_git_ref: str = "prod",
     include_second_model: bool = False,
+    include_view_model: bool = False,
 ) -> Path:
     """Build a dbt diff workspace with prod and feature branch order tables."""
 
@@ -140,6 +141,8 @@ def prepare_dbt_diff_workspace(
     )
     if include_second_model:
         _write_dbt_diff_customers_model(workspace=workspace)
+    if include_view_model:
+        write_dbt_clone_summary_view_model(workspace=workspace, amount_cents=900)
     (profiles_dir / "profiles.yml").write_text(
         "analytics:\n"
         "  target: dev\n"
@@ -203,6 +206,24 @@ def _write_dbt_diff_customers_model(*, workspace: Path) -> None:
         ") }}\n\n"
         "select 1 as customer_id, 'alice' as name\n",
         encoding="utf-8",
+    )
+
+
+def write_dbt_clone_summary_view_model(*, workspace: Path, amount_cents: int) -> None:
+    """Write the mutable dbt view model used by clone E2Es."""
+
+    workspace.joinpath("dbt_project", "models", "dbt_order_summary.sql").write_text(
+        f"{{{{ config(materialized='view') }}}}\n\nselect {amount_cents} as total_amount_cents\n",
+        encoding="utf-8",
+    )
+
+
+def drop_dbt_clone_origin_orders_relation(*, workspace: Path) -> None:
+    """Drop the prod relation after manifest baseline creation for warning E2Es."""
+
+    execute_duckdb(
+        db_path=workspace / "warehouse.duckdb",
+        sql="DROP TABLE IF EXISTS prod.dbt_orders",
     )
 
 

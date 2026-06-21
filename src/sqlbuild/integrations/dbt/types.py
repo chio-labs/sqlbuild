@@ -34,6 +34,7 @@ class DbtInteropCommand(StrEnum):
     DEBUG = "debug"
     LINEAGE = "lineage"
     DIFF = "diff"
+    CLONE = "clone"
 
 
 class DbtLineageDirection(StrEnum):

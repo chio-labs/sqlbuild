@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import dbt_executable
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     assert_dbt_seeded_reuse_from_lifecycle,
     assert_dbt_snapshot_seeded_reuse_from_lifecycle,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
+    run_sqb,
     stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
@@ -601,6 +606,96 @@ def build_snowflake_dbt_profiles_yml(*, schema_name: str, config: dict[str, obje
         f"      database: {config['database']}\n"
         f"      schema: {schema_name}\n"
     )
+
+
+def assert_snowflake_dbt_clone_lifecycle(
+    *,
+    tmp_path: Path,
+    profiles_yml: str,
+    project_toml: str,
+    fetch_rows: Callable[[str], tuple[tuple[object, ...], ...]],
+    rows_sql: str,
+    command: tuple[str, ...],
+    prod_model_sql: str,
+    feature_model_sql: str,
+    expected_stdout_fragments: tuple[str, ...],
+    expected_rows: tuple[tuple[object, ...], ...],
+    env: Mapping[str, str] | None = None,
+) -> None:
+    """Assert dbt clone copies a prod dbt relation into the current Snowflake target."""
+
+    workspace: Path = tmp_path / "snowflake_dbt_clone"
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    (profiles_dir / "profiles.yml").write_text(profiles_yml, encoding="utf-8")
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n"
+        "    +transient: false\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "fact_orders.sql").write_text(prod_model_sql, encoding="utf-8")
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(project_toml, encoding="utf-8")
+    (macro_dir / "prod_generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n"
+        "  {{ target.schema.replace('_dev', '_prod') }}\n"
+        "{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    _run_git(args=("init",), cwd=workspace)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
+    _run_git(args=("add", "."), cwd=workspace)
+    _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
+    _run_git(args=("branch", "prod"), cwd=workspace)
+    process_env: dict[str, str] = dict(os.environ)
+    if env is not None:
+        process_env.update(env)
+    subprocess.run(
+        (
+            dbt_executable(),
+            "run",
+            "--project-dir",
+            dbt_project_dir.as_posix(),
+            "--profiles-dir",
+            profiles_dir.as_posix(),
+            "--target",
+            "prod",
+        ),
+        capture_output=True,
+        check=True,
+        env=process_env,
+        text=True,
+    )
+    _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
+    (dbt_models_dir / "fact_orders.sql").write_text(feature_model_sql, encoding="utf-8")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=command,
+        project_dir=sqlbuild_project_dir,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    fragment: str
+    for fragment in expected_stdout_fragments:
+        assert fragment in result.stdout
+    assert fetch_rows(rows_sql) == expected_rows
+
+
+def _run_git(*, args: tuple[str, ...], cwd: Path) -> None:
+    subprocess.run(("git", *args), cwd=cwd, capture_output=True, check=True, text=True)
 
 
 def write_snowflake_dbt_scenario_date_trunc_model(*, sqlbuild_project_dir: Path) -> None:

@@ -197,6 +197,15 @@ class PlanningCompletionMessageTestCase:
 
 
 @dataclass(frozen=True)
+class PlanningFinishTestCase:
+    description: str
+    messages_before_finish: tuple[str, ...]
+    blank_line_after: bool
+    messages_after_finish: tuple[str, ...]
+    expected_output: str
+
+
+@dataclass(frozen=True)
 class ResolveProjectConnectionConfigTestCase:
     description: str
     project_dir_name: str

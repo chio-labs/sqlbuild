@@ -16,7 +16,11 @@ def render_clone_output(
     use_color: bool,
 ) -> None:
     style: CliStyle = CliStyle(use_color=use_color)
-    print(f"sqb clone  origin={origin_target_name} destination={destination_target_name}\n")
+    print(
+        f"{style.title('sqb clone')}  "
+        f"{style.label('origin=')}{style.value(origin_target_name)} "
+        f"{style.label('destination=')}{style.value(destination_target_name)}\n"
+    )
     name_column_width: int = resolve_name_column_width(
         tuple(item.name for item in result.item_results)
     )
@@ -31,13 +35,13 @@ def render_clone_output(
         print(
             format_aligned_name_value(
                 plain_name=item.name,
-                styled_name=item.name,
-                value=f"{rendered_status:<6} {item.action}",
+                styled_name=style.object_name(item.name),
+                value=f"{rendered_status:<6} {style.accent(item.action.value)}",
                 name_column_width=name_column_width,
             )
         )
         if item.message is not None:
-            print(f"    {item.message}")
+            print(f"    {style.muted(item.message)}")
     success_count: int = sum(
         1 for item in result.item_results if item.status == CloneStatus.SUCCESS
     )
@@ -52,13 +56,17 @@ def render_clone_output(
     )
     print()
     if warning_count == 0 and fail_count == 0:
-        print("Completed successfully.")
+        print(style.success_strong("Completed successfully."))
     else:
-        print("Completed with warnings.")
+        print(style.warning_strong("Completed with warnings."))
     print(
-        f"CLONED={cloned_count}  COPIED={copied_count}  RECREATED_VIEWS={recreated_count}  "
-        f"PASS={success_count}  WARN={warning_count}  FAIL={fail_count}  "
-        f"TOTAL={len(result.item_results)}"
+        f"{style.label('CLONED=')}{style.value(str(cloned_count))}  "
+        f"{style.label('COPIED=')}{style.value(str(copied_count))}  "
+        f"{style.label('RECREATED_VIEWS=')}{style.value(str(recreated_count))}  "
+        f"{style.label('PASS=')}{style.success(str(success_count))}  "
+        f"{style.label('WARN=')}{style.warning(str(warning_count))}  "
+        f"{style.label('FAIL=')}{style.error(str(fail_count))}  "
+        f"{style.label('TOTAL=')}{style.value(str(len(result.item_results)))}"
     )
 
 
