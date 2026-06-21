@@ -117,6 +117,7 @@ def build_dbt_model_planning_result(
             ),
         ),
         source_freshness=source_freshness,
+        selected_unique_ids=tuple(sorted(frozenset(candidate_unique_ids))),
     )
 
 

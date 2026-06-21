@@ -113,6 +113,7 @@ def build_warehouse_snapshot(
         upstream_deps=scope.upstream_deps,
         snapshot=snapshot,
         deferred_relations=deferred_relations,
+        satisfied_keys=frozenset(seed.key for seed in project.seeds if seed.external),
     )
     if missing:
         names: str = ", ".join(m.key.name for m in missing[:5])

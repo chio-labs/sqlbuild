@@ -123,6 +123,33 @@ def test_given_dbt_options_when_building_compile_argv_then_returns_expected_comm
     "test_case",
     [
         DbtArgvTestCase(
+            description="builds compile argv with full refresh",
+            select=(),
+            exclude=(),
+            resource_types=(),
+            expected_argv=("dbt", "compile", *OPTIONS_ARGV_SUFFIX, "--full-refresh"),
+        )
+    ],
+    ids=["builds compile argv with full refresh"],
+)
+def test_given_full_refresh_when_building_compile_argv_then_includes_full_refresh(
+    test_case: DbtArgvTestCase,
+) -> None:
+    options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
+
+    result: tuple[str, ...] = build_dbt_compile_argv(
+        dbt_executable="dbt",
+        options=options,
+        full_refresh=True,
+    )
+
+    assert result == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtArgvTestCase(
             description="builds debug argv with common options",
             select=(),
             exclude=(),
@@ -197,7 +224,7 @@ def test_given_repeated_dbt_ls_when_running_then_reuses_memoized_result(
     test_case: DbtRunnerMemoTestCase,
 ) -> None:
     invoker: RecordingDbtInvoker = RecordingDbtInvoker(test_case.command_result)
-    runner: DbtRunner = DbtRunner(invoker=invoker)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoker)
     options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
 
     first: DbtLsResult = runner.ls(options=options, select=("tag:nightly",))
@@ -223,7 +250,7 @@ def test_given_dbt_runner_when_running_compile_then_uses_project_dir_as_cwd(
     test_case: DbtRunnerCommandTestCase,
 ) -> None:
     invoker: RecordingDbtInvoker = RecordingDbtInvoker(test_case.command_result)
-    runner: DbtRunner = DbtRunner(invoker=invoker)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoker)
     options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
 
     result: DbtCommandResult = runner.compile(options=options)

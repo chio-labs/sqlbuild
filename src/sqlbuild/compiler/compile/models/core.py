@@ -346,6 +346,7 @@ class CompiledSeed:
     schema_entry: SchemaSeedEntry
     schema_file: DiscoveredSchemaFile
     destination: CompiledRelationLocation
+    external: bool = False
 
 
 @dataclass(frozen=True)

@@ -129,11 +129,13 @@ def build_compile_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        external_sql_reference_resolver=external_sql_reference_resolver,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
         index_generic_audit_definitions(discovered_inputs.audit_files)

@@ -18,6 +18,7 @@ class PlanTestChainTestCase:
     loaded_macro_outputs: dict[str, str] = field(default_factory=dict)
     function_locations: dict[str, str] = field(default_factory=dict)
     model_macro_source_queries: dict[str, str] = field(default_factory=dict)
+    model_query_overrides: dict[str, str] = field(default_factory=dict)
     expected_sql_fragments: dict[str, str] = field(default_factory=dict)
     expected_warning_count: int = 0
     expected_warning_severity: WarningSeverity | None = None

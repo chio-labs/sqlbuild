@@ -15,6 +15,7 @@ from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.selection import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
+from sqlbuild.integrations.dbt.helpers.sql_test_targets import resolve_dbt_sql_test_target_names
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -71,6 +72,23 @@ def plan_dbt_interop_command(
         exclude=exclude,
         dbt_anchor_unique_ids_by_term=anchors_by_term,
     )
+    if normalized_command == DbtInteropCommand.TEST:
+        dbt_test_target_names: tuple[str, ...] = resolve_dbt_sql_test_target_names(
+            project=project,
+            manifest=manifest,
+            selected_dbt_unique_ids=tuple(node.unique_id for node in full_dbt_ls.nodes),
+            select=tuple(select),
+        )
+        if dbt_test_target_names:
+            selection = DbtInteropSelectionResult(
+                sqlbuild_model_names=tuple(
+                    dict.fromkeys((*selection.sqlbuild_model_names, *dbt_test_target_names))
+                ),
+                dbt_required_unique_ids=selection.dbt_required_unique_ids,
+                dbt_anchor_terms=selection.dbt_anchor_terms,
+                dbt_anchor_unique_ids_by_term=selection.dbt_anchor_unique_ids_by_term,
+                path_translations=selection.path_translations,
+            )
     dbt_required_selector_terms: tuple[str, ...] = _build_required_dbt_selector_terms(
         project=project,
         manifest=manifest,

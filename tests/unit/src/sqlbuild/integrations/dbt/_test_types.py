@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode
+from sqlbuild.integrations.dbt.models import (
+    DbtCliOptions,
+    DbtCommandResult,
+    DbtInteropParsedArgs,
+    DbtLsNode,
+)
 from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,
     DbtLineageOutputFormat,
@@ -92,6 +97,13 @@ class DbtExecutionSpacingTestCase:
     unexpected_no_work_no_blank_fragment: str
     unexpected_extra_blank_fragment: str
     unexpected_no_work_extra_blank_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtCompileFullRefreshPipelineTestCase:
+    description: str
+    command: str
+    expected_full_refresh_values: tuple[bool, ...]
 
 
 @dataclass(frozen=True)
@@ -478,7 +490,7 @@ class DbtColumnLineageOutputTestCase:
 class DbtArgRoutingTestCase:
     description: str
     command: str
-    args: tuple[str, ...]
+    parsed: DbtInteropParsedArgs
     expected_select: tuple[str, ...]
     expected_exclude: tuple[str, ...]
     expected_dbt_args: tuple[str, ...]
@@ -487,6 +499,26 @@ class DbtArgRoutingTestCase:
 
 @dataclass(frozen=True)
 class DbtArgRoutingErrorTestCase:
+    description: str
+    command: str
+    parsed: DbtInteropParsedArgs
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtArgParseTestCase:
+    description: str
+    command: str
+    args: tuple[str, ...]
+    expected_select: tuple[str, ...]
+    expected_exclude: tuple[str, ...]
+    expected_full_refresh: bool
+    expected_target: str | None
+    expected_dbt_passthrough: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtArgParseErrorTestCase:
     description: str
     command: str
     args: tuple[str, ...]
@@ -663,3 +695,50 @@ class DbtDiffExecuteErrorTestCase:
     create_reuse_relation: bool
     expected_error_fragment: str
     expected_code: str
+
+
+@dataclass(frozen=True)
+class DbtSqlTestTargetTestCase:
+    description: str
+    selected_dbt_unique_ids: tuple[str, ...]
+    select: tuple[str, ...]
+    expected_target_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...]
+    expected_query_fragments: tuple[str, ...]
+    expected_adapted_model_names: tuple[str, ...] | None = None
+    expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
+    manifest_kind: str = "default"
+    sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def adapted_model_names(self) -> tuple[str, ...]:
+        return self.expected_adapted_model_names or self.expected_model_names
+
+
+@dataclass(frozen=True)
+class DbtSqlTestMultipleBoundaryTestCase:
+    description: str
+    expected_test_model_names: tuple[tuple[str, ...], ...]
+    expected_query_fragments_by_test: tuple[tuple[str, ...], ...]
+    expected_absent_fragments_by_test: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtSqlTestTargetErrorTestCase:
+    description: str
+    manifest_kind: str
+    expected_model_names: tuple[str, ...]
+    target_names: tuple[str, ...]
+    expected_error_fragment: str
+    project_kind: str = "default"
+
+
+@dataclass(frozen=True)
+class DbtSqlTestFixtureNameTestCase:
+    description: str
+    fixture_kind: str
+    known_names: set[str]
+    expected_names: set[str]
+    expected_error_fragment: str | None = None
+    manifest_kind: str = "source_dependency"

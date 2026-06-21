@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
@@ -25,6 +26,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
+from sqlbuild.spec.models.project import ScenarioConfig
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 
@@ -518,6 +520,47 @@ class DbtLineageArgs:
 
 
 @dataclass(frozen=True)
+class DbtScenarioBuild:
+    """Adapted SQLBuild project and connection inputs for a dbt scenario run."""
+
+    project: CompiledProject
+    adapter_name: str
+    connection_config: dict[str, object]
+    project_name: str
+    scenario_config: ScenarioConfig
+
+
+@dataclass(frozen=True)
+class DbtInteropParsedArgs:
+    """Declared `sqb dbt` flags parsed by argparse, before routing to buckets."""
+
+    select: tuple[str, ...] = field(default_factory=tuple)
+    exclude: tuple[str, ...] = field(default_factory=tuple)
+    vars: str | None = None
+    threads: str | None = None
+    full_refresh: bool = False
+    event_time_start: str | None = None
+    event_time_end: str | None = None
+    project_dir: str | None = None
+    profiles_dir: str | None = None
+    profile: str | None = None
+    target: str | None = None
+    target_path: str | None = None
+    state: str | None = None
+    indirect_selection: str | None = None
+    defer: bool = False
+    start_cursor_ts: str | None = None
+    end_cursor_ts: str | None = None
+    start_cursor_int: str | None = None
+    end_cursor_int: str | None = None
+    defer_to: str | None = None
+    fail_fast: bool = False
+    force: bool = False
+    hard_copy: bool = False
+    dbt_passthrough: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DbtInteropRoutedArgs:
     """Arguments split for a future `sqb dbt` command execution."""
 
@@ -570,6 +613,7 @@ class DbtModelPlanningResult:
     stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
     blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
     source_freshness: StandardSourceFreshnessPlanningResult | None = None
+    selected_unique_ids: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def run_unique_ids(self) -> tuple[str, ...]:
@@ -593,6 +637,43 @@ class DbtModelPlanningResult:
     def blocked_unique_ids(self) -> tuple[str, ...]:
         return tuple(
             entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.BLOCKED
+        )
+
+    @property
+    def displayed_entries(self) -> tuple[DbtModelPlanEntry, ...]:
+        """Plan entries that should be shown to the user.
+
+        Restricts to originally-selected candidates when known; upstream nodes
+        pulled in only for change propagation are kept out of the display.
+        """
+
+        if not self.selected_unique_ids:
+            return self.entries
+        selected: frozenset[str] = frozenset(self.selected_unique_ids)
+        return tuple(entry for entry in self.entries if entry.unique_id in selected)
+
+    @property
+    def displayed_run_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.displayed_entries
+            if entry.action == DbtModelPlanAction.RUN
+        )
+
+    @property
+    def displayed_current_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.displayed_entries
+            if entry.action == DbtModelPlanAction.CURRENT
+        )
+
+    @property
+    def displayed_blocked_unique_ids(self) -> tuple[str, ...]:
+        return tuple(
+            entry.unique_id
+            for entry in self.displayed_entries
+            if entry.action == DbtModelPlanAction.BLOCKED
         )
 
 

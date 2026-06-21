@@ -333,6 +333,802 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     return root_dir / "sqlbuild_project"
 
 
+def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a SQLBuild unit test that targets a dbt model directly."""
+
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a SQLBuild unit test with a package-qualified dbt expected target."""
+
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__analytics__fact_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_incremental_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write an incremental dbt model and unit test that require full-refresh compile."""
+
+    project_dir.parent.joinpath("dbt_project", "models", "marts", "fact_orders.sql").write_text(
+        "{{ config(materialized='incremental', unique_key='order_id', tags=['finance']) }}\n\n"
+        "select order_id, ordered_at, 'full' as branch from {{ ref('stg_orders') }}\n"
+        "{% if is_incremental() %}\n"
+        "union all select 999 as order_id, cast('2026-01-01 00:00:00' as timestamp) "
+        "as ordered_at, 'incremental' as branch\n"
+        "{% endif %}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at, "
+        "'full' AS branch\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a dbt source-backed model and SQLBuild unit test targeting it."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_orders_from_source.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_stg_orders_from_source.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 20 AS order_id, cast('2026-02-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_orders_from_source AS (\n"
+        "  SELECT 20 AS order_id, cast('2026-02-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a dbt seed-backed model and SQLBuild unit test targeting it."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_countries.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        "),\n"
+        "__expected__dim_countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_chained_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a two-model dbt source chain and SQLBuild unit test targeting the final model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_orders_from_source.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "fact_orders_from_source.sql").write_text(
+        "select order_id, ordered_at from {{ ref('stg_orders_from_source') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_from_source.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 30 AS order_id, cast('2026-03-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_from_source AS (\n"
+        "  SELECT 30 AS order_id, cast('2026-03-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_chained_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a two-model dbt seed chain and SQLBuild unit test targeting the final model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "staging", "stg_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_country_names.sql").write_text(
+        "select country_code, country_name from {{ ref('stg_countries') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_country_names.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__countries AS (\n"
+        "  SELECT 'MX' AS country_code, 'Mexico' AS country_name\n"
+        "),\n"
+        "__expected__dim_country_names AS (\n"
+        "  SELECT 'MX' AS country_code, 'Mexico' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_scenario_targeting_dbt_model(*, project_dir: Path) -> None:
+    """Write a dbt source-backed model and a scenario targeting that dbt model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_scenario_orders.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_stg_scenario_orders.sql").write_text(
+        'SCENARIO (description: "dbt scenario target", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 60 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_scenario_orders AS (\n"
+        "  SELECT 60 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__assert__no_zero_orders AS (\n"
+        '  SELECT * FROM __ref("stg_scenario_orders") WHERE order_id = 0\n'
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_chained_dbt_scenario_targeting_dbt_model(*, project_dir: Path) -> None:
+    """Write a two-model dbt source chain and a scenario targeting the final dbt model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_scenario_chain.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "fact_scenario_chain.sql").write_text(
+        "select order_id, ordered_at from {{ ref('stg_scenario_chain') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_fact_scenario_chain.sql").write_text(
+        'SCENARIO (description: "chained dbt scenario target", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 70 AS order_id, cast('2026-07-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_scenario_chain AS (\n"
+        "  SELECT 70 AS order_id, cast('2026-07-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_spanning_sqlbuild_dbt_ref_scenario(*, project_dir: Path) -> None:
+    """Write a scenario over a SQLBuild model whose chain crosses a dbt ref boundary.
+
+    mart_orders -> downstream_orders (both SQLBuild) -> __dbt_ref(analytics, fact_orders).
+    The dbt ref is mocked; downstream_orders resolves from its real SQL.
+    """
+
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("mart_orders_spanning.sql").write_text(
+        'SCENARIO (description: "mixed dbt and SQLBuild graph scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__dbt_ref__analytics__fact_orders AS (\n"
+        "  SELECT 42 AS order_id\n"
+        "),\n"
+        "__expected__mart_orders AS (\n"
+        "  SELECT 42 AS order_id\n"
+        "),\n"
+        "__assert__mart_orders_nonzero AS (\n"
+        '  SELECT * FROM __ref("mart_orders") WHERE order_id = 0\n'
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_real_source_fixture_dbt_scenario(*, project_dir: Path) -> None:
+    """Write a dbt source-backed model and a scenario whose fixture reads the real source."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_real_source_orders.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_real_source_fixture.sql").write_text(
+        'SCENARIO (description: "fixture reads real dbt source", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        '  SELECT order_id, ordered_at FROM __source("raw__orders") WHERE order_id = 1\n'
+        "),\n"
+        "__expected__stg_real_source_orders AS (\n"
+        "  SELECT 1 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def seed_real_dbt_source_orders(*, project_dir: Path) -> None:
+    """Create the physical raw.orders source table the dbt source points at."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    db_path: Path = project_dir / "dbt_interop.duckdb"
+    execute_duckdb(db_path=db_path, sql="CREATE SCHEMA IF NOT EXISTS raw")
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE OR REPLACE TABLE raw.orders AS "
+            "SELECT 1 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at "
+            "UNION ALL "
+            "SELECT 2 AS order_id, cast('2026-02-02 00:00:00' as timestamp) AS ordered_at"
+        ),
+    )
+
+
+def _write_dbt_source_orders_model(*, project_dir: Path, model_name: str) -> None:
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", f"{model_name}.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+
+
+def write_failing_assertion_dbt_scenario(*, project_dir: Path) -> None:
+    """Write a dbt scenario whose zero-row assertion is violated."""
+
+    _write_dbt_source_orders_model(project_dir=project_dir, model_name="stg_scenario_fail_assert")
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_fail_assert.sql").write_text(
+        'SCENARIO (description: "failing assertion", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 0 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_scenario_fail_assert AS (\n"
+        "  SELECT 0 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__assert__no_zero_orders AS (\n"
+        '  SELECT * FROM __ref("stg_scenario_fail_assert") WHERE order_id = 0\n'
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_failing_expected_dbt_scenario(*, project_dir: Path) -> None:
+    """Write a dbt scenario whose expected output mismatches the dbt model."""
+
+    _write_dbt_source_orders_model(project_dir=project_dir, model_name="stg_scenario_fail_expected")
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_fail_expected.sql").write_text(
+        'SCENARIO (description: "failing expected", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__raw__orders AS (\n"
+        "  SELECT 80 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_scenario_fail_expected AS (\n"
+        "  SELECT 999 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_seed_dbt_scenario_targeting_dbt_model(*, project_dir: Path) -> None:
+    """Write a dbt seed-backed model and a scenario targeting that dbt model."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_scenario_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_dim_scenario_countries.sql").write_text(
+        'SCENARIO (description: "dbt seed scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__seed__countries AS (\n"
+        "  SELECT 'MX' AS country_code, 'Mexico' AS country_name\n"
+        "),\n"
+        "__expected__dim_scenario_countries AS (\n"
+        "  SELECT 'MX' AS country_code, 'Mexico' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_ref_boundary_dbt_scenario(*, project_dir: Path) -> None:
+    """Write a dbt model chain and a scenario mocking the upstream dbt model as a boundary."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_dir.joinpath("models", "staging", "stg_scenario_boundary.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "fact_scenario_boundary.sql").write_text(
+        "select order_id, ordered_at from {{ ref('stg_scenario_boundary') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_fact_scenario_boundary.sql").write_text(
+        'SCENARIO (description: "dbt ref boundary scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__dbt_ref__analytics__stg_scenario_boundary AS (\n"
+        "  SELECT 90 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_scenario_boundary AS (\n"
+        "  SELECT 90 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_source_dbt_scenario(*, project_dir: Path) -> None:
+    """Write colliding dbt package sources and a scenario using a qualified source fixture."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    _write_local_dbt_package(project_dir=project_dir)
+    dbt_project_dir.joinpath("models", "staging", "stg_scenario_qualified.sql").write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_stg_scenario_qualified.sql").write_text(
+        'SCENARIO (description: "qualified dbt source scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__source__analytics__raw__orders AS (\n"
+        "  SELECT 95 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_scenario_qualified AS (\n"
+        "  SELECT 95 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_snapshot_boundary_dbt_scenario(*, project_dir: Path) -> None:
+    """Write a dbt chain through a snapshot and a scenario mocking the snapshot boundary."""
+
+    _write_dbt_snapshot_chain(project_dir=project_dir)
+    scenarios_dir: Path = project_dir / "tests" / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenarios_dir.joinpath("dbt_fact_orders_snapshot_scenario.sql").write_text(
+        'SCENARIO (description: "dbt snapshot boundary scenario", tags: ["dbt"]);\n\n'
+        "WITH\n"
+        "__dbt_ref__analytics__orders_snapshot AS (\n"
+        "  SELECT 11 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_snapshot AS (\n"
+        "  SELECT 11 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def _write_dbt_snapshot_chain(*, project_dir: Path) -> None:
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    project_path: Path = dbt_project_dir / "dbt_project.yml"
+    project_path.write_text(
+        project_path.read_text(encoding="utf-8") + "snapshot-paths: ['snapshots']\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "staging", "stg_snapshot_orders.sql").write_text(
+        "select 1 as order_id, cast('2026-06-01 00:00:00' as timestamp) as ordered_at\n",
+        encoding="utf-8",
+    )
+    snapshots_dir: Path = dbt_project_dir / "snapshots"
+    snapshots_dir.mkdir()
+    snapshots_dir.joinpath("orders_snapshot.sql").write_text(
+        "{% snapshot orders_snapshot %}\n"
+        "{{ config(unique_key='order_id', strategy='check', check_cols=['ordered_at']) }}\n"
+        "select order_id, ordered_at from {{ ref('stg_snapshot_orders') }}\n"
+        "{% endsnapshot %}\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "fact_orders_snapshot.sql").write_text(
+        "select order_id, ordered_at from {{ ref('orders_snapshot') }}\n",
+        encoding="utf-8",
+    )
+
+
+def write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt chain through a snapshot with no mock boundary for the snapshot."""
+
+    _write_dbt_snapshot_chain(project_dir=project_dir)
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_snapshot.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__analytics__stg_snapshot_orders AS (\n"
+        "  SELECT 1 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_snapshot AS (\n"
+        "  SELECT 1 AS order_id, cast('2026-06-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_mocked_snapshot_boundary_dbt_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a dbt chain through a snapshot mocked as a boundary."""
+
+    _write_dbt_snapshot_chain(project_dir=project_dir)
+    project_dir.joinpath("tests", "unit", "test_dbt_fact_orders_snapshot.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__analytics__orders_snapshot AS (\n"
+        "  SELECT 7 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__fact_orders_snapshot AS (\n"
+        "  SELECT 7 AS order_id, cast('2026-06-02 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_dbt_source_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write colliding dbt package sources and a qualified SQLBuild source fixture test."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    _write_local_dbt_package(project_dir=project_dir)
+    dbt_project_dir.joinpath(
+        "models", "staging", "stg_orders_from_qualified_source.sql"
+    ).write_text(
+        "select order_id, ordered_at from {{ source('raw', 'orders') }}\n",
+        encoding="utf-8",
+    )
+    schema_path: Path = dbt_project_dir / "models" / "schema.yml"
+    schema_path.write_text(
+        schema_path.read_text(encoding="utf-8")
+        + "\nsources:\n"
+        + "  - name: raw\n"
+        + "    schema: raw\n"
+        + "    tables:\n"
+        + "      - name: orders\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath(
+        "tests", "unit", "test_dbt_stg_orders_from_qualified_source.sql"
+    ).write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__analytics__raw__orders AS (\n"
+        "  SELECT 40 AS order_id, cast('2026-04-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        "__expected__stg_orders_from_qualified_source AS (\n"
+        "  SELECT 40 AS order_id, cast('2026-04-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_qualified_dbt_seed_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write colliding dbt package seeds and a qualified SQLBuild seed fixture test."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    _write_local_dbt_package(project_dir=project_dir, include_seed=True)
+    dbt_project_dir.joinpath("models", "marts", "dim_qualified_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('countries') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_qualified_countries.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__analytics__countries AS (\n"
+        "  SELECT 'BR' AS country_code, 'Brazil' AS country_name\n"
+        "),\n"
+        "__expected__dim_qualified_countries AS (\n"
+        "  SELECT 'BR' AS country_code, 'Brazil' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_source_relation_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt source test with a colliding SQLBuild source relation."""
+
+    write_dbt_source_sqlbuild_unit_test(project_dir=project_dir)
+    sources_dir: Path = project_dir / "sources"
+    sources_dir.mkdir()
+    sources_dir.joinpath("local.yml").write_text(
+        "sources:\n"
+        "  - name: local_orders\n"
+        "    database: dbt_interop\n"
+        "    schema: raw\n"
+        "    table: orders\n",
+        encoding="utf-8",
+    )
+
+
+def _write_local_dbt_package(*, project_dir: Path, include_seed: bool = False) -> None:
+    """Write a local dbt package used to create package-qualified fixture names."""
+
+    root_dir: Path = project_dir.parent
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    package_dir: Path = root_dir / "finance_package"
+    package_models_dir: Path = package_dir / "models"
+    package_models_dir.mkdir(parents=True)
+    dbt_project_dir.joinpath("packages.yml").write_text(
+        "packages:\n  - local: ../finance_package\n",
+        encoding="utf-8",
+    )
+    package_dir.joinpath("dbt_project.yml").write_text(
+        "name: finance\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "seed-paths: ['seeds']\n"
+        "seeds:\n"
+        "  finance:\n"
+        "    +schema: finance\n",
+        encoding="utf-8",
+    )
+    package_models_dir.joinpath("schema.yml").write_text(
+        "sources:\n  - name: raw\n    schema: finance_raw\n    tables:\n      - name: orders\n",
+        encoding="utf-8",
+    )
+    if include_seed:
+        package_seeds_dir: Path = package_dir / "seeds"
+        package_seeds_dir.mkdir()
+        package_seeds_dir.joinpath("countries.csv").write_text(
+            "country_code,country_name\nFR,France\n",
+            encoding="utf-8",
+        )
+
+
+def write_dbt_source_fixture_name_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt source test with a colliding SQLBuild source fixture name."""
+
+    write_dbt_source_sqlbuild_unit_test(project_dir=project_dir)
+    sources_dir: Path = project_dir / "sources"
+    sources_dir.mkdir()
+    sources_dir.joinpath("local.yml").write_text(
+        "sources:\n  - name: raw__orders\n    schema: local_raw\n    table: orders\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_seed_relation_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt seed test with a colliding SQLBuild seed relation."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    dbt_project_path: Path = dbt_project_dir / "dbt_project.yml"
+    dbt_project_path.write_text(
+        dbt_project_path.read_text(encoding="utf-8")
+        + "\nseeds:\n"
+        + "  analytics:\n"
+        + "    local_countries:\n"
+        + "      +alias: countries\n",
+        encoding="utf-8",
+    )
+    seeds_dir: Path = dbt_project_dir / "seeds"
+    seeds_dir.mkdir()
+    seeds_dir.joinpath("local_countries.csv").write_text(
+        "country_code,country_name\nUS,United States\n",
+        encoding="utf-8",
+    )
+    dbt_project_dir.joinpath("models", "marts", "dim_local_countries.sql").write_text(
+        "select country_code, country_name from {{ ref('local_countries') }}\n",
+        encoding="utf-8",
+    )
+    project_seed_dir: Path = project_dir / "seeds"
+    project_seed_dir.mkdir()
+    project_seed_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nCA,Canada\n",
+        encoding="utf-8",
+    )
+    project_seed_dir.joinpath("schema.yml").write_text(
+        "seeds:\n"
+        "  - name: countries\n"
+        "    database: dbt_interop\n"
+        "    schema: main\n"
+        "    columns:\n"
+        "      - name: country_code\n"
+        "        type: VARCHAR\n"
+        "      - name: country_name\n"
+        "        type: VARCHAR\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", "test_dbt_dim_local_countries.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__seed__local_countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        "),\n"
+        "__expected__dim_local_countries AS (\n"
+        "  SELECT 'CA' AS country_code, 'Canada' AS country_name\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_seed_fixture_name_collision_sqlbuild_unit_test(project_dir: Path) -> None:
+    """Write a dbt seed test with a colliding SQLBuild seed fixture name."""
+
+    write_dbt_seed_sqlbuild_unit_test(project_dir=project_dir)
+    project_seed_dir: Path = project_dir / "seeds"
+    project_seed_dir.mkdir()
+    project_seed_dir.joinpath("countries.csv").write_text(
+        "country_code,country_name\nCA,Canada\n",
+        encoding="utf-8",
+    )
+    project_seed_dir.joinpath("schema.yml").write_text(
+        "seeds:\n"
+        "  - name: countries\n"
+        "    schema: local_seed\n"
+        "    columns:\n"
+        "      - name: country_code\n"
+        "        type: VARCHAR\n"
+        "      - name: country_name\n"
+        "        type: VARCHAR\n",
+        encoding="utf-8",
+    )
+
+
 def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run dbt compile so plain SQLBuild commands can validate dbt refs."""
 
@@ -349,6 +1145,26 @@ def compile_dbt_interop_manifest(*, project_dir: Path) -> subprocess.CompletedPr
             profiles_dir.as_posix(),
             "--target-path",
             target_path.as_posix(),
+        ),
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+
+def install_dbt_interop_packages(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run dbt deps for E2E fixtures that add local packages."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    profiles_dir: Path = project_dir.parent / "profiles"
+    return subprocess.run(
+        (
+            dbt_executable(),
+            "deps",
+            "--project-dir",
+            dbt_project_dir.as_posix(),
+            "--profiles-dir",
+            profiles_dir.as_posix(),
         ),
         capture_output=True,
         check=False,
@@ -1302,3 +2118,58 @@ def seed_dbt_phase11_sources(*, project_dir: Path, stale_orders: bool) -> None:
             "SELECT 10 AS customer_id, 'Ada' AS customer_name"
         ),
     )
+
+
+def assert_dbt_scenario_snapshot(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    relation_file: str,
+    expected_row_count: int,
+    expected_column_names: set[str],
+) -> None:
+    """Assert a captured dbt scenario snapshot manifest and relation JSONL file."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
+    manifest_path: Path = snapshot_root / "scenario.json"
+    jsonl_path: Path = snapshot_root / relation_file
+    assert manifest_path.exists()
+    assert jsonl_path.exists()
+    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest_data, dict)
+    assert manifest_data["scenario_name"] == scenario_name
+    assert manifest_data["format"] == "jsonl"
+    assert manifest_data["total_rows"] == expected_row_count
+    relation: object = manifest_data["relations"][0]
+    assert isinstance(relation, dict)
+    assert relation["file"] == relation_file
+    assert relation["row_count"] == expected_row_count
+    columns: object = relation["columns"]
+    assert isinstance(columns, list)
+    column_names: set[str] = {str(column["name"]) for column in columns}
+    assert expected_column_names.issubset(column_names)
+    column: object
+    for column in columns:
+        assert isinstance(column, dict)
+        assert column["warehouse_type"]
+        assert column["local_type"]
+    rows: list[str] = jsonl_path.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == expected_row_count
+
+
+def assert_dbt_local_replay_rows(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    rows_sql: str,
+    expected_rows: tuple[tuple[object, ...], ...],
+) -> None:
+    """Assert replayed rows in the retained local DuckDB for a dbt scenario."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+
+    if not rows_sql:
+        return
+    db_path: Path = project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb"
+    rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
+    assert tuple(rows) == expected_rows

@@ -45,6 +45,7 @@ _RELATION_DIRS: dict[ScenarioArtifactKind, str] = {
     ScenarioArtifactKind.SOURCE: "sources",
     ScenarioArtifactKind.REF: "refs",
     ScenarioArtifactKind.SEED: "seeds",
+    ScenarioArtifactKind.DBT_REF: "dbt_refs",
 }
 
 

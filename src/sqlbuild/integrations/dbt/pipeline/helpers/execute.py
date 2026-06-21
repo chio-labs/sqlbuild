@@ -56,13 +56,14 @@ def execute_dbt_commands(
     stdout_stream: TextIO,
     stderr_stream: TextIO,
     use_color: bool,
+    skip_message: str = "Skipping dbt: no dbt work selected.",
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
 ) -> DbtCommandExecutionResult:
     """Execute the merged dbt command, or skip when no dbt work exists."""
 
     if merged_argv is None:
         style: CliStyle = CliStyle(use_color=use_color)
-        progress_stream.write(style.muted("Skipping dbt: no dbt work selected.") + "\n")
+        progress_stream.write(style.muted(skip_message) + "\n")
         progress_stream.flush()
         return DbtCommandExecutionResult(returncode=0)
     argv: tuple[str, ...] = merged_argv

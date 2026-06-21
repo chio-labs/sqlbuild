@@ -82,7 +82,7 @@ def test_given_dbt_debug_args_when_running_pipeline_then_invokes_only_dbt_debug(
     returncode: int = debug_dbt_from_project(
         project_dir=sqlbuild_project_dir,
         args=test_case.args,
-        dbt_runner=DbtRunner(invoker=invoker),
+        dbt_runner=DbtRunner(dbt_executable="dbt", invoker=invoker),
         stdout_stream=stdout_stream,
         stderr_stream=stderr_stream,
     )

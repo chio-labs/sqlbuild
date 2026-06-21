@@ -1305,6 +1305,88 @@ SELECT 1
         expected_audit_references=((("source", "raw_orders"),),),
     ),
     BuildCompileInputsTestCase(
+        description="accepts dbt source and seed SQL test fixtures from manifest",
+        repo_files=base_repo_files()
+        | {
+            "dbt/target/manifest.json": """
+{
+  "nodes": {
+    "seed.analytics.countries": {
+      "unique_id": "seed.analytics.countries",
+      "resource_type": "seed",
+      "package_name": "analytics",
+      "name": "countries",
+      "relation_name": "analytics.countries"
+    }
+  },
+  "sources": {
+    "source.analytics.raw.orders": {
+      "unique_id": "source.analytics.raw.orders",
+      "resource_type": "source",
+      "package_name": "analytics",
+      "source_name": "raw",
+      "name": "orders",
+      "relation_name": "raw.orders"
+    }
+  },
+  "macros": {}
+}
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS order_id
+),
+__seed__countries AS (
+  SELECT 'US' AS country_code
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        cli_vars=None,
+        run_id=None,
+        expected_model_schema_names=(None,),
+        expected_model_config_values=({},),
+        expected_model_path_defaults=(None,),
+        expected_seed_names=(),
+        expected_source_names=(),
+        expected_effective_target_name=None,
+        expected_effective_connection={},
+        expected_effective_vars={},
+        expected_model_query_sqls=("select 1",),
+        expected_test_sql_bodies=(
+            """
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS order_id
+),
+__seed__countries AS (
+  SELECT 'US' AS country_code
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip(),
+        ),
+        expected_test_authored_cte_names=(("__source__raw__orders", "__seed__countries"),),
+        expected_test_mock_model_names=((),),
+        expected_test_mock_source_names=(("raw__orders",),),
+        expected_test_mock_seed_names=(("countries",),),
+        expected_test_expected_model_names=(("orders",),),
+        expected_model_references=((),),
+        expected_audit_references=(),
+    ),
+    BuildCompileInputsTestCase(
         description="applies sql interpolation across all authored sql text fields",
         repo_files=base_repo_files()
         | {
@@ -3000,6 +3082,101 @@ SELECT 1
         selected_target=None,
         run_id=None,
         expected_error_fragment="mocks unknown seed 'missing_seed'",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when dbt source fixture collides through compile attachment",
+        repo_files=base_repo_files()
+        | {
+            "dbt/target/manifest.json": """
+{
+  "nodes": {},
+  "sources": {
+    "source.analytics.raw.orders": {
+      "unique_id": "source.analytics.raw.orders",
+      "resource_type": "source",
+      "package_name": "analytics",
+      "source_name": "raw",
+      "name": "orders",
+      "relation_name": "raw.orders"
+    }
+  },
+  "macros": {}
+}
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "sources/raw.yml": """
+sources:
+  - name: raw__orders
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS order_id
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment="conflicts with a SQLBuild source",
+    ),
+    BuildCompileInputsErrorTestCase(
+        description="raises when dbt seed fixture collides through compile attachment",
+        repo_files=base_repo_files()
+        | {
+            "dbt/target/manifest.json": """
+{
+  "nodes": {
+    "seed.analytics.countries": {
+      "unique_id": "seed.analytics.countries",
+      "resource_type": "seed",
+      "package_name": "analytics",
+      "name": "countries",
+      "relation_name": "analytics.countries"
+    }
+  },
+  "sources": {},
+  "macros": {}
+}
+""".strip()
+            + "\n",
+            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            "seeds/countries.csv": "country_code,country_name\nUS,United States\n",
+            "seeds/schema.yml": """
+seeds:
+  - name: countries
+    columns:
+      - name: country_code
+        type: VARCHAR
+      - name: country_name
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "tests/unit/orders.sql": """
+TEST ();
+
+WITH
+__seed__countries AS (
+  SELECT 'US' AS country_code
+),
+__expected__orders AS (
+  SELECT 1 AS order_id
+)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+        selected_target=None,
+        run_id=None,
+        expected_error_fragment="conflicts with a SQLBuild seed",
     ),
     BuildCompileInputsErrorTestCase(
         description="raises when a compiled test body references an unknown macro mock",

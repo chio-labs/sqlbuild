@@ -181,12 +181,15 @@ def build_execution_plan(
         and standard_reuse.decisions.models[key.name].decision
         == StandardReuseDecisionKind.REUSE_ELIGIBLE.value
     )
+    external_seed_keys: frozenset[CompiledObjectKey] = frozenset(
+        seed.key for seed in project.seeds if seed.external
+    )
     missing: tuple[MissingUpstream, ...] = check_buildability(
         selected_keys=selected_scope.selected_keys,
         upstream_deps=selected_scope.upstream_deps,
         snapshot=snapshot,
         deferred_relations=deferred_relations,
-        satisfied_keys=reusable_dependency_baseline_keys,
+        satisfied_keys=reusable_dependency_baseline_keys | external_seed_keys,
     )
     if missing:
         names: str = ", ".join(m.key.name for m in missing[:5])

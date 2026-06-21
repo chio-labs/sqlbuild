@@ -30,6 +30,7 @@ class DbtInteropCommand(StrEnum):
     RUN = "run"
     BUILD = "build"
     TEST = "test"
+    SCENARIO = "scenario"
     DEBUG = "debug"
     LINEAGE = "lineage"
     DIFF = "diff"
@@ -56,6 +57,13 @@ class DbtInteropSqlbuildTestAction(StrEnum):
 
     TEST = "test"
     AUDIT = "audit"
+
+
+class DbtChainNodeBoundaryKind(StrEnum):
+    """dbt node kinds that must be mocked as boundaries in a SQLBuild test chain."""
+
+    SNAPSHOT = "snapshot"
+    EPHEMERAL = "ephemeral"
 
 
 class DbtInteropSkipReason(StrEnum):

@@ -150,6 +150,16 @@ PATH_TEST_CASES: list[ScenarioSnapshotPathTestCase] = [
         expected_manifest_path=Path("/repo/tests/_scenario_snapshots/order_refund/scenario.json"),
         expected_relation_path=Path("seeds/waffle_types.jsonl"),
     ),
+    ScenarioSnapshotPathTestCase(
+        description="dbt ref snapshot paths use dbt_refs directory",
+        project_dir=Path("/repo"),
+        scenario_name="order_refund",
+        kind=ScenarioArtifactKind.DBT_REF,
+        logical_name="analytics__fact_orders",
+        expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
+        expected_manifest_path=Path("/repo/tests/_scenario_snapshots/order_refund/scenario.json"),
+        expected_relation_path=Path("dbt_refs/analytics__fact_orders.jsonl"),
+    ),
 ]
 
 

@@ -907,6 +907,83 @@ def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_term
     "test_case",
     [
         DbtPlanHumanFormatterTestCase(
+            description="bare selection hides passive upstream current models in plan display",
+            dbt_ls_nodes=(
+                DbtLsNode(
+                    unique_id="model.analytics.agg_daily_revenue",
+                    resource_type="model",
+                    package_name="analytics",
+                    name="agg_daily_revenue",
+                ),
+            ),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=None,
+            use_color=False,
+            expected_human_fragments=(
+                "Current (1)",
+                "analytics.agg_daily_revenue",
+                "planned models: 0 run, 1 current, 0 blocked",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=(
+                "analytics.stg_orders",
+                "Current (2)",
+                "planned models: 0 run, 2 current, 0 blocked",
+            ),
+        )
+    ],
+    ids=["bare selection hides passive upstream current models in plan display"],
+)
+def test_given_bare_selection_when_formatting_then_hides_passive_upstream_models(
+    test_case: DbtPlanHumanFormatterTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build", "--select", "agg_daily_revenue"),
+        dbt_selected_nodes=test_case.dbt_ls_nodes,
+        dbt_selected_unique_ids=tuple(node.unique_id for node in test_case.dbt_ls_nodes),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.agg_daily_revenue",
+                    package_name="analytics",
+                    name="agg_daily_revenue",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.agg_daily_revenue",
+                ),
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.stg_orders",
+                    package_name="analytics",
+                    name="stg_orders",
+                    action=DbtModelPlanAction.CURRENT,
+                    reason=DbtModelPlanReason.NO_CHANGE,
+                    relation_name="main.stg_orders",
+                ),
+            ),
+            selected_unique_ids=("model.analytics.agg_daily_revenue",),
+        ),
+    )
+
+    human_output: str = format_dbt_interop_plan(
+        plan,
+        use_color=test_case.use_color,
+        display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
+    )
+
+    for expected_fragment in test_case.expected_human_fragments:
+        assert expected_fragment in human_output
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in human_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtPlanHumanFormatterTestCase(
             description="model plan shows reasons and inspected dependency wording",
             dbt_ls_nodes=(),
             sqlbuild_model_names=(),
