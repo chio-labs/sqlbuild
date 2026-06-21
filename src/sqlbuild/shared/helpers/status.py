@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 from collections.abc import Iterator
@@ -53,6 +54,7 @@ class TransientStatusReporter:
         )
         self._status_context: AbstractContextManager[Status] | None = None
         self._status: Status | None = None
+        atexit.register(self.close)
 
     def start(self, message: str) -> None:
         if self._enabled:
@@ -89,6 +91,10 @@ class TransientStatusReporter:
             self._status_context.__exit__(None, None, None)
             self._status_context = None
             self._status = None
+
+    def write_blank_line(self) -> None:
+        self._stream.write("\n")
+        self._stream.flush()
 
     def _write_message(self, message: str, *, dim_output: bool) -> None:
         formatted_message: str = self._style.muted(message) if dim_output else message

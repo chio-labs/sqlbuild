@@ -50,6 +50,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.graph import (
@@ -1873,6 +1874,122 @@ def build_dbt_diff_ls_node(
         name=name,
         fqn=("analytics", name),
     )
+
+
+def build_dbt_clone_manifest_index(
+    *,
+    schema: str,
+    relation_name: str,
+    materialized: str,
+    compiled_code: str | None = None,
+    unique_id: str = "model.analytics.dbt_orders",
+    name: str = "dbt_orders",
+) -> DbtManifestIndex:
+    """Build a single-model dbt manifest index for clone executor tests."""
+
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id=unique_id,
+                    package_name="analytics",
+                    name=name,
+                    relation_name=relation_name,
+                    schema=schema,
+                    alias=name,
+                    materialized=materialized,
+                    raw_code=(
+                        "{{ config(materialized='view') }}\nSELECT 99 AS order_id, 'raw' AS status"
+                    ),
+                    compiled_code=compiled_code,
+                ),
+            )
+        )
+    )
+
+
+def build_dbt_clone_reuse_manifest_index(
+    *, include_model: bool, materialized: str
+) -> DbtManifestIndex:
+    """Build a reuse manifest index for clone executor tests."""
+
+    if not include_model:
+        return build_dbt_manifest_index(raw_data=build_manifest_data(nodes=()))
+    return build_dbt_clone_manifest_index(
+        schema="prod",
+        relation_name="prod.dbt_orders",
+        materialized=materialized,
+    )
+
+
+def create_dbt_clone_relation(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    name: str = "dbt_orders",
+    rows: tuple[tuple[object, ...], ...] = ((1, "origin"),),
+) -> None:
+    """Create a dbt clone table from literal rows in a real DuckDB schema."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    selects: list[str] = []
+    row: tuple[object, ...]
+    for row in rows:
+        order_id: int = cast(int, row[0])
+        status: str = cast(str, row[1])
+        selects.append(f"SELECT {order_id} AS order_id, '{status}' AS status")
+    union_sql: str = " UNION ALL ".join(selects)
+    adapter.execute(connection, f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}")
+
+
+def create_dbt_clone_relation_when_requested(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+    schema: str,
+    create: bool,
+    rows: tuple[tuple[object, ...], ...] = ((1, "origin"),),
+) -> None:
+    """Create a dbt clone fixture relation when requested by a test case."""
+
+    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    if create:
+        create_dbt_clone_relation(
+            adapter=adapter,
+            connection=connection,
+            schema=schema,
+            rows=rows,
+        )
+
+
+def read_dbt_clone_rows(
+    *, adapter: DuckDbAdapter, connection: object, schema: str, name: str = "dbt_orders"
+) -> tuple[tuple[object, ...], ...]:
+    """Read deterministic dbt clone rows from DuckDB."""
+
+    result: QueryResult = adapter.query(
+        connection,
+        f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
+        limit=None,
+    )
+    return result.rows
+
+
+def assert_dbt_clone_execution_result(
+    *,
+    result: CloneExecutionResult,
+    expected_item_count: int,
+    expected_action: str | None,
+    expected_status: str | None,
+) -> None:
+    """Assert dbt clone execution result fields."""
+
+    assert len(result.item_results) == expected_item_count
+    if expected_item_count == 0:
+        return
+    assert result.item_results[0].action == expected_action
+    assert result.item_results[0].status == expected_status
 
 
 def create_dbt_diff_relation(

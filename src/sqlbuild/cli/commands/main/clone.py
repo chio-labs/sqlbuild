@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sys
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.clone.output import (
@@ -23,6 +25,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection import (
 from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
@@ -51,9 +54,17 @@ def run_clone(
     cli_vars: dict[str, object] | None = None,
 ) -> int:
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    use_color: bool = not no_color and supports_color()
+    progress_stream: TextIO = sys.stdout
+    progress: PlanningProgressReporter = PlanningProgressReporter(
+        stream=progress_stream,
+        use_color=use_color,
+    )
+    progress.start("Discovering project...")
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    progress.complete("Discovered project.")
     validate_clone_request(
         discovered_inputs=discovered_inputs,
         origin_target_name=origin_target_name,
@@ -80,6 +91,8 @@ def run_clone(
         cli_vars=cli_vars,
     )
     if discovered_inputs.project_config.settings.virtual_environments:
+        progress.start("Cloning virtual environment...")
+        clone_start: float = time.monotonic()
         result: VirtualCloneResult = run_virtual_clone(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
@@ -99,16 +112,25 @@ def run_clone(
                 discovered_inputs=discovered_inputs,
             ),
         )
+        progress.complete(f"Cloned virtual environment. ({time.monotonic() - clone_start:.2f}s)")
+        progress.finish(blank_line_after=True)
         render_virtual_clone_output(
             result=result,
-            use_color=not no_color and supports_color(),
+            use_color=use_color,
             verbose=verbose,
         )
         return 0 if is_virtual_clone_success(result) else 1
 
+    progress.start(f"Connecting to {effective_adapter_name}...")
+    connect_start: float = time.monotonic()
     origin_connection: Any = adapter.connect(origin_connection_config)
     destination_connection: Any = adapter.connect(destination_connection_config)
+    progress.complete(
+        f"Connected to {effective_adapter_name}. ({time.monotonic() - connect_start:.2f}s)"
+    )
     try:
+        progress.start("Preparing clone plan...")
+        planning_start: float = time.monotonic()
         clone_pipeline: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
@@ -124,6 +146,7 @@ def run_clone(
                 discovered_inputs=discovered_inputs,
             ),
         )
+        progress.complete(f"Prepared clone plan. ({time.monotonic() - planning_start:.2f}s)")
         destination_model_entries: tuple[ModelPlanEntry, ...] = (
             clone_pipeline.destination_model_entries
         )
@@ -133,6 +156,8 @@ def run_clone(
         if not destination_model_entries and not destination_seed_entries:
             raise CliUserError("no cloneable resources found in the selected scope", code="C407")
 
+        progress.start("Cloning relations...")
+        clone_start = time.monotonic()
         result: CloneExecutionResult = execute_clone(
             origin_model_entries=clone_pipeline.origin_model_entries,
             destination_model_entries=destination_model_entries,
@@ -143,7 +168,9 @@ def run_clone(
             destination_connection=destination_connection,
             hard_copy=hard_copy,
         )
+        progress.complete(f"Cloned relations. ({time.monotonic() - clone_start:.2f}s)")
     finally:
+        progress.finish(blank_line_after=True)
         adapter.close(origin_connection)
         adapter.close(destination_connection)
 
@@ -151,6 +178,6 @@ def run_clone(
         result=result,
         origin_target_name=origin_target_name,
         destination_target_name=destination_target_name,
-        use_color=not no_color and supports_color(),
+        use_color=use_color,
     )
     return 0 if is_clone_success(result) else 1

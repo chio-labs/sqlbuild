@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
@@ -280,6 +281,26 @@ class DbtDiffRun:
     verbose: bool
     max_column_examples: int
     max_row_only_examples: int
+
+
+@dataclass(frozen=True)
+class DbtCloneOptions:
+    """Parsed SQLBuild dbt clone options."""
+
+    dbt_args: tuple[str, ...]
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    hard_copy: bool
+    no_sql_validation: bool
+
+
+@dataclass(frozen=True)
+class DbtCloneRun:
+    """dbt clone execution result with rendering labels."""
+
+    result: CloneExecutionResult
+    origin_label: str
+    destination_label: str
 
 
 @dataclass(frozen=True)
