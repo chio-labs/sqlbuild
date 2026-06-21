@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 
@@ -23,6 +23,9 @@ class DltDestinationTestCase:
     dataset_name: str | None
     expected_destination_name: str
     expected_dataset_name: str | None
+    destination_config: dict[str, object] | None = None
+    expected_config_params: dict[str, object] = field(default_factory=dict)
+    expected_caps_params: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,7 @@ class DltDestinationErrorTestCase:
     connection_config: dict[str, object]
     dataset_name: str | None
     expected_error_fragment: str
+    destination_config: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

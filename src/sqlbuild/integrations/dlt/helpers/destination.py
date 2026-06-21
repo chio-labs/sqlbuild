@@ -8,9 +8,18 @@ from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError
 from sqlbuild.integrations.dlt.models import DltDestinationConfig
 
+_DEFAULT_DESTINATION_OPTIONS: dict[str, object] = {"naming_convention": "sql_ci_v1"}
+_SQLBUILD_OWNED_DESTINATION_KEYS: frozenset[str] = frozenset(
+    {"credentials", "dataset_name", "default_schema_name", "project_id"}
+)
+
 
 def build_dlt_destination(
-    *, adapter_name: str, connection_config: dict[str, object], dataset_name: str | None
+    *,
+    adapter_name: str,
+    connection_config: dict[str, object],
+    destination_config: dict[str, object] | None = None,
+    dataset_name: str | None,
 ) -> DltDestinationConfig:
     """Return a dlt destination object and dataset for a SQLBuild target."""
 
@@ -22,12 +31,16 @@ def build_dlt_destination(
             "pip install 'sqlbuild[dlt]'"
         ) from error
 
+    destination_options: dict[str, object] = _destination_options(
+        adapter_name=adapter_name, destination_config=destination_config or {}
+    )
     if adapter_name == BuiltinAdapter.DUCKDB.value:
         return DltDestinationConfig(
-            destination=destinations.duckdb(
+            destination=cast(Any, destinations.duckdb)(
                 credentials=_required_string(
                     connection_config, "database", adapter_name=BuiltinAdapter.DUCKDB.value
-                )
+                ),
+                **destination_options,
             ),
             dataset_name=dataset_name or "main",
         )
@@ -39,40 +52,62 @@ def build_dlt_destination(
         if token is not None:
             credentials = f"{credentials}?motherduck_token={token}"
         return DltDestinationConfig(
-            destination=destinations.motherduck(credentials=credentials), dataset_name=dataset_name
+            destination=cast(Any, destinations.motherduck)(
+                credentials=credentials, **destination_options
+            ),
+            dataset_name=dataset_name,
         )
     if adapter_name == BuiltinAdapter.POSTGRES.value:
         return DltDestinationConfig(
-            destination=destinations.postgres(
-                credentials=_postgres_connection_string(connection_config)
+            destination=cast(Any, destinations.postgres)(
+                credentials=_postgres_connection_string(connection_config), **destination_options
             ),
             dataset_name=dataset_name,
         )
     if adapter_name == BuiltinAdapter.SNOWFLAKE.value:
         return DltDestinationConfig(
-            destination=destinations.snowflake(
-                credentials=_snowflake_credentials(connection_config)
+            destination=cast(Any, destinations.snowflake)(
+                credentials=_snowflake_credentials(connection_config), **destination_options
             ),
             dataset_name=dataset_name,
         )
     if adapter_name == BuiltinAdapter.BIGQUERY.value:
         return DltDestinationConfig(
-            destination=cast(Any, destinations.bigquery)(**_bigquery_config(connection_config)),
+            destination=cast(Any, destinations.bigquery)(
+                **_bigquery_config(connection_config), **destination_options
+            ),
             dataset_name=dataset_name,
         )
     if adapter_name == BuiltinAdapter.DATABRICKS.value:
         return DltDestinationConfig(
-            destination=destinations.databricks(
-                credentials=_databricks_credentials(connection_config)
+            destination=cast(Any, destinations.databricks)(
+                credentials=_databricks_credentials(connection_config), **destination_options
             ),
             dataset_name=dataset_name,
         )
     if adapter_name == BuiltinAdapter.SQLSERVER.value:
         return DltDestinationConfig(
-            destination=destinations.mssql(credentials=_sqlserver_credentials(connection_config)),
+            destination=cast(Any, destinations.mssql)(
+                credentials=_sqlserver_credentials(connection_config), **destination_options
+            ),
             dataset_name=dataset_name,
         )
     raise DltIntegrationError(f"Adapter '{adapter_name}' does not support dlt integration loaders")
+
+
+def _destination_options(
+    *, adapter_name: str, destination_config: dict[str, object]
+) -> dict[str, object]:
+    blocked_keys: tuple[str, ...] = tuple(
+        key for key in destination_config if key in _SQLBUILD_OWNED_DESTINATION_KEYS
+    )
+    if blocked_keys:
+        blocked: str = ", ".join(sorted(blocked_keys))
+        raise DltIntegrationError(
+            f"Adapter '{adapter_name}' dlt destination config cannot define SQLBuild-owned key(s): "
+            f"{blocked}"
+        )
+    return {**_DEFAULT_DESTINATION_OPTIONS, **destination_config}
 
 
 def _postgres_connection_string(config: dict[str, object]) -> str:

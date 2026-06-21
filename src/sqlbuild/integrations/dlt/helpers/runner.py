@@ -34,6 +34,7 @@ def run_dlt_source(*, config: DltSourceConfig, ctx: LoaderContext) -> None:
     destination: DltDestinationConfig = build_dlt_destination(
         adapter_name=ctx.adapter.adapter_name,
         connection_config=ctx.connection_config,
+        destination_config=resolved.destination,
         dataset_name=resolved.resource.schema,
     )
     dlt_source: Any = build_dlt_source(resolved)

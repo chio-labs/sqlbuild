@@ -232,6 +232,7 @@ class ParseSourcesYamlDltTestCase:
     expected_kind: str
     expected_dlt_names: tuple[str, ...]
     expected_schemas: tuple[str | None, ...]
+    expected_destination_config: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
