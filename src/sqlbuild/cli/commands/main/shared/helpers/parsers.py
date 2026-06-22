@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from sqlbuild.cli.commands.main.shared.constants import SQLBUILD_CONCURRENCY_ENV_VAR
 
 
 def parse_cli_vars(value: str) -> dict[str, object]:
@@ -27,6 +30,25 @@ def parse_cli_vars(value: str) -> dict[str, object]:
             raise argparse.ArgumentTypeError("--vars keys must be strings")
         result[key] = item_value
     return result
+
+
+def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | None:
+    """Return CLI concurrency, falling back to SQLBUILD_CONCURRENCY when unset."""
+
+    if explicit_concurrency is not None:
+        return explicit_concurrency
+    raw_value: str | None = os.environ.get(SQLBUILD_CONCURRENCY_ENV_VAR)
+    if raw_value is None or raw_value == "":
+        return None
+    try:
+        concurrency: int = int(raw_value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"{SQLBUILD_CONCURRENCY_ENV_VAR} must be an integer"
+        ) from error
+    if concurrency < 1:
+        raise argparse.ArgumentTypeError(f"{SQLBUILD_CONCURRENCY_ENV_VAR} must be >= 1")
+    return concurrency
 
 
 def parse_cursor_timestamp(value: str | None) -> datetime | None:

@@ -46,7 +46,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "Plan ready (full refresh, 17 selected, 2 sources to load)"
             ),
             expected_plan_ordered_fragments=(
-                "Connecting to duckdb...",
+                "Connecting to duckdb",
                 "Connected to duckdb. (<time>)",
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
@@ -57,16 +57,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "Seeds (1)",
             ),
             expected_build_ordered_fragments=(
-                "Connecting to duckdb...",
+                "Connecting to duckdb",
                 "Connected to duckdb. (<time>)",
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
                 "Plan ready (17 selected, 2 sources to load)",
                 "Sources to load (2)",
-                "Execution  sqb build  (concurrency: 1)",
+                "Execution  sqb build  (concurrency:",
                 "source    raw_customers",
                 "source    raw_orders",
-                "Connecting to duckdb...",
+                "Connecting to duckdb",
                 "Connected to duckdb. (<time>)",
                 "udf       is_completed_order",
                 "Completed successfully.",

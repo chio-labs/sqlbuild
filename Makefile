@@ -27,6 +27,13 @@ test-e2e-duckdb:
 	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
 
 
+test-virtual:
+	TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest \
+		$(VIRTUAL_TEST_ROOTS) \
+		-k "$(VIRTUAL_TEST_KEYWORD)" \
+		-m "not dbt and not performance" -vv -n auto --dist loadfile
+
+
 skills:
 	uv run sqb skills update --global --target opencode
 	uv run python -m scripts.skills.update_structure_skill
@@ -38,12 +45,21 @@ skills:
 DBT_EXECUTABLE ?= dbt
 export DBT_EXECUTABLE
 
+# Default per-project SQLBuild execution concurrency for verify runs. Override with
+# `make verify SQLBUILD_CONCURRENCY=8` or by exporting SQLBUILD_CONCURRENCY.
+SQLBUILD_CONCURRENCY ?= 8
+
+# Virtual-environment focused test selection. Override roots/keyword to zoom in,
+# e.g. `make test-virtual VIRTUAL_TEST_ROOTS=tests/e2e/src/sqlbuild/cli/commands/main/build`.
+VIRTUAL_TEST_ROOTS ?= tests/e2e/src/sqlbuild/cli/commands/main tests/e2e/src/sqlbuild/integrations/dagster
+VIRTUAL_TEST_KEYWORD ?= virtual or reconcile or diff or janitor or snapshot or dagster
+
 
 test-dbt:
 	@mkdir -p /tmp/opencode
 	@log=/tmp/opencode/test-dbt-$$(date +%Y%m%d-%H%M%S).log; \
 	echo "Logging to $$log (DBT_EXECUTABLE=$(DBT_EXECUTABLE))"; \
-	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv --color=yes 2>&1 | tee "$$log"; \
+	uv run pytest tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/sqlbuild/cli/commands/main/dbt -m "dbt and not real_warehouse" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "Full output saved to $$log"; \
 	exit $$status
@@ -53,31 +69,31 @@ DBT_TEST_PATHS := tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/
 
 
 test-dbt-real:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse" -vv
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse" -vv -n auto --dist load
 
 
 test-dbt-real-snowflake:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and snowflake" -vv
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and snowflake" -vv -n auto --dist load
 
 
 test-dbt-real-bigquery:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and bigquery" -vv
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and bigquery" -vv -n auto --dist load
 
 
 test-dbt-real-databricks:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and databricks" -vv
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and databricks" -vv -n auto --dist load
 
 
 test-dbt-real-postgres:
-	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and postgres" -vv
+	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and postgres" -vv -n auto --dist load
 
 
 test-dbt-real-sqlserver:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and sqlserver" -vv
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and sqlserver" -vv -n auto --dist load
 
 
 test-dbt-real-motherduck:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and motherduck" -vv
+	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse and motherduck" -vv -n auto --dist load
 
 
 waffle-shop:
@@ -104,7 +120,7 @@ test-real-databricks:
 
 
 test-real-postgres:
-	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests -m "real_warehouse and postgres" -vv
+	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests -m "real_warehouse and postgres" -vv -n auto --dist load
 
 
 test-real-sqlserver:
@@ -169,10 +185,8 @@ verify:
 		run_verify_step "ruff format" uv run ruff format .; \
 		run_verify_step "ruff check" uv run ruff check --fix .; \
 		run_verify_step "type check" uv run ty check src tests; \
-		run_verify_step "e2e tests" env PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
-		run_verify_step "performance e2e tests" env PYTHONUNBUFFERED=1 uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
-		run_verify_step "integration tests" env PYTHONUNBUFFERED=1 uv run pytest tests/integration -m "not real_warehouse and not dbt" -vv --color=yes; \
-		run_verify_step "unit tests" env PYTHONUNBUFFERED=1 uv run pytest tests/unit -m "not real_warehouse and not dbt" -vv --color=yes; \
+		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration tests/e2e -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse) or (real_warehouse and postgres)) and not performance" -vv --color=yes -n auto --dist loadfile; \
+		run_verify_step "performance tests" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
 		run_verify_step "test conventions" uv run check-test-conventions tests; \
 		run_verify_step "structure conventions" uv run check-structure-conventions src/sqlbuild scripts; \
 		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
