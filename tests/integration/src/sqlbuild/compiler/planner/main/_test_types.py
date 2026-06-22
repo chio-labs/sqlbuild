@@ -67,3 +67,17 @@ class SourceCursorInputPlanErrorTestCase:
     cursor_column: str
     cursor_input_column: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SelectionAwareExecutionRoundTripTestCase:
+    description: str
+    previous_sql_by_model_name: dict[str, str]
+    current_sql_by_model_name: dict[str, str]
+    build_select: tuple[str, ...]
+    replan_select: tuple[str, ...]
+    model_configs: dict[str, dict[str, object]]
+    expected_built_model_names: tuple[str, ...]
+    expected_replan_model_names: tuple[str, ...]
+    expected_replan_warning_fragments: tuple[str, ...]
+    expected_target_rows: tuple[tuple[int], ...]

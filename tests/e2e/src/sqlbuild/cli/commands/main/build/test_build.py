@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     PythonLoaderStatusResultBuildE2ETestCase,
     PythonPersistedResultBuildE2ETestCase,
     PythonTargetIsolationBuildE2ETestCase,
+    SelectionAwareStalenessBuildE2ETestCase,
     StandardPythonBuildHardeningE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
@@ -125,6 +126,94 @@ def test_given_dependency_baseline_project_when_building_downstream_then_prepare
 ) -> None:
     assert test_case.expected_stdout_fragments
     assert_dependency_baseline_build_case(tmp_path=tmp_path, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectionAwareStalenessBuildE2ETestCase(
+            description="out of selection changed upstream warns without rerunning leaf",
+            project_name="selection_aware_staleness_build",
+            initial_command=("--no-color", "build"),
+            mixed_command=("--no-color", "build", "--select", "b", "c"),
+            replan_command=("--no-color", "build", "--select", "c"),
+            expected_mixed_stdout_fragments=(
+                "selected model 'c' is stale",
+                "a changed but will not be rebuilt",
+                "Completed successfully.",
+            ),
+            expected_replan_stdout_fragments=(
+                "selected model 'c' is stale",
+                "a changed but will not be rebuilt",
+            ),
+            unexpected_replan_stdout_fragments=("table      c",),
+            expected_c_rows=((1,), (2,)),
+        )
+    ],
+    ids=["out of selection changed upstream warns without rerunning leaf"],
+)
+def test_given_changed_unselected_upstream_when_building_leaf_then_warns_and_noops(
+    tmp_path: Path,
+    test_case: SelectionAwareStalenessBuildE2ETestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                f'database = "{test_case.project_name}.duckdb"\n'
+            ),
+            "models/a.sql": "MODEL (materialized table);\n\nselect 1 as id\n",
+            "models/b.sql": "MODEL (materialized table);\n\nselect 1 as id\n",
+            "models/c.sql": (
+                "MODEL (materialized table);\n\n"
+                'select * from __ref("a") union all select * from __ref("b")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / f"{test_case.project_name}.duckdb"
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.initial_command,
+        project_dir=project_dir,
+    )
+    (project_dir / "models" / "a.sql").write_text(
+        "MODEL (materialized table);\n\nselect 10 as id\n",
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "b.sql").write_text(
+        "MODEL (materialized table);\n\nselect 2 as id\n",
+        encoding="utf-8",
+    )
+    mixed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.mixed_command,
+        project_dir=project_dir,
+    )
+    replan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.replan_command,
+        project_dir=project_dir,
+    )
+    c_rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql="SELECT id FROM main.c ORDER BY id",
+    )
+    mixed_output: str = mixed_result.stdout + mixed_result.stderr
+    replan_output: str = replan_result.stdout + replan_result.stderr
+
+    assert initial_result.returncode == 0
+    assert mixed_result.returncode == 0
+    assert replan_result.returncode == 0
+    expected_fragment: str
+    for expected_fragment in test_case.expected_mixed_stdout_fragments:
+        assert expected_fragment in mixed_output
+    for expected_fragment in test_case.expected_replan_stdout_fragments:
+        assert expected_fragment in replan_output
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_replan_stdout_fragments:
+        assert unexpected_fragment not in replan_output
+    assert tuple(c_rows) == test_case.expected_c_rows
 
 
 STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES: list[StandardPythonBuildHardeningE2ETestCase] = [
