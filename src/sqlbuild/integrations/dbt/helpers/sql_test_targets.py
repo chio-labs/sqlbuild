@@ -29,7 +29,6 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_MATERIALIZED_KEY,
     DBT_MANIFEST_RESOURCE_TYPE_KEY,
     DBT_MATERIALIZATION_EPHEMERAL,
-    DBT_RESOURCE_TYPE_SNAPSHOT,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.manifest.models import (
@@ -38,7 +37,7 @@ from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestSeed,
     DbtManifestSource,
 )
-from sqlbuild.integrations.dbt.types import DbtChainNodeBoundaryKind
+from sqlbuild.integrations.dbt.types import DbtChainNodeBoundaryKind, DbtSupportedResourceType
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
@@ -622,7 +621,7 @@ def _require_chainable_dbt_node(*, dbt_model: DbtManifestModel) -> None:
 
 
 def _dbt_node_boundary_kind(*, dbt_model: DbtManifestModel) -> DbtChainNodeBoundaryKind | None:
-    if dbt_model.payload.get(DBT_MANIFEST_RESOURCE_TYPE_KEY) == DBT_RESOURCE_TYPE_SNAPSHOT:
+    if dbt_model.payload.get(DBT_MANIFEST_RESOURCE_TYPE_KEY) == DbtSupportedResourceType.SNAPSHOT:
         return DbtChainNodeBoundaryKind.SNAPSHOT
     config: object = dbt_model.payload.get(DBT_MANIFEST_CONFIG_KEY)
     if isinstance(config, dict):

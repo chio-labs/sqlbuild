@@ -258,7 +258,7 @@ def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
     [
         DbtTestCliTestCase(
             description="SQLBuild unit test targets dbt model with mocked upstream",
-            setup_command=("dbt", "build", "--select", "fact_orders"),
+            setup_command=("dbt", "build", "--select", "+fact_orders"),
             command=("dbt", "test", "--select", "fact_orders"),
             expected_stdout_fragments=(
                 "dbt execution",
@@ -299,7 +299,7 @@ def test_given_sqlbuild_test_targets_dbt_model_when_running_dbt_test_then_uses_m
     [
         DbtTestCliTestCase(
             description="SQLBuild unit test targets package-qualified dbt model",
-            setup_command=("dbt", "build", "--select", "fact_orders"),
+            setup_command=("dbt", "build", "--select", "+fact_orders"),
             command=("dbt", "test", "--select", "fact_orders"),
             expected_stdout_fragments=(
                 "SQLBuild execution  sqb test",
@@ -339,7 +339,7 @@ def test_given_sqlbuild_test_targets_qualified_dbt_model_when_running_dbt_test_t
     [
         DbtTestCliTestCase(
             description="SQLBuild dbt test compiles incremental target with full refresh",
-            setup_command=("dbt", "build", "--select", "fact_orders"),
+            setup_command=("dbt", "build", "--select", "+fact_orders"),
             command=("dbt", "test", "--select", "fact_orders"),
             expected_stdout_fragments=(
                 "SQLBuild execution  sqb test",
