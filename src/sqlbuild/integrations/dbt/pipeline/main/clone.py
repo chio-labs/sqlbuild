@@ -41,6 +41,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
     parse_dbt_clone_options,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
 
 
@@ -163,7 +164,7 @@ def _resolve_selected_nodes(
         options=dbt_options,
         select=options.select,
         exclude=options.exclude,
-        resource_types=("model",),
+        resource_types=(DbtSupportedResourceType.MODEL,),
     )
     if ls_result.command.returncode != 0:
         raise DbtInteropRuntimeError(

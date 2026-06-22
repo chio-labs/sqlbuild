@@ -19,10 +19,12 @@ from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestSeed,
     DbtManifestSource,
 )
+from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 from sqlbuild.shared.types import SqlReferenceKind
 
-_INDEXED_NODE_RESOURCE_TYPES: frozenset[str] = frozenset({"model", "snapshot"})
-_SEED_RESOURCE_TYPE: str = "seed"
+_INDEXED_NODE_RESOURCE_TYPES: frozenset[DbtSupportedResourceType] = frozenset(
+    {DbtSupportedResourceType.MODEL, DbtSupportedResourceType.SNAPSHOT}
+)
 _DBT_RAW_CODE_KEYS: tuple[str, ...] = ("raw_code", "raw_sql")
 _DBT_DEPENDS_ON_KEY: str = "depends_on"
 _DBT_DEPENDS_ON_MACROS_KEY: str = "macros"
@@ -92,7 +94,7 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
             models_by_name_lists.setdefault(model.name, []).append(model)
             models_by_package_and_name[(model.package_name, model.name)] = model
             continue
-        if resource_type == _SEED_RESOURCE_TYPE:
+        if resource_type == DbtSupportedResourceType.SEED:
             seed: DbtManifestSeed = _parse_seed(
                 unique_id=unique_id, raw_node=node_data, warnings=seed_identity_warnings
             )
@@ -102,7 +104,7 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
             continue
         node_data = cast(dict[object, object], raw_node)
-        if node_data.get("resource_type") != "source":
+        if node_data.get("resource_type") != DbtSupportedResourceType.SOURCE:
             continue
         source: DbtManifestSource = _parse_source(unique_id=unique_id, raw_node=node_data)
         sources_by_unique_id[source.unique_id] = source

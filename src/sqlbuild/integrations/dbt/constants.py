@@ -17,7 +17,6 @@ DBT_MANIFEST_INCREMENTAL_STRATEGY_KEY: str = "incremental_strategy"
 DBT_MANIFEST_MATERIALIZED_KEY: str = "materialized"
 DBT_MANIFEST_META_KEY: str = "meta"
 DBT_MANIFEST_RESOURCE_TYPE_KEY: str = "resource_type"
-DBT_RESOURCE_TYPE_SNAPSHOT: str = "snapshot"
 DBT_MANIFEST_SQLBUILD_META_KEY: str = "sqlbuild"
 DBT_MANIFEST_REUSE_CURSOR_KEY: str = "reuse_cursor"
 

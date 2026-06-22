@@ -23,11 +23,15 @@ class DbtCombinedGraphResourceType(StrEnum):
     SOURCE = "source"
 
 
-class DbtNodeResourceType(StrEnum):
-    """dbt node resource types branched on during execution fingerprinting."""
+class DbtSupportedResourceType(StrEnum):
+    """dbt resource types SQLBuild currently handles with dedicated behavior."""
 
     MODEL = "model"
     SEED = "seed"
+    SNAPSHOT = "snapshot"
+    SOURCE = "source"
+    TEST = "test"
+    UNIT_TEST = "unit_test"
 
 
 class DbtInteropCommand(StrEnum):
