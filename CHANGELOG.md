@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.37.4](https://github.com/chio-labs/sqlbuild/compare/v0.37.3...v0.37.4) (2026-06-22)
+
+
+### Bug Fixes
+
+* **dbt:** improve lineage output labels ([d09ee4f](https://github.com/chio-labs/sqlbuild/commit/d09ee4fe938dab41d9f87a3c0a753725d6f921a8))
+* **dbt:** normalize supported resource types ([57b67c6](https://github.com/chio-labs/sqlbuild/commit/57b67c6b14e6332af0668f3e81cf33f876061be4))
+* **dbt:** stabilize dependency-aware version hashes and required upstream execution ([02df9cb](https://github.com/chio-labs/sqlbuild/commit/02df9cbf39e08c1a5eb5e03245a5a0da11d31a38))
+
 ## [0.37.3](https://github.com/chio-labs/sqlbuild/compare/v0.37.2...v0.37.3) (2026-06-22)
 
 
