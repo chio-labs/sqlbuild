@@ -481,6 +481,16 @@ def append_stale_out_of_selection_warning(
     return replace(plan, warnings=(*plan.warnings, warning))
 
 
+def append_manifest_seed_warnings(
+    *, plan: DbtInteropPlan, manifest: DbtManifestIndex
+) -> DbtInteropPlan:
+    """Surface manifest-time seed identity warnings (e.g. unreadable seed files)."""
+
+    if not manifest.seed_identity_warnings:
+        return plan
+    return replace(plan, warnings=(*plan.warnings, *manifest.seed_identity_warnings))
+
+
 def build_dbt_pruned_seed_unique_ids(
     *, command: DbtInteropCommand, plan: DbtInteropPlan
 ) -> tuple[str, ...]:

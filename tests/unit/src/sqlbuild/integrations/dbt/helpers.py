@@ -1307,6 +1307,8 @@ def build_manifest_seed_node(
     relation_name: str | None = None,
     checksum: str | None = None,
     config_overrides: dict[str, object] | None = None,
+    root_path: str | None = None,
+    original_file_path: str | None = None,
 ) -> dict[str, object]:
     """Build a minimal dbt manifest seed node."""
 
@@ -1322,6 +1324,10 @@ def build_manifest_seed_node(
         node["checksum"] = {"checksum": checksum}
     if config_overrides is not None:
         node["config"] = config_overrides
+    if root_path is not None:
+        node["root_path"] = root_path
+    if original_file_path is not None:
+        node["original_file_path"] = original_file_path
     return node
 
 

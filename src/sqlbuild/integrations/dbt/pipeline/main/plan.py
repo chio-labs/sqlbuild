@@ -44,6 +44,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
     dependency_baseline_unique_ids,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    append_manifest_seed_warnings,
     append_stale_out_of_selection_warning,
     build_dbt_non_model_run_unique_ids,
     build_dbt_pruned_seed_unique_ids,
@@ -189,6 +190,7 @@ def plan_dbt_interop_from_project(
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
         plan = append_stale_out_of_selection_warning(plan=plan, dbt_model_plan=dbt_model_plan)
+    plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
     reuse_git_ref: str | None = _dbt_reuse_git_ref(discovered_inputs)
     has_explicit_dbt_reuse_scope: bool = bool(
         plan.dbt_selected_unique_ids
