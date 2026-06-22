@@ -156,7 +156,8 @@ COLUMN_LINEAGE_OUTPUT_TEST_CASES: tuple[DbtColumnLineageOutputTestCase, ...] = (
         expected_fragments=(
             "Column trace",
             "downstream_orders:downstream_amount",
-            "model.analytics.fact_orders:amount",
+            "fact_orders:amount",
+            "└─",
         ),
     ),
 )
