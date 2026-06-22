@@ -446,6 +446,8 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
                 CREATE TABLE raw_customers AS
                 SELECT 1 AS customer_id, 'basic' AS plan,
                   TIMESTAMP '2026-01-01 00:00:00' AS updated_at;
+
+                CREATE TABLE hook_log (model_name VARCHAR, phase VARCHAR);
                 """
             ).strip()
             + "\n",
@@ -468,10 +470,6 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
 
                 @hook
                 def log_hook(ctx):
-                    ctx.execute_sql(
-                        f"CREATE TABLE IF NOT EXISTS {ctx.destination.schema}.hook_log "
-                        "(model_name VARCHAR, phase VARCHAR)"
-                    )
                     ctx.execute_sql(
                         f"INSERT INTO {ctx.destination.schema}.hook_log VALUES "
                         f"('{ctx.model_name}', '{ctx.phase}')"
@@ -620,7 +618,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--concurrency", "4"),
         project_dir=project_dir,
     )
 

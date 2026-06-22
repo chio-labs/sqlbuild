@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
@@ -47,6 +48,7 @@ from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SettingsConfig, SnapshotsConfig
+from sqlbuild.spec.models.source import SourceEntry
 
 
 def run_build_pipeline(
@@ -118,6 +120,11 @@ def run_build_pipeline(
             precompleted_keys=precompleted_keys,
             providers=providers,
         )
+    )
+    _prepare_build_schemas(
+        plan=plan,
+        adapter=adapter,
+        connection_config=connection_config,
     )
     worker_connections: list[Any] = []
     scheduler_connection: Any | None = None
@@ -194,3 +201,34 @@ def run_build_pipeline(
         logger.debug("close scheduler connection")
         if scheduler_connection is not None:
             adapter.close(scheduler_connection)
+
+
+def _prepare_build_schemas(
+    *,
+    plan: PlanOutput,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+) -> None:
+    schemas: set[tuple[str | None, str]] = set()
+    for entry in (*plan.model_entries, *plan.seed_entries, *plan.function_entries):
+        if entry.destination.schema is not None:
+            schemas.add((entry.destination.database, entry.destination.schema))
+    for entry in plan.source_load_entries:
+        source_entry: SourceEntry | None = plan.source_map.get(entry.name)
+        if source_entry is not None and source_entry.schema is not None:
+            schemas.add((source_entry.database, source_entry.schema))
+    if not schemas:
+        return
+
+    connection: Any = adapter.connect(connection_config)
+    recorder: StatementRecorder = StatementRecorder()
+    try:
+        for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
+            adapter.ensure_schema(
+                connection,
+                database=database,
+                schema=schema,
+                statement_recorder=recorder,
+            )
+    finally:
+        adapter.close(connection)

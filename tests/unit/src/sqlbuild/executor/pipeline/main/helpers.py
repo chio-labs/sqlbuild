@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.planner.models import (
+    FunctionPlanEntry,
+    ModelPlanEntry,
+    PlanOutput,
+    SeedPlanEntry,
+    SourceLoadPlanEntry,
+)
+from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.spec.models.schema import default_seed_csv_settings
+from sqlbuild.spec.models.source import SourceEntry
+
+
+class BuildSchemaPreflightAdapter(BaseAdapter):
+    def __init__(self) -> None:
+        self.connections: list[object] = []
+        self.closed_connections: list[object] = []
+        self.prepared_schemas: list[tuple[str | None, str | None]] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        connection: object = object()
+        self.connections.append(connection)
+        return connection
+
+    def execute(self, connection: object, sql: str) -> object:
+        del connection, sql
+        return object()
+
+    def close(self, connection: object) -> None:
+        self.closed_connections.append(connection)
+
+    def ensure_schema(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schema: str | None,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, statement_recorder
+        self.prepared_schemas.append((database, schema))
+
+
+def build_schema_preflight_plan() -> PlanOutput:
+    return PlanOutput(
+        model_entries=(
+            ModelPlanEntry(
+                key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+                name="orders",
+                relative_path=Path("models/orders.sql"),
+                materialization_type=MaterializationType.TABLE,
+                action=PlanAction.CREATE_TABLE,
+                reason=PlanReason.FIRST_RUN,
+                destination=_location(schema="dev", name="orders"),
+                fingerprint_query_sql="SELECT 1 AS id",
+                resolved_sql="SELECT 1 AS id",
+                logical_ddl="",
+            ),
+        ),
+        seed_entries=(
+            SeedPlanEntry(
+                key=CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="statuses"),
+                name="statuses",
+                destination=_location(schema="dev", name="statuses"),
+                file_path=Path("seeds/statuses.csv"),
+                columns=(ColumnInfo(name="id", type="INTEGER"),),
+                csv_settings=default_seed_csv_settings,
+            ),
+        ),
+        source_load_entries=(
+            SourceLoadPlanEntry(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SOURCE,
+                    name="raw_orders",
+                ),
+                name="raw_orders",
+                loader="load_orders",
+                destination="raw.raw_orders",
+                resource_kind=ExecutionResourceKind.SOURCE,
+            ),
+        ),
+        function_entries=(
+            FunctionPlanEntry(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.UDF,
+                    name="is_large_order",
+                ),
+                name="is_large_order",
+                relative_path=Path("functions/sql/is_large_order.sql"),
+                destination=_location(schema="analytics", name="is_large_order"),
+                arguments=(),
+                returns="BOOLEAN",
+                body_sql="amount > 100",
+                fingerprint_query_sql="amount > 100",
+                fingerprint_destination=_location(schema="analytics", name="is_large_order"),
+                language=FunctionLanguage.SQL,
+            ),
+        ),
+        source_map={
+            "raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders"),
+        },
+    )
+
+
+def _location(*, schema: str, name: str) -> CompiledRelationLocation:
+    return CompiledRelationLocation(
+        database=None,
+        schema=schema,
+        name=name,
+        qualified_name=f"{schema}.{name}",
+    )
