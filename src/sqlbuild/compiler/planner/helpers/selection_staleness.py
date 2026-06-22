@@ -6,11 +6,17 @@ from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectK
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
+from sqlbuild.compiler.planner.helpers.selection_staleness_classifier import (
+    classify_selection_staleness_warnings,
+)
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,
     PlannerScope,
     PlanWarning,
+    SelectionStalenessGraph,
+    SelectionStalenessNodeKey,
+    SelectionStalenessWarning,
     StandardModelVersionIdentities,
     WarehouseSnapshot,
 )
@@ -46,31 +52,38 @@ def build_stale_out_of_selection_warnings(
         for key in execution_scope.selected_keys
         if key.resource_type == CompiledResourceType.SOURCE
     )
-    warnings: list[PlanWarning] = []
-    key: CompiledObjectKey
-    for key in original_scope.selected_keys:
-        if key.resource_type != CompiledResourceType.MODEL:
-            continue
-        triggers: tuple[str, ...] = _changed_upstream_names(
-            model_key=key,
+    neutral_graph: SelectionStalenessGraph = SelectionStalenessGraph(
+        upstream_deps=_neutral_upstream_deps(original_scope.upstream_deps),
+        selected_model_names=frozenset(
+            key.name
+            for key in original_scope.selected_keys
+            if key.resource_type == CompiledResourceType.MODEL
+        ),
+        run_model_names=run_model_names,
+        run_seed_names=run_seed_names,
+        run_source_names=run_source_names,
+        changed_model_names=_changed_model_names(
             original_scope=original_scope,
-            run_model_names=run_model_names,
-            run_seed_names=run_seed_names,
-            run_source_names=run_source_names,
             changes=changes,
             snapshot=snapshot,
             version_identities=version_identities,
-            source_freshness=source_freshness,
-        )
-        if not triggers:
-            continue
+        ),
+        changed_seed_names=_changed_seed_names(
+            snapshot=snapshot,
+            version_identities=version_identities,
+        ),
+        changed_source_names=_changed_source_names(source_freshness),
+    )
+    warnings: list[PlanWarning] = []
+    warning: SelectionStalenessWarning
+    for warning in classify_selection_staleness_warnings(neutral_graph):
         warnings.append(
             PlanWarning(
-                model_name=key.name,
+                model_name=warning.model_name,
                 severity=WarningSeverity.WARNING,
                 message=(
-                    f"selected model '{key.name}' is stale: upstream "
-                    f"{_format_trigger_names(triggers)}; "
+                    f"selected model '{warning.model_name}' is stale: upstream "
+                    f"{_format_trigger_names(warning.trigger_names)}; "
                     "use a closure selector (for example +model) to incorporate it"
                 ),
             )
@@ -78,114 +91,86 @@ def build_stale_out_of_selection_warnings(
     return tuple(warnings)
 
 
-def _changed_upstream_names(
+def _neutral_upstream_deps(
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]:
+    return {
+        _neutral_key(key): tuple(_neutral_key(upstream_key) for upstream_key in upstream_keys)
+        for key, upstream_keys in upstream_deps.items()
+    }
+
+
+def _neutral_key(key: CompiledObjectKey) -> SelectionStalenessNodeKey:
+    return SelectionStalenessNodeKey(
+        resource_type=_neutral_resource_type(key.resource_type),
+        name=key.name,
+    )
+
+
+def _neutral_resource_type(resource_type: str) -> str:
+    if resource_type == CompiledResourceType.MODEL:
+        return "model"
+    if resource_type == CompiledResourceType.SEED:
+        return "seed"
+    if resource_type == CompiledResourceType.SOURCE:
+        return "source"
+    return str(resource_type)
+
+
+def _changed_model_names(
     *,
-    model_key: CompiledObjectKey,
-    original_scope: PlannerScope,
-    run_model_names: frozenset[str],
-    run_seed_names: frozenset[str],
-    run_source_names: frozenset[str],
-    changes: PlannerChangeResults,
-    snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
-) -> tuple[str, ...]:
-    names: set[str] = set()
-    visited: set[CompiledObjectKey] = set()
-
-    def visit(upstream_key: CompiledObjectKey) -> bool:
-        if upstream_key in visited:
-            return False
-        visited.add(upstream_key)
-        if upstream_key.resource_type == CompiledResourceType.MODEL:
-            in_run_set: bool = upstream_key.name in run_model_names
-            own_changed: bool = _model_own_identity_changed(
-                model_name=upstream_key.name,
-                original_scope=original_scope,
-                changes=changes,
-                snapshot=snapshot,
-                version_identities=version_identities,
-            )
-            if own_changed and not in_run_set:
-                names.add(upstream_key.name)
-                return True
-            ancestor_stale: bool = False
-            parent_key: CompiledObjectKey
-            for parent_key in original_scope.upstream_deps.get(upstream_key, ()):
-                ancestor_stale = visit(parent_key) or ancestor_stale
-                if _run_parent_changed(
-                    parent_key=parent_key,
-                    run_model_names=run_model_names,
-                    run_seed_names=run_seed_names,
-                    run_source_names=run_source_names,
-                    original_scope=original_scope,
-                    changes=changes,
-                    snapshot=snapshot,
-                    version_identities=version_identities,
-                    source_freshness=source_freshness,
-                ):
-                    ancestor_stale = True
-            if ancestor_stale and not in_run_set:
-                names.add(upstream_key.name)
-                return True
-            return ancestor_stale
-        if upstream_key.resource_type == CompiledResourceType.SEED:
-            changed: bool = _seed_identity_changed(
-                seed_name=upstream_key.name,
-                snapshot=snapshot,
-                version_identities=version_identities,
-            )
-            if changed and upstream_key.name not in run_seed_names:
-                names.add(upstream_key.name)
-            return changed
-        if upstream_key.resource_type == CompiledResourceType.SOURCE:
-            changed = _source_freshness_changed(
-                source_name=upstream_key.name,
-                source_freshness=source_freshness,
-            )
-            if changed and upstream_key.name not in run_source_names:
-                names.add(upstream_key.name)
-            return changed
-        return False
-
-    upstream_key: CompiledObjectKey
-    for upstream_key in original_scope.upstream_deps.get(model_key, ()):
-        visit(upstream_key)
-    return tuple(sorted(names))
-
-
-def _run_parent_changed(
-    *,
-    parent_key: CompiledObjectKey,
-    run_model_names: frozenset[str],
-    run_seed_names: frozenset[str],
-    run_source_names: frozenset[str],
     original_scope: PlannerScope,
     changes: PlannerChangeResults,
     snapshot: WarehouseSnapshot,
     version_identities: StandardModelVersionIdentities,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
-) -> bool:
-    if parent_key.resource_type == CompiledResourceType.MODEL:
-        return parent_key.name in run_model_names and _model_own_identity_changed(
-            model_name=parent_key.name,
+) -> frozenset[str]:
+    changed: set[str] = {
+        model_name
+        for model_name, change in changes.models.items()
+        if change.change_kind
+        in {
+            ChangeKind.FIRST_RUN,
+            ChangeKind.QUERY_CHANGED,
+            ChangeKind.CONFIG_CHANGED,
+            ChangeKind.SCHEMA_CHANGED,
+        }
+    }
+    changed.update(
+        model_name
+        for model_name in original_scope.models_by_name
+        if _model_own_identity_changed(
+            model_name=model_name,
             original_scope=original_scope,
             changes=changes,
             snapshot=snapshot,
             version_identities=version_identities,
         )
-    if parent_key.resource_type == CompiledResourceType.SEED:
-        return parent_key.name in run_seed_names and _seed_identity_changed(
-            seed_name=parent_key.name,
+    )
+    return frozenset(changed)
+
+
+def _changed_seed_names(
+    *,
+    snapshot: WarehouseSnapshot,
+    version_identities: StandardModelVersionIdentities,
+) -> frozenset[str]:
+    return frozenset(
+        seed_name
+        for seed_name in version_identities.seed_version_hashes
+        if _seed_identity_changed(
+            seed_name=seed_name,
             snapshot=snapshot,
             version_identities=version_identities,
         )
-    if parent_key.resource_type == CompiledResourceType.SOURCE:
-        return parent_key.name in run_source_names and _source_freshness_changed(
-            source_name=parent_key.name,
-            source_freshness=source_freshness,
-        )
-    return False
+    )
+
+
+def _changed_source_names(
+    source_freshness: StandardSourceFreshnessPlanningResult | None,
+) -> frozenset[str]:
+    if source_freshness is None:
+        return frozenset()
+    return frozenset(identity.source_name for identity in source_freshness.changed_identities)
 
 
 def _model_own_identity_changed(
@@ -236,16 +221,6 @@ def _seed_identity_changed(
         return False
     fingerprint: Fingerprint | None = snapshot.fingerprints.seeds.get(seed_name)
     return fingerprint is None or fingerprint.version_hash != expected_hash
-
-
-def _source_freshness_changed(
-    *, source_name: str, source_freshness: StandardSourceFreshnessPlanningResult | None
-) -> bool:
-    if source_freshness is None:
-        return False
-    return any(
-        identity.source_name == source_name for identity in source_freshness.changed_identities
-    )
 
 
 def _format_trigger_names(names: tuple[str, ...]) -> str:

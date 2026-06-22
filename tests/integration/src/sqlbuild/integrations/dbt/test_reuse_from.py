@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.exceptions import (
+    DbtInteropConfigError,
+    DbtInteropRuntimeError,
+    DbtReuseUnavailableError,
+)
 from sqlbuild.integrations.dbt.helpers import reuse_from
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.main.compile_reuse_from_manifest import (
@@ -36,7 +40,7 @@ REUSE_FROM_COMPILE_ERROR_TEST_CASES: list[DbtReuseFromCompileErrorTestCase] = [
         git_ref="missing-ref",
         command_returncode=0,
         command_stdout="",
-        expected_error_type=DbtInteropConfigError,
+        expected_error_type=DbtReuseUnavailableError,
         expected_error_fragment=(
             "dbt reuse_from git_ref 'missing-ref' does not exist in this repository"
         ),
@@ -175,7 +179,7 @@ def test_given_reuse_from_git_ref_is_current_branch_when_compiling_then_raises_c
         build_local_reuse_from_git_project(tmp_path=tmp_path)
     )
 
-    with pytest.raises(DbtInteropConfigError) as exc_info:
+    with pytest.raises(DbtReuseUnavailableError) as exc_info:
         compile_reuse_from_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
@@ -490,7 +494,7 @@ def test_given_reuse_from_git_ref_refresh_fails_when_compiling_then_raises_clear
     run_git_command(repo_dir=repo_dir, args=("config", "branch.prod.remote", "missing-origin"))
     run_git_command(repo_dir=repo_dir, args=("config", "branch.prod.merge", "refs/heads/prod"))
 
-    with pytest.raises(DbtInteropConfigError) as exc_info:
+    with pytest.raises(DbtReuseUnavailableError) as exc_info:
         compile_reuse_from_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
@@ -607,7 +611,7 @@ def test_given_sqlbuild_project_outside_git_repo_when_compiling_reuse_from_then_
     profiles_dir.mkdir()
     sqlbuild_project_dir.joinpath(macro_relative_path).write_text("macro", encoding="utf-8")
 
-    with pytest.raises(DbtInteropConfigError) as exc_info:
+    with pytest.raises(DbtReuseUnavailableError) as exc_info:
         compile_reuse_from_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
@@ -648,7 +652,7 @@ def test_given_dbt_project_outside_git_repo_when_compiling_reuse_from_then_raise
     dbt_project_dir: Path = tmp_path / "external_dbt_project"
     dbt_project_dir.mkdir()
 
-    with pytest.raises(DbtInteropConfigError) as exc_info:
+    with pytest.raises(DbtReuseUnavailableError) as exc_info:
         compile_reuse_from_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(

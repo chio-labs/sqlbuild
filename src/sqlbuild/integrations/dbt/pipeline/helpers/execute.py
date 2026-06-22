@@ -470,6 +470,14 @@ def append_stale_out_of_selection_warning(
 ) -> DbtInteropPlan:
     """Append a warning when selected models are stale via unselected changed seeds."""
 
+    if dbt_model_plan.stale_out_of_selection_warning_messages:
+        return replace(
+            plan,
+            warnings=(
+                *plan.warnings,
+                *dbt_model_plan.stale_out_of_selection_warning_messages,
+            ),
+        )
     stale_seeds: tuple[str, ...] = dbt_model_plan.stale_out_of_selection_seed_unique_ids
     if not stale_seeds:
         return plan
