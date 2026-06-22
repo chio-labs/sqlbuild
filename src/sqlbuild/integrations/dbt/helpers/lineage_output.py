@@ -279,15 +279,15 @@ def _format_column_trace_branch(
     )
     for index, edge in enumerate(edges):
         is_last: bool = index == len(edges) - 1
-        branch: str = "└─" if is_last else "├─"
-        continuation: str = "   " if is_last else "│  "
+        branch: str = "└── " if is_last else "├── "
+        continuation: str = "    " if is_last else "│   "
         related_column: QualifiedLineageColumn = (
             edge.target if direction == DbtLineageDirection.DOWNSTREAM else edge.source
         )
         related_id: str = _column_id(related_column)
         suffix: str = style.muted(" (already shown)") if related_id in seen else ""
         lines.append(
-            f"{prefix}{style.muted(branch)} "
+            f"{prefix}{style.muted(branch)}"
             f"{_format_column_short(related_column, style=style)} "
             f"{style.muted(f'({edge.transform_kind})')}{suffix}"
         )
@@ -346,11 +346,11 @@ def _format_branch(
     )
     for index, child in enumerate(children):
         is_last: bool = index == len(children) - 1
-        branch: str = "└─" if is_last else "├─"
-        continuation: str = "   " if is_last else "│  "
+        branch: str = "└── " if is_last else "├── "
+        continuation: str = "    " if is_last else "│   "
         suffix: str = style.muted(" (already shown)") if child in seen else ""
         lines.append(
-            f"{prefix}{style.muted(branch)} {_format_node(node_by_key[child], style=style)}{suffix}"
+            f"{prefix}{style.muted(branch)}{_format_node(node_by_key[child], style=style)}{suffix}"
         )
         if child in seen:
             continue

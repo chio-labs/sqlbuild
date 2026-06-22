@@ -56,6 +56,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    GraphNodeKey,
     PlannerScope,
     PlanOutput,
     ScenarioArtifactIdentity,
@@ -116,6 +117,17 @@ class StandardReuseFromTargetTestResult:
 
     def fetchall(self) -> tuple[tuple[object, ...], ...]:
         return self._rows
+
+
+def compose_readable_identity(
+    local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+) -> str:
+    if not upstream_hashes:
+        return local_hash
+    rendered: str = ",".join(
+        f"{key.node_type}:{key.node_name}={upstream_hash}" for key, upstream_hash in upstream_hashes
+    )
+    return f"{local_hash}|{rendered}"
 
 
 class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):

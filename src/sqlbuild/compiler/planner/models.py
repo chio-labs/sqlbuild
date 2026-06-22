@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    GraphResourceKind,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -45,6 +46,38 @@ from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
+
+
+@dataclass(frozen=True)
+class GraphNodeKey:
+    """Neutral graph key matching fingerprint identity fields."""
+
+    node_type: str
+    node_name: str
+
+
+@dataclass(frozen=True)
+class GraphIdentityNode:
+    """Neutral node input for dependency-aware identity resolution."""
+
+    key: GraphNodeKey
+    resource_kind: GraphResourceKind
+    upstream_keys: tuple[GraphNodeKey, ...]
+    local_hash: str | None
+
+
+@dataclass(frozen=True)
+class GraphChangesOnlyPropagationResult:
+    """Neutral changes-only propagation result for selected model nodes."""
+
+    blocked_model_keys: frozenset[GraphNodeKey] = frozenset()
+    identity_stale_model_keys: frozenset[GraphNodeKey] = frozenset()
+    source_changed_model_keys: frozenset[GraphNodeKey] = frozenset()
+    seed_changed_model_keys: frozenset[GraphNodeKey] = frozenset()
+    upstream_changed_model_keys: frozenset[GraphNodeKey] = frozenset()
+    blocked_source_keys_by_model_key: dict[GraphNodeKey, tuple[GraphNodeKey, ...]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)

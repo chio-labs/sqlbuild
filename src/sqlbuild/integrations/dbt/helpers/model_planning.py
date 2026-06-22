@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -14,10 +12,17 @@ from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.planner.main.graph_changes_only import (
+    build_graph_changes_only_propagation,
+)
+from sqlbuild.compiler.planner.main.graph_identity import build_expected_graph_identity_hashes
 from sqlbuild.compiler.planner.main.selection_staleness import (
     classify_selection_staleness_warnings,
 )
 from sqlbuild.compiler.planner.models import (
+    GraphChangesOnlyPropagationResult,
+    GraphIdentityNode,
+    GraphNodeKey,
     SelectionStalenessGraph,
     SelectionStalenessNodeKey,
     SelectionStalenessWarning,
@@ -31,6 +36,12 @@ from sqlbuild.integrations.dbt.helpers.graph import (
     dbt_model_graph_key,
     expand_combined_downstream,
     expand_combined_upstream,
+)
+from sqlbuild.integrations.dbt.helpers.model_identity import (
+    build_dbt_graph_identity_nodes,
+    compose_dbt_graph_version_hash,
+    dbt_graph_identity_execution_order,
+    dbt_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
@@ -382,26 +393,45 @@ def _apply_graph_propagation(
     changed_seed_unique_ids: frozenset[str],
 ) -> dict[str, DbtModelPlanEntry]:
     propagated: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
-    upstream_by_unique_id: dict[str, frozenset[DbtCombinedGraphKey]] = {
-        unique_id: expand_combined_upstream(dbt_model_graph_key(unique_id), graph.upstream_deps)
-        for unique_id in entries_by_unique_id
-    }
-    direct_upstream_by_unique_id: dict[str, tuple[DbtCombinedGraphKey, ...]] = {
-        unique_id: graph.upstream_deps.get(dbt_model_graph_key(unique_id), ())
-        for unique_id in entries_by_unique_id
-    }
+    propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
+        upstream_deps=_dbt_neutral_upstream_deps(graph=graph),
+        model_keys=frozenset(dbt_graph_node_key(unique_id) for unique_id in entries_by_unique_id),
+        selected_model_keys=frozenset(
+            dbt_graph_node_key(unique_id) for unique_id in selected_unique_ids
+        ),
+        current_model_keys=frozenset(
+            dbt_graph_node_key(unique_id)
+            for unique_id, entry in entries_by_unique_id.items()
+            if entry.action == DbtModelPlanAction.CURRENT
+        ),
+        run_model_keys=frozenset(
+            dbt_graph_node_key(unique_id)
+            for unique_id, entry in entries_by_unique_id.items()
+            if entry.action == DbtModelPlanAction.RUN
+        ),
+        version_mismatch_model_keys=frozenset(
+            dbt_graph_node_key(unique_id)
+            for unique_id, entry in entries_by_unique_id.items()
+            if _entry_version_mismatch(entry)
+        ),
+        changed_seed_keys=frozenset(
+            dbt_graph_node_key(unique_id) for unique_id in changed_seed_unique_ids
+        ),
+        changed_source_keys=frozenset(
+            dbt_graph_node_key(unique_id) for unique_id in changed_source_unique_ids
+        ),
+        blocked_source_keys=frozenset(
+            dbt_graph_node_key(unique_id) for unique_id in blocked_source_unique_ids
+        ),
+    )
+    unique_id: str
     for unique_id, entry in tuple(propagated.items()):
-        upstream: frozenset[DbtCombinedGraphKey] = upstream_by_unique_id[unique_id]
-        blocked_sources: tuple[str, ...] = tuple(
-            sorted(
-                key.name
-                for key in upstream
-                if key.owner == DbtCombinedGraphOwner.DBT
-                and key.resource_type == DbtCombinedGraphResourceType.SOURCE
-                and key.name in blocked_source_unique_ids
+        key: GraphNodeKey = dbt_graph_node_key(unique_id)
+        if key in propagation.blocked_model_keys:
+            blocked_sources: tuple[str, ...] = tuple(
+                source_key.node_name
+                for source_key in propagation.blocked_source_keys_by_model_key.get(key, ())
             )
-        )
-        if blocked_sources:
             propagated[unique_id] = replace(
                 entry,
                 action=DbtModelPlanAction.BLOCKED,
@@ -409,66 +439,41 @@ def _apply_graph_propagation(
                 blocked_source_unique_ids=blocked_sources,
             )
             continue
-        changed_sources: tuple[str, ...] = tuple(
-            sorted(
-                key.name
-                for key in upstream
-                if key.owner == DbtCombinedGraphOwner.DBT
-                and key.resource_type == DbtCombinedGraphResourceType.SOURCE
-                and key.name in changed_source_unique_ids
-            )
-        )
-        if changed_sources and entry.action == DbtModelPlanAction.CURRENT:
+        if key in propagation.source_changed_model_keys:
             propagated[unique_id] = replace(
                 entry,
                 action=DbtModelPlanAction.RUN,
                 reason=DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
             )
             continue
-        changed_seeds: bool = any(
-            key.owner == DbtCombinedGraphOwner.DBT
-            and key.resource_type == DbtCombinedGraphResourceType.SOURCE
-            and key.name in changed_seed_unique_ids
-            for key in upstream
-        )
-        if changed_seeds and entry.action == DbtModelPlanAction.CURRENT:
+        if key in propagation.seed_changed_model_keys:
             propagated[unique_id] = replace(
                 entry,
                 action=DbtModelPlanAction.RUN,
                 reason=DbtModelPlanReason.UPSTREAM_CHANGED,
             )
             continue
-    changed: bool = True
-    while changed:
-        changed = False
-        for unique_id, entry in tuple(propagated.items()):
-            if unique_id not in selected_unique_ids or entry.action != DbtModelPlanAction.CURRENT:
-                continue
-            direct_upstream: tuple[DbtCombinedGraphKey, ...] = direct_upstream_by_unique_id[
-                unique_id
-            ]
-            upstream_run: bool = any(
-                key.owner == DbtCombinedGraphOwner.DBT
-                and key.resource_type == DbtCombinedGraphResourceType.MODEL
-                and key.name in selected_unique_ids
-                and key.name in propagated
-                and propagated[key.name].action == DbtModelPlanAction.RUN
-                for key in direct_upstream
+        if key in propagation.upstream_changed_model_keys:
+            propagated[unique_id] = replace(
+                entry,
+                action=DbtModelPlanAction.RUN,
+                reason=DbtModelPlanReason.UPSTREAM_CHANGED,
             )
-            selected_upstream_version_mismatch: bool = any(
-                key.owner == DbtCombinedGraphOwner.DBT
-                and key.resource_type == DbtCombinedGraphResourceType.MODEL
-                and key.name in selected_unique_ids
-                for key in direct_upstream
-            ) and _entry_version_mismatch(entry)
-            if upstream_run or selected_upstream_version_mismatch:
-                propagated[unique_id] = replace(
-                    entry,
-                    action=DbtModelPlanAction.RUN,
-                    reason=DbtModelPlanReason.UPSTREAM_CHANGED,
-                )
-                changed = True
     return propagated
+
+
+def _dbt_neutral_upstream_deps(
+    *, graph: DbtCombinedGraph
+) -> dict[GraphNodeKey, tuple[GraphNodeKey, ...]]:
+    return {
+        dbt_graph_node_key(key.name): tuple(
+            dbt_graph_node_key(upstream_key.name)
+            for upstream_key in upstream_keys
+            if upstream_key.owner == DbtCombinedGraphOwner.DBT
+        )
+        for key, upstream_keys in graph.upstream_deps.items()
+        if key.owner == DbtCombinedGraphOwner.DBT
+    }
 
 
 def _blocked_sqlbuild_model_names(
@@ -527,59 +532,25 @@ def _read_dbt_fingerprints(
     return dict(fingerprint_set.fingerprints_by_identity or {})
 
 
-def compose_dbt_version_hash(*, own_hash: str, upstream_hashes: Sequence[tuple[str, str]]) -> str:
-    """Compose a dbt model version hash from its own checksum and upstream identities."""
-
-    if not upstream_hashes:
-        return own_hash
-    payload: str = json.dumps(
-        {"own": own_hash, "upstream": sorted(upstream_hashes)},
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
 def build_expected_dbt_model_version_hashes(
     *, manifest: DbtManifestIndex, graph: DbtCombinedGraph | None
 ) -> dict[str, str | None]:
-    hashes: dict[str, str | None] = {}
-
-    def resolve(unique_id: str, visiting: frozenset[str] = frozenset()) -> str | None:
-        if unique_id in hashes:
-            return hashes[unique_id]
-        model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
-        if model is None:
-            hashes[unique_id] = None
-            return None
-        own_hash: str | None = model.node_checksum
-        if own_hash is None:
-            hashes[unique_id] = None
-            return None
-        if graph is None or unique_id in visiting:
-            hashes[unique_id] = own_hash
-            return own_hash
-        upstream_hashes: list[tuple[str, str]] = []
-        key: DbtCombinedGraphKey
-        for key in graph.upstream_deps.get(dbt_model_graph_key(unique_id), ()):
-            if key.owner != DbtCombinedGraphOwner.DBT:
-                continue
-            upstream_hash: str | None = None
-            if key.resource_type == DbtCombinedGraphResourceType.MODEL:
-                upstream_hash = resolve(key.name, visiting | {unique_id})
-            elif key.resource_type == DbtCombinedGraphResourceType.SOURCE:
-                seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(key.name)
-                upstream_hash = None if seed is None else seed.identity_hash
-            if upstream_hash is not None:
-                upstream_hashes.append((key.name, upstream_hash))
-        composed: str = compose_dbt_version_hash(own_hash=own_hash, upstream_hashes=upstream_hashes)
-        hashes[unique_id] = composed
-        return composed
-
-    unique_id: str
-    for unique_id in manifest.models_by_unique_id:
-        resolve(unique_id)
-    return hashes
+    nodes: dict[GraphNodeKey, GraphIdentityNode] = build_dbt_graph_identity_nodes(
+        manifest=manifest,
+        graph=graph,
+    )
+    execution_order: tuple[GraphNodeKey, ...] = dbt_graph_identity_execution_order(
+        manifest=manifest
+    )
+    hashes: dict[GraphNodeKey, str | None] = build_expected_graph_identity_hashes(
+        nodes=nodes,
+        execution_order=execution_order,
+        compose_identity=compose_dbt_graph_version_hash,
+    )
+    return {
+        unique_id: hashes.get(dbt_graph_node_key(unique_id))
+        for unique_id in manifest.models_by_unique_id
+    }
 
 
 def _plan_model(
