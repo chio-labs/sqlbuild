@@ -33,6 +33,12 @@ class DbtInteropArgumentError(DbtInteropError):
     code: str = "C230"
 
 
+class DbtReuseUnavailableError(DbtInteropError):
+    """Raised when reuse_from preconditions are unmet; reuse is skipped, not fatal."""
+
+    code: str = "C243"
+
+
 class DbtProfileError(DbtInteropConfigError):
     """Raised when a dbt profile cannot be resolved for SQLBuild."""
 

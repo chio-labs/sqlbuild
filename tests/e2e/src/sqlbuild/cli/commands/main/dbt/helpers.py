@@ -2194,3 +2194,319 @@ def assert_dbt_local_replay_rows(
     db_path: Path = project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb"
     rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
     assert tuple(rows) == expected_rows
+
+
+_SEED_CHANGE_RAW_ORDERS_BASE: str = (
+    "order_id,customer_id,amount\n101,1,25\n102,2,20\n103,3,30\n104,1,15\n"
+)
+
+
+def prepare_dbt_seed_change_project(*, tmp_path: Path) -> Path:
+    """Write a pure dbt DuckDB project with a seed-backed model chain.
+
+    Chain: seed raw_orders -> stg_orders -> int_orders -> fct_customer_revenue, plus a
+    seed raw_customers used by int_orders. Returns the SQLBuild twin project dir.
+    """
+
+    root_dir: Path = tmp_path / "dbt_seed_change"
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    dbt_seeds_dir: Path = dbt_project_dir / "seeds"
+    dbt_models_dir.mkdir(parents=True)
+    dbt_seeds_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_project_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_seed_change.duckdb"
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n",
+        encoding="utf-8",
+    )
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "seed-paths: ['seeds']\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (dbt_seeds_dir / "raw_orders.csv").write_text(_SEED_CHANGE_RAW_ORDERS_BASE, encoding="utf-8")
+    (dbt_seeds_dir / "raw_customers.csv").write_text(
+        "customer_id,customer_name\n1,Ada\n2,Babbage\n3,Curie\n", encoding="utf-8"
+    )
+    (dbt_models_dir / "stg_orders.sql").write_text(
+        "select order_id, customer_id, amount from {{ ref('raw_orders') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "stg_customers.sql").write_text(
+        "select customer_id, customer_name from {{ ref('raw_customers') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "int_orders.sql").write_text(
+        "select o.order_id, o.customer_id, o.amount, c.customer_name "
+        "from {{ ref('stg_orders') }} o "
+        "join {{ ref('stg_customers') }} c using (customer_id)\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "fct_customer_revenue.sql").write_text(
+        "select customer_id, count(*) as order_count, sum(amount) as total_revenue "
+        "from {{ ref('int_orders') }} group by customer_id\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "schema.yml").write_text(
+        "version: 2\n"
+        "models:\n"
+        "  - name: fct_customer_revenue\n"
+        "    columns:\n"
+        "      - name: customer_id\n"
+        "        tests: [not_null, unique]\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dbt_seed_change"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n'
+        "[connection]\n"
+        'database = "dbt_seed_change.duckdb"\n'
+        "[targets.dev]\n"
+        'schema = "main"\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n',
+        encoding="utf-8",
+    )
+    return sqlbuild_project_dir
+
+
+def append_dbt_seed_change_order(
+    *, project_dir: Path, order_id: int, customer_id: int, amount: int
+) -> None:
+    """Append one unique order row to the seed-change raw_orders seed."""
+
+    seed_path: Path = project_dir.parent / "dbt_project" / "seeds" / "raw_orders.csv"
+    seed_path.write_text(
+        seed_path.read_text(encoding="utf-8") + f"{order_id},{customer_id},{amount}\n",
+        encoding="utf-8",
+    )
+
+
+def _write_reuse_skip_project_files(*, root_dir: Path, git_ref: str) -> Path:
+    dbt_project_dir: Path = root_dir / "dbt_project"
+    profiles_dir: Path = root_dir / "profiles"
+    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    macro_dir: Path = sqlbuild_project_dir / "dbt" / "macros"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_project_dir.mkdir(parents=True)
+    macro_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_reuse_skip.duckdb"
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n",
+        encoding="utf-8",
+    )
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "orders.sql").write_text("select 1 as order_id\n", encoding="utf-8")
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dbt_reuse_skip"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n'
+        "[connection]\n"
+        'database = "dbt_reuse_skip.duckdb"\n'
+        "[targets.dev]\n"
+        'schema = "main"\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n'
+        "[dbt.reuse_from]\n"
+        f'git_ref = "{git_ref}"\n'
+        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n',
+        encoding="utf-8",
+    )
+    (macro_dir / "generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    return sqlbuild_project_dir
+
+
+def prepare_dbt_reuse_skip_non_git_project(*, tmp_path: Path) -> Path:
+    """Reuse-configured pure dbt project that is NOT inside a git repository."""
+
+    return _write_reuse_skip_project_files(root_dir=tmp_path / "dbt_reuse_skip", git_ref="main")
+
+
+def prepare_dbt_reuse_skip_current_branch_project(*, tmp_path: Path) -> Path:
+    """Reuse-configured pure dbt project whose git_ref equals the current branch."""
+
+    root_dir: Path = tmp_path / "dbt_reuse_skip"
+    project_dir: Path = _write_reuse_skip_project_files(root_dir=root_dir, git_ref="main")
+    _run_git(args=("init", "--initial-branch=main"), cwd=root_dir)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=root_dir)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=root_dir)
+    _run_git(args=("add", "."), cwd=root_dir)
+    _run_git(args=("commit", "-m", "baseline"), cwd=root_dir)
+    return project_dir
+
+
+def prepare_dbt_reuse_fatal_macro_project(*, tmp_path: Path) -> Path:
+    """Reuse-configured git project with a valid prod ref but a broken override macro."""
+
+    root_dir: Path = tmp_path / "dbt_reuse_skip"
+    project_dir: Path = _write_reuse_skip_project_files(root_dir=root_dir, git_ref="prod")
+    (project_dir / "dbt" / "macros" / "generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n"
+        "  {% this is invalid jinja %}\n"
+        "{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    _run_git(args=("init", "--initial-branch=work"), cwd=root_dir)
+    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=root_dir)
+    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=root_dir)
+    _run_git(args=("add", "."), cwd=root_dir)
+    _run_git(args=("commit", "-m", "baseline"), cwd=root_dir)
+    _run_git(args=("branch", "prod"), cwd=root_dir)
+    return project_dir
+
+
+def query_dbt_seed_change_revenue_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
+    """Return fct_customer_revenue rows for the seed-change project."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+
+    return query_duckdb(
+        db_path=project_dir / "dbt_seed_change.duckdb",
+        sql="SELECT customer_id, total_revenue FROM main.fct_customer_revenue ORDER BY customer_id",
+    )
+
+
+def run_dbt_seed_change_build(
+    *, project_dir: Path, select: str
+) -> subprocess.CompletedProcess[str]:
+    """Run `sqb dbt build --select <select>` for the seed-change project."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+
+    return run_sqb(
+        command=("--no-color", "dbt", "build", "--select", select),
+        project_dir=project_dir,
+    )
+
+
+def run_dbt_seed_change_command(
+    *, project_dir: Path, command: tuple[str, ...]
+) -> subprocess.CompletedProcess[str]:
+    """Run an arbitrary `sqb dbt ...` command for the seed-change project."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+
+    return run_sqb(command=command, project_dir=project_dir)
+
+
+def drop_dbt_seed_change_relation(*, project_dir: Path, relation: str) -> None:
+    """Drop a warehouse relation in the seed-change project's DuckDB."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+
+    execute_duckdb(
+        db_path=project_dir / "dbt_seed_change.duckdb",
+        sql=f"DROP TABLE main.{relation}",
+    )
+
+
+def enable_dbt_seed_change_reuse_from(*, project_dir: Path, git_ref: str = "main") -> None:
+    """Add a reuse_from block (and override macro) to the seed-change twin config."""
+
+    macro_dir: Path = project_dir / "dbt" / "macros"
+    macro_dir.mkdir(parents=True, exist_ok=True)
+    (macro_dir / "generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + "[dbt.reuse_from]\n"
+        + f'git_ref = "{git_ref}"\n'
+        + 'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n',
+        encoding="utf-8",
+    )
+
+
+def add_dbt_seed_change_second_seed(*, project_dir: Path) -> None:
+    """Add an independent second seed + model branch to the seed-change project.
+
+    Adds seed raw_regions and model dim_regions (regions -> dim_regions), leaving the
+    existing raw_orders -> ... -> fct_customer_revenue branch untouched, so a change to
+    one seed must cascade only into its own branch.
+    """
+
+    dbt_dir: Path = project_dir.parent / "dbt_project"
+    (dbt_dir / "seeds" / "raw_regions.csv").write_text(
+        "region_id,region_name\n1,North\n2,South\n", encoding="utf-8"
+    )
+    (dbt_dir / "models" / "dim_regions.sql").write_text(
+        "select region_id, region_name from {{ ref('raw_regions') }}\n",
+        encoding="utf-8",
+    )
+
+
+def append_dbt_seed_change_region(*, project_dir: Path, region_id: int, region_name: str) -> None:
+    """Append one row to the raw_regions seed."""
+
+    seed_path: Path = project_dir.parent / "dbt_project" / "seeds" / "raw_regions.csv"
+    seed_path.write_text(
+        seed_path.read_text(encoding="utf-8") + f"{region_id},{region_name}\n",
+        encoding="utf-8",
+    )
+
+
+def edit_dbt_seed_change_leaf_sql(*, project_dir: Path) -> None:
+    """Change the leaf model's own SQL without changing its inputs."""
+
+    leaf_path: Path = project_dir.parent / "dbt_project" / "models" / "fct_customer_revenue.sql"
+    leaf_path.write_text(
+        "select customer_id, count(*) as order_count, sum(amount) + 0 as total_revenue "
+        "from {{ ref('int_orders') }} group by customer_id\n",
+        encoding="utf-8",
+    )
+
+
+def set_dbt_seed_change_column_types(*, project_dir: Path) -> None:
+    """Add a seed column_types config without changing CSV bytes (config-only change)."""
+
+    seeds_block: str = (
+        "seeds:\n  analytics:\n    raw_orders:\n      +column_types:\n        amount: bigint\n"
+    )
+    dbt_project_file: Path = project_dir.parent / "dbt_project" / "dbt_project.yml"
+    dbt_project_file.write_text(
+        dbt_project_file.read_text(encoding="utf-8") + seeds_block,
+        encoding="utf-8",
+    )

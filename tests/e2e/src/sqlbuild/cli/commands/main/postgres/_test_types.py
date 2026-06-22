@@ -271,3 +271,12 @@ class PostgresStateSchemaCorruptionE2ETestCase:
     mutation_sql_template: str
     expected_exit_code: int
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PostgresDbtSeedChangeE2ETestCase:
+    description: str
+    expected_initial_total: int
+    expected_changed_total: int
+    expected_changed_fragments: tuple[str, ...]
+    expected_noop_fragments: tuple[str, ...]

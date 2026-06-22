@@ -9,7 +9,11 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.exceptions import (
+    DbtInteropConfigError,
+    DbtInteropRuntimeError,
+    DbtReuseUnavailableError,
+)
 from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -105,7 +109,7 @@ def _git_root(*, path: Path) -> Path:
         "-C", str(path), "rev-parse", "--show-toplevel"
     )
     if result.returncode != 0:
-        raise DbtInteropConfigError(
+        raise DbtReuseUnavailableError(
             "dbt reuse_from requires the SQLBuild project to be in a git repository",
             help=result.stderr or result.stdout or None,
         )
@@ -117,7 +121,7 @@ def _relative_to_git_root(*, path: Path, git_root: Path, label: str) -> Path:
     try:
         return resolved_path.relative_to(git_root)
     except ValueError as error:
-        raise DbtInteropConfigError(
+        raise DbtReuseUnavailableError(
             f"dbt reuse_from requires the {label} to be inside the git repository",
             help=f"{resolved_path} is not under {git_root}.",
         ) from error
@@ -131,7 +135,7 @@ def _raise_if_current_branch(*, git_root: Path, git_ref: str) -> None:
         return
     current_branch: str = result.stdout.strip()
     if current_branch and current_branch == git_ref:
-        raise DbtInteropConfigError(
+        raise DbtReuseUnavailableError(
             "dbt reuse_from git_ref must not be the current branch",
             help=(
                 "Choose a production-shaped branch or tag that differs from the active "
@@ -153,7 +157,7 @@ def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
         "-C", str(git_root), "fetch", remote, branch
     )
     if result.returncode != 0:
-        raise DbtInteropConfigError(
+        raise DbtReuseUnavailableError(
             "dbt reuse_from git_ref could not be refreshed from its remote",
             help=result.stderr or result.stdout or None,
         )
@@ -174,7 +178,7 @@ def _raise_if_missing_git_ref(
         available_detail = (
             " Available local branches/tags include: " + ", ".join(available_refs) + "."
         )
-    raise DbtInteropConfigError(
+    raise DbtReuseUnavailableError(
         f"dbt reuse_from git_ref '{configured_ref}' does not exist in this repository",
         help=(
             f"SQLBuild tried to archive git ref '{configured_ref}' from {git_root}. "

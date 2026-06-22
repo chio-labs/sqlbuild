@@ -10,6 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.exceptions import DbtReuseUnavailableError
 from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.reuse_candidates import (
     build_dbt_reuse_planning_result,
@@ -43,6 +44,7 @@ def build_dbt_reuse_plan_output(
     plan: DbtInteropPlan,
     dbt_options: DbtCliOptions,
     runner: DbtRunner,
+    warnings: list[str] | None = None,
 ) -> DbtReusePlanningResult | None:
     """Build dbt reuse_from plan output when reuse_from is configured."""
 
@@ -52,12 +54,17 @@ def build_dbt_reuse_plan_output(
     if dbt_model_plan is None:
         return None
 
-    compile_result: DbtReuseFromCompileResult = compile_reuse_from_manifest(
-        sqlbuild_project_dir=project_dir,
-        dbt_options=dbt_options,
-        reuse_from=reuse_from,
-        runner=runner,
-    )
+    try:
+        compile_result: DbtReuseFromCompileResult = compile_reuse_from_manifest(
+            sqlbuild_project_dir=project_dir,
+            dbt_options=dbt_options,
+            reuse_from=reuse_from,
+            runner=runner,
+        )
+    except DbtReuseUnavailableError as error:
+        if warnings is not None:
+            warnings.append(f"dbt reuse_from skipped: {error.message}. Running standard build.")
+        return None
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
     )
@@ -164,6 +171,7 @@ def build_dbt_dependency_baseline_plan_output(
     scoped_unique_ids: tuple[str, ...],
     dbt_options: DbtCliOptions,
     runner: DbtRunner,
+    warnings: list[str] | None = None,
 ) -> DbtReusePlanningResult | None:
     """Build physical dependency baseline plan for unselected dbt refs."""
 
@@ -175,12 +183,15 @@ def build_dbt_dependency_baseline_plan_output(
     if dbt_model_plan is None:
         return None
 
-    compile_result: DbtReuseFromCompileResult = compile_reuse_from_manifest(
-        sqlbuild_project_dir=project_dir,
-        dbt_options=dbt_options,
-        reuse_from=reuse_from,
-        runner=runner,
-    )
+    try:
+        compile_result: DbtReuseFromCompileResult = compile_reuse_from_manifest(
+            sqlbuild_project_dir=project_dir,
+            dbt_options=dbt_options,
+            reuse_from=reuse_from,
+            runner=runner,
+        )
+    except DbtReuseUnavailableError:
+        return None
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
     )

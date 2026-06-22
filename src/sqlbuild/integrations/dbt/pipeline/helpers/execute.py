@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -30,6 +31,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtModelExecutionOutcomeEntry,
     DbtModelPlanEntry,
+    DbtModelPlanningResult,
     DbtNodeExecutionResult,
     DbtNodeMessage,
 )
@@ -433,8 +435,11 @@ def build_dbt_non_model_run_unique_ids(
     if command == DbtInteropCommand.TEST:
         return tuple(sorted(frozenset((*test_unique_ids, *unit_test_unique_ids))))
     if command == DbtInteropCommand.BUILD:
+        changed_seed_unique_ids: frozenset[str] = frozenset(seed_unique_ids) & frozenset(
+            plan.dbt_model_plan.changed_seed_unique_ids
+        )
         if not plan.dbt_model_plan.run_selector_terms:
-            return ()
+            return tuple(sorted(changed_seed_unique_ids))
         return tuple(sorted(frozenset((*seed_unique_ids, *test_unique_ids, *unit_test_unique_ids))))
     return ()
 
@@ -460,6 +465,40 @@ def build_dbt_pruned_test_unique_ids(
     )
 
 
+def append_stale_out_of_selection_warning(
+    *, plan: DbtInteropPlan, dbt_model_plan: DbtModelPlanningResult
+) -> DbtInteropPlan:
+    """Append a warning when selected models are stale via unselected changed seeds."""
+
+    if dbt_model_plan.stale_out_of_selection_warning_messages:
+        return replace(
+            plan,
+            warnings=(
+                *plan.warnings,
+                *dbt_model_plan.stale_out_of_selection_warning_messages,
+            ),
+        )
+    stale_seeds: tuple[str, ...] = dbt_model_plan.stale_out_of_selection_seed_unique_ids
+    if not stale_seeds:
+        return plan
+    names: str = ", ".join(seed.split(".")[-1] for seed in stale_seeds)
+    warning: str = (
+        f"selected models are stale: seed(s) {names} changed but were not selected; "
+        "rebuild with a closure selector (e.g. +model) to incorporate them"
+    )
+    return replace(plan, warnings=(*plan.warnings, warning))
+
+
+def append_manifest_seed_warnings(
+    *, plan: DbtInteropPlan, manifest: DbtManifestIndex
+) -> DbtInteropPlan:
+    """Surface manifest-time seed identity warnings (e.g. unreadable seed files)."""
+
+    if not manifest.seed_identity_warnings:
+        return plan
+    return replace(plan, warnings=(*plan.warnings, *manifest.seed_identity_warnings))
+
+
 def build_dbt_pruned_seed_unique_ids(
     *, command: DbtInteropCommand, plan: DbtInteropPlan
 ) -> tuple[str, ...]:
@@ -469,7 +508,12 @@ def build_dbt_pruned_seed_unique_ids(
         return ()
     if plan.dbt_model_plan.run_selector_terms:
         return ()
-    return _selected_non_model_unique_ids(plan=plan, resource_type="seed")
+    changed: frozenset[str] = frozenset(plan.dbt_model_plan.changed_seed_unique_ids)
+    return tuple(
+        unique_id
+        for unique_id in _selected_non_model_unique_ids(plan=plan, resource_type="seed")
+        if unique_id not in changed
+    )
 
 
 def build_unblocked_sqlbuild_model_names(plan: DbtInteropPlan) -> tuple[str, ...]:
@@ -556,7 +600,9 @@ def _planned_dbt_select_terms(
     model_terms: tuple[str, ...] = tuple(
         entry.selector_term
         for entry in plan.dbt_model_plan.entries
-        if entry.action == DbtModelPlanAction.RUN and entry.unique_id not in reused_unique_ids
+        if entry.action == DbtModelPlanAction.RUN
+        and entry.unique_id in plan.dbt_selected_unique_ids
+        and entry.unique_id not in reused_unique_ids
     )
     return tuple(sorted(frozenset((*model_terms, *non_model_terms))))
 

@@ -44,6 +44,8 @@ from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
     dependency_baseline_unique_ids,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    append_manifest_seed_warnings,
+    append_stale_out_of_selection_warning,
     build_dbt_non_model_run_unique_ids,
     build_dbt_pruned_seed_unique_ids,
     build_dbt_pruned_test_unique_ids,
@@ -174,6 +176,7 @@ def plan_dbt_interop_from_project(
                 )
             )
         ),
+        selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh="--full-refresh" in routed.dbt_args,
         on_connection_start=(
             None if connection_progress is None else connection_progress.on_connection_start
@@ -187,6 +190,8 @@ def plan_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
+        plan = append_stale_out_of_selection_warning(plan=plan, dbt_model_plan=dbt_model_plan)
+    plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
     reuse_git_ref: str | None = _dbt_reuse_git_ref(discovered_inputs)
     has_explicit_dbt_reuse_scope: bool = bool(
         plan.dbt_selected_unique_ids
@@ -199,6 +204,7 @@ def plan_dbt_interop_from_project(
         _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
     dbt_reuse_plan: DbtReusePlanningResult | None = None
     if has_explicit_dbt_reuse_scope:
+        reuse_warnings: list[str] = []
         dbt_reuse_plan = build_dbt_reuse_plan_output(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -209,7 +215,10 @@ def plan_dbt_interop_from_project(
             plan=plan,
             dbt_options=dbt_options,
             runner=runner,
+            warnings=reuse_warnings,
         )
+        if reuse_warnings:
+            plan = replace(plan, warnings=(*plan.warnings, *reuse_warnings))
     if reuse_plan_start is not None:
         _report_progress(
             on_progress,
@@ -234,6 +243,7 @@ def plan_dbt_interop_from_project(
             manifest=manifest,
             graph=graph,
             candidate_unique_ids=dependency_baseline_ids,
+            selected_unique_ids=dependency_baseline_ids,
             full_refresh="--full-refresh" in routed.dbt_args,
             on_connection_start=(
                 None if connection_progress is None else connection_progress.on_connection_start

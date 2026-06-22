@@ -25,6 +25,13 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 
+_RUN_PARENT_TYPES: frozenset[CompiledResourceType] = frozenset(
+    {
+        CompiledResourceType.MODEL,
+        CompiledResourceType.SEED,
+    }
+)
+
 
 def prune_standard_unchanged_scope(
     *,
@@ -37,22 +44,18 @@ def prune_standard_unchanged_scope(
     expected_version_hashes: dict[str, str] | None = None,
     expected_seed_version_hashes: dict[str, str] | None = None,
     built_seed_fingerprints: dict[str, Fingerprint] | None = None,
+    user_selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerScope:
     """Remove unchanged selected SQL nodes for standard stale-only planning."""
 
     selected_keys: set[CompiledObjectKey] = set()
+    identity_scope_keys: frozenset[CompiledObjectKey] = user_selected_keys or scope.selected_keys
     forced_stale: frozenset[str] = frozenset(forced_stale_model_names)
     key: CompiledObjectKey
     for key in scope.selected_keys:
         if key.resource_type == CompiledResourceType.MODEL:
             resolved_action: ResolvedModelAction | None = resolved_actions.models.get(key.name)
             if resolved_action is not None and _model_action_is_stale(resolved_action):
-                selected_keys.add(key)
-            elif _model_version_identity_is_stale(
-                model_name=key.name,
-                expected_version_hashes=expected_version_hashes,
-                resolved_action=resolved_action,
-            ):
                 selected_keys.add(key)
             elif _source_freshness_marks_model_stale(
                 model_name=key.name,
@@ -62,6 +65,16 @@ def prune_standard_unchanged_scope(
             elif _run_despite_unchanged_marks_model_stale(
                 model_name=key.name,
                 run_despite_unchanged=run_despite_unchanged,
+            ):
+                selected_keys.add(key)
+            elif _model_version_identity_is_stale(
+                model_name=key.name,
+                expected_version_hashes=expected_version_hashes,
+                resolved_action=resolved_action,
+            ) and _upstream_identity_scope_is_complete(
+                key=key,
+                selected_keys=identity_scope_keys,
+                upstream_deps=scope.upstream_deps,
             ):
                 selected_keys.add(key)
             elif key.name in forced_stale:
@@ -81,10 +94,15 @@ def prune_standard_unchanged_scope(
                 selected_keys.add(key)
             continue
         selected_keys.add(key)
+    pruned_selected_keys: frozenset[CompiledObjectKey] = _add_direct_parent_run_models(
+        original_selected_keys=user_selected_keys or scope.selected_keys,
+        selected_keys=frozenset(selected_keys),
+        upstream_deps=scope.upstream_deps,
+    )
     return replace(
         scope,
         selected_keys=expand_required_build_resources(
-            selected_keys=frozenset(selected_keys),
+            selected_keys=pruned_selected_keys,
             upstream=scope.upstream_deps,
             downstream=scope.downstream_deps,
             include_upstream_functions=True,
@@ -92,6 +110,65 @@ def prune_standard_unchanged_scope(
             include_downstream_functions=False,
         ),
     )
+
+
+def mark_direct_parent_run_actions(
+    *, scope: PlannerScope, resolved_actions: PlannerResolvedActions
+) -> PlannerResolvedActions:
+    """Mark unchanged selected models that run because a direct parent runs."""
+
+    models: dict[str, ResolvedModelAction] = dict(resolved_actions.models)
+    run_parent_keys: frozenset[CompiledObjectKey] = frozenset(
+        key for key in scope.selected_keys if key.resource_type in _RUN_PARENT_TYPES
+    )
+    key: CompiledObjectKey
+    for key in scope.selected_keys:
+        if key.resource_type != CompiledResourceType.MODEL:
+            continue
+        resolved_action: ResolvedModelAction | None = models.get(key.name)
+        if resolved_action is None or not _can_mark_upstream_cascade(resolved_action):
+            continue
+        upstream_key: CompiledObjectKey
+        for upstream_key in scope.upstream_deps.get(key, ()):
+            if upstream_key in run_parent_keys:
+                models[key.name] = replace(
+                    resolved_action,
+                    cascade=CascadeResult(
+                        effective_action=BackfillAction.FORWARD_ONLY,
+                        effective_duration=None,
+                        root_cause=upstream_key.name,
+                        root_reason=PlanReason.UPSTREAM_CHANGED,
+                    ),
+                )
+                break
+    return PlannerResolvedActions(models=models)
+
+
+def _add_direct_parent_run_models(
+    *,
+    original_selected_keys: frozenset[CompiledObjectKey],
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[CompiledObjectKey]:
+    expanded: set[CompiledObjectKey] = set(selected_keys)
+    changed: bool = True
+    while changed:
+        changed = False
+        key: CompiledObjectKey
+        for key in original_selected_keys:
+            if key in expanded or key.resource_type != CompiledResourceType.MODEL:
+                continue
+            upstream_key: CompiledObjectKey
+            for upstream_key in upstream_deps.get(key, ()):
+                if (
+                    upstream_key.resource_type in _RUN_PARENT_TYPES
+                    and upstream_key in expanded
+                    and upstream_key in original_selected_keys
+                ):
+                    expanded.add(key)
+                    changed = True
+                    break
+    return frozenset(expanded)
 
 
 def build_standard_identity_stale_model_names(
@@ -144,20 +221,6 @@ def mark_version_identity_stale_actions(
                 ),
             )
             continue
-        if not _version_identity_requires_upstream_cascade(
-            model_name=key.name,
-            expected_version_hashes=expected_version_hashes,
-            resolved_action=resolved_action,
-        ):
-            continue
-        models[key.name] = replace(
-            resolved_action,
-            cascade=CascadeResult(
-                effective_action=BackfillAction.FORWARD_ONLY,
-                effective_duration=None,
-                root_cause=None,
-            ),
-        )
     return PlannerResolvedActions(models=models)
 
 
@@ -269,23 +332,23 @@ def _model_version_identity_is_stale(
     return previous_version_hash != expected_version_hash
 
 
-def _version_identity_requires_upstream_cascade(
+def _upstream_identity_scope_is_complete(
     *,
-    model_name: str,
-    expected_version_hashes: dict[str, str],
-    resolved_action: ResolvedModelAction,
+    key: CompiledObjectKey,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> bool:
-    if resolved_action.change.change_kind != ChangeKind.NO_CHANGE:
-        return False
-    if resolved_action.cascade is not None:
-        return False
-    if _backfill_is_stale(resolved_action.backfill):
-        return False
-    return _model_version_identity_is_stale(
-        model_name=model_name,
-        expected_version_hashes=expected_version_hashes,
-        resolved_action=resolved_action,
-    )
+    visited: set[CompiledObjectKey] = set()
+
+    def visit(upstream_key: CompiledObjectKey) -> bool:
+        if upstream_key in visited:
+            return True
+        visited.add(upstream_key)
+        if upstream_key.resource_type in _RUN_PARENT_TYPES and upstream_key not in selected_keys:
+            return False
+        return all(visit(parent_key) for parent_key in upstream_deps.get(upstream_key, ()))
+
+    return all(visit(upstream_key) for upstream_key in upstream_deps.get(key, ()))
 
 
 def _source_freshness_marks_model_stale(
