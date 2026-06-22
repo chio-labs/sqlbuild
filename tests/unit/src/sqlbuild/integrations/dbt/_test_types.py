@@ -768,3 +768,13 @@ class DbtSqlTestFixtureNameTestCase:
     expected_names: set[str]
     expected_error_fragment: str | None = None
     manifest_kind: str = "source_dependency"
+
+
+@dataclass(frozen=True)
+class DbtSeedIdentityTestCase:
+    description: str
+    checksum: str
+    config_overrides: dict[str, object] | None
+    other_checksum: str
+    other_config_overrides: dict[str, object] | None
+    expected_same_identity: bool

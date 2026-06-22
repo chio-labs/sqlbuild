@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresBuildE2ETestCase,
     PostgresDbtProfileE2ETestCase,
     PostgresDbtReuseFromE2ETestCase,
+    PostgresDbtSeedChangeE2ETestCase,
     PostgresDependencyBaselineE2ETestCase,
     PostgresIntermediateDagStrategyE2ETestCase,
     PostgresLoaderWaffleShopE2ETestCase,
@@ -26,6 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresSourceLoaderStrategiesE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
+    append_postgres_dbt_seed_change_order,
     assert_current_postgres_snapshot_rows_from_case,
     assert_postgres_seeded_reuse_case,
     assert_postgres_snapshot_apply_rows,
@@ -39,6 +41,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     execute_postgres_sql,
     fetch_postgres_rows,
     postgres_dbt_env,
+    prepare_postgres_dbt_seed_change_workspace,
     prepare_postgres_source_loader_strategies,
     prepare_postgres_waffle_shop,
     relation_name,
@@ -1553,5 +1556,71 @@ def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sq
             expected_historical_timestamp_rows=test_case.expected_historical_timestamp_rows,
             expected_historical_check_rows=test_case.expected_historical_check_rows,
         )
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+
+
+@pytest.mark.dbt
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresDbtSeedChangeE2ETestCase(
+            description="postgres dbt seed change reloads, cascades, and round-trips identity",
+            expected_initial_total=75,
+            expected_changed_total=115,
+            expected_changed_fragments=("Upstream changed", "fct_orders"),
+            expected_noop_fragments=("Skipping dbt: no dbt work selected.",),
+        )
+    ],
+    ids=["postgres dbt seed change reloads, cascades, and round-trips identity"],
+)
+def test_given_postgres_dbt_seed_change_when_building_then_cascades_and_round_trips(
+    tmp_path: Path,
+    test_case: PostgresDbtSeedChangeE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_dbt_seed_change")
+    project_dir: Path = prepare_postgres_dbt_seed_change_workspace(
+        tmp_path=tmp_path,
+        schema_name=schema_name,
+        config=postgres_e2e_config,
+    )
+    env: dict[str, str] = postgres_dbt_env(password=str(postgres_e2e_config["password"]))
+    try:
+        baseline: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "+fct_orders"),
+            project_dir=project_dir,
+            env=env,
+        )
+        assert baseline.returncode == 0, baseline.stdout + baseline.stderr
+        assert fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=f"SELECT total_amount FROM {schema_name}.fct_orders",
+        ) == ((test_case.expected_initial_total,),)
+
+        append_postgres_dbt_seed_change_order(project_dir=project_dir, order_id=4, amount=40)
+
+        changed: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "+fct_orders"),
+            project_dir=project_dir,
+            env=env,
+        )
+        assert changed.returncode == 0, changed.stdout + changed.stderr
+        fragment: str
+        for fragment in test_case.expected_changed_fragments:
+            assert fragment in changed.stdout
+        assert fetch_postgres_rows(
+            config=postgres_e2e_config,
+            sql=f"SELECT total_amount FROM {schema_name}.fct_orders",
+        ) == ((test_case.expected_changed_total,),)
+
+        noop: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "dbt", "build", "--select", "+fct_orders"),
+            project_dir=project_dir,
+            env=env,
+        )
+        assert noop.returncode == 0, noop.stdout + noop.stderr
+        for fragment in test_case.expected_noop_fragments:
+            assert fragment in noop.stdout
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)

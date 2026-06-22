@@ -17,10 +17,12 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtManifestResolutionErrorTestCase,
     DbtManifestResolutionTestCase,
     DbtManifestSourceIndexTestCase,
+    DbtSeedIdentityTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_manifest_data,
     build_manifest_model_node,
+    build_manifest_seed_node,
     build_manifest_source_node,
 )
 
@@ -246,3 +248,66 @@ def test_given_manifest_index_error_when_indexing_then_raises_compile_input_erro
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
         build_dbt_manifest_index(raw_data=test_case.manifest_data)
+
+
+SEED_IDENTITY_TEST_CASES: list[DbtSeedIdentityTestCase] = [
+    DbtSeedIdentityTestCase(
+        description="same checksum and config produces the same identity",
+        checksum="abc123",
+        config_overrides=None,
+        other_checksum="abc123",
+        other_config_overrides=None,
+        expected_same_identity=True,
+    ),
+    DbtSeedIdentityTestCase(
+        description="changed file checksum produces a different identity",
+        checksum="abc123",
+        config_overrides=None,
+        other_checksum="def456",
+        other_config_overrides=None,
+        expected_same_identity=False,
+    ),
+    DbtSeedIdentityTestCase(
+        description="config-only column_types change produces a different identity",
+        checksum="abc123",
+        config_overrides=None,
+        other_checksum="abc123",
+        other_config_overrides={"column_types": {"amount": "bigint"}},
+        expected_same_identity=False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SEED_IDENTITY_TEST_CASES,
+    ids=[case.description for case in SEED_IDENTITY_TEST_CASES],
+)
+def test_given_seed_nodes_when_indexing_then_identity_hash_reflects_content_and_config(
+    test_case: DbtSeedIdentityTestCase,
+) -> None:
+    index: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_seed_node(
+                    unique_id="seed.analytics.left",
+                    name="left",
+                    checksum=test_case.checksum,
+                    config_overrides=test_case.config_overrides,
+                ),
+                build_manifest_seed_node(
+                    unique_id="seed.analytics.right",
+                    name="right",
+                    checksum=test_case.other_checksum,
+                    config_overrides=test_case.other_config_overrides,
+                ),
+            )
+        )
+    )
+
+    left_identity: str | None = index.seeds_by_unique_id["seed.analytics.left"].identity_hash
+    right_identity: str | None = index.seeds_by_unique_id["seed.analytics.right"].identity_hash
+
+    assert left_identity is not None
+    assert right_identity is not None
+    assert (left_identity == right_identity) is test_case.expected_same_identity

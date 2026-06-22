@@ -343,7 +343,7 @@ class DbtInitMissingProdRelationBuildE2ETestCase:
 @dataclass(frozen=True)
 class DbtInitInvalidReuseRefE2ETestCase:
     description: str
-    expected_stderr_fragments: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -465,3 +465,29 @@ class DbtPhase11ReplayFullTestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtSeedChangeE2ETestCase:
+    description: str
+    select: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    expected_revenue_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DbtFullRefreshScopeTestCase:
+    description: str
+    select: str
+    expected_command_select_fragments: tuple[str, ...]
+    unexpected_command_select_fragments: tuple[str, ...]
+    expected_full_refresh_count: int
+
+
+@dataclass(frozen=True)
+class DbtReuseSkipE2ETestCase:
+    description: str
+    expected_returncode: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]

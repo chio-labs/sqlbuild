@@ -54,6 +54,7 @@ class DbtManifestSeed:
     database: str | None = None
     schema: str | None = None
     alias: str | None = None
+    identity_hash: str | None = None
     payload: dict[str, object] = field(default_factory=dict)
 
 

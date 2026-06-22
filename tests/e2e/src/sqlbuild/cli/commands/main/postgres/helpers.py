@@ -654,3 +654,88 @@ def prepare_postgres_source_loader_strategies(
         ),
     )
     return project_dir, schema_name
+
+
+def prepare_postgres_dbt_seed_change_workspace(
+    *, tmp_path: Path, schema_name: str, config: dict[str, object]
+) -> Path:
+    """Write a pure dbt seed-backed model chain on a Postgres dbt profile.
+
+    Chain: seed raw_orders -> stg_orders -> fct_orders. Returns the SQLBuild twin dir.
+    """
+
+    workspace: Path = tmp_path / "pg_seed_change"
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    dbt_seeds_dir: Path = dbt_project_dir / "seeds"
+    dbt_models_dir.mkdir(parents=True)
+    dbt_seeds_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_project_dir.mkdir(parents=True)
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: postgres\n"
+        f"      host: {config['host']}\n"
+        f"      port: {config['port']}\n"
+        f"      dbname: {config['dbname']}\n"
+        f"      user: {config['user']}\n"
+        "      pass: \"{{ env_var('DBT_POSTGRES_PASSWORD') }}\"\n"
+        f"      schema: {schema_name}\n",
+        encoding="utf-8",
+    )
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "version: '1.0'\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "seed-paths: ['seeds']\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (dbt_seeds_dir / "raw_orders.csv").write_text(
+        "order_id,amount\n1,25\n2,20\n3,30\n", encoding="utf-8"
+    )
+    (dbt_models_dir / "stg_orders.sql").write_text(
+        "select order_id, amount from {{ ref('raw_orders') }}\n", encoding="utf-8"
+    )
+    (dbt_models_dir / "fct_orders.sql").write_text(
+        "select count(*) as order_count, sum(amount) as total_amount "
+        "from {{ ref('stg_orders') }}\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "pg_seed_change"\n'
+        'adapter = "postgres"\n'
+        'default_target = "dev"\n'
+        "[connection]\n"
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'dbname = "{config["dbname"]}"\n'
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n'
+        "[targets.dev]\n"
+        f'schema = "{schema_name}"\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n',
+        encoding="utf-8",
+    )
+    return sqlbuild_project_dir
+
+
+def append_postgres_dbt_seed_change_order(*, project_dir: Path, order_id: int, amount: int) -> None:
+    """Append one row to the Postgres seed-change raw_orders seed."""
+
+    seed_path: Path = project_dir.parent / "dbt_project" / "seeds" / "raw_orders.csv"
+    seed_path.write_text(
+        seed_path.read_text(encoding="utf-8") + f"{order_id},{amount}\n",
+        encoding="utf-8",
+    )

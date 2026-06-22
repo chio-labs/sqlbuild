@@ -25,7 +25,11 @@ from sqlbuild.integrations.dbt.helpers.graph import (
 from sqlbuild.integrations.dbt.helpers.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import (
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSeed,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
@@ -72,8 +76,16 @@ def build_dbt_model_planning_result(
     changed_source_unique_ids: frozenset[str] = frozenset(
         identity.source_name for identity in source_freshness.changed_identities
     )
+    changed_seed_unique_ids: frozenset[str] = _changed_seed_unique_ids(
+        manifest=manifest,
+        fingerprints=fingerprints,
+        full_refresh=full_refresh,
+        adapter=adapter,
+        connection=connection,
+    )
     entries_by_unique_id: dict[str, DbtModelPlanEntry] = {}
     unique_id: str
+    selected_unique_ids: frozenset[str] = frozenset(candidate_unique_ids)
     expanded_candidate_unique_ids: tuple[str, ...] = _expand_candidate_unique_ids(
         candidate_unique_ids=candidate_unique_ids,
         graph=graph,
@@ -87,14 +99,21 @@ def build_dbt_model_planning_result(
             fingerprint=fingerprints.get((NODE_TYPE_DBT, unique_id)),
             adapter=adapter,
             connection=connection,
-            full_refresh=full_refresh,
+            full_refresh=full_refresh and unique_id in selected_unique_ids,
         )
+    in_selection_changed_seed_unique_ids: frozenset[str] = (
+        changed_seed_unique_ids & selected_unique_ids
+    )
+    stale_out_of_selection_seed_unique_ids: frozenset[str] = (
+        changed_seed_unique_ids - selected_unique_ids
+    )
     if graph is not None:
         entries_by_unique_id = _apply_graph_propagation(
             entries_by_unique_id=entries_by_unique_id,
             graph=graph,
             blocked_source_unique_ids=blocked_source_unique_ids,
             changed_source_unique_ids=changed_source_unique_ids,
+            changed_seed_unique_ids=in_selection_changed_seed_unique_ids,
         )
     return DbtModelPlanningResult(
         entries=tuple(
@@ -118,6 +137,10 @@ def build_dbt_model_planning_result(
         ),
         source_freshness=source_freshness,
         selected_unique_ids=tuple(sorted(frozenset(candidate_unique_ids))),
+        changed_seed_unique_ids=tuple(sorted(in_selection_changed_seed_unique_ids)),
+        stale_out_of_selection_seed_unique_ids=tuple(
+            sorted(stale_out_of_selection_seed_unique_ids)
+        ),
     )
 
 
@@ -150,6 +173,34 @@ def _expand_candidate_unique_ids(
     return tuple(sorted(unique_ids))
 
 
+def _changed_seed_unique_ids(
+    *,
+    manifest: DbtManifestIndex,
+    fingerprints: dict[tuple[str, str], Fingerprint],
+    full_refresh: bool,
+    adapter: BaseAdapter,
+    connection: Any,
+) -> frozenset[str]:
+    changed: set[str] = set()
+    seed: DbtManifestSeed
+    for seed in manifest.seeds_by_unique_id.values():
+        if full_refresh:
+            changed.add(seed.unique_id)
+            continue
+        fingerprint: Fingerprint | None = fingerprints.get((NODE_TYPE_DBT, seed.unique_id))
+        if fingerprint is None or fingerprint.version_hash != seed.identity_hash:
+            changed.add(seed.unique_id)
+            continue
+        if not adapter.relation_exists(
+            connection,
+            database=seed.database,
+            schema=seed.schema,
+            name=seed.alias or seed.name,
+        ):
+            changed.add(seed.unique_id)
+    return frozenset(changed)
+
+
 def _source_freshness_result(
     *,
     manifest: DbtManifestIndex,
@@ -180,6 +231,7 @@ def _apply_graph_propagation(
     graph: DbtCombinedGraph,
     blocked_source_unique_ids: frozenset[str],
     changed_source_unique_ids: frozenset[str],
+    changed_seed_unique_ids: frozenset[str],
 ) -> dict[str, DbtModelPlanEntry]:
     propagated: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
     for unique_id, entry in entries_by_unique_id.items():
@@ -217,6 +269,19 @@ def _apply_graph_propagation(
                 entry,
                 action=DbtModelPlanAction.RUN,
                 reason=DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
+            )
+            continue
+        changed_seeds: bool = any(
+            key.owner == DbtCombinedGraphOwner.DBT
+            and key.resource_type == DbtCombinedGraphResourceType.SOURCE
+            and key.name in changed_seed_unique_ids
+            for key in upstream
+        )
+        if changed_seeds and entry.action == DbtModelPlanAction.CURRENT:
+            propagated[unique_id] = replace(
+                entry,
+                action=DbtModelPlanAction.RUN,
+                reason=DbtModelPlanReason.UPSTREAM_CHANGED,
             )
             continue
         upstream_run: bool = any(
