@@ -41,7 +41,7 @@ LINEAGE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
             "fact_orders [sqb]",
             "int_orders [dbt]",
             "stg_orders [dbt]",
-            "└─",
+            "└── ",
         ),
     ),
 )

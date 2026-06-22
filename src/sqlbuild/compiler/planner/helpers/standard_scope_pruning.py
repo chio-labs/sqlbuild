@@ -9,13 +9,19 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.selectors import expand_required_build_resources
+from sqlbuild.compiler.planner.helpers.version_identity_hashing import (
+    graph_key_for_compiled_resource,
+)
 from sqlbuild.compiler.planner.helpers.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
+from sqlbuild.compiler.planner.main.graph_changes_only import build_graph_changes_only_propagation
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     FunctionChangeResult,
+    GraphChangesOnlyPropagationResult,
+    GraphNodeKey,
     PlannerChangeResults,
     PlannerResolvedActions,
     PlannerScope,
@@ -51,6 +57,21 @@ def prune_standard_unchanged_scope(
     selected_keys: set[CompiledObjectKey] = set()
     identity_scope_keys: frozenset[CompiledObjectKey] = user_selected_keys or scope.selected_keys
     forced_stale: frozenset[str] = frozenset(forced_stale_model_names)
+    identity_stale_keys: frozenset[CompiledObjectKey] = frozenset(
+        key
+        for key in scope.selected_keys
+        if key.resource_type == CompiledResourceType.MODEL
+        and _model_version_identity_is_stale(
+            model_name=key.name,
+            expected_version_hashes=expected_version_hashes,
+            resolved_action=resolved_actions.models.get(key.name),
+        )
+        and _upstream_identity_scope_is_complete(
+            key=key,
+            selected_keys=identity_scope_keys,
+            upstream_deps=scope.upstream_deps,
+        )
+    )
     key: CompiledObjectKey
     for key in scope.selected_keys:
         if key.resource_type == CompiledResourceType.MODEL:
@@ -65,16 +86,6 @@ def prune_standard_unchanged_scope(
             elif _run_despite_unchanged_marks_model_stale(
                 model_name=key.name,
                 run_despite_unchanged=run_despite_unchanged,
-            ):
-                selected_keys.add(key)
-            elif _model_version_identity_is_stale(
-                model_name=key.name,
-                expected_version_hashes=expected_version_hashes,
-                resolved_action=resolved_action,
-            ) and _upstream_identity_scope_is_complete(
-                key=key,
-                selected_keys=identity_scope_keys,
-                upstream_deps=scope.upstream_deps,
             ):
                 selected_keys.add(key)
             elif key.name in forced_stale:
@@ -94,10 +105,11 @@ def prune_standard_unchanged_scope(
                 selected_keys.add(key)
             continue
         selected_keys.add(key)
-    pruned_selected_keys: frozenset[CompiledObjectKey] = _add_direct_parent_run_models(
-        original_selected_keys=user_selected_keys or scope.selected_keys,
+    pruned_selected_keys: frozenset[CompiledObjectKey] = _add_neutral_propagated_model_keys(
+        scope=scope,
+        original_selected_keys=identity_scope_keys,
         selected_keys=frozenset(selected_keys),
-        upstream_deps=scope.upstream_deps,
+        identity_stale_keys=identity_stale_keys,
     )
     return replace(
         scope,
@@ -121,12 +133,36 @@ def mark_direct_parent_run_actions(
     run_parent_keys: frozenset[CompiledObjectKey] = frozenset(
         key for key in scope.selected_keys if key.resource_type in _RUN_PARENT_TYPES
     )
+    propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
+        upstream_deps=_neutral_upstream_deps(scope=scope),
+        model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
+        selected_model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
+        current_model_keys=frozenset(
+            _graph_key(key)
+            for key in scope.selected_keys
+            if key.resource_type == CompiledResourceType.MODEL
+            and (resolved := models.get(key.name)) is not None
+            and _can_mark_upstream_cascade(resolved)
+        ),
+        run_model_keys=frozenset(
+            _graph_key(key)
+            for key in run_parent_keys
+            if key.resource_type == CompiledResourceType.MODEL
+            and (resolved := models.get(key.name)) is not None
+            and not _can_mark_upstream_cascade(resolved)
+        ),
+        run_parent_keys=frozenset(_graph_key(key) for key in run_parent_keys),
+        selected_parent_keys=frozenset(_graph_key(key) for key in scope.selected_keys),
+        version_mismatch_model_keys=frozenset(),
+    )
     key: CompiledObjectKey
     for key in scope.selected_keys:
         if key.resource_type != CompiledResourceType.MODEL:
             continue
         resolved_action: ResolvedModelAction | None = models.get(key.name)
         if resolved_action is None or not _can_mark_upstream_cascade(resolved_action):
+            continue
+        if _graph_key(key) not in propagation.upstream_changed_model_keys:
             continue
         upstream_key: CompiledObjectKey
         for upstream_key in scope.upstream_deps.get(key, ()):
@@ -144,31 +180,67 @@ def mark_direct_parent_run_actions(
     return PlannerResolvedActions(models=models)
 
 
-def _add_direct_parent_run_models(
+def _add_neutral_propagated_model_keys(
     *,
+    scope: PlannerScope,
     original_selected_keys: frozenset[CompiledObjectKey],
     selected_keys: frozenset[CompiledObjectKey],
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    identity_stale_keys: frozenset[CompiledObjectKey],
 ) -> frozenset[CompiledObjectKey]:
-    expanded: set[CompiledObjectKey] = set(selected_keys)
-    changed: bool = True
-    while changed:
-        changed = False
-        key: CompiledObjectKey
-        for key in original_selected_keys:
-            if key in expanded or key.resource_type != CompiledResourceType.MODEL:
-                continue
-            upstream_key: CompiledObjectKey
-            for upstream_key in upstream_deps.get(key, ()):
-                if (
-                    upstream_key.resource_type in _RUN_PARENT_TYPES
-                    and upstream_key in expanded
-                    and upstream_key in original_selected_keys
-                ):
-                    expanded.add(key)
-                    changed = True
-                    break
+    propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
+        upstream_deps=_neutral_upstream_deps(scope=scope),
+        model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
+        selected_model_keys=_neutral_model_keys(scope=scope, keys=original_selected_keys),
+        current_model_keys=frozenset(
+            _graph_key(key)
+            for key in original_selected_keys
+            if key.resource_type == CompiledResourceType.MODEL and key not in selected_keys
+        ),
+        run_model_keys=frozenset(
+            _graph_key(key)
+            for key in selected_keys
+            if key.resource_type == CompiledResourceType.MODEL
+        ),
+        run_parent_keys=frozenset(
+            _graph_key(key) for key in selected_keys if key.resource_type in _RUN_PARENT_TYPES
+        ),
+        selected_parent_keys=frozenset(
+            _graph_key(key)
+            for key in original_selected_keys
+            if key.resource_type in _RUN_PARENT_TYPES
+        ),
+        identity_stale_model_keys=frozenset(_graph_key(key) for key in identity_stale_keys),
+        version_mismatch_model_keys=frozenset(_graph_key(key) for key in identity_stale_keys),
+    )
+    expanded: set[CompiledObjectKey] = set(selected_keys) | set(identity_stale_keys)
+    upstream_changed_keys: frozenset[GraphNodeKey] = propagation.upstream_changed_model_keys
+    key: CompiledObjectKey
+    for key in original_selected_keys:
+        if (
+            key.resource_type == CompiledResourceType.MODEL
+            and _graph_key(key) in upstream_changed_keys
+        ):
+            expanded.add(key)
     return frozenset(expanded)
+
+
+def _neutral_upstream_deps(*, scope: PlannerScope) -> dict[GraphNodeKey, tuple[GraphNodeKey, ...]]:
+    return {
+        _graph_key(key): tuple(_graph_key(upstream_key) for upstream_key in upstream_keys)
+        for key, upstream_keys in scope.upstream_deps.items()
+    }
+
+
+def _neutral_model_keys(
+    *, scope: PlannerScope, keys: frozenset[CompiledObjectKey]
+) -> frozenset[GraphNodeKey]:
+    return frozenset(
+        _graph_key(key) for key in keys if key.resource_type == CompiledResourceType.MODEL
+    )
+
+
+def _graph_key(key: CompiledObjectKey) -> GraphNodeKey:
+    return graph_key_for_compiled_resource(resource_type=key.resource_type, name=key.name)
 
 
 def build_standard_identity_stale_model_names(

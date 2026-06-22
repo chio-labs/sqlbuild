@@ -13,6 +13,9 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
+    GraphChangesOnlyPropagationResult,
+    GraphIdentityNode,
+    GraphNodeKey,
     MissingUpstream,
     ParsedSelector,
     PathSelector,
@@ -177,6 +180,39 @@ class VersionStalenessTestCase:
     built_version_hashes: dict[str, str | None]
     forced_stale_model_names: tuple[str, ...]
     expected_stale_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GraphIdentityExpectedHashesTestCase:
+    description: str
+    nodes: dict[GraphNodeKey, GraphIdentityNode]
+    execution_order: tuple[GraphNodeKey, ...]
+    expected_hashes: dict[GraphNodeKey, str | None]
+
+
+@dataclass(frozen=True)
+class GraphIdentityWriteHashesTestCase:
+    description: str
+    nodes: dict[GraphNodeKey, GraphIdentityNode]
+    execution_order: tuple[GraphNodeKey, ...]
+    selected_keys: frozenset[GraphNodeKey]
+    base_identity_hashes: dict[GraphNodeKey, str]
+    expected_hashes: dict[GraphNodeKey, str]
+
+
+@dataclass(frozen=True)
+class GraphChangesOnlyPropagationTestCase:
+    description: str
+    upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]]
+    model_keys: frozenset[GraphNodeKey]
+    selected_model_keys: frozenset[GraphNodeKey]
+    current_model_keys: frozenset[GraphNodeKey]
+    run_model_keys: frozenset[GraphNodeKey]
+    version_mismatch_model_keys: frozenset[GraphNodeKey]
+    expected_result: GraphChangesOnlyPropagationResult
+    changed_seed_keys: frozenset[GraphNodeKey] = frozenset()
+    changed_source_keys: frozenset[GraphNodeKey] = frozenset()
+    blocked_source_keys: frozenset[GraphNodeKey] = frozenset()
 
 
 @dataclass(frozen=True)

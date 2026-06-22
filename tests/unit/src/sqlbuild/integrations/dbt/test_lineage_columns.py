@@ -157,7 +157,7 @@ COLUMN_LINEAGE_OUTPUT_TEST_CASES: tuple[DbtColumnLineageOutputTestCase, ...] = (
             "Column trace",
             "downstream_orders:downstream_amount",
             "fact_orders:amount",
-            "└─",
+            "└── ",
         ),
     ),
 )
