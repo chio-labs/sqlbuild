@@ -25,12 +25,18 @@ from sqlbuild.compiler.planner.helpers.dependency_baseline import (
     build_dependency_baseline_entries,
     with_dependency_baseline_candidates,
 )
+from sqlbuild.compiler.planner.helpers.honest_version_hashes import (
+    with_honest_model_write_hashes,
+)
 from sqlbuild.compiler.planner.helpers.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
 )
 from sqlbuild.compiler.planner.helpers.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
+from sqlbuild.compiler.planner.helpers.selection_staleness import (
+    build_stale_out_of_selection_warnings,
+)
 from sqlbuild.compiler.planner.helpers.source_freshness import (
     build_planner_source_freshness_result,
 )
@@ -43,6 +49,7 @@ from sqlbuild.compiler.planner.helpers.standard_reuse_planning import (
 )
 from sqlbuild.compiler.planner.helpers.standard_scope_pruning import (
     build_standard_identity_stale_model_names,
+    mark_direct_parent_run_actions,
     mark_run_despite_unchanged_actions,
     mark_version_identity_stale_actions,
     prune_standard_unchanged_scope,
@@ -65,6 +72,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerResolvedActions,
     PlannerScope,
     PlanOutput,
+    PlanWarning,
     RunDespiteUnchangedPlanningResult,
     StandardReusePlanningResult,
     WarehouseSnapshot,
@@ -219,6 +227,7 @@ def build_execution_plan(
             relations=relations,
         )
     )
+    original_scope_for_stale_warnings: PlannerScope = selected_scope
     pruned_standard_model_names: tuple[str, ...] = ()
     if standard_scope_pruning == StandardScopePruning.PRUNE_UNCHANGED and not full_refresh:
         original_selected_model_names: frozenset[str] = frozenset(
@@ -266,6 +275,7 @@ def build_execution_plan(
             expected_version_hashes=version_identities.model_version_hashes,
             expected_seed_version_hashes=version_identities.seed_version_hashes,
             built_seed_fingerprints=snapshot.fingerprints.seeds,
+            user_selected_keys=selected_scope.selected_keys,
         )
         pruned_standard_model_names = tuple(
             sorted(
@@ -288,6 +298,10 @@ def build_execution_plan(
             resolved_actions=resolved_actions,
             run_despite_unchanged=run_despite_unchanged,
         )
+        resolved_actions = mark_direct_parent_run_actions(
+            scope=scope,
+            resolved_actions=resolved_actions,
+        )
     else:
         standard_identity_stale_model_names = frozenset()
         run_despite_unchanged = RunDespiteUnchangedPlanningResult()
@@ -295,9 +309,32 @@ def build_execution_plan(
         scope,
         selected_keys=scope.selected_keys - dependency_baseline_candidate_keys,
     )
+    baseline_model_hashes: dict[str, str] = {}
+    if standard_reuse is not None:
+        key: CompiledObjectKey
+        for key in reusable_dependency_baseline_keys:
+            baseline_hash: str | None = standard_reuse.snapshot.model_snapshots[
+                key.name
+            ].built_version_hash
+            if baseline_hash is not None:
+                baseline_model_hashes[key.name] = baseline_hash
+    changes = with_honest_model_write_hashes(
+        scope=execution_scope,
+        snapshot=snapshot,
+        changes=changes,
+        version_identities=version_identities,
+        available_model_hashes=baseline_model_hashes,
+    )
+    resolved_actions = replace(
+        resolved_actions,
+        models={
+            model_name: replace(resolved, change=changes.models.get(model_name, resolved.change))
+            for model_name, resolved in resolved_actions.models.items()
+        },
+    )
     dependency_baseline_scope: PlannerScope = replace(
         scope,
-        selected_keys=scope.selected_keys & reusable_dependency_baseline_keys,
+        selected_keys=reusable_dependency_baseline_keys,
     )
     execution_relations: PlannerRelationsContext = build_planner_relations_context(
         project=project,
@@ -378,6 +415,21 @@ def build_execution_plan(
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,
     )
+    stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
+        build_stale_out_of_selection_warnings(
+            original_scope=original_scope_for_stale_warnings,
+            execution_scope=execution_scope,
+            changes=changes,
+            snapshot=snapshot,
+            version_identities=version_identities,
+            source_freshness=source_freshness,
+        )
+    )
+    if stale_out_of_selection_warnings:
+        plan_output = replace(
+            plan_output,
+            warnings=(*plan_output.warnings, *stale_out_of_selection_warnings),
+        )
     if pruned_standard_model_names:
         plan_output = replace(
             plan_output,
