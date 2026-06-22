@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.model_config_validation import (
+from sqlbuild.compiler.compile.helpers.config.model_validation import (
     validate_contract_config,
     validate_custom_materialization_config,
     validate_incremental_config,

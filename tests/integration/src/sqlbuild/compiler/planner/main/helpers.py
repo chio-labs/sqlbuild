@@ -9,8 +9,8 @@ from tempfile import gettempdir
 from typing import Any
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
-from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,

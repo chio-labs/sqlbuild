@@ -20,14 +20,14 @@ from sqlbuild.compiler.compile.constants import (
     UDF_EXPECTED_TEST_CTE_NAME,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.macros import find_macro_call_names
-from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
-from sqlbuild.compiler.compile.helpers.sql_analysis_ctes import (
+from sqlbuild.compiler.compile.helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
 )
-from sqlbuild.compiler.compile.helpers.sql_analysis_tests import (
+from sqlbuild.compiler.compile.helpers.analysis.tests import (
     extract_expected_branch_column_names_with_sql_analysis,
 )
+from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile.helpers.render.macros import find_macro_call_names
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.compiler.compile.models.sql_tests import (
     CompileDirectLogicSqlTestCtes,

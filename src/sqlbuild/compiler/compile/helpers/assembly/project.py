@@ -7,19 +7,19 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.helpers.deps import (
+from sqlbuild.compiler.compile.helpers.analysis.columns import (
+    analyze_columns_and_lineage_with_polyglot,
+    infer_columns_with_sql_analysis,
+)
+from sqlbuild.compiler.compile.helpers.analysis.validation import validate_sql_syntax
+from sqlbuild.compiler.compile.helpers.deps.dependencies import (
     audit_scope_deps,
     function_build_deps,
     model_build_deps,
     sql_test_scope_deps,
 )
-from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros, find_macro_call_names
-from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
-    analyze_columns_and_lineage_with_polyglot,
-    infer_columns_with_sql_analysis,
-)
-from sqlbuild.compiler.compile.helpers.sql_analysis_validation import validate_sql_syntax
-from sqlbuild.compiler.compile.helpers.templating import expand_template_data
+from sqlbuild.compiler.compile.helpers.render.macros import expand_sql_macros, find_macro_call_names
+from sqlbuild.compiler.compile.helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
