@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 
+from sqlbuild.compiler.planner.models import (
+    SelectionStalenessGraph,
+    SelectionStalenessWarning,
+)
 from sqlbuild.compiler.planner.types import StandardScopePruning
 
 
@@ -67,3 +71,10 @@ class StandardSelectionAwareStalenessTestCase:
     model_configs: dict[str, dict[str, object]] | None = None
     expected_current_version_hash_model_names: tuple[str, ...] = ()
     expected_non_current_version_hash_model_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SelectionStalenessClassifierTestCase:
+    description: str
+    graph: SelectionStalenessGraph
+    expected_warnings: tuple[SelectionStalenessWarning, ...]

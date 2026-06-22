@@ -63,6 +63,7 @@ from sqlbuild.compiler.planner.main.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result,
 )
 from sqlbuild.compiler.planner.models import (
+    ChangeDetectionResult,
     CursorOverrides,
     DependencyBaselinePlanEntry,
     MissingUpstream,
@@ -73,11 +74,16 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanOutput,
     PlanWarning,
+    ResolvedModelAction,
     RunDespiteUnchangedPlanningResult,
     StandardReusePlanningResult,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import StandardReuseDecisionKind, StandardScopePruning
+from sqlbuild.compiler.planner.types import (
+    ChangeKind,
+    StandardReuseDecisionKind,
+    StandardScopePruning,
+)
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
@@ -325,13 +331,22 @@ def build_execution_plan(
         version_identities=version_identities,
         available_model_hashes=baseline_model_hashes,
     )
-    resolved_actions = replace(
-        resolved_actions,
-        models={
-            model_name: replace(resolved, change=changes.models.get(model_name, resolved.change))
-            for model_name, resolved in resolved_actions.models.items()
-        },
-    )
+    recomputed_resolved_models: dict[str, ResolvedModelAction] = {}
+    for model_name, resolved in resolved_actions.models.items():
+        recomputed_change: ChangeDetectionResult | None = changes.models.get(model_name)
+        if recomputed_change is None:
+            recomputed_change = resolved.change
+        elif (
+            resolved.change.change_kind == ChangeKind.RUN_DESPITE_UNCHANGED
+            and recomputed_change.change_kind == ChangeKind.NO_CHANGE
+        ):
+            recomputed_change = replace(
+                recomputed_change,
+                change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
+                backfill=resolved.change.backfill,
+            )
+        recomputed_resolved_models[model_name] = replace(resolved, change=recomputed_change)
+    resolved_actions = replace(resolved_actions, models=recomputed_resolved_models)
     dependency_baseline_scope: PlannerScope = replace(
         scope,
         selected_keys=reusable_dependency_baseline_keys,

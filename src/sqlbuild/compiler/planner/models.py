@@ -163,6 +163,36 @@ class WarehouseSnapshot:
 
 
 @dataclass(frozen=True)
+class SelectionStalenessNodeKey:
+    """Neutral node identity for shared selection-aware staleness classification."""
+
+    resource_type: str
+    name: str
+
+
+@dataclass(frozen=True)
+class SelectionStalenessGraph:
+    """Neutral graph inputs for selected-model stale warning classification."""
+
+    upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]
+    selected_model_names: frozenset[str]
+    run_model_names: frozenset[str]
+    run_seed_names: frozenset[str]
+    run_source_names: frozenset[str]
+    changed_model_names: frozenset[str]
+    changed_seed_names: frozenset[str]
+    changed_source_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SelectionStalenessWarning:
+    """Neutral stale warning classification for one selected model."""
+
+    model_name: str
+    trigger_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SchemaFinding:
     """One detected schema difference between expected and warehouse columns."""
 

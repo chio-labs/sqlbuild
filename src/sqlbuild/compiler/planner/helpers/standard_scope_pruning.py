@@ -49,6 +49,7 @@ def prune_standard_unchanged_scope(
     """Remove unchanged selected SQL nodes for standard stale-only planning."""
 
     selected_keys: set[CompiledObjectKey] = set()
+    identity_scope_keys: frozenset[CompiledObjectKey] = user_selected_keys or scope.selected_keys
     forced_stale: frozenset[str] = frozenset(forced_stale_model_names)
     key: CompiledObjectKey
     for key in scope.selected_keys:
@@ -64,6 +65,16 @@ def prune_standard_unchanged_scope(
             elif _run_despite_unchanged_marks_model_stale(
                 model_name=key.name,
                 run_despite_unchanged=run_despite_unchanged,
+            ):
+                selected_keys.add(key)
+            elif _model_version_identity_is_stale(
+                model_name=key.name,
+                expected_version_hashes=expected_version_hashes,
+                resolved_action=resolved_action,
+            ) and _upstream_identity_scope_is_complete(
+                key=key,
+                selected_keys=identity_scope_keys,
+                upstream_deps=scope.upstream_deps,
             ):
                 selected_keys.add(key)
             elif key.name in forced_stale:
@@ -319,6 +330,25 @@ def _model_version_identity_is_stale(
     if previous_version_hash is None:
         return True
     return previous_version_hash != expected_version_hash
+
+
+def _upstream_identity_scope_is_complete(
+    *,
+    key: CompiledObjectKey,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> bool:
+    visited: set[CompiledObjectKey] = set()
+
+    def visit(upstream_key: CompiledObjectKey) -> bool:
+        if upstream_key in visited:
+            return True
+        visited.add(upstream_key)
+        if upstream_key.resource_type in _RUN_PARENT_TYPES and upstream_key not in selected_keys:
+            return False
+        return all(visit(parent_key) for parent_key in upstream_deps.get(upstream_key, ()))
+
+    return all(visit(upstream_key) for upstream_key in upstream_deps.get(key, ()))
 
 
 def _source_freshness_marks_model_stale(

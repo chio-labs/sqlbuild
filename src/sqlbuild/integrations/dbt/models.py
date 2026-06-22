@@ -637,6 +637,7 @@ class DbtModelPlanningResult:
     selected_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     changed_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     stale_out_of_selection_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
+    stale_out_of_selection_warning_messages: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def run_unique_ids(self) -> tuple[str, ...]:
