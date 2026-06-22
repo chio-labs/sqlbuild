@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
 )
-from sqlbuild.integrations.dbt.helpers.graph import (
+from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
     expand_combined_upstream,

@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph import (
+from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,

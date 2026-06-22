@@ -32,18 +32,18 @@ from sqlbuild.compiler.source_freshness.main.planning import (
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.integrations.dbt.helpers.graph import (
+from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
     expand_combined_upstream,
 )
-from sqlbuild.integrations.dbt.helpers.model_identity import (
+from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_graph_identity_nodes,
     compose_dbt_graph_version_hash,
     dbt_graph_identity_execution_order,
     dbt_graph_node_key,
 )
-from sqlbuild.integrations.dbt.helpers.source_freshness import (
+from sqlbuild.integrations.dbt.helpers.runtime.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
 )
 from sqlbuild.integrations.dbt.manifest.models import (

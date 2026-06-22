@@ -22,9 +22,13 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning
-from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
-from sqlbuild.integrations.dbt.helpers.model_planning import build_dbt_model_planning_result
-from sqlbuild.integrations.dbt.helpers.sql_test_targets import adapt_project_for_dbt_sql_tests
+from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+    build_dbt_model_planning_result,
+)
+from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
+    adapt_project_for_dbt_sql_tests,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,

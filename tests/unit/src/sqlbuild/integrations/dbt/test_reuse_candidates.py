@@ -14,8 +14,8 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_REUSE_METADATA_ORIGIN_RELATION_KEY,
     DBT_REUSE_METADATA_REUSE_MODE_KEY,
 )
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.reuse_candidates import (
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.reuse.candidates import (
     build_dbt_reuse_planning_result,
     resolve_dbt_reuse_candidates,
     resolve_dbt_reuse_candidates_for_plan,

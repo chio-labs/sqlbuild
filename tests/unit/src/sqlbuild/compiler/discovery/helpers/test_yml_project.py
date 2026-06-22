@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.yml_project import (
+from sqlbuild.compiler.discovery.helpers.yml.project import (
     load_local_config,
     load_project_config,
 )

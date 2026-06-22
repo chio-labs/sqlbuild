@@ -13,7 +13,7 @@ from yaml import YAMLError
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
-from sqlbuild.compiler.discovery.helpers.constants import (
+from sqlbuild.compiler.discovery.helpers.sql.constants import (
     TEST_HEADER_ONLY_PATTERN,
     TEST_HEADER_PATTERN,
 )

@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
-from sqlbuild.integrations.dbt.helpers.profile_load import (
+from sqlbuild.integrations.dbt.helpers.profile.load import (
     default_profiles_dir,
     load_dbt_project_metadata,
     load_raw_dbt_profile,
     select_dbt_profile_output,
 )
-from sqlbuild.integrations.dbt.helpers.profile_normalize import normalize_dbt_profile_connection
-from sqlbuild.integrations.dbt.helpers.profile_render import render_selected_dbt_profile_output
+from sqlbuild.integrations.dbt.helpers.profile.normalize import normalize_dbt_profile_connection
+from sqlbuild.integrations.dbt.helpers.profile.render import render_selected_dbt_profile_output
 from sqlbuild.integrations.dbt.models import (
     DbtProfileConnectionRequest,
     DbtProjectProfileMetadata,

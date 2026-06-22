@@ -10,15 +10,17 @@ from typing import TextIO, cast
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.event_stream import (
-    execute_dbt_json_event_stream,
-    render_dbt_node_result,
-)
-from sqlbuild.integrations.dbt.helpers.model_planning import build_downstream_sqlbuild_model_names
-from sqlbuild.integrations.dbt.helpers.runner import (
+from sqlbuild.integrations.dbt.helpers.cli.runner import (
     DbtRunner,
     build_dbt_command_argv,
     parse_dbt_ls_json_lines,
+)
+from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+    build_downstream_sqlbuild_model_names,
+)
+from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
+    execute_dbt_json_event_stream,
+    render_dbt_node_result,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (

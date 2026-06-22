@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.model_planning import (
+from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     _stale_out_of_selection_warning_messages,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

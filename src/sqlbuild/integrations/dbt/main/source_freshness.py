@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.integrations.dbt.helpers.source_freshness import (
+from sqlbuild.integrations.dbt.helpers.runtime.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

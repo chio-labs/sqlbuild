@@ -27,13 +27,13 @@ from sqlbuild.compiler.lineage.models import (
     QualifiedLineageColumn,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph import (
+from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.lineage_selection import resolve_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.lineage.selection import resolve_dbt_lineage_target
+from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,

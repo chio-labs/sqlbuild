@@ -14,7 +14,7 @@ from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropRuntimeError,
     DbtReuseUnavailableError,
 )
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,

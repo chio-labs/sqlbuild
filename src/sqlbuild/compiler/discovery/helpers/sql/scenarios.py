@@ -11,7 +11,7 @@ import yaml
 from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
-from sqlbuild.compiler.discovery.helpers.constants import SCENARIO_HEADER_PATTERN
+from sqlbuild.compiler.discovery.helpers.sql.constants import SCENARIO_HEADER_PATTERN
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 
 

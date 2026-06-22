@@ -10,12 +10,14 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
-from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.selection import resolve_dbt_interop_sqlbuild_selection
-from sqlbuild.integrations.dbt.helpers.selector_terms import dbt_fqn_selector_term
-from sqlbuild.integrations.dbt.helpers.sql_test_targets import resolve_dbt_sql_test_target_names
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
+from sqlbuild.integrations.dbt.helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
+from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
+from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
+    resolve_dbt_sql_test_target_names,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

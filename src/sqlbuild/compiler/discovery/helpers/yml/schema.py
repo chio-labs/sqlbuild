@@ -9,7 +9,7 @@ import yaml
 from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.exceptions import SchemaParseError
-from sqlbuild.compiler.discovery.helpers.yml_primitives import (
+from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     optional_bool,
     optional_mapping,
     optional_non_empty_string,

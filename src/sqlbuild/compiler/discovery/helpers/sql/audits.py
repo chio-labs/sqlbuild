@@ -11,7 +11,7 @@ import yaml
 from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
-from sqlbuild.compiler.discovery.helpers.constants import (
+from sqlbuild.compiler.discovery.helpers.sql.constants import (
     AUDIT_HEADER_ONLY_PATTERN,
     AUDIT_HEADER_PATTERN,
 )

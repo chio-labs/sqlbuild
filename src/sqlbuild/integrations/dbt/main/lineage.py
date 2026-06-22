@@ -13,15 +13,16 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.lineage_args import parse_dbt_lineage_args
-from sqlbuild.integrations.dbt.helpers.lineage_columns import (
+from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.helpers.lineage.args import parse_dbt_lineage_args
+from sqlbuild.integrations.dbt.helpers.lineage.columns import (
     dbt_column_lineage_selected_keys,
     inspect_dbt_source_schemas,
     select_dbt_column_lineage_target,
 )
-from sqlbuild.integrations.dbt.helpers.lineage_output import (
+from sqlbuild.integrations.dbt.helpers.lineage.output import (
     format_dbt_column_lineage_json,
     format_dbt_column_lineage_list,
     format_dbt_column_lineage_tree,
@@ -29,15 +30,14 @@ from sqlbuild.integrations.dbt.helpers.lineage_output import (
     format_dbt_lineage_list,
     format_dbt_lineage_tree,
 )
-from sqlbuild.integrations.dbt.helpers.lineage_selection import select_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.plan_runtime import (
+from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
+from sqlbuild.integrations.dbt.helpers.manifest.core import load_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_interop_adapter,
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
 )
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

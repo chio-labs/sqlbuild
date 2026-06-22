@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.sql_scenarios import parse_sql_scenario_file
+from sqlbuild.compiler.discovery.helpers.sql.scenarios import parse_sql_scenario_file
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSqlScenarioFileErrorTestCase,

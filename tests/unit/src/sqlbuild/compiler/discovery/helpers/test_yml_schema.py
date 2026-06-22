@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
+from sqlbuild.compiler.discovery.helpers.yml.schema import parse_schema_yml
 from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSchemaYamlErrorTestCase,

@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.integrations.dbt.helpers.manifest import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,

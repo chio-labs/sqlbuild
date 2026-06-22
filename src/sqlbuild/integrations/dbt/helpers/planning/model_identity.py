@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
 from sqlbuild.compiler.planner.types import GraphResourceKind
-from sqlbuild.integrations.dbt.helpers.graph import dbt_model_graph_key
+from sqlbuild.integrations.dbt.helpers.graph.core import dbt_model_graph_key
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,

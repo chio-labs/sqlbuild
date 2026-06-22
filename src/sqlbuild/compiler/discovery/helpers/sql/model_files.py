@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
-from sqlbuild.compiler.discovery.helpers.constants import MODEL_HEADER_PATTERN
+from sqlbuild.compiler.discovery.helpers.sql.constants import MODEL_HEADER_PATTERN
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import SourceLocation
