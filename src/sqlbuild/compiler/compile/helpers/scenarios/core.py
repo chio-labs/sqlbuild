@@ -12,10 +12,10 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sql_analysis_ctes import (
+from sqlbuild.compiler.compile.helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
 )
-from sqlbuild.compiler.compile.helpers.tests import (
+from sqlbuild.compiler.compile.helpers.sql_tests.core import (
     _consume_keyword,
     _read_identifier,
     _require_prefixed_name,

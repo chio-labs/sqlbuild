@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.helpers.attachment import find_matching_path_default
+from sqlbuild.compiler.compile.helpers.attachment.core import find_matching_path_default
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     FindMatchingPathDefaultTestCase,

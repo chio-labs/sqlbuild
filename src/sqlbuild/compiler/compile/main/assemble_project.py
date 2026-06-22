@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
+from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompileProjectInputs,

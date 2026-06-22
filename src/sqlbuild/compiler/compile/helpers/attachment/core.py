@@ -20,12 +20,13 @@ from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.macros import (
-    expand_sql_macros,
-    find_macro_call_names,
-    load_project_macros,
+from sqlbuild.compiler.compile.helpers.analysis.validation import (
+    validate_function_sql_syntax,
+    validate_hook_sql_syntax,
+    validate_source_expression_syntax,
+    validate_sql_syntax,
 )
-from sqlbuild.compiler.compile.helpers.model_config_validation import (
+from sqlbuild.compiler.compile.helpers.config.model_validation import (
     validate_contract_config,
     validate_custom_materialization_config,
     validate_incremental_config,
@@ -33,23 +34,22 @@ from sqlbuild.compiler.compile.helpers.model_config_validation import (
     validate_placeholder_config,
     validate_snapshot_config,
 )
-from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
-from sqlbuild.compiler.compile.helpers.scenarios import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile.helpers.sql_analysis_validation import (
-    validate_function_sql_syntax,
-    validate_hook_sql_syntax,
-    validate_source_expression_syntax,
-    validate_sql_syntax,
+from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile.helpers.render.macros import (
+    expand_sql_macros,
+    find_macro_call_names,
+    load_project_macros,
 )
-from sqlbuild.compiler.compile.helpers.sql_vars import (
+from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
     substitute_sql_vars,
 )
-from sqlbuild.compiler.compile.helpers.templating import (
+from sqlbuild.compiler.compile.helpers.render.templating import (
     expand_effective_vars,
     expand_template_data,
 )
-from sqlbuild.compiler.compile.helpers.tests import extract_sql_test_ctes
+from sqlbuild.compiler.compile.helpers.scenarios.core import extract_sql_scenario_ctes
+from sqlbuild.compiler.compile.helpers.sql_tests.core import extract_sql_test_ctes
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
     CompileModelConfig,

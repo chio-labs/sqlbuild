@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sql_analysis_validation import validate_sql_syntax
+from sqlbuild.compiler.compile.helpers.analysis.validation import validate_sql_syntax
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ValidateSqlSyntaxTestCase,
 )

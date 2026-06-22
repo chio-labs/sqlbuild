@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
+from sqlbuild.compiler.compile.helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.models.core import (
     LoadedMacro,
     MacroContext,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.helpers.sql_analysis_columns import (
+from sqlbuild.compiler.compile.helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     import_polyglot_sql,
     infer_columns_with_sql_analysis,

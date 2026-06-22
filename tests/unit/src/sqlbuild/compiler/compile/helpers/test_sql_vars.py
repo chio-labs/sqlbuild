@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.sql_vars import (
+from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     substitute_sql_vars,
 )
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
