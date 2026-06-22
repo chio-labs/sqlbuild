@@ -55,6 +55,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
     dependency_baseline_unique_ids,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    append_stale_out_of_selection_warning,
     build_dbt_execution_outcome,
     build_dbt_non_model_run_unique_ids,
     build_dbt_pruned_seed_unique_ids,
@@ -236,6 +237,7 @@ def execute_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
+        plan = append_stale_out_of_selection_warning(plan=plan, dbt_model_plan=dbt_model_plan)
     reuse_git_ref: str | None = None
     reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
     if reuse_from.git_ref is not None and reuse_from.generate_schema_name_override is not None:
@@ -252,6 +254,7 @@ def execute_dbt_interop_from_project(
         _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
     dbt_reuse_plan: DbtReusePlanningResult | None = None
     if dbt_reuse_enabled and has_explicit_dbt_reuse_scope:
+        reuse_warnings: list[str] = []
         dbt_reuse_plan = build_dbt_reuse_plan_output(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -262,7 +265,10 @@ def execute_dbt_interop_from_project(
             plan=plan,
             dbt_options=dbt_options,
             runner=runner,
+            warnings=reuse_warnings,
         )
+        if reuse_warnings:
+            plan = replace(plan, warnings=(*plan.warnings, *reuse_warnings))
     if reuse_plan_start is not None:
         _report_progress(
             on_progress,
@@ -470,6 +476,11 @@ def execute_dbt_interop_from_project(
     dbt_query_sql_by_unique_id: dict[str, str] = {
         unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
     }
+    dbt_seed_identity_by_unique_id: dict[str, str] = {
+        unique_id: seed.identity_hash
+        for unique_id, seed in manifest.seeds_by_unique_id.items()
+        if seed.identity_hash is not None
+    }
     if project.settings.query_change_tracking and adapter_name != "duckdb":
         dbt_state_connection = adapter.connect(connection_config)
 
@@ -491,6 +502,7 @@ def execute_dbt_interop_from_project(
             target_name=project.effective_target_name,
             warnings=dbt_fingerprint_warnings,
             query_sql=dbt_query_sql_by_unique_id.get(result.unique_id),
+            seed_identity_hash=dbt_seed_identity_by_unique_id.get(result.unique_id),
         )
 
     try:
@@ -528,6 +540,7 @@ def execute_dbt_interop_from_project(
                     target_name=project.effective_target_name,
                     warnings=dbt_fingerprint_warnings,
                     query_sql=dbt_query_sql_by_unique_id.get(dbt_result.unique_id),
+                    seed_identity_hash=dbt_seed_identity_by_unique_id.get(dbt_result.unique_id),
                 )
         finally:
             adapter.close(duckdb_connection)

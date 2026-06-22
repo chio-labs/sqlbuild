@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtFullRefreshScopeTestCase,
     DbtPhase11DbtOnlySourceFreshnessTestCase,
     DbtPhase11ExecutionTestCase,
     DbtPhase11FreshnessEdgeCaseTestCase,
@@ -887,7 +888,14 @@ def test_given_current_dbt_models_when_seed_and_test_selected_then_prunes_non_mo
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "+downstream_orders", "+customer_summary"),
+        command=(
+            "dbt",
+            "build",
+            "--select",
+            "+downstream_orders",
+            "+customer_summary",
+            "country_codes",
+        ),
         project_dir=project_dir,
     )
     assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
@@ -1098,3 +1106,59 @@ def test_given_dbt_replay_full_when_model_changes_then_dbt_execution_uses_full_r
         db_path=project_dir / "dbt_phase11.duckdb",
         sql="SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id",
     ) == list(test_case.expected_rows)
+
+
+FULL_REFRESH_SCOPE_TEST_CASES: list[DbtFullRefreshScopeTestCase] = [
+    DbtFullRefreshScopeTestCase(
+        description="full-refresh of a leaf selects only that model, not its upstream",
+        select="fact_orders",
+        expected_command_select_fragments=("fqn:analytics.fact_orders",),
+        unexpected_command_select_fragments=("fqn:analytics.stg_orders",),
+        expected_full_refresh_count=1,
+    ),
+    DbtFullRefreshScopeTestCase(
+        description="full-refresh of a closure selects the whole upstream closure",
+        select="+fact_orders",
+        expected_command_select_fragments=(
+            "fqn:analytics.fact_orders",
+            "fqn:analytics.stg_orders",
+        ),
+        unexpected_command_select_fragments=(),
+        expected_full_refresh_count=2,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    FULL_REFRESH_SCOPE_TEST_CASES,
+    ids=[case.description for case in FULL_REFRESH_SCOPE_TEST_CASES],
+)
+def test_given_full_refresh_when_selecting_then_scope_matches_selection(
+    test_case: DbtFullRefreshScopeTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_phase11_project(tmp_path=tmp_path)
+    setup: subprocess.CompletedProcess[str] = run_sqb(
+        command=("dbt", "build", "--select", "+fact_orders"),
+        project_dir=project_dir,
+    )
+    assert setup.returncode == 0, setup.stderr or setup.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build", "--select", test_case.select, "--full-refresh"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert f"Full refresh ({test_case.expected_full_refresh_count})" in result.stdout
+    command_line: str = next(
+        line for line in result.stdout.splitlines() if "dbt build" in line and "--select" in line
+    )
+    fragment: str
+    for fragment in test_case.expected_command_select_fragments:
+        assert fragment in command_line
+    unexpected: str
+    for unexpected in test_case.unexpected_command_select_fragments:
+        assert unexpected not in command_line

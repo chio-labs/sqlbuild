@@ -236,8 +236,25 @@ def _parse_seed(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifes
         schema=schema,
         alias=alias,
         relation_name=relation_name,
+        identity_hash=_seed_identity_hash(raw_node=raw_node),
         payload={str(key): value for key, value in raw_node.items()},
     )
+
+
+def _seed_identity_hash(*, raw_node: dict[object, object]) -> str | None:
+    checksum: str | None = _parse_checksum(raw_node.get("checksum"))
+    config: object = raw_node.get(DBT_MANIFEST_CONFIG_KEY)
+    config_mapping: dict[str, object] = (
+        cast(dict[str, object], config) if isinstance(config, dict) else {}
+    )
+    identity: dict[str, object] = {
+        "checksum": checksum,
+        "column_types": config_mapping.get("column_types"),
+        "delimiter": config_mapping.get("delimiter"),
+        "quote_columns": config_mapping.get("quote_columns"),
+    }
+    payload: str = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _source_freshness_filter(

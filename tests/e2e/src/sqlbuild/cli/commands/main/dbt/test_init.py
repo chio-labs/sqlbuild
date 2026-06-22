@@ -270,18 +270,17 @@ def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
     "test_case",
     [
         DbtInitInvalidReuseRefE2ETestCase(
-            description="interactive typed invalid reuse ref explains how to fix config",
-            expected_stderr_fragments=(
-                "dbt reuse_from git_ref 'missing-prod-ref' does not exist in this repository",
-                "sqlbuild_project.toml [dbt.reuse_from].git_ref",
-                "Available local branches/tags include:",
-                "prod",
+            description="interactive typed invalid reuse ref skips reuse with a warning",
+            expected_stdout_fragments=(
+                "dbt reuse_from skipped",
+                "does not exist in this repository",
+                "Plan ready",
             ),
         )
     ],
-    ids=["interactive typed invalid reuse ref explains how to fix config"],
+    ids=["interactive typed invalid reuse ref skips reuse with a warning"],
 )
-def test_given_interactive_invalid_ref_when_planning_then_error_explains_fix(
+def test_given_interactive_invalid_ref_when_planning_then_skips_reuse_with_warning(
     tmp_path: Path,
     test_case: DbtInitInvalidReuseRefE2ETestCase,
 ) -> None:
@@ -315,10 +314,10 @@ def test_given_interactive_invalid_ref_when_planning_then_error_explains_fix(
         project_dir=workspace / "sqlbuild_project",
     )
 
-    assert plan_result.returncode == 1, plan_result.stdout + plan_result.stderr
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
     expected_fragment: str
-    for expected_fragment in test_case.expected_stderr_fragments:
-        assert expected_fragment in plan_result.stderr
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in plan_result.stdout
 
 
 @pytest.mark.parametrize(
@@ -644,18 +643,17 @@ def test_given_generated_dbt_init_config_without_prod_table_when_building_then_r
     "test_case",
     [
         DbtInitInvalidReuseRefE2ETestCase(
-            description="auto-init invalid default reuse ref explains how to fix config",
-            expected_stderr_fragments=(
-                "dbt reuse_from git_ref 'main' does not exist in this repository",
-                "sqlbuild_project.toml [dbt.reuse_from].git_ref",
-                "Available local branches/tags include:",
-                "prod",
+            description="auto-init invalid default reuse ref skips reuse with a warning",
+            expected_stdout_fragments=(
+                "dbt reuse_from skipped",
+                "does not exist in this repository",
+                "Plan ready",
             ),
         )
     ],
-    ids=["auto-init invalid default reuse ref explains how to fix config"],
+    ids=["auto-init invalid default reuse ref skips reuse with a warning"],
 )
-def test_given_auto_init_default_ref_is_missing_when_planning_then_error_explains_fix(
+def test_given_auto_init_default_ref_is_missing_when_planning_then_skips_reuse_with_warning(
     tmp_path: Path,
     test_case: DbtInitInvalidReuseRefE2ETestCase,
 ) -> None:
@@ -670,7 +668,7 @@ def test_given_auto_init_default_ref_is_missing_when_planning_then_error_explain
         project_dir=workspace / "dbt_project",
     )
 
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     expected_fragment: str
-    for expected_fragment in test_case.expected_stderr_fragments:
-        assert expected_fragment in result.stderr
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
