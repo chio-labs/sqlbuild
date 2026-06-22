@@ -44,11 +44,13 @@ def execute_dbt_complete_reuse_plan(
     fingerprint_schema: str | None,
     target_name: str | None,
     warnings: list[str],
+    expected_version_hashes: dict[str, str | None] | None = None,
 ) -> tuple[str, ...]:
     """Execute complete table reuse entries and return reused dbt unique IDs."""
 
     if plan.dbt_reuse_plan is None:
         return ()
+    expected_hashes: dict[str, str | None] = expected_version_hashes or {}
     reused_unique_ids: list[str] = []
     entry: DbtReusePlanEntry
     for entry in plan.dbt_reuse_plan.entries:
@@ -69,6 +71,7 @@ def execute_dbt_complete_reuse_plan(
             fingerprint_schema=fingerprint_schema,
             target_name=target_name,
             warnings=warnings,
+            expected_version_hash=expected_hashes.get(entry.unique_id),
         )
         reused_unique_ids.append(entry.unique_id)
     return tuple(reused_unique_ids)
@@ -202,6 +205,7 @@ def _execute_complete_reuse_entry(
     fingerprint_schema: str | None,
     target_name: str | None,
     warnings: list[str],
+    expected_version_hash: str | None = None,
 ) -> None:
     destination_database, destination_schema, destination_name = _relation_parts(
         relation_name=entry.destination_relation_name or model.relation_name
@@ -253,6 +257,7 @@ def _execute_complete_reuse_entry(
         fingerprint_schema=fingerprint_schema,
         target_name=target_name,
         warnings=warnings,
+        expected_version_hash=expected_version_hash,
     )
 
 
@@ -267,6 +272,7 @@ def _write_reuse_fingerprint(
     fingerprint_schema: str | None,
     target_name: str | None,
     warnings: list[str],
+    expected_version_hash: str | None = None,
 ) -> None:
     if fingerprint_schema is None:
         warnings.append(
@@ -283,6 +289,7 @@ def _write_reuse_fingerprint(
     definition_hash: str = (
         model.node_checksum or hashlib.sha256(model.query_sql.encode("utf-8")).hexdigest()
     )
+    version_hash: str = expected_version_hash or definition_hash
     target_database, target_schema, destination_relation_name = _relation_parts(
         relation_name=entry.destination_relation_name or model.relation_name
     )
@@ -294,7 +301,7 @@ def _write_reuse_fingerprint(
         target_name=destination_relation_name,
         run_id=run_id,
         definition_hash=definition_hash,
-        version_hash=definition_hash,
+        version_hash=version_hash,
         schema_fingerprint=hashlib.sha256(b"").hexdigest(),
         definition=model.query_sql,
         metadata_json=json.dumps(

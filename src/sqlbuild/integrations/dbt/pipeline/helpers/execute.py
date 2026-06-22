@@ -604,11 +604,14 @@ def _planned_dbt_select_terms(
         for entry in (plan.dbt_reuse_plan.entries if plan.dbt_reuse_plan is not None else ())
         if entry.action == DbtReusePlanAction.COMPLETE_REUSE
     )
+    executable_model_unique_ids: frozenset[str] = frozenset(
+        (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
+    )
     model_terms: tuple[str, ...] = tuple(
         entry.selector_term
         for entry in plan.dbt_model_plan.entries
         if entry.action == DbtModelPlanAction.RUN
-        and entry.unique_id in plan.dbt_selected_unique_ids
+        and entry.unique_id in executable_model_unique_ids
         and entry.unique_id not in reused_unique_ids
     )
     return tuple(sorted(frozenset((*model_terms, *non_model_terms))))

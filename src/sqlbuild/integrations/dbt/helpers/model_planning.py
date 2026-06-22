@@ -527,13 +527,25 @@ def _read_dbt_fingerprints(
     return dict(fingerprint_set.fingerprints_by_identity or {})
 
 
+def compose_dbt_version_hash(*, own_hash: str, upstream_hashes: Sequence[tuple[str, str]]) -> str:
+    """Compose a dbt model version hash from its own checksum and upstream identities."""
+
+    if not upstream_hashes:
+        return own_hash
+    payload: str = json.dumps(
+        {"own": own_hash, "upstream": sorted(upstream_hashes)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def build_expected_dbt_model_version_hashes(
     *, manifest: DbtManifestIndex, graph: DbtCombinedGraph | None
 ) -> dict[str, str | None]:
     hashes: dict[str, str | None] = {}
 
     def resolve(unique_id: str, visiting: frozenset[str] = frozenset()) -> str | None:
-        cached: str | None
         if unique_id in hashes:
             return hashes[unique_id]
         model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
@@ -560,17 +572,9 @@ def build_expected_dbt_model_version_hashes(
                 upstream_hash = None if seed is None else seed.identity_hash
             if upstream_hash is not None:
                 upstream_hashes.append((key.name, upstream_hash))
-        if not upstream_hashes:
-            hashes[unique_id] = own_hash
-            return own_hash
-        payload: str = json.dumps(
-            {"own": own_hash, "upstream": sorted(upstream_hashes)},
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        cached = hashlib.sha256(payload.encode()).hexdigest()
-        hashes[unique_id] = cached
-        return cached
+        composed: str = compose_dbt_version_hash(own_hash=own_hash, upstream_hashes=upstream_hashes)
+        hashes[unique_id] = composed
+        return composed
 
     unique_id: str
     for unique_id in manifest.models_by_unique_id:
