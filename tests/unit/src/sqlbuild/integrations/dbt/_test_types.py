@@ -778,3 +778,12 @@ class DbtSeedIdentityTestCase:
     other_checksum: str
     other_config_overrides: dict[str, object] | None
     expected_same_identity: bool
+
+
+@dataclass(frozen=True)
+class DbtSeedContentIdentityTestCase:
+    description: str
+    left_content: str
+    right_content: str
+    expected_same_identity: bool
+    expected_warning: bool

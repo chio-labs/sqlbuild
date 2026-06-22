@@ -76,6 +76,7 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel] = {}
     sources_by_unique_id: dict[str, DbtManifestSource] = {}
     seeds_by_unique_id: dict[str, DbtManifestSeed] = {}
+    seed_identity_warnings: list[str] = []
     unique_id: object
     raw_node: object
     for unique_id, raw_node in raw_nodes.items():
@@ -92,7 +93,9 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
             models_by_package_and_name[(model.package_name, model.name)] = model
             continue
         if resource_type == _SEED_RESOURCE_TYPE:
-            seed: DbtManifestSeed = _parse_seed(unique_id=unique_id, raw_node=node_data)
+            seed: DbtManifestSeed = _parse_seed(
+                unique_id=unique_id, raw_node=node_data, warnings=seed_identity_warnings
+            )
             seeds_by_unique_id[seed.unique_id] = seed
 
     for unique_id, raw_node in raw_sources.items():
@@ -110,6 +113,7 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         models_by_package_and_name=models_by_package_and_name,
         sources_by_unique_id=sources_by_unique_id,
         seeds_by_unique_id=seeds_by_unique_id,
+        seed_identity_warnings=tuple(seed_identity_warnings),
     )
 
 
@@ -219,7 +223,9 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
     )
 
 
-def _parse_seed(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifestSeed:
+def _parse_seed(
+    *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
+) -> DbtManifestSeed:
     package_name: str = _required_str(raw_node.get("package_name"), field_name="package_name")
     name: str = _required_str(raw_node.get("name"), field_name="name")
     database: str | None = _optional_str(raw_node.get("database"))
@@ -236,12 +242,16 @@ def _parse_seed(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifes
         schema=schema,
         alias=alias,
         relation_name=relation_name,
-        identity_hash=_seed_identity_hash(raw_node=raw_node),
+        identity_hash=_seed_identity_hash(
+            unique_id=unique_id, raw_node=raw_node, warnings=warnings
+        ),
         payload={str(key): value for key, value in raw_node.items()},
     )
 
 
-def _seed_identity_hash(*, raw_node: dict[object, object]) -> str | None:
+def _seed_identity_hash(
+    *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
+) -> str | None:
     checksum: str | None = _parse_checksum(raw_node.get("checksum"))
     config: object = raw_node.get(DBT_MANIFEST_CONFIG_KEY)
     config_mapping: dict[str, object] = (
@@ -249,12 +259,45 @@ def _seed_identity_hash(*, raw_node: dict[object, object]) -> str | None:
     )
     identity: dict[str, object] = {
         "checksum": checksum,
-        "column_types": config_mapping.get("column_types"),
-        "delimiter": config_mapping.get("delimiter"),
-        "quote_columns": config_mapping.get("quote_columns"),
+        "config": _normalize_json_value(config_mapping),
+        "content": _seed_content_hash(unique_id=unique_id, raw_node=raw_node, warnings=warnings),
     }
     payload: str = json.dumps(identity, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _seed_content_hash(
+    *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
+) -> str | None:
+    root_path: str | None = _optional_str(raw_node.get("root_path"))
+    relative_path: str | None = _optional_str(raw_node.get("original_file_path"))
+    if root_path is None or relative_path is None:
+        warnings.append(
+            f"seed '{unique_id}': missing manifest path; independent content change "
+            "detection is inactive (relying on dbt checksum only)"
+        )
+        return None
+    seed_file: Path = Path(root_path) / relative_path
+    try:
+        text: str = seed_file.read_text(encoding="utf-8-sig")
+    except (OSError, ValueError) as exc:
+        warnings.append(
+            f"seed '{unique_id}': could not read seed file ({exc}); independent content "
+            "change detection is inactive (relying on dbt checksum only)"
+        )
+        return None
+    normalized: str = text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _normalize_json_value(value: object) -> object:
+    if isinstance(value, dict):
+        mapping: dict[object, object] = cast(dict[object, object], value)
+        return {str(k): _normalize_json_value(mapping[k]) for k in sorted(mapping, key=str)}
+    if isinstance(value, list):
+        items: list[object] = cast(list[object], value)
+        return [_normalize_json_value(item) for item in items]
+    return value
 
 
 def _source_freshness_filter(
