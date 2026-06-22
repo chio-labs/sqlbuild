@@ -787,3 +787,17 @@ class DbtSeedContentIdentityTestCase:
     right_content: str
     expected_same_identity: bool
     expected_warning: bool
+
+
+@dataclass(frozen=True)
+class DbtSelectionStalenessWarningTestCase:
+    description: str
+    upstream_deps: dict[str, tuple[str, ...]]
+    selected_unique_ids: tuple[str, ...]
+    run_unique_ids: tuple[str, ...]
+    changed_model_unique_ids: tuple[str, ...]
+    changed_seed_unique_ids: tuple[str, ...]
+    changed_source_unique_ids: tuple[str, ...]
+    expected_warning_count: int
+    expected_warning_fragments: tuple[str, ...]
+    unexpected_warning_fragments: tuple[str, ...] = field(default_factory=tuple)

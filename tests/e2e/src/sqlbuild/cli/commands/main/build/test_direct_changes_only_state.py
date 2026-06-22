@@ -595,7 +595,7 @@ def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_s
     "test_case",
     [
         DirectChangesOnlyStateBuildE2ETestCase(
-            description="scoped build leaves downstream stale until upstream is selected again",
+            description="later unscoped build rebuilds downstream left stale by scoped build",
             project_name="direct_changes_only_build_scoped_then_later",
             initial_amount_cents=100,
             changed_amount_cents=125,
@@ -603,9 +603,9 @@ def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_s
             expected_changed_amount_dollars=1.25,
         )
     ],
-    ids=["scoped build leaves downstream stale until upstream is selected again"],
+    ids=["later unscoped build rebuilds downstream left stale by scoped build"],
 )
-def test_given_scoped_upstream_changes_only_build_when_building_later_then_downstream_stays_stale(
+def test_given_scoped_upstream_changes_only_build_when_building_later_then_rebuilds_downstream(
     test_case: DirectChangesOnlyStateBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -644,13 +644,13 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
     )
 
     assert later_result.returncode == 0, later_result.stdout + later_result.stderr
-    assert "Plan ready (0 selected)" in later_result.stdout
-    assert "Remaining stale" in later_result.stdout
-    assert "model set: fact_orders" in later_result.stdout
+    assert "Plan ready (1 selected)" in later_result.stdout
+    assert "fact_orders" in later_result.stdout
+    assert "Remaining stale" not in later_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT amount_cents, amount_dollars FROM fact_orders ORDER BY order_id",
-    ) == [(test_case.initial_amount_cents, test_case.expected_initial_amount_dollars)]
+    ) == [(test_case.changed_amount_cents, test_case.expected_changed_amount_dollars)]
 
 
 @pytest.mark.parametrize(

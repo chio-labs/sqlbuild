@@ -88,6 +88,7 @@ def format_plan(
             section_header_style=resolved_section_header_style,
             python_plan_entries=python_plan_entries,
         )
+        _format_warnings(lines, plan)
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 

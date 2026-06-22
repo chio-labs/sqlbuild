@@ -305,6 +305,53 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("TC014", "TC020"),
     ),
     CheckPathsTestCase(
+        description="allows generated engine matrix in selection staleness e2e",
+        repo_files=base_repo_files()
+        | {
+            "src/sqlbuild/cli/__init__.py": '"""CLI package."""\n',
+            "tests/e2e/src/sqlbuild/cli/commands/main/selection_staleness/_test_types.py": dedent(
+                """
+                from dataclasses import dataclass
+
+
+                @dataclass(frozen=True)
+                class SelectionStalenessEngineE2ETestCase:
+                    description: str
+                    expected_rows_after_repair: tuple[tuple[object, ...], ...]
+                """
+            ).strip()
+            + "\n",
+            (
+                "tests/e2e/src/sqlbuild/cli/commands/main/selection_staleness/"
+                "test_selection_staleness.py"
+            ): (
+                "import pytest\n\n"
+                "from tests.e2e.src.sqlbuild.cli.commands.main.selection_staleness."
+                "_test_types import (\n"
+                "    SelectionStalenessEngineE2ETestCase,\n"
+                ")\n\n\n"
+                'BASE_DESCRIPTIONS = ("native", "dbt")\n'
+                "TEST_CASES = [\n"
+                "    SelectionStalenessEngineE2ETestCase(\n"
+                '        description=f"{description}: direct parent",\n'
+                "        expected_rows_after_repair=((1, 1.25),),\n"
+                "    )\n"
+                "    for description in BASE_DESCRIPTIONS\n"
+                "]\n"
+                "@pytest.mark.parametrize(\n"
+                '    "test_case",\n'
+                "    TEST_CASES,\n"
+                "    ids=[case.description for case in TEST_CASES],\n"
+                ")\n"
+                "def test_given_exact_selection_when_changed_then_preserves_contract(\n"
+                "    test_case: SelectionStalenessEngineE2ETestCase,\n"
+                ") -> None:\n"
+                "    assert test_case.expected_rows_after_repair\n"
+            ),
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="reports top level helper function in test module",
         repo_files=base_repo_files()
         | {

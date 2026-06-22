@@ -199,6 +199,7 @@ def build_dbt_model_plan_output(
     manifest: DbtManifestIndex,
     graph: DbtCombinedGraph | None = None,
     candidate_unique_ids: tuple[str, ...],
+    selected_unique_ids: tuple[str, ...],
     full_refresh: bool = False,
     on_connection_start: Callable[[int], None] | None,
     on_connection_complete: Callable[[int, float], None] | None,
@@ -227,6 +228,7 @@ def build_dbt_model_plan_output(
         return build_dbt_model_planning_result(
             manifest=manifest,
             candidate_unique_ids=candidate_unique_ids,
+            selected_unique_ids=selected_unique_ids,
             project=project,
             graph=graph,
             full_refresh=full_refresh,

@@ -122,6 +122,15 @@ def build_execution_plan(
         auto_load_sources=auto_load_sources,
         selected_keys=selected_keys,
     )
+    project_scope_for_stale_warnings: PlannerScope = replace(
+        build_planner_scope(
+            project=project,
+            select=(),
+            exclude=(),
+            auto_load_sources=auto_load_sources,
+        ),
+        selected_keys=selected_scope.selected_keys,
+    )
     dependency_baseline_candidate_keys: frozenset[CompiledObjectKey] = (
         build_dependency_baseline_candidate_keys(selected_scope)
     )
@@ -145,7 +154,7 @@ def build_execution_plan(
         adapter=adapter,
         connection=connection,
         execute=adapter.execute,
-        selected_keys=scope.selected_keys,
+        selected_keys=frozenset(project_scope_for_stale_warnings.all_keys.values()),
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -172,6 +181,24 @@ def build_execution_plan(
         functions=project.functions,
         seeds=project.seeds,
         scope=scope,
+    )
+    stale_warning_version_identities: StandardModelVersionIdentities = (
+        build_standard_model_version_identities(
+            functions=project.functions,
+            seeds=project.seeds,
+            scope=project_scope_for_stale_warnings,
+        )
+    )
+    stale_warning_changes: PlannerChangeResults = detect_changes(
+        project=project,
+        scope=replace(
+            project_scope_for_stale_warnings,
+            selected_keys=frozenset(project_scope_for_stale_warnings.all_keys.values()),
+        ),
+        snapshot=snapshot,
+        full_refresh=False,
+        expected_version_hashes=stale_warning_version_identities.model_version_hashes,
+        expected_metadata_jsons=stale_warning_version_identities.model_metadata_jsons,
     )
     standard_reuse: StandardReusePlanningResult | None = build_standard_reuse_planning_result(
         project=project,
@@ -233,7 +260,7 @@ def build_execution_plan(
             relations=relations,
         )
     )
-    original_scope_for_stale_warnings: PlannerScope = selected_scope
+    original_scope_for_stale_warnings: PlannerScope = project_scope_for_stale_warnings
     pruned_standard_model_names: tuple[str, ...] = ()
     if standard_scope_pruning == StandardScopePruning.PRUNE_UNCHANGED and not full_refresh:
         original_selected_model_names: frozenset[str] = frozenset(
@@ -273,7 +300,7 @@ def build_execution_plan(
         )
         scope = prune_standard_unchanged_scope(
             scope=scope,
-            changes=changes,
+            changes=stale_warning_changes,
             resolved_actions=resolved_actions,
             source_freshness=source_freshness,
             run_despite_unchanged=run_despite_unchanged,
@@ -434,9 +461,9 @@ def build_execution_plan(
         build_stale_out_of_selection_warnings(
             original_scope=original_scope_for_stale_warnings,
             execution_scope=execution_scope,
-            changes=changes,
+            changes=stale_warning_changes,
             snapshot=snapshot,
-            version_identities=version_identities,
+            version_identities=stale_warning_version_identities,
             source_freshness=source_freshness,
         )
     )

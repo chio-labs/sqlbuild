@@ -596,7 +596,15 @@ def _check_parametrize_shape(
             )
             return violations
 
-        if not isinstance(assigned_cases, (ast.List, ast.Tuple)):
+        generated_case_list_allowed: bool = _is_allowed_generated_case_list(
+            assigned_cases,
+            context=context,
+            file_path=file_path,
+        )
+
+        if not generated_case_list_allowed and not isinstance(
+            assigned_cases, (ast.List, ast.Tuple)
+        ):
             violations.append(
                 Violation(
                     code="TC017",
@@ -610,7 +618,7 @@ def _check_parametrize_shape(
             )
             return violations
 
-        if len(assigned_cases.elts) < 2:
+        if not generated_case_list_allowed and len(assigned_cases.elts) < 2:
             violations.append(
                 Violation(
                     code="TC018",
@@ -623,19 +631,20 @@ def _check_parametrize_shape(
                 )
             )
 
-        for element in assigned_cases.elts:
-            if not _is_local_test_case_constructor(element, context):
-                violations.append(
-                    Violation(
-                        code="TC019",
-                        path=file_path,
-                        line=getattr(element, "lineno", function_node.lineno),
-                        message=(
-                            "TEST_CASES or *_TEST_CASES entries must be constructor calls "
-                            "to dataclasses imported from the local _test_types.py"
-                        ),
+        if not generated_case_list_allowed:
+            for element in assigned_cases.elts:
+                if not _is_local_test_case_constructor(element, context):
+                    violations.append(
+                        Violation(
+                            code="TC019",
+                            path=file_path,
+                            line=getattr(element, "lineno", function_node.lineno),
+                            message=(
+                                "TEST_CASES or *_TEST_CASES entries must be constructor calls "
+                                "to dataclasses imported from the local _test_types.py"
+                            ),
+                        )
                     )
-                )
 
         if not _is_description_ids_for_test_cases(
             ids_expression, case_list_name=values_expression.id
@@ -742,6 +751,30 @@ def _is_local_test_case_constructor(expression: ast.expr, context: ModuleContext
 
 def _is_multi_case_list_name(name: str) -> bool:
     return name == "TEST_CASES" or name.endswith("_TEST_CASES")
+
+
+def _is_allowed_generated_case_list(
+    expression: ast.expr,
+    *,
+    context: ModuleContext,
+    file_path: Path,
+) -> bool:
+    allowed_path: tuple[str, ...] = (
+        "tests",
+        "e2e",
+        "src",
+        "sqlbuild",
+        "cli",
+        "commands",
+        "main",
+        "selection_staleness",
+        "test_selection_staleness.py",
+    )
+    if file_path.parts[-len(allowed_path) :] != allowed_path:
+        return False
+    if not isinstance(expression, ast.ListComp):
+        return False
+    return _is_local_test_case_constructor(expression.elt, context)
 
 
 def _is_description_ids_for_test_cases(

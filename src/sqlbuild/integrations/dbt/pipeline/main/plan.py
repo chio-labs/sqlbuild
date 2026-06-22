@@ -176,6 +176,7 @@ def plan_dbt_interop_from_project(
                 )
             )
         ),
+        selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh="--full-refresh" in routed.dbt_args,
         on_connection_start=(
             None if connection_progress is None else connection_progress.on_connection_start
@@ -242,6 +243,7 @@ def plan_dbt_interop_from_project(
             manifest=manifest,
             graph=graph,
             candidate_unique_ids=dependency_baseline_ids,
+            selected_unique_ids=dependency_baseline_ids,
             full_refresh="--full-refresh" in routed.dbt_args,
             on_connection_start=(
                 None if connection_progress is None else connection_progress.on_connection_start

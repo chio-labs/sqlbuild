@@ -1299,6 +1299,94 @@ def build_manifest_source_node(
     return node
 
 
+def build_dbt_selection_staleness_manifest(
+    *,
+    model_unique_ids: tuple[str, ...],
+    seed_unique_ids: tuple[str, ...],
+    source_unique_ids: tuple[str, ...],
+) -> DbtManifestIndex:
+    """Build a minimal manifest for dbt selection staleness adapter tests."""
+
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                *(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name=unique_id.rsplit(".", 1)[-1],
+                        relation_name=unique_id.rsplit(".", 1)[-1],
+                        checksum="same_hash",
+                    )
+                    for unique_id in model_unique_ids
+                ),
+                *(
+                    build_manifest_seed_node(
+                        unique_id=unique_id,
+                        name=unique_id.rsplit(".", 1)[-1],
+                    )
+                    for unique_id in seed_unique_ids
+                ),
+            ),
+            sources=tuple(
+                build_manifest_source_node(
+                    unique_id=unique_id,
+                    source_name=unique_id.split(".")[-2],
+                    name=unique_id.rsplit(".", 1)[-1],
+                )
+                for unique_id in source_unique_ids
+            ),
+        )
+    )
+
+
+def build_dbt_selection_staleness_graph(
+    *, upstream_deps: dict[str, tuple[str, ...]]
+) -> DbtCombinedGraph:
+    """Build a combined dbt graph from unique-id upstream dependencies."""
+
+    mapped_upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]] = {
+        build_dbt_selection_staleness_key(unique_id): tuple(
+            build_dbt_selection_staleness_key(upstream_unique_id)
+            for upstream_unique_id in upstream_unique_ids
+        )
+        for unique_id, upstream_unique_ids in upstream_deps.items()
+    }
+    nodes: frozenset[DbtCombinedGraphKey] = frozenset(
+        key for item in mapped_upstream_deps.items() for key in (item[0], *item[1])
+    )
+    return DbtCombinedGraph(nodes=nodes, upstream_deps=mapped_upstream_deps, downstream_deps={})
+
+
+def build_dbt_selection_staleness_key(unique_id: str) -> DbtCombinedGraphKey:
+    """Build the combined graph key shape used by dbt model planning."""
+
+    resource_type: DbtCombinedGraphResourceType = DbtCombinedGraphResourceType.MODEL
+    if unique_id.startswith(("seed.", "source.")):
+        resource_type = DbtCombinedGraphResourceType.SOURCE
+    return DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.DBT,
+        resource_type=resource_type,
+        name=unique_id,
+    )
+
+
+def build_dbt_selection_staleness_entry(
+    *, unique_id: str, action: DbtModelPlanAction, reason: DbtModelPlanReason
+) -> DbtModelPlanEntry:
+    """Build a dbt model plan entry for staleness warning tests."""
+
+    name: str = unique_id.rsplit(".", 1)[-1]
+    return DbtModelPlanEntry(
+        unique_id=unique_id,
+        package_name="analytics",
+        name=name,
+        action=action,
+        reason=reason,
+        relation_name=name,
+    )
+
+
 def build_manifest_seed_node(
     *,
     unique_id: str,
