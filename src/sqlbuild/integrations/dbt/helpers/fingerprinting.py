@@ -28,6 +28,7 @@ def try_write_dbt_node_fingerprint(
     warnings: list[str],
     query_sql: str | None = None,
     seed_identity_hash: str | None = None,
+    version_hash_override: str | None = None,
 ) -> None:
     """Best-effort append of one successful dbt node fingerprint."""
 
@@ -64,6 +65,7 @@ def try_write_dbt_node_fingerprint(
             if result.resource_type == DbtNodeResourceType.SEED and seed_identity_hash is not None
             else result.node_checksum or compute_query_hash(definition)
         )
+        version_hash: str = version_hash_override or definition_hash
         fingerprint: Fingerprint = Fingerprint(
             node_type=NODE_TYPE_DBT,
             node_name=result.unique_id,
@@ -72,7 +74,7 @@ def try_write_dbt_node_fingerprint(
             target_name=result.relation_name or result.node_name,
             run_id=run_id,
             definition_hash=definition_hash,
-            version_hash=definition_hash,
+            version_hash=version_hash,
             schema_fingerprint=hashlib.sha256(b"").hexdigest(),
             definition=definition,
             metadata_json=json.dumps(

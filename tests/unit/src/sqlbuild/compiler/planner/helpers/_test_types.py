@@ -124,6 +124,7 @@ class SelectionStalenessGraphWarningTestCase:
     changed_seed_names: frozenset[str]
     changed_source_names: frozenset[str]
     expected_warning_fragments: tuple[str, ...]
+    unexpected_warning_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

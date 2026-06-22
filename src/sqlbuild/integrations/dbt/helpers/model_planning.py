@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -57,6 +59,7 @@ def build_dbt_model_planning_result(
     *,
     manifest: DbtManifestIndex,
     candidate_unique_ids: Sequence[str],
+    selected_unique_ids: Sequence[str] | None = None,
     project: CompiledProject,
     graph: DbtCombinedGraph | None = None,
     full_refresh: bool = False,
@@ -93,7 +96,13 @@ def build_dbt_model_planning_result(
     )
     entries_by_unique_id: dict[str, DbtModelPlanEntry] = {}
     unique_id: str
-    selected_unique_ids: frozenset[str] = frozenset(candidate_unique_ids)
+    selected_unique_ids_set: frozenset[str] = frozenset(
+        candidate_unique_ids if selected_unique_ids is None else selected_unique_ids
+    )
+    expected_version_hashes: dict[str, str | None] = build_expected_dbt_model_version_hashes(
+        manifest=manifest,
+        graph=graph,
+    )
     expanded_candidate_unique_ids: tuple[str, ...] = _expand_candidate_unique_ids(
         candidate_unique_ids=candidate_unique_ids,
         graph=graph,
@@ -107,18 +116,20 @@ def build_dbt_model_planning_result(
             fingerprint=fingerprints.get((NODE_TYPE_DBT, unique_id)),
             adapter=adapter,
             connection=connection,
-            full_refresh=full_refresh and unique_id in selected_unique_ids,
+            full_refresh=full_refresh and unique_id in selected_unique_ids_set,
+            expected_version_hash=expected_version_hashes.get(unique_id),
         )
     in_selection_changed_seed_unique_ids: frozenset[str] = (
-        changed_seed_unique_ids & selected_unique_ids
+        changed_seed_unique_ids & selected_unique_ids_set
     )
     stale_out_of_selection_seed_unique_ids: frozenset[str] = (
-        changed_seed_unique_ids - selected_unique_ids
+        changed_seed_unique_ids - selected_unique_ids_set
     )
     if graph is not None:
         entries_by_unique_id = _apply_graph_propagation(
             entries_by_unique_id=entries_by_unique_id,
             graph=graph,
+            selected_unique_ids=selected_unique_ids_set,
             blocked_source_unique_ids=blocked_source_unique_ids,
             changed_source_unique_ids=changed_source_unique_ids,
             changed_seed_unique_ids=in_selection_changed_seed_unique_ids,
@@ -146,13 +157,13 @@ def build_dbt_model_planning_result(
         stale_out_of_selection_warning_messages=_stale_out_of_selection_warning_messages(
             manifest=manifest,
             graph=graph,
-            selected_unique_ids=selected_unique_ids,
+            selected_unique_ids=selected_unique_ids_set,
             entries_by_unique_id=entries_by_unique_id,
             changed_seed_unique_ids=changed_seed_unique_ids,
             changed_source_unique_ids=changed_source_unique_ids,
         ),
         source_freshness=source_freshness,
-        selected_unique_ids=tuple(sorted(frozenset(candidate_unique_ids))),
+        selected_unique_ids=tuple(sorted(selected_unique_ids_set)),
         changed_seed_unique_ids=tuple(sorted(in_selection_changed_seed_unique_ids)),
         stale_out_of_selection_seed_unique_ids=tuple(
             sorted(stale_out_of_selection_seed_unique_ids)
@@ -181,7 +192,7 @@ def _stale_out_of_selection_warning_messages(
         run_model_names=frozenset(
             entry.unique_id
             for entry in entries_by_unique_id.values()
-            if entry.action == DbtModelPlanAction.RUN
+            if entry.action == DbtModelPlanAction.RUN and entry.unique_id in selected_unique_ids
         ),
         run_seed_names=changed_seed_unique_ids & selected_unique_ids,
         run_source_names=frozenset(),
@@ -227,6 +238,14 @@ def _entry_is_own_changed(entry: DbtModelPlanEntry) -> bool:
         DbtModelPlanReason.CHECKSUM_CHANGED,
         DbtModelPlanReason.FULL_REFRESH,
     }
+
+
+def _entry_version_mismatch(entry: DbtModelPlanEntry) -> bool:
+    return (
+        entry.previous_version_hash is not None
+        and entry.expected_version_hash is not None
+        and entry.previous_version_hash != entry.expected_version_hash
+    )
 
 
 def _format_stale_warning(*, warning: SelectionStalenessWarning, manifest: DbtManifestIndex) -> str:
@@ -352,15 +371,22 @@ def _apply_graph_propagation(
     *,
     entries_by_unique_id: dict[str, DbtModelPlanEntry],
     graph: DbtCombinedGraph,
+    selected_unique_ids: frozenset[str],
     blocked_source_unique_ids: frozenset[str],
     changed_source_unique_ids: frozenset[str],
     changed_seed_unique_ids: frozenset[str],
 ) -> dict[str, DbtModelPlanEntry]:
     propagated: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
-    for unique_id, entry in entries_by_unique_id.items():
-        upstream: frozenset[DbtCombinedGraphKey] = expand_combined_upstream(
-            dbt_model_graph_key(unique_id), graph.upstream_deps
-        )
+    upstream_by_unique_id: dict[str, frozenset[DbtCombinedGraphKey]] = {
+        unique_id: expand_combined_upstream(dbt_model_graph_key(unique_id), graph.upstream_deps)
+        for unique_id in entries_by_unique_id
+    }
+    direct_upstream_by_unique_id: dict[str, tuple[DbtCombinedGraphKey, ...]] = {
+        unique_id: graph.upstream_deps.get(dbt_model_graph_key(unique_id), ())
+        for unique_id in entries_by_unique_id
+    }
+    for unique_id, entry in tuple(propagated.items()):
+        upstream: frozenset[DbtCombinedGraphKey] = upstream_by_unique_id[unique_id]
         blocked_sources: tuple[str, ...] = tuple(
             sorted(
                 key.name
@@ -407,19 +433,36 @@ def _apply_graph_propagation(
                 reason=DbtModelPlanReason.UPSTREAM_CHANGED,
             )
             continue
-        upstream_run: bool = any(
-            key.owner == DbtCombinedGraphOwner.DBT
-            and key.resource_type == DbtCombinedGraphResourceType.MODEL
-            and key.name in entries_by_unique_id
-            and entries_by_unique_id[key.name].action == DbtModelPlanAction.RUN
-            for key in upstream
-        )
-        if upstream_run and entry.action == DbtModelPlanAction.CURRENT:
-            propagated[unique_id] = replace(
-                entry,
-                action=DbtModelPlanAction.RUN,
-                reason=DbtModelPlanReason.UPSTREAM_CHANGED,
+    changed: bool = True
+    while changed:
+        changed = False
+        for unique_id, entry in tuple(propagated.items()):
+            if unique_id not in selected_unique_ids or entry.action != DbtModelPlanAction.CURRENT:
+                continue
+            direct_upstream: tuple[DbtCombinedGraphKey, ...] = direct_upstream_by_unique_id[
+                unique_id
+            ]
+            upstream_run: bool = any(
+                key.owner == DbtCombinedGraphOwner.DBT
+                and key.resource_type == DbtCombinedGraphResourceType.MODEL
+                and key.name in selected_unique_ids
+                and key.name in propagated
+                and propagated[key.name].action == DbtModelPlanAction.RUN
+                for key in direct_upstream
             )
+            selected_upstream_version_mismatch: bool = any(
+                key.owner == DbtCombinedGraphOwner.DBT
+                and key.resource_type == DbtCombinedGraphResourceType.MODEL
+                and key.name in selected_unique_ids
+                for key in direct_upstream
+            ) and _entry_version_mismatch(entry)
+            if upstream_run or selected_upstream_version_mismatch:
+                propagated[unique_id] = replace(
+                    entry,
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.UPSTREAM_CHANGED,
+                )
+                changed = True
     return propagated
 
 
@@ -479,6 +522,57 @@ def _read_dbt_fingerprints(
     return dict(fingerprint_set.fingerprints_by_identity or {})
 
 
+def build_expected_dbt_model_version_hashes(
+    *, manifest: DbtManifestIndex, graph: DbtCombinedGraph | None
+) -> dict[str, str | None]:
+    hashes: dict[str, str | None] = {}
+
+    def resolve(unique_id: str, visiting: frozenset[str] = frozenset()) -> str | None:
+        cached: str | None
+        if unique_id in hashes:
+            return hashes[unique_id]
+        model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
+        if model is None:
+            hashes[unique_id] = None
+            return None
+        own_hash: str | None = model.node_checksum
+        if own_hash is None:
+            hashes[unique_id] = None
+            return None
+        if graph is None or unique_id in visiting:
+            hashes[unique_id] = own_hash
+            return own_hash
+        upstream_hashes: list[tuple[str, str]] = []
+        key: DbtCombinedGraphKey
+        for key in graph.upstream_deps.get(dbt_model_graph_key(unique_id), ()):
+            if key.owner != DbtCombinedGraphOwner.DBT:
+                continue
+            upstream_hash: str | None = None
+            if key.resource_type == DbtCombinedGraphResourceType.MODEL:
+                upstream_hash = resolve(key.name, visiting | {unique_id})
+            elif key.resource_type == DbtCombinedGraphResourceType.SOURCE:
+                seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(key.name)
+                upstream_hash = None if seed is None else seed.identity_hash
+            if upstream_hash is not None:
+                upstream_hashes.append((key.name, upstream_hash))
+        if not upstream_hashes:
+            hashes[unique_id] = own_hash
+            return own_hash
+        payload: str = json.dumps(
+            {"own": own_hash, "upstream": sorted(upstream_hashes)},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        cached = hashlib.sha256(payload.encode()).hexdigest()
+        hashes[unique_id] = cached
+        return cached
+
+    unique_id: str
+    for unique_id in manifest.models_by_unique_id:
+        resolve(unique_id)
+    return hashes
+
+
 def _plan_model(
     *,
     model: DbtManifestModel,
@@ -486,8 +580,8 @@ def _plan_model(
     adapter: BaseAdapter,
     connection: Any,
     full_refresh: bool,
+    expected_version_hash: str | None,
 ) -> DbtModelPlanEntry:
-    expected_version_hash: str | None = model.node_checksum
     if full_refresh:
         return _entry(
             model=model,
@@ -517,7 +611,7 @@ def _plan_model(
             fingerprint=fingerprint,
             expected_version_hash=expected_version_hash,
         )
-    if expected_version_hash is not None and fingerprint.version_hash != expected_version_hash:
+    if model.node_checksum is not None and fingerprint.definition_hash != model.node_checksum:
         return _entry(
             model=model,
             action=DbtModelPlanAction.RUN,

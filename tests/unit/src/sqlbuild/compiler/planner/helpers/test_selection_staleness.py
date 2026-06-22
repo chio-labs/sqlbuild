@@ -150,6 +150,41 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         ),
     ),
     SelectionStalenessGraphWarningTestCase(
+        description="mixed selected and unselected changed parents warns only for unselected",
+        upstream_deps={
+            MODEL_KEY: (MODEL_A_KEY, MODEL_B_KEY),
+        },
+        selected_keys=frozenset({MODEL_A_KEY, MODEL_KEY}),
+        execution_selected_keys=frozenset({MODEL_A_KEY, MODEL_KEY}),
+        changed_model_names=frozenset({MODEL_A_KEY.name, MODEL_B_KEY.name}),
+        changed_seed_names=frozenset(),
+        changed_source_names=frozenset(),
+        expected_warning_fragments=(
+            "selected model 'c' is stale",
+            "b changed but will not be rebuilt",
+        ),
+        unexpected_warning_fragments=("a changed but will not be rebuilt",),
+    ),
+    SelectionStalenessGraphWarningTestCase(
+        description="diamond graph reports both stale intermediates",
+        upstream_deps={
+            MODEL_KEY: (MODEL_B_KEY, MODEL_D_KEY),
+            MODEL_B_KEY: (MODEL_A_KEY,),
+            MODEL_D_KEY: (MODEL_A_KEY,),
+        },
+        selected_keys=frozenset({MODEL_KEY}),
+        execution_selected_keys=frozenset(),
+        changed_model_names=frozenset({MODEL_A_KEY.name}),
+        changed_seed_names=frozenset(),
+        changed_source_names=frozenset(),
+        expected_warning_fragments=(
+            "selected model 'c' is stale",
+            "a changed but will not be rebuilt",
+            "b changed but will not be rebuilt or is stale",
+            "d changed but will not be rebuilt or is stale",
+        ),
+    ),
+    SelectionStalenessGraphWarningTestCase(
         description="warning trigger list is capped",
         upstream_deps={
             MODEL_KEY: tuple(
@@ -184,6 +219,22 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
             "selected model 'c' is stale",
             "a changed but will not be rebuilt",
         ),
+    ),
+    SelectionStalenessGraphWarningTestCase(
+        description="self cycle does not report selected model as its own trigger",
+        upstream_deps={
+            MODEL_KEY: (MODEL_KEY, MODEL_A_KEY),
+        },
+        selected_keys=frozenset({MODEL_KEY}),
+        execution_selected_keys=frozenset(),
+        changed_model_names=frozenset({MODEL_A_KEY.name}),
+        changed_seed_names=frozenset(),
+        changed_source_names=frozenset(),
+        expected_warning_fragments=(
+            "selected model 'c' is stale",
+            "a changed but will not be rebuilt",
+        ),
+        unexpected_warning_fragments=("c changed but will not be rebuilt",),
     ),
 ]
 
@@ -339,3 +390,6 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
     expected_fragment: str
     for expected_fragment in test_case.expected_warning_fragments:
         assert expected_fragment in warning_text
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_warning_fragments:
+        assert unexpected_fragment not in warning_text

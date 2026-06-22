@@ -600,7 +600,9 @@ def _planned_dbt_select_terms(
     model_terms: tuple[str, ...] = tuple(
         entry.selector_term
         for entry in plan.dbt_model_plan.entries
-        if entry.action == DbtModelPlanAction.RUN and entry.unique_id not in reused_unique_ids
+        if entry.action == DbtModelPlanAction.RUN
+        and entry.unique_id in plan.dbt_selected_unique_ids
+        and entry.unique_id not in reused_unique_ids
     )
     return tuple(sorted(frozenset((*model_terms, *non_model_terms))))
 
