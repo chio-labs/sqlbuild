@@ -11,6 +11,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildE2ETestCase,
     VirtualBuildSelectionGuardE2ETestCase,
+    VirtualConcurrentBuildE2ETestCase,
     VirtualCustomMaterializationE2ETestCase,
     VirtualExplicitCheckpointRollbackE2ETestCase,
     VirtualNodeResultFailureStateE2ETestCase,
@@ -29,6 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     build_virtual_multi_seed_lifecycle_repo_files,
     build_virtual_seed_lifecycle_repo_files,
+    build_virtual_wide_dag_repo_files,
     count_virtual_physical_versions,
     initialize_virtual_seeded_project,
     prepare_virtual_cursor_override_without_snapshot_project,
@@ -48,6 +50,60 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     run_sqb,
     table_exists,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualConcurrentBuildE2ETestCase(
+            description="wide virtual DAG builds with concurrent physical schema setup",
+            concurrency=8,
+            expected_model_count=8,
+            expected_build_fragments=("Execution  sqb build  (concurrency: 8)",),
+        )
+    ],
+    ids=["wide virtual DAG builds with concurrent physical schema setup"],
+)
+def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_setup_is_safe(
+    test_case: VirtualConcurrentBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_concurrent_schema_setup",
+        repo_files=build_virtual_wide_dag_repo_files(
+            model_count=test_case.expected_model_count,
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--concurrency", str(test_case.concurrency)),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    fragment: str
+    for fragment in test_case.expected_build_fragments:
+        assert fragment in build_result.stdout
+    physical_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'dev__sqb_physical' AND table_name LIKE '%__v_%' "
+            "ORDER BY table_name"
+        ),
+    )
+    assert len(physical_rows) == test_case.expected_model_count
+    logical_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql="SELECT id, model_name FROM dev__dev.model_08",
+    )
+    assert logical_rows == [(8, "model_08")]
 
 
 @pytest.mark.parametrize(

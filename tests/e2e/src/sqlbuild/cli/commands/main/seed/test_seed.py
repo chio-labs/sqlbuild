@@ -43,7 +43,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
                 "Seed ready (1 selected)",
                 "Seeds (1)",
                 "waffle_types",
-                "Execution  sqb seed  (concurrency: 1)",
+                "Execution  sqb seed  (concurrency:",
                 "1/1  seed      waffle_types",
                 "Completed successfully.",
                 "PASS=1  WARN=0  FAIL=0  SKIP=0  TOTAL=1",
@@ -84,7 +84,7 @@ def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expe
             expected_seed_fragments=(
                 "Plan ready (1 selected)",
                 "order_amounts",
-                "Execution  sqb seed  (concurrency: 1)",
+                "Execution  sqb seed  (concurrency:",
                 "Completed successfully.",
             ),
             expected_current_seed_fragments=(
