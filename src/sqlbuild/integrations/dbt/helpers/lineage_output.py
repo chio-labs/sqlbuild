@@ -11,7 +11,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageGraph,
     DbtLineageNode,
 )
-from sqlbuild.integrations.dbt.types import DbtLineageDirection
+from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtLineageDirection
 from sqlbuild.shared.helpers.cli_style import CliStyle
 
 _HUMAN_COLUMN_TRACE_LIMIT: int = 25
@@ -162,7 +162,7 @@ def format_dbt_column_lineage_tree(
 
     style: CliStyle = CliStyle(use_color=use_color)
     lines: list[str] = [
-        f"{style.object_name('Column trace')}  {_format_column(trace.target, style=style)}  "
+        f"{style.object_name('Column trace')}  {_format_column_short(trace.target, style=style)}  "
         f"{style.muted(trace.direction.value)}",
         "",
     ]
@@ -236,12 +236,25 @@ def _serialize_column(column: QualifiedLineageColumn) -> dict[str, object]:
 
 
 def _format_node(node: DbtLineageNode, *, style: CliStyle) -> str:
-    owner_prefix: str = f"{node.key.owner.value}:"
-    return style.object_name(f"{owner_prefix}{node.label}")
+    if node.key.owner == DbtCombinedGraphOwner.DBT:
+        name: str = style.dbt_object_name(node.label)
+    else:
+        name = style.object_name(node.label)
+    return f"{name} {style.muted(f'[{node.key.owner.value}]')}"
 
 
 def _format_column(column: QualifiedLineageColumn, *, style: CliStyle) -> str:
     return style.object_name(_column_id(column))
+
+
+def _format_column_short(column: QualifiedLineageColumn, *, style: CliStyle) -> str:
+    return style.object_name(f"{_short_resource_name(column.resource_name)}:{column.column_name}")
+
+
+def _short_resource_name(resource_name: str) -> str:
+    """Drop the dbt unique-id prefix (model.<package>.) for human display."""
+
+    return resource_name.rsplit(".", 1)[-1]
 
 
 def _column_id(column: QualifiedLineageColumn) -> str:
@@ -264,16 +277,18 @@ def _format_column_trace_branch(
             edge.target if direction == DbtLineageDirection.DOWNSTREAM else edge.source
         ),
     )
-    arrow: str = "->" if direction == DbtLineageDirection.DOWNSTREAM else "<-"
-    for edge in edges:
+    for index, edge in enumerate(edges):
+        is_last: bool = index == len(edges) - 1
+        branch: str = "└─" if is_last else "├─"
+        continuation: str = "   " if is_last else "│  "
         related_column: QualifiedLineageColumn = (
             edge.target if direction == DbtLineageDirection.DOWNSTREAM else edge.source
         )
         related_id: str = _column_id(related_column)
         suffix: str = style.muted(" (already shown)") if related_id in seen else ""
         lines.append(
-            f"{prefix}  {style.muted(arrow)} "
-            f"{_format_column(related_column, style=style)} "
+            f"{prefix}{style.muted(branch)} "
+            f"{_format_column_short(related_column, style=style)} "
             f"{style.muted(f'({edge.transform_kind})')}{suffix}"
         )
         if related_id in seen:
@@ -283,7 +298,7 @@ def _format_column_trace_branch(
                 related_column,
                 deps,
                 direction=direction,
-                prefix=prefix + "     ",
+                prefix=prefix + continuation,
                 seen=seen | {related_id},
                 style=style,
             )
@@ -331,8 +346,8 @@ def _format_branch(
     )
     for index, child in enumerate(children):
         is_last: bool = index == len(children) - 1
-        branch: str = "`-" if is_last else "+-"
-        continuation: str = "  " if is_last else "| "
+        branch: str = "└─" if is_last else "├─"
+        continuation: str = "   " if is_last else "│  "
         suffix: str = style.muted(" (already shown)") if child in seen else ""
         lines.append(
             f"{prefix}{style.muted(branch)} {_format_node(node_by_key[child], style=style)}{suffix}"
