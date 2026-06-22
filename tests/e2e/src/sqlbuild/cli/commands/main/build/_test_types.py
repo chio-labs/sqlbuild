@@ -61,6 +61,19 @@ class DependencyBaselineBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SelectionAwareStalenessBuildE2ETestCase:
+    description: str
+    project_name: str
+    initial_command: tuple[str, ...]
+    mixed_command: tuple[str, ...]
+    replan_command: tuple[str, ...]
+    expected_mixed_stdout_fragments: tuple[str, ...]
+    expected_replan_stdout_fragments: tuple[str, ...]
+    unexpected_replan_stdout_fragments: tuple[str, ...]
+    expected_c_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class PythonBuildE2ETestCase:
     """Test case for direct build Python-node behavior."""
 

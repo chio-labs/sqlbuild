@@ -162,6 +162,92 @@ def test_given_seed_change_when_building_changes_only_then_reloads_seed_and_down
 @pytest.mark.parametrize(
     "test_case",
     [
+        DirectChangesOnlySeedBuildE2ETestCase(
+            description=(
+                "selected leaf warns on changed out-of-selection seed until closure rebuild"
+            ),
+            project_name="direct_changes_only_seed_selection_staleness",
+            initial_seed_contents="order_id,amount_cents\n1,100\n",
+            changed_seed_contents="order_id,amount_cents\n1,125\n",
+            expected_plan_selected_count=2,
+            expected_amount_dollars=1.25,
+        )
+    ],
+    ids=["selected leaf warns on changed out-of-selection seed until closure rebuild"],
+)
+def test_given_seed_change_out_of_selection_when_building_leaf_then_warns_until_closure(
+    test_case: DirectChangesOnlySeedBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": test_case.initial_seed_contents,
+            "models/fact_orders.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT order_id, amount_cents / 100.0 AS amount_dollars "
+                'FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    (project_dir / "seeds" / "order_amounts.csv").write_text(
+        test_case.changed_seed_contents, encoding="utf-8"
+    )
+    narrow_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "fact_orders"),
+        project_dir=project_dir,
+    )
+    narrow_output: str = narrow_result.stdout + narrow_result.stderr
+    assert narrow_result.returncode == 0, narrow_output
+    assert "selected model 'fact_orders' is stale" in narrow_output
+    assert "order_amounts changed but will not be rebuilt" in narrow_output
+    assert "seed      order_amounts" not in narrow_output
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT amount_dollars FROM fact_orders ORDER BY order_id",
+    ) == [(1.0,)]
+
+    closure_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "+fact_orders"),
+        project_dir=project_dir,
+    )
+    closure_output: str = closure_result.stdout + closure_result.stderr
+    assert closure_result.returncode == 0, closure_output
+    assert f"Plan ready ({test_case.expected_plan_selected_count} selected)" in closure_output
+    assert "seed      order_amounts" in closure_output
+    assert "selected model 'fact_orders' is stale" not in closure_output
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT amount_dollars FROM fact_orders ORDER BY order_id",
+    ) == [(test_case.expected_amount_dollars,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DirectSeedChangesOnlyGapE2ETestCase(
             description="standalone seed writes fingerprint for changes-only build",
             project_name="direct_standalone_seed_fingerprint",
@@ -509,7 +595,7 @@ def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_s
     "test_case",
     [
         DirectChangesOnlyStateBuildE2ETestCase(
-            description="scoped build leaves downstream stale then later catches up",
+            description="later unscoped build rebuilds downstream left stale by scoped build",
             project_name="direct_changes_only_build_scoped_then_later",
             initial_amount_cents=100,
             changed_amount_cents=125,
@@ -517,9 +603,9 @@ def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_s
             expected_changed_amount_dollars=1.25,
         )
     ],
-    ids=["scoped build leaves downstream stale then later catches up"],
+    ids=["later unscoped build rebuilds downstream left stale by scoped build"],
 )
-def test_given_scoped_upstream_changes_only_build_when_building_later_then_downstream_catches_up(
+def test_given_scoped_upstream_changes_only_build_when_building_later_then_rebuilds_downstream(
     test_case: DirectChangesOnlyStateBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -560,6 +646,7 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_downs
     assert later_result.returncode == 0, later_result.stdout + later_result.stderr
     assert "Plan ready (1 selected)" in later_result.stdout
     assert "fact_orders" in later_result.stdout
+    assert "Remaining stale" not in later_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT amount_cents, amount_dollars FROM fact_orders ORDER BY order_id",

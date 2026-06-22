@@ -108,7 +108,11 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
     monkeypatch.setattr(
         execute_module,
         "load_dbt_manifest_index",
-        lambda *, manifest_path: SimpleNamespace(models_by_unique_id={}),
+        lambda *, manifest_path: SimpleNamespace(
+            models_by_unique_id={},
+            seeds_by_unique_id={},
+            seed_identity_warnings=(),
+        ),
     )
     monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
     monkeypatch.setattr(
@@ -233,7 +237,11 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     monkeypatch.setattr(
         execute_module,
         "load_dbt_manifest_index",
-        lambda *, manifest_path: SimpleNamespace(models_by_unique_id={}),
+        lambda *, manifest_path: SimpleNamespace(
+            models_by_unique_id={},
+            seeds_by_unique_id={},
+            seed_identity_warnings=(),
+        ),
     )
     monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
     monkeypatch.setattr(
@@ -458,7 +466,11 @@ def test_given_dbt_reuse_execution_when_running_then_prints_plan_before_reuse_pr
     monkeypatch.setattr(
         execute_module,
         "load_dbt_manifest_index",
-        lambda *, manifest_path: SimpleNamespace(models_by_unique_id={}),
+        lambda *, manifest_path: SimpleNamespace(
+            models_by_unique_id={},
+            seeds_by_unique_id={},
+            seed_identity_warnings=(),
+        ),
     )
     monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
     monkeypatch.setattr(

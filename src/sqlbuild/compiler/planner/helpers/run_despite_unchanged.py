@@ -55,7 +55,6 @@ def build_run_despite_unchanged_planning_result(
                 now=now,
                 raw_value=raw_value,
             )
-            continue
         decision: RunDespiteUnchangedDecision | None = _decision_for_model(
             model=model,
             scope=scope,

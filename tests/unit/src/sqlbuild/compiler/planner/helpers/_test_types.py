@@ -89,11 +89,42 @@ class MarkVersionIdentityStaleActionsTestCase:
 
 
 @dataclass(frozen=True)
+class DirectParentRunActionTestCase:
+    description: str
+    parent_key: CompiledObjectKey
+    child_key: CompiledObjectKey
+    expected_cascade_present: bool
+    expected_root_cause: str | None = None
+    expected_root_reason: PlanReason | None = None
+
+
+@dataclass(frozen=True)
 class DirectIdentityStaleModelNamesTestCase:
     description: str
     expected_version_hashes: dict[str, str]
     built_version_hashes: dict[str, str | None]
     expected_stale_model_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SelectionStalenessWarningTestCase:
+    description: str
+    upstream_key: CompiledObjectKey
+    execution_selected_keys: frozenset[CompiledObjectKey]
+    expected_warning_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SelectionStalenessGraphWarningTestCase:
+    description: str
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    selected_keys: frozenset[CompiledObjectKey]
+    execution_selected_keys: frozenset[CompiledObjectKey]
+    changed_model_names: frozenset[str]
+    changed_seed_names: frozenset[str]
+    changed_source_names: frozenset[str]
+    expected_warning_fragments: tuple[str, ...]
+    unexpected_warning_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

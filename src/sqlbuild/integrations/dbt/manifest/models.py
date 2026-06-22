@@ -54,6 +54,7 @@ class DbtManifestSeed:
     database: str | None = None
     schema: str | None = None
     alias: str | None = None
+    identity_hash: str | None = None
     payload: dict[str, object] = field(default_factory=dict)
 
 
@@ -66,3 +67,4 @@ class DbtManifestIndex:
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
     sources_by_unique_id: dict[str, DbtManifestSource] = field(default_factory=dict)
     seeds_by_unique_id: dict[str, DbtManifestSeed] = field(default_factory=dict)
+    seed_identity_warnings: tuple[str, ...] = field(default_factory=tuple)

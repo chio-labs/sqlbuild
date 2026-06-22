@@ -43,7 +43,12 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     StandardReuseFromSourceDeferralConflictTestCase,
     StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,
+    StandardSelectionAwareStalenessTestCase,
     StandardSourceFreshnessPlanOutputTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
+    build_standard_pruning_project,
+    write_standard_model_state,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
@@ -72,6 +77,255 @@ SOURCE_DEFERRAL_CONFLICT_TEST_CASES: list[StandardReuseFromSourceDeferralConflic
         defer_sources_to="prod_sources",
         target_defer_sources_to=None,
         expected_error_fragment="source deferral is active",
+    ),
+]
+
+SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCase] = [
+    StandardSelectionAwareStalenessTestCase(
+        description="plain leaf selection with changed upstream is no-op and warns",
+        previous_sql_by_model_name={
+            "b": "select 1 as id",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "b": "select 2 as id",
+            "c": "select * from __ref('b')",
+        },
+        select=("c",),
+        expected_model_names=(),
+        expected_warning_fragments=("selected model 'c' is stale", "b changed"),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="multi-hop leaf selection with changed root is no-op and warns",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select * from __ref('a')",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select * from __ref('a')",
+            "c": "select * from __ref('b')",
+        },
+        select=("c",),
+        expected_model_names=(),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="multi-hop selected root and leaf warns for unbuilt intermediate",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select * from __ref('a')",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select * from __ref('a')",
+            "c": "select * from __ref('b')",
+        },
+        select=("a", "c"),
+        expected_model_names=("a",),
+        expected_warning_fragments=("selected model 'c' is stale", "b changed"),
+        expected_current_version_hash_model_names=("a",),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="mixed selected and unselected upstream changes run and warn",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select 1 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select 2 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        select=("b", "c"),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_current_version_hash_model_names=("b",),
+        expected_non_current_version_hash_model_names=("c",),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="mixed case with view child runs and warns",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select 1 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select 2 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        select=("b", "c"),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        model_configs={"c": {"materialized": "view"}},
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="mixed case with incremental child runs and warns",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select 1 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select 2 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        select=("b", "c"),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        model_configs={"c": {"materialized": "incremental", "incremental_strategy": "append"}},
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="mixed case with microbatch child runs and warns",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select 1 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select 2 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        select=("b", "c"),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        model_configs={
+            "c": {
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "incremental_mode": "microbatch",
+                "cursor": "id",
+                "cursor_type": "integer",
+                "unique_key": ("id",),
+            }
+        },
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="mixed case with snapshot child runs and warns",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select 1 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select 2 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        select=("b", "c"),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        model_configs={
+            "c": {
+                "materialized": "snapshot",
+                "unique_key": ("id",),
+                "snapshot_strategy": "check",
+                "check_columns": ("id",),
+            }
+        },
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="mixed case with custom child runs and warns",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select 1 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select 2 as id",
+            "c": "select * from __ref('a') union all select * from __ref('b')",
+        },
+        select=("b", "c"),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        model_configs={"c": {"materialized": "custom_test_materialization"}},
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="run_despite_unchanged child runs and still warns for unselected upstream",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "c": "select * from __ref('a')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "c": "select * from __ref('a')",
+        },
+        select=("c",),
+        expected_model_names=("c",),
+        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        model_configs={"c": {"materialized": "table", "run_despite_unchanged": "always"}},
+        expected_non_current_version_hash_model_names=("c",),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="closure rebuilds changed upstream and downstream without warning",
+        previous_sql_by_model_name={
+            "b": "select 1 as id",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "b": "select 2 as id",
+            "c": "select * from __ref('b')",
+        },
+        select=("+c",),
+        expected_model_names=("b", "c"),
+        expected_warning_fragments=(),
+        expected_current_version_hash_model_names=("b", "c"),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="multi-hop closure rebuilds changed root and chain without warning",
+        previous_sql_by_model_name={
+            "a": "select 1 as id",
+            "b": "select * from __ref('a')",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "a": "select 2 as id",
+            "b": "select * from __ref('a')",
+            "c": "select * from __ref('b')",
+        },
+        select=("+c",),
+        expected_model_names=("a", "b", "c"),
+        expected_warning_fragments=(),
+        expected_current_version_hash_model_names=("a", "b", "c"),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="full refresh applies only to selected leaf",
+        previous_sql_by_model_name={
+            "b": "select 1 as id",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "b": "select 1 as id",
+            "c": "select * from __ref('b')",
+        },
+        select=("c",),
+        expected_model_names=("c",),
+        expected_warning_fragments=(),
+        full_refresh=True,
+        expected_current_version_hash_model_names=("c",),
+    ),
+    StandardSelectionAwareStalenessTestCase(
+        description="full refresh selected leaf still warns for changed unselected upstream",
+        previous_sql_by_model_name={
+            "b": "select 1 as id",
+            "c": "select * from __ref('b')",
+        },
+        current_sql_by_model_name={
+            "b": "select 2 as id",
+            "c": "select * from __ref('b')",
+        },
+        select=("c",),
+        expected_model_names=("c",),
+        expected_warning_fragments=("selected model 'c' is stale", "b changed"),
+        full_refresh=True,
+        expected_non_current_version_hash_model_names=("c",),
     ),
 ]
 
@@ -146,6 +400,76 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
         adapter.close(connection)
 
     assert tuple(hook.name for hook in plan_output.hook_functions) == test_case.expected_hook_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SELECTION_AWARE_STALENESS_TEST_CASES,
+    ids=[case.description for case in SELECTION_AWARE_STALENESS_TEST_CASES],
+)
+def test_given_standard_pruned_selection_when_upstream_changes_then_respects_selection_and_warns(
+    test_case: StandardSelectionAwareStalenessTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    previous_project: CompiledProject = build_standard_pruning_project(
+        test_case.previous_sql_by_model_name,
+        model_configs=test_case.model_configs,
+    )
+    current_project: CompiledProject = build_standard_pruning_project(
+        test_case.current_sql_by_model_name,
+        model_configs=test_case.model_configs,
+    )
+    try:
+        write_standard_model_state(
+            adapter=adapter,
+            connection=connection,
+            project=previous_project,
+        )
+        plan_output: PlanOutput = build_execution_plan(
+            project=current_project,
+            adapter=adapter,
+            connection=connection,
+            select=test_case.select,
+            full_refresh=test_case.full_refresh,
+            standard_scope_pruning=StandardScopePruning.PRUNE_UNCHANGED,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert (
+        tuple(entry.name for entry in plan_output.model_entries) == test_case.expected_model_names
+    )
+    warning_text: str = "\n".join(warning.message for warning in plan_output.warnings)
+    expected_fragment: str
+    for expected_fragment in test_case.expected_warning_fragments:
+        assert expected_fragment in warning_text
+    assert ("is stale" in warning_text) == bool(test_case.expected_warning_fragments)
+
+    current_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
+        functions=current_project.functions,
+        seeds=current_project.seeds,
+        scope=build_planner_scope(
+            project=current_project,
+            select=(),
+            exclude=(),
+            auto_load_sources=False,
+        ),
+    )
+    entries_by_name: dict[str, ModelPlanEntry] = {
+        entry.name: entry for entry in plan_output.model_entries
+    }
+    model_name: str
+    for model_name in test_case.expected_current_version_hash_model_names:
+        assert (
+            entries_by_name[model_name].fingerprint_version_hash
+            == (current_identities.model_version_hashes[model_name])
+        )
+    for model_name in test_case.expected_non_current_version_hash_model_names:
+        assert (
+            entries_by_name[model_name].fingerprint_version_hash
+            != (current_identities.model_version_hashes[model_name])
+        )
 
 
 @pytest.mark.parametrize(
@@ -473,6 +797,11 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
     baseline_entry: DependencyBaselinePlanEntry = plan_output.dependency_baseline_entries[0]
     assert baseline_entry.relation_reuse is not None
     assert baseline_entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
+    downstream_entry: ModelPlanEntry = plan_output.model_entries[0]
+    assert (
+        downstream_entry.fingerprint_version_hash
+        == version_identities.model_version_hashes["downstream"]
+    )
 
 
 @pytest.mark.parametrize(

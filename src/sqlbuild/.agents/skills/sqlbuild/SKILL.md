@@ -13,8 +13,17 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 
 - `index`
 - `quickstart`
-- `concepts/dbt-interop`
-- `concepts/comparison-with-sqlmesh`
+- `feature-comparison`
+- `concepts/dbt-compatibility/overview`
+- `concepts/dbt-compatibility/selection`
+- `concepts/dbt-compatibility/reuse-from`
+- `concepts/dbt-compatibility/change-aware-builds`
+- `concepts/dbt-compatibility/column-lineage`
+- `concepts/dbt-compatibility/testing`
+- `concepts/dbt-compatibility/scenarios`
+- `concepts/dbt-compatibility/diff`
+- `concepts/dbt-compatibility/clone`
+- `concepts/dbt-compatibility/adding-sqlbuild-models`
 - `concepts/project-configuration`
 - `concepts/adapters`
 - `concepts/adapters/duckdb`
@@ -32,13 +41,14 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/functions`
 - `concepts/incremental`
 - `concepts/planning`
+- `concepts/reuse-from-production`
 - `concepts/snapshots`
 - `concepts/audits`
 - `concepts/testing`
 - `concepts/scenarios`
 - `concepts/selectors`
 - `concepts/column-lineage`
-- `concepts/diffs`
+- `concepts/diff`
 - `concepts/python-nodes/overview`
 - `concepts/python-nodes/loaders`
 - `concepts/python-nodes/tasks`
@@ -47,18 +57,18 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/python-nodes/factories`
 - `concepts/python-nodes/providers`
 - `concepts/python-nodes/sql-references`
-- `concepts/advanced/virtual-environments`
-- `concepts/advanced/virtual-environments/setup`
-- `concepts/advanced/virtual-environments/building`
-- `concepts/advanced/virtual-environments/promotion`
-- `concepts/advanced/virtual-environments/rollback`
-- `concepts/advanced/virtual-environments/adopt-detach`
-- `concepts/advanced/virtual-environments/clone`
-- `concepts/advanced/virtual-environments/diff`
-- `concepts/advanced/virtual-environments/reconcile`
-- `concepts/advanced/virtual-environments/locks`
-- `concepts/advanced/virtual-environments/janitor`
-- `concepts/advanced/virtual-environments/recovery`
+- `concepts/virtual-environments`
+- `concepts/virtual-environments/setup`
+- `concepts/virtual-environments/building`
+- `concepts/virtual-environments/promotion`
+- `concepts/virtual-environments/rollback`
+- `concepts/virtual-environments/adopt-detach`
+- `concepts/virtual-environments/clone`
+- `concepts/virtual-environments/diff`
+- `concepts/virtual-environments/reconcile`
+- `concepts/virtual-environments/locks`
+- `concepts/virtual-environments/janitor`
+- `concepts/virtual-environments/recovery`
 - `integrations/dagster`
 - `integrations/dagster-reference`
 - `integrations/rivers`
@@ -97,7 +107,7 @@ Source: `index.mdx`
 
 A change-aware SQL framework: only rebuild what changed, with all state in the warehouse.
 
-Every build fingerprints models, seeds, functions, and Python nodes, tracks source freshness, and skips anything that hasn't changed, including audits that already passed for the same version. It keeps a low, dbt-like floor for SQL models, can run alongside an existing dbt project, and adds ingestion, Python nodes, and opt-in virtual environments for more advanced use cases.
+Every build fingerprints models, seeds, functions, and Python nodes, tracks source freshness, and skips anything that hasn't changed, including audits that already passed for the same version. The same change-aware planning extends to an existing [dbt project](/concepts/dbt-compatibility/overview): SQLBuild prunes unchanged dbt models from the dbt run and can reuse already-built tables from production. It also adds ingestion, Python nodes, and opt-in virtual environments for more advanced use cases.
 
 ### Supported adapters
 
@@ -129,7 +139,7 @@ Every node in the graph has a versioned identity. SQLBuild compares identities a
 
 #### Warehouse-native state
 
-- **Standard mode:** all change-tracking state lives in the warehouse as append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`) in the same schemas as your data. No external state database, no manifest files, no state machine that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as history and can be pruned by the janitor.
+- **Standard mode:** all state lives in the warehouse as append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in the same schemas as your data. No external state database, no manifest files, no state machine that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as history and can be pruned by the janitor.
 - **Virtual environments:** the same identity and freshness data is stored in the VDE state backend (PostgreSQL or DuckDB), scoped per environment.
 
 #### Familiar SQL models
@@ -264,7 +274,7 @@ SQL models never depend on Python nodes - the only path from Python into SQL is 
 
 #### Virtual environments
 
-- **Opt-in, not forced:** Virtual environments give you instant low-copy branching, promotion, and rollback - but they are an opt-in mode, not a tax you pay upfront. Standard mode stays the default, so the floor stays low and you reach for virtual environments only when a workflow actually needs them. See [Virtual Environments](/concepts/advanced/virtual-environments).
+- **Opt-in, not forced:** Virtual environments give you instant low-copy branching, promotion, and rollback - but they are an opt-in mode, not a tax you pay upfront. Standard mode stays the default, so the floor stays low and you reach for virtual environments only when a workflow actually needs them. See [Virtual Environments](/concepts/virtual-environments).
 
 #### Extensibility
 
@@ -286,7 +296,6 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
 ### What's next
 
-- **Python models** - Define models in Python using Pandas, PySpark, Snowpark, or BigFrames for transformations that don't fit naturally in SQL, with the same testing and audit guarantees as SQL models
 - **Broader adapter support** - ClickHouse, Redshift, Trino, Spark, Athena
 
 ### Quick links
@@ -551,58 +560,239 @@ waffle-shop/
 - [Column Lineage](/concepts/column-lineage) - trace individual columns through your pipeline
 - [CLI Reference](/cli/build) - full command reference
 
+## Feature Comparison
+
+Source: `feature-comparison.mdx`
+
+Feature comparison between SQLBuild, dbt, and SQLMesh.
+
+SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common ground but differ in design philosophy and feature focus.
+
+### Feature comparison
+
+#### Testing
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Unit tests with model chaining | Chain across multiple models | YAML-stub, single model | CTE-based, single model |
+| Macros as test helpers | Tests are SQL - macros work as reusable fixture generators | No (YAML stubs) | No |
+| E2E scenario tests | Fixture worlds with real graph execution | No | No |
+| Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
+| Macro / UDF / table function tests | `TEST(mode: macro/udf/table_fn)` | No | No |
+| Zero-row assertions | `__assert__` CTEs in tests and scenarios | No | No |
+
+#### Audits
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Built-in audits | not_null, unique, accepted_values, relationships | not_null, unique, accepted_values, relationships | Extensive (statistical, string pattern, etc.) |
+| Blocking audits | Block promotion from staging table | Tests run after materialization | Audits gate plan application; run-time audits execute after the interval is materialized |
+| Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
+
+#### Compilation
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| SQL validation | Offline, compile-time (Polyglot) | dbt Core: none; dbt Fusion engine: compile-time (proprietary; built on Apache-2.0 dbt Core v2) | Compile-time (SQLGlot) |
+| Column-level lineage | Compile-time, fast and rich modes | dbt Core: post-hoc via docs; dbt Fusion engine: compile-time | Compile-time |
+| Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
+| SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
+| Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
+| Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
+
+#### Incremental
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Incremental strategies | append, delete_insert, merge, SCD Type 2 | append, delete_insert, merge, snapshots | delete_insert (time-range), merge (unique-key), SCD Type 2, partition |
+| Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
+| Stateful interval tracking | Cursor-based, no external interval state | No | Tracks which intervals have run (in state store) |
+| SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (timestamp and check strategies) | `SCD_TYPE_2` model kind (timestamp and check strategies) |
+
+#### Planning and change detection
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Change-aware by default | Fingerprints models, seeds, functions, Python nodes; skips unchanged work including audits | dbt State (paid) | Version hash comparison |
+| Warehouse-native state | Append-only tables in the warehouse; no external state database | manifest.json artifacts | Requires external state store (SQLite/PostgreSQL) |
+| Source freshness | `sqb freshness` with adapter/column/sql strategies, lag tolerance, and CI gating | `dbt source freshness` | No dedicated freshness command; `signals` gate model evaluation until external data is ready |
+| Reuse from production | `reuse_from` clones/copies unchanged relations from another target | dbt State clone (paid) | Virtual environments reuse fingerprint-matched physical tables across environments (shared physical storage) |
+| Cascade propagation | Topological walk with `replay_on_change` policy inheritance and override | No cascade control | Cascades through version hashes |
+
+#### Environments
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Virtual environments | Pointer swaps with hash-based version reuse (opt-in) | No | Pointer swaps, no compute cost |
+| Data diffs | Full row-level data comparison across targets or virtual environments | No | Table diff |
+| Zero-copy cloning | `sqb clone` | No | No |
+
+#### Models
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| SQL models | `MODEL()` header with inline config | Jinja-templated SQL + YAML sidecar | `MODEL` DDL |
+| Python models | Coming soon | Pandas, PySpark, Snowpark, BigFrames | Pandas, PySpark, Snowpark, BigFrames |
+| Custom materializations | Python with full framework hooks | Jinja-based | Python-based custom model kinds |
+| Lifecycle hooks | Typed `sql()`/`python()` hooks with compile-time validation and `HookContext` | Jinja pre/post hooks | Python pre/post hooks |
+
+#### Python nodes
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Tasks | `@task` - Python computation as DAG nodes | No | No |
+| Assets | `@asset` - external artifact production/observation | No | No |
+| Checks | `@check` - Python validation of tasks, assets, and loaders | No | No |
+| Factories | `@factory` - programmatic node generation | No | No |
+| Providers | Shared runtime services with name-based injection into nodes and hooks | No | No |
+
+#### dbt interoperability
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| dbt compatibility | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
+| Change-aware dbt builds | Fingerprints dbt models in the warehouse and prunes unchanged ones from the dbt run | dbt State (paid) | N/A |
+| Reuse dbt builds from production | Pull already-built dbt tables from a production git branch, seed incrementals for catch-up | dbt State clone (paid) | N/A |
+
+#### Sources
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Source loaders | Python `@loader` functions with table/append/delete_insert/merge strategies | No (external to dbt) | No (external to SQLMesh) |
+| Declarative ingestion | dlt and ingestr integrations - YAML-only source config, no Python | No | No |
+| Auto-load during builds | Managed sources loaded before dependent models | No | No |
+| Source deferral | `--defer-sources-to` reads source data from another target | No | No |
+
+#### Other
+
+| Feature | SQLBuild | dbt | SQLMesh |
+|---------|----------|-----|---------|
+| Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
+| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
+| State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
+| Playground | `sqb playground` | Clone example repo | Example project |
+| AI agent skills | `sqb skills update` | No | No |
+
+### Where each tool fits
+
+| Tool | Best for |
+|------|----------|
+| **SQLBuild** | Change-aware SQL pipelines with warehouse-native state. Skips unchanged work by default, tracks source freshness, and keeps all state as append-only tables in the warehouse. Adds ingestion, Python nodes, pre-promotion audit gating, chained unit tests, local E2E replay, and opt-in virtual environments. |
+| **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
+| **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
+
+### Not yet in SQLBuild
+
+- **Broader adapter support** - ClickHouse, Redshift, Trino, Spark, Athena
+
 ## Using SQLBuild with dbt
 
-Source: `concepts/dbt-interop.mdx`
+Source: `concepts/dbt-compatibility/overview.mdx`
 
-Run SQLBuild models downstream of an existing dbt project without migrating.
+Stop rebuilding your dbt project in dev. Reuse already-built tables from production and skip unchanged models, with no SQLBuild models.
 
-SQLBuild can run alongside an existing dbt project. Your dbt models stay in dbt. New models, tests, audits, and scenarios are written in SQLBuild and can reference dbt model outputs directly. No migration required.
+Point SQLBuild at your existing dbt project to stop rebuilding it from scratch in dev. No SQLBuild models, no migration, no edits to your dbt files. It adds two things on a plain dbt project:
+
+- **Reuse from production.** Building a branch in dev usually rebuilds the whole project, even though most models are identical to production. SQLBuild compiles a production-shaped git branch, copies its already-built tables into your target, and seeds incremental models from a production baseline, so dbt only builds what your branch actually changed. See [Reuse from production](/concepts/dbt-compatibility/reuse-from).
+- **Change-aware builds.** SQLBuild fingerprints your dbt models in the warehouse and prunes the ones that have not changed, so a second build skips everything already current. See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds).
+
+SQLBuild reads your dbt manifest and drives the `dbt` CLI as a subprocess. It never edits, patches, or moves files in your dbt project, and it does not reimplement Jinja, profiles, or dbt's selection language. Your dbt project runs exactly as it does today.
+
+### Start with your existing dbt project
+
+From inside your dbt project, run a `sqb dbt` command. Selection works exactly like dbt: scope to whatever you would normally build with `--select`, or omit it to plan the whole project.
+
+```bash
+sqb dbt plan --select path:models/marts
+```
+
+The first time you do this, SQLBuild bootstraps itself. If there is no `sqlbuild_project.toml`, it reads your `dbt_project.yml` and profile and creates a minimal twin project in a `sqlbuild_project/` directory next to your dbt project. It reuses your dbt profile for the warehouse connection, so there are no separate credentials to configure.
+
+```
+my-workspace/
+  analytics/                  # your existing dbt project, untouched
+    dbt_project.yml
+    models/
+    target/
+      manifest.json
+  sqlbuild_project/           # created by SQLBuild
+    sqlbuild_project.toml     # points at the dbt project, no models of its own
+```
+
+The generated `sqlbuild_project.toml` looks like this:
+
+```toml
+name = "analytics"
+adapter = "snowflake"
+default_target = "dev"
+
+[dbt]
+project_dir = "../analytics"
+profiles_dir = "/Users/you/.dbt"
+target_path = "../analytics/target"
+target = "dev"
+
+[targets.dev]
+schema = "analytics"
+
+[targets.dev.connection]
+source = "dbt_profile"
+profile = "analytics"
+target = "dev"
+```
+
+`source = "dbt_profile"` tells SQLBuild to connect using your dbt profile, so it talks to the same warehouse dbt does.
+
+Run `sqb dbt build --select path:models/marts` once to build your selected dbt models with state recorded, then plan again. Once everything in the selection is current, the dbt side reports nothing to do:
+
+```
+Plan ready (0 selected resources)
+
+dbt (3 selected resources)
+  selected by dbt selector: 3 from dbt selector
+  planned models: 0 run, 3 current, 0 blocked
+  planned non-model dbt work: 0
+  skipped: all planned dbt models are current
+
+  Model plan
+    First run (0)
+    Current (3)
+      model.analytics.dim_customers   no change
+      model.analytics.fct_orders      no change
+      model.analytics.dim_products    no change
+    Blocked (0)
+```
+
+The next `sqb dbt build` skips the dbt run entirely because nothing changed. Change one model and only that model, plus whatever depends on it, rebuilds.
 
 ### How it works
 
 1. SQLBuild runs `dbt compile` to produce a `manifest.json` with model metadata
 2. SQLBuild reads the manifest to understand dbt model names and their qualified warehouse tables
-3. SQLBuild models reference dbt models using `__dbt_ref("package", "model")`
-4. `sqb dbt plan/run/build/test` orchestrates both sides: dbt runs first, then SQLBuild runs against the dbt outputs
+3. SQLBuild resolves your `--select`/`--exclude` against dbt by running `dbt ls`, so dbt-native selectors like `state:modified` and `package:` are evaluated by dbt itself, not reimplemented
+4. SQLBuild plans which dbt models actually need to run, using warehouse-stored fingerprints and source freshness, and optionally reuses already-built relations from production
+5. `sqb dbt plan/run/build/test` orchestrates the run: dbt builds only the models that changed, pruning everything that is current
+6. (Optional) any SQLBuild models you have added run last, against the dbt outputs
 
-dbt is always invoked as a subprocess - SQLBuild does not reimplement Jinja, profiles, or any dbt internals. It calls the `dbt` CLI for compilation, selection, and execution.
+Each step calls the `dbt` CLI directly: `dbt compile` for the manifest, `dbt ls` for selection, and `dbt build`/`dbt run` for execution.
 
-### Setup
+#### Passing dbt flags through
 
-#### Project layout
+`sqb dbt` execution commands accept common flags directly, including `--select`/`--exclude` (dbt selection) and `--full-refresh`:
 
-A typical layout has both projects side by side:
-
-```
-my-workspace/
-  dbt_project/
-    dbt_project.yml
-    models/
-      staging/stg_orders.sql
-      marts/fact_orders.sql
-    target/
-      manifest.json
-  profiles/
-    profiles.yml
-  sqlbuild_project/
-    sqlbuild_project.toml
-    models/
-      marts/downstream_orders.sql
-    tests/
-      unit/test_downstream_orders.sql
+```bash
+sqb dbt build --select path:models/marts --full-refresh
 ```
 
-#### Configuration
+To forward any other native dbt flag straight to the underlying `dbt` invocation, put it after a `--` separator:
 
-Point SQLBuild at the dbt project in `sqlbuild_project.toml`:
-
-```toml
-[dbt]
-project_dir = "../dbt_project"
-profiles_dir = "../profiles"
-target_path = "../dbt_project/target"
+```bash
+sqb dbt build -- --vars '{"my_var": 1}'
 ```
+
+### Configuration
+
+The auto-generated project above is editable, and you can write `sqlbuild_project.toml` by hand. The `[dbt]` block (shown in the generated project above) accepts:
 
 | Field | Description |
 |-------|-------------|
@@ -610,37 +800,49 @@ target_path = "../dbt_project/target"
 | `profiles_dir` | Path to the directory containing `profiles.yml` |
 | `target_path` | Path to dbt's `target/` directory (where `manifest.json` is written) |
 | `target` | dbt target name override (optional) |
+| `replay_on_change` | Project-wide policy for rerunning changed dbt models: `forward_only` (default) or `full` (optional). See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds#replay-on-change). |
+| `reuse_from` | Production reuse configuration (optional). See [Reuse from production](/concepts/dbt-compatibility/reuse-from). |
 
 Paths can be absolute or relative to the SQLBuild project root.
 
-#### Referencing dbt models
+### Prerequisites
 
-SQLBuild models use `__dbt_ref("package", "model")` to reference dbt model outputs:
+- dbt must be installed and available on `PATH` as `dbt`
+- Both projects must target the same warehouse and schema/database context
 
-```sql
-MODEL (
-  tags [finance],
-  columns (order_id (audits [not_null])),
-);
+SQLBuild uses your own `dbt` install; it does not bundle or install dbt. If your `dbt` is not reachable as a bare `dbt` on `PATH` (for example, you run it via `uv`, `poetry`, or a wrapper), set the `DBT_EXECUTABLE` environment variable to the executable SQLBuild should call.
 
-SELECT order_id FROM __dbt_ref("analytics", "fact_orders")
+SQLBuild runs `dbt compile` automatically as part of `sqb dbt plan/run/build/test` to produce the manifest. You do not need to compile the dbt project manually.
+
+### Debugging
+
+`sqb dbt debug` runs both projects' diagnostics: `dbt debug` (verifying the dbt project config and warehouse connection) followed by `sqb debug` (verifying the SQLBuild project config and connection).
+
+```bash
+sqb dbt debug
 ```
 
-This resolves to the qualified warehouse table name from the dbt manifest (e.g. `analytics.fact_orders`). The dbt model becomes an upstream dependency in the combined graph.
+### On this topic
 
-SQLBuild models can also reference other SQLBuild models with `__ref()` as usual:
+- [Selection](/concepts/dbt-compatibility/selection) - how `--select` and `--exclude` route work across both graphs.
+- [Reuse from production](/concepts/dbt-compatibility/reuse-from) - pull already-built tables from a production-shaped git branch instead of rebuilding.
+- [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds) - fingerprinting, cascade propagation, source freshness, and pruning unchanged dbt models.
+- [Column lineage](/concepts/dbt-compatibility/column-lineage) - trace a column through dbt and SQLBuild models, plus model-level lineage.
+- [Testing](/concepts/dbt-compatibility/testing) - unit tests against dbt models, with mocks and model chaining.
+- [Scenarios](/concepts/dbt-compatibility/scenarios) - end-to-end scenario tests with warehouse capture and local replay.
+- [Diff](/concepts/dbt-compatibility/diff) - compare a dbt build against a production baseline.
+- [Clone](/concepts/dbt-compatibility/clone) - copy or zero-copy clone production relations into a target.
+- [Adding SQLBuild models](/concepts/dbt-compatibility/adding-sqlbuild-models) - optionally write SQLBuild models, tests, audits, and scenarios downstream of dbt.
 
-```sql
-MODEL (tags [marts]);
+## Selection
 
-SELECT order_id FROM __ref("downstream_orders")
-```
+Source: `concepts/dbt-compatibility/selection.mdx`
 
-### Selection behavior
+How --select and --exclude route work across the dbt and SQLBuild graphs.
 
 The `sqb dbt` commands use `--select` and `--exclude` to scope what runs. Selectors work across both dbt and SQLBuild, with the system determining which side owns each selector and how to route work.
 
-#### SQLBuild-recognized selectors
+### SQLBuild-recognized selectors
 
 These selectors match SQLBuild models directly:
 
@@ -657,7 +859,7 @@ These selectors match SQLBuild models directly:
 
 When a SQLBuild model is selected, its immediate dbt upstream dependencies are always included so dbt can build the tables that SQLBuild models read from.
 
-#### dbt-only selectors
+### dbt-only selectors
 
 Selectors that SQLBuild does not recognize (like `state:modified`, `package:stripe`, `source:stripe.charges`) are passed to `dbt ls` to resolve:
 
@@ -669,7 +871,7 @@ Selectors that SQLBuild does not recognize (like `state:modified`, `package:stri
 
 This means you can use dbt-native selectors like `state:modified+` to trigger rebuilds of SQLBuild models that depend on changed dbt models. If `dbt ls` returns no matching models, no SQLBuild work is triggered.
 
-#### Exclude
+### Exclude
 
 `--exclude` removes matching SQLBuild models from the final selection:
 
@@ -677,7 +879,7 @@ This means you can use dbt-native selectors like `state:modified+` to trigger re
 sqb dbt build --select fact_orders+ --exclude tag:nightly
 ```
 
-#### Examples
+### Examples
 
 ```bash
 # Build a specific SQLBuild model and its dbt dependencies
@@ -703,8 +905,9 @@ sqb dbt build --select path:marts
 
 For `sqb dbt run` and `sqb dbt build`:
 
-1. **dbt runs first** - a single `dbt run/build` command executes with the user's selectors merged with any additional dbt models required by selected SQLBuild models
-2. **SQLBuild runs second** - selected SQLBuild models execute against the now-built dbt tables
+1. **Reuse pre-phase** (if [reuse from production](/concepts/dbt-compatibility/reuse-from) is configured) - already-built relations are pulled from the production branch before dbt runs
+2. **dbt runs** - a single `dbt run/build` command executes with the user's selectors merged with any additional dbt models required by selected SQLBuild models, pruned to only the models that [actually changed](/concepts/dbt-compatibility/change-aware-builds)
+3. **SQLBuild runs** - selected SQLBuild models execute against the now-built dbt tables
 
 For `sqb dbt test`:
 
@@ -714,9 +917,403 @@ For `sqb dbt test`:
 
 The `test_type:data` and `test_type:unit` selectors from dbt are mapped to SQLBuild equivalents: `test_type:data` runs SQLBuild audits, `test_type:unit` runs SQLBuild unit tests.
 
-### Unit tests with dbt refs
+## Reuse from production
 
-SQLBuild unit tests can mock dbt model dependencies using `__dbt_ref__` fixture CTEs. When a model has a package, use `__dbt_ref__package__model`. When there is no package, use `__dbt_ref__model`:
+Source: `concepts/dbt-compatibility/reuse-from.mdx`
+
+Pull already-built dbt tables from a production-shaped git branch instead of rebuilding them in dev.
+
+Building a dbt project in a dev or branch environment usually rebuilds everything, even though most models are identical to production. Reuse from production avoids that:
+
+- SQLBuild copies the already-built tables from a production-shaped git branch into your target.
+- It seeds incremental models from production so they only need to catch up, not rebuild.
+- dbt then builds only the models your branch actually changed.
+
+This is the dbt-compatibility counterpart to SQLBuild's native [reuse from production](/concepts/reuse-from-production), which reuses relations from another live target in the same warehouse. This version reuses the dbt-built tables described by a different git branch.
+
+### How it works
+
+When `reuse_from` is configured, SQLBuild runs a reuse pre-phase before dbt executes:
+
+1. SQLBuild git-archives the configured `git_ref` into an isolated temporary checkout (your working tree is never touched).
+2. It compiles that checkout's dbt project on its own, producing a second manifest that describes the production-shaped relations.
+3. For each in-scope dbt model, SQLBuild compares the current manifest against the production manifest and the warehouse state, and decides whether the model can be reused.
+4. Reusable tables are copied into your target, and incremental models get a production baseline, before dbt runs. dbt then only builds the models that genuinely changed on your branch.
+
+Because reuse runs as a pre-phase, the models it satisfies are already current by the time the [change-aware](/concepts/dbt-compatibility/change-aware-builds) dbt run starts, so they are pruned from the dbt command.
+
+### Configuration
+
+Configure reuse in the `[dbt]` block of `sqlbuild_project.toml`:
+
+```toml
+[dbt]
+project_dir = "../dbt_project"
+profiles_dir = "../profiles"
+target_path = "../dbt_project/target"
+
+[dbt.reuse_from]
+git_ref = "main"
+generate_schema_name_override = "dbt/macros/generate_schema_name.sql"
+```
+
+| Field | Description |
+|-------|-------------|
+| `git_ref` | The production-shaped git branch or tag whose built tables you want to reuse. Must differ from the current branch. |
+| `generate_schema_name_override` | Relative path to a `generate_schema_name` macro that resolves to your production schema layout, used when compiling the reuse ref. Must live under `dbt/macros/`. See [The schema-name override macro](#the-schema-name-override-macro). |
+
+The override macro is injected into the isolated checkout when SQLBuild compiles the reuse ref, so the production manifest resolves to the production warehouse relations rather than your dev schema.
+
+### The schema-name override macro
+
+To reuse a production table, SQLBuild needs its exact warehouse location. It gets this by compiling the production git ref in isolation and reading the relation names from the resulting manifest, which dbt computes with its `generate_schema_name` macro.
+
+The problem: SQLBuild compiles the ref with your configured target and deliberately knows nothing about your environments. If that target resolves to your dev schemas, the manifest points at dev tables, not the production ones you want to copy from.
+
+The override fixes this:
+
+- You provide a `generate_schema_name` macro that resolves to your production schema layout, with no environment branching.
+- SQLBuild injects it into the isolated checkout only, never your real dbt project.
+- The macro must be named `generate_schema_name` (so it shadows your project's own) and live under `dbt/macros/` in your SQLBuild project.
+
+**The rule:** take your project's existing `generate_schema_name`, keep only what it does in production, and delete the dev/CI branching.
+
+Most projects have a macro that switches on the environment, building clean schema names in production and suffixed ones in dev or CI:
+
+```sql
+-- your dbt project's existing macro
+{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- if target.name == 'prod' -%}
+        {%- if custom_schema_name is none -%}
+            {{ target.schema }}
+        {%- else -%}
+            {{ custom_schema_name | trim }}
+        {%- endif -%}
+    {%- else -%}
+        {{ target.schema }}_{{ target.name }}
+    {%- endif -%}
+{%- endmacro %}
+```
+
+The override is just the production branch, with the conditional removed:
+
+```sql
+-- dbt/macros/generate_schema_name.sql
+{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- if custom_schema_name is none -%}
+        {{ target.schema }}
+    {%- else -%}
+        {{ custom_schema_name | trim }}
+    {%- endif -%}
+{%- endmacro %}
+```
+
+If your production uses dbt's default unsuffixed layout (everything in the base schema, custom schemas concatenated), the override is just dbt's stock `generate_schema_name`:
+
+```sql
+-- dbt/macros/generate_schema_name.sql
+{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- if custom_schema_name is none -%}
+        {{ target.schema }}
+    {%- else -%}
+        {{ target.schema }}_{{ custom_schema_name | trim }}
+    {%- endif -%}
+{%- endmacro %}
+```
+
+The override must produce production's schema names regardless of which target SQLBuild compiles with. The examples above use `target.schema` as the base, which only resolves to production when your configured target's schema is the production one. If your production base schema is a fixed value that differs from the active target, write that literal value instead of `target.schema`.
+
+### Reuse modes
+
+SQLBuild picks the mode per model based on its dbt materialization.
+
+#### Complete reuse (tables)
+
+For `table` models, SQLBuild reuses the production table outright:
+
+- Creates a staging table from the production relation.
+- Promotes it atomically into the destination.
+- Writes a fingerprint so the model counts as current.
+
+dbt does not rebuild it.
+
+#### Baseline reuse (incremental, microbatch, snapshot)
+
+For `incremental`, `microbatch`, and `snapshot` models, SQLBuild seeds a baseline from production and lets dbt catch up:
+
+- If the destination does not exist, it copies the production relation as the baseline.
+- If the destination already has data, it appends only the rows past the destination's current cursor value.
+- dbt then runs the incremental model on top, catching up to the latest data.
+
+The cursor column is read from the model's `meta.sqlbuild.reuse_cursor` in the manifest:
+
+```yaml
+models:
+  - name: fct_orders
+    config:
+      materialized: incremental
+      meta:
+        sqlbuild:
+          reuse_cursor: order_ts
+```
+
+### What qualifies for reuse
+
+Only physical materializations are reuse candidates: `table`, `incremental`, `microbatch`, and `snapshot`. The following are skipped:
+
+| Materialization | Result |
+|-----------------|--------|
+| `view` | skipped (no physical table to reuse) |
+| `ephemeral` | skipped (no relation) |
+| anything else | skipped (unsupported materialization) |
+
+A qualifying model is still rebuilt instead of reused when:
+
+- a full refresh is requested,
+- an upstream source is stale and blocks it, or
+- its reuse metadata no longer matches the current relations or cursor.
+
+### Plan output
+
+The reuse pre-phase reports what it pulled, separately from the dbt run:
+
+```
+dbt reuse  pre-phase before dbt execution
+  model.analytics.fct_orders          OK     reuse
+  model.analytics.fct_daily_activity  OK     baseline reuse before dbt catch-up
+
+REUSED=1  BASELINE_REUSED=1  TOTAL=2
+```
+
+- `REUSED` counts complete table reuses.
+- `BASELINE_REUSED` counts incremental baselines that dbt will catch up on.
+
+### Requirements and guards
+
+Reuse uses git to read the production ref, with guards that fail fast on misconfiguration:
+
+- The SQLBuild project must be inside a git repository, and the dbt project directory must be under the same git root.
+- `git_ref` must not be the current branch. Choose a production-shaped branch or tag that differs from your active worktree branch.
+- If `git_ref` tracks a remote branch, SQLBuild refreshes it from the remote before archiving, so reuse reflects the latest production state.
+- `git` must be installed and available on `PATH`.
+
+### Distinct from target-level reuse
+
+There are two reuse mechanisms with the same name, operating at different layers:
+
+- **dbt reuse** (`[dbt].reuse_from`, this page) reuses dbt-built tables described by a production git branch, with an isolated reuse compile.
+- **Native reuse** (`targets.<name>.reuse_from`, see [Reuse from production](/concepts/reuse-from-production)) reuses SQLBuild relations from another live target in the same warehouse, keyed on SQLBuild version identity, with optional zero-copy cloning.
+
+They are configured independently and can be used in the same project for their respective model kinds.
+
+## Change-aware builds
+
+Source: `concepts/dbt-compatibility/change-aware-builds.mdx`
+
+Skip unchanged dbt models by fingerprinting them in the warehouse, with cascade propagation and source freshness.
+
+When you run `sqb dbt build` or `sqb dbt run`, SQLBuild plans which dbt models actually need to run instead of rebuilding everything in the selection. Models whose SQL has not changed and whose inputs are current are pruned from the dbt command, so a second build skips them entirely.
+
+This works on a plain dbt project, with no SQLBuild models and no changes to your dbt files. SQLBuild reads the dbt manifest, compares it against state it stores in your warehouse, and decides per model whether dbt needs to run it.
+
+### How dbt models are tracked
+
+SQLBuild stores a fingerprint for every dbt model it builds, in a `_sqlbuild_fingerprints` table in your target schema. Each fingerprint is keyed with `node_type: "dbt"` and the model's dbt `unique_id`, and records the model's version identity.
+
+The version identity comes from dbt's own `checksum` for the model node in the manifest. On each plan, SQLBuild compares the checksum in the current manifest against the fingerprint it last stored:
+
+| Condition | Action | Reason |
+|-----------|--------|--------|
+| No stored fingerprint | run | first run |
+| Target relation missing | run | relation missing |
+| Manifest checksum differs from stored fingerprint | run | checksum changed |
+| Full refresh requested | run | full refresh |
+| Everything matches and relation exists | skip | no change |
+
+After dbt runs, SQLBuild writes an updated fingerprint for each dbt model that executed, so the next plan sees them as current.
+
+#### What SQLBuild creates in your warehouse
+
+All state is append-only and lives in your target schema, in the same warehouse dbt already uses. There is no external state store, no manifest comparison server, and no requirement to log in anywhere. SQLBuild creates two small tables:
+
+| Table | Contents |
+|-------|----------|
+| `_sqlbuild_fingerprints` | One row per build per model, recording its version identity. Drives change detection. |
+| `_sqlbuild_source_freshness` | One row per build per source, recording the last observed freshness. Drives source-change detection. |
+
+These are the only objects SQLBuild adds. Your dbt models, schemas, and tables are otherwise untouched. The [janitor](/cli/janitor) can prune old rows, keeping only the latest per identity.
+
+### Cascade propagation
+
+Change detection runs over the combined dbt and SQLBuild graph, so a change in one dbt model correctly forces the work that depends on it, in both directions:
+
+- **Upstream changed.** A dbt model that is otherwise current is rerun when any of its upstream dbt models is running. The plan reason is `upstream_changed`.
+- **Downstream into SQLBuild.** When a dbt model runs, SQLBuild marks the SQLBuild models that read from it (through `__dbt_ref`) as stale, so they rebuild against the new data.
+
+This means a single changed staging model propagates a rebuild signal through the rest of the dbt DAG and across the boundary into your SQLBuild models, without you having to select them by hand.
+
+### Source freshness
+
+SQLBuild translates the sources declared in the dbt manifest into its own source freshness model and observes them as part of planning. Observations are stored in the `_sqlbuild_source_freshness` table in your target schema.
+
+- **Source changed.** A current dbt model whose upstream source has new data is promoted to run, with reason `source_freshness_changed`.
+- **Source stale past its age policy.** If an upstream source is older than its configured age tolerance, the dbt models downstream of it are blocked rather than built on stale inputs, with reason `source_freshness_error`. SQLBuild models downstream of a blocked dbt model are blocked too.
+
+Source freshness records are persisted after a successful build, so the next plan can detect new arrivals. See [Sources](/concepts/sources) for freshness strategies and age policies.
+
+### Pruning and steady state
+
+Only the dbt models classified as `run` are passed to the underlying `dbt build`/`dbt run` command. Current models are removed from the dbt selection, dbt tests and seeds for pruned models are dropped from the command, and dbt never sees the models it does not need to rebuild.
+
+When every dbt model in the selection is current, SQLBuild does not invoke dbt at all. The dbt section of the plan reports the skip and lists the current models:
+
+```
+dbt (3 selected resources)
+  selected by dbt selector: 3 from dbt selector
+  planned models: 0 run, 3 current, 0 blocked
+  planned non-model dbt work: 0
+  skipped: all planned dbt models are current
+
+  Model plan
+    Current (3)
+      model.analytics.dim_customers   no change
+      model.analytics.fct_orders      no change
+      model.analytics.dim_products    no change
+```
+
+A first build runs the changed models; a second build with no changes skips the entire dbt run and only re-evaluates SQLBuild models, which are themselves current. This is the same skip-unchanged behavior SQLBuild applies to its own models, extended over your existing dbt project.
+
+### Replay on change
+
+When a changed incremental dbt model is rerun, `replay_on_change` controls whether it runs incrementally or rebuilds in full. It is a single project-wide policy in the `[dbt]` config block, applied to every changed model in the run (not per model):
+
+```toml
+[dbt]
+project_dir = "../dbt_project"
+profiles_dir = "../profiles"
+target_path = "../dbt_project/target"
+replay_on_change = "forward_only"
+```
+
+| Value | Behavior |
+|-------|----------|
+| `forward_only` (default) | Changed models run incrementally, picking up new data from where they left off. |
+| `full` | Changed models are rebuilt in full. SQLBuild adds `--full-refresh` to the dbt run when there is model work to do. |
+
+Unlike SQLBuild's own per-model [`replay_on_change`](/concepts/planning#replay-on-change), the dbt setting is all-or-nothing across the run and does not support bounded windows. A `bounded-<duration>` value is rejected for dbt.
+
+### What is never touched
+
+- dbt source files are never modified. SQLBuild reads the manifest and drives the `dbt` CLI; it does not patch, rewrite, or revert your dbt project.
+- dbt internals are never monkey-patched. Selection and execution go through the documented `dbt` CLI surface (`dbt ls`, `dbt compile`, `dbt build`/`dbt run`).
+- State lives in your warehouse, not in a separate database or service.
+
+## Column lineage
+
+Source: `concepts/dbt-compatibility/column-lineage.mdx`
+
+Trace a column through your dbt and SQLBuild models, plus model-level lineage, from one command.
+
+`sqb dbt lineage` traces dependencies across the combined dbt and SQLBuild graph. Point it at a column to see exactly where that column's values come from (or go), through every intermediate model. Point it at a model for the model-level dependency graph. It compiles your dbt project, reads the manifest, and analyzes the SQL, so lineage works whether a node is a dbt model or a SQLBuild model.
+
+### Column lineage
+
+Target a column with `resource:column` (a colon between the model and the column name):
+
+```bash
+sqb dbt lineage fct_orders:order_amount_usd
+```
+
+```
+Column trace  model.jaffle_analytics.fct_orders:order_amount_usd  upstream
+
+  <- model.jaffle_analytics.int_order_payments:order_amount_cents (expression)
+```
+
+SQLBuild parses each model's SQL to follow the column back through the transformations that produced it, annotating how each step derived the value (for example `expression` for a computed column). This works across the dbt/SQLBuild boundary: a SQLBuild column that reads from a dbt model via `__dbt_ref` traces straight into the dbt model's columns.
+
+Use `--direction downstream` to trace the other way (every column that is derived from this one):
+
+```bash
+sqb dbt lineage stg_payments:amount_cents --direction downstream
+```
+
+Column lineage supports `--direction upstream` (default) or `downstream`. It does not support `both`, the same restriction as the native [`sqb lineage`](/concepts/column-lineage) command.
+
+The dbt column target uses a colon: `model:column`. The native `sqb lineage` command uses a dot: `model.column`. The dbt command uses a colon because dbt model and package references already use dots.
+
+### Model lineage
+
+Target a model (no colon) for the model-level dependency graph:
+
+```bash
+sqb dbt lineage fct_orders
+```
+
+```
+Lineage  dbt:fct_orders  upstream
+`- dbt:int_order_payments
+  +- dbt:stg_order_statuses
+  | `- dbt:stg_orders
+  +- dbt:stg_orders
+  `- dbt:stg_payments
+```
+
+Model lineage supports `--direction both`, which shows upstream and downstream in one view:
+
+```bash
+sqb dbt lineage fct_orders --direction both
+```
+
+```
+Lineage  dbt:fct_orders  both
+upstream
+`- dbt:int_order_payments
+  +- dbt:stg_order_statuses
+  | `- dbt:stg_orders
+  +- dbt:stg_orders
+  `- dbt:stg_payments
+downstream
+`- dbt:agg_daily_revenue
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--direction` | `upstream` (default), `downstream`, or `both`. `both` is model lineage only. |
+| `--depth` | How many hops to traverse: an integer or `all` (default `all`). |
+| `--format` | `tree` (default), `list` (an edge list of `a -> b` pairs), or `json`. |
+| `--no-sql-validation` | Skip SQL validation while compiling the SQLBuild side. |
+
+See [Selection](/concepts/dbt-compatibility/selection) for how dbt and SQLBuild resources are named in the combined graph.
+
+## Testing dbt models
+
+Source: `concepts/dbt-compatibility/testing.mdx`
+
+Write SQLBuild unit tests against your dbt models, mock sources/seeds/refs, and chain assertions across the dbt graph.
+
+SQLBuild unit tests can target your dbt models directly. You mock the inputs at the edges of a chain, assert the output of a model downstream, and the real intermediate dbt models run in between to produce it. dbt's own unit tests are single-model and stub every input by hand; SQLBuild lets you test a model *through* its upstreams, and because tests are SQL you can use macros to generate repetitive fixtures.
+
+Tests live under `tests/unit/` in your SQLBuild project and begin with a `TEST();` header.
+
+### Mocking dbt inputs
+
+A test replaces a model's real inputs with fixture CTEs. The CTE name encodes what it mocks:
+
+| Prefix | Mocks | Example |
+|--------|-------|---------|
+| `__dbt_ref__<model>` | A dbt model dependency (no package) | `__dbt_ref__stg_orders` |
+| `__dbt_ref__<package>__<model>` | A dbt model dependency (with package) | `__dbt_ref__analytics__fact_orders` |
+| `__source__<source>__<table>` | A dbt source | `__source__raw__orders` |
+| `__source__<schema>__<source>__<table>` | A dbt source (schema-qualified) | `__source__analytics__raw__orders` |
+| `__seed__<seed>` | A dbt seed | `__seed__countries` |
+| `__ref__<model>` | A SQLBuild model dependency | `__ref__downstream_orders` |
+| `__macro__<name>` | A macro (replaces every `@<name>(...)` call) | `__macro__country_filter` |
+| `__expected__<model>` | The expected output to assert against | `__expected__downstream_orders` |
+
+Mocking a dbt model lets you test downstream logic without a warehouse connection or a compiled manifest:
 
 ```sql
 TEST();
@@ -731,107 +1328,313 @@ __expected__downstream_orders AS (
 SELECT 1
 ```
 
-This mocks the dbt model `analytics.fact_orders` with controlled data, allowing you to test your SQLBuild model without a warehouse connection or a compiled dbt manifest.
+### Chaining across models
 
-### Debug
+To test a model through its upstreams, mock at the edges and assert downstream. Provide fixture rows for the source, seed, or upstream model at the top of the chain, assert the output of a model further down with `__expected__`, and SQLBuild runs the real dbt models in between.
 
-`sqb dbt debug` runs both dbt's and SQLBuild's diagnostics:
+```sql
+TEST();
 
-```bash
-sqb dbt debug
+WITH
+__source__raw__orders AS (
+  SELECT 70 AS order_id, cast('2026-07-01' AS date) AS order_date
+),
+__expected__fact_scenario_chain AS (
+  SELECT 70 AS order_id, cast('2026-07-01' AS date) AS order_date
+)
+SELECT 1
 ```
 
-This runs `dbt debug` (verifying dbt project config and warehouse connection) followed by `sqb debug` (verifying SQLBuild project config and connection).
+Here `__source__raw__orders` mocks the source at the top of the chain, and `__expected__fact_scenario_chain` asserts the output of a dbt model two layers downstream. The intermediate staging model runs for real to get there, so a change anywhere in the chain that breaks the final output is caught.
 
-### Prerequisites
+### Generating fixtures with macros
 
-- dbt must be installed and available on `PATH`
-- Both projects must target the same warehouse and schema/database context
+Because tests are SQL, your `@macro()` functions work inside them as fixture generators. Instead of copy-pasting near-identical rows, call a macro that returns the fixture SQL:
 
-SQLBuild runs `dbt compile` automatically as part of `sqb dbt plan/run/build/test` to produce the manifest. You do not need to compile the dbt project manually.
+```sql
+TEST();
 
-## Feature Comparison
+WITH
+__source__raw__orders AS (
+  @mock_orders()
+),
+__expected__fact_scenario_chain AS (
+  SELECT 70 AS order_id, cast('2026-07-01' AS date) AS order_date
+)
+SELECT 1
+```
 
-Source: `concepts/comparison-with-sqlmesh.mdx`
+The `@mock_orders()` call expands at compile time to whatever SQL the Python macro returns. dbt unit tests use static YAML fixtures with no macro support, which is what makes repetitive test data unmaintainable at scale. See [Testing](/concepts/testing) for the full unit-test reference, including macro mocking and macro tests.
 
-Feature comparison between SQLBuild, dbt, and SQLMesh.
+### Running tests
 
-SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common ground but differ in design philosophy and feature focus.
+`sqb dbt test` runs dbt's own tests first, then SQLBuild's unit tests and audits for the selected models:
 
-### Feature comparison
+```bash
+sqb dbt test
+```
 
-| Feature | SQLBuild | dbt | SQLMesh |
-|---------|----------|-----|---------|
-| **Testing** | | | |
-| Unit tests with model chaining | Chain across multiple models | YAML-stub, single model | CTE-based, single model |
-| Macros as test helpers | Tests are SQL - macros work as reusable fixture generators | No (YAML stubs) | No |
-| E2E scenario tests | Fixture worlds with real graph execution | No | No |
-| Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
-| Macro / UDF / table function tests | `TEST(mode: macro/udf/table_fn)` | No | No |
-| Zero-row assertions | `__assert__` CTEs in tests and scenarios | No | No |
-| **Audits** | | | |
-| Built-in audits | not_null, unique, accepted_values, relationships | not_null, unique, accepted_values, relationships | Extensive (statistical, string pattern, etc.) |
-| Blocking audits | Block promotion from staging table | Tests run after materialization | Block during plan (production untouched); during run, data already written |
-| Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
-| **Compilation** | | | |
-| SQL validation | Offline, compile-time | dbt Fusion (proprietary license) | SQLGlot-based |
-| Column-level lineage | Compile-time, fast and rich modes | Post-hoc via docs | Compile-time |
-| Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
-| SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
-| Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
-| Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
-| **Incremental** | | | |
-| Incremental strategies | append, delete_insert, merge, SCD Type 2 | append, delete+insert, merge, snapshots | append, delete_insert (time-range), merge (unique-key), SCD Type 2, partition (stateful) |
-| Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
-| Stateful interval tracking | No - cursor-based (no external state) | No | Yes - tracks which intervals ran |
-| SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (limited) | Built-in |
-| **Planning and change detection** | | | |
-| Change-aware by default | Fingerprints models, seeds, functions, Python nodes; skips unchanged work including audits | dbt State (paid add-on) or external orchestrator | Version hash comparison |
-| Warehouse-native state | Append-only tables in the warehouse; no external state database | manifest.json artifacts | Requires external state store (SQLite/PostgreSQL) |
-| Source freshness | `sqb freshness` with adapter/column/sql strategies, lag tolerance, and CI gating | `dbt source freshness` | Adapter-metadata signal for external sources (no standalone command, no per-source config) |
-| Reuse from production | `reuse_from` clones/copies unchanged relations from another target | dbt State clone (paid) | N/A |
-| Cascade propagation | Topological walk with `replay_on_change` policy inheritance and override | No cascade control | Cascades through version hashes |
-| **Environments** | | | |
-| Virtual environments | Pointer swaps with hash-based version reuse (opt-in) | No | Pointer swaps, no compute cost |
-| Data diffs | Full row-level data comparison across targets or virtual environments | No | Table diff |
-| Zero-copy cloning | `sqb clone` | No | No |
-| **Models** | | | |
-| SQL models | `MODEL()` header with inline config | Jinja-templated SQL + YAML sidecar | `MODEL` DDL |
-| Python models | Coming soon | Limited (remote only) | Pandas, PySpark, Snowpark, BigFrames |
-| Custom materializations | Python with full framework hooks | Jinja-based | Python-based custom model kinds |
-| Lifecycle hooks | Typed `sql()`/`python()` hooks with compile-time validation and `HookContext` | Jinja pre/post hooks | Python pre/post hooks |
-| **Python nodes** | | | |
-| Tasks | `@task` - Python computation as DAG nodes | No | No |
-| Assets | `@asset` - external artifact production/observation | No | No |
-| Checks | `@check` - Python validation of tasks, assets, and loaders | No | No |
-| Factories | `@factory` - programmatic node generation | No | No |
-| Providers | Shared runtime services with name-based injection into nodes and hooks | No | No |
-| **dbt** | | | |
-| dbt interop | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
-| **Sources** | | | |
-| Source loaders | Python `@loader` functions with table/append/delete_insert/merge strategies | No (external to dbt) | No (external to SQLMesh) |
-| Declarative ingestion | ingestr integration - YAML-only config for 50+ sources | No | No |
-| Auto-load during builds | Managed sources loaded before dependent models | No | No |
-| Source deferral | `--defer-sources-to` reads source data from another target | No | No |
-| **Other** | | | |
-| Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
-| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
-| State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
-| Playground | `sqb playground` | Clone example repo | Example project |
-| AI agent skills | `sqb skills update` | No | No |
+1. **dbt tests run first** with your original selectors.
+2. **SQLBuild unit tests run** for the selected models.
+3. **SQLBuild audits run** for the selected models.
 
-### Where each tool fits
+dbt's `test_type:` selectors map to SQLBuild equivalents: `test_type:unit` runs SQLBuild unit tests, `test_type:data` runs SQLBuild audits. Without a test-type selector, both run.
 
-| Tool | Best for |
-|------|----------|
-| **SQLBuild** | Change-aware SQL pipelines with warehouse-native state. Skips unchanged work by default, tracks source freshness, and keeps all state as append-only tables in the warehouse. Adds ingestion, Python nodes, pre-promotion audit gating, chained unit tests, local E2E replay, and opt-in virtual environments. |
-| **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
-| **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
+### On this topic
 
-### Not yet in SQLBuild
+- [Scenarios](/concepts/dbt-compatibility/scenarios) - end-to-end fixture-world tests for dbt models, with warehouse capture and local replay.
+- [Diff](/concepts/dbt-compatibility/diff) - compare a dbt build against a production baseline.
+- [Adding SQLBuild models](/concepts/dbt-compatibility/adding-sqlbuild-models) - write SQLBuild models, audits, and scenarios downstream of dbt.
 
-- **Python models** - Define models in Python using Pandas, PySpark, Snowpark, or BigFrames
-- **Broader adapter support** - ClickHouse, Redshift, Trino, Spark, Athena
+## Scenario tests for dbt models
+
+Source: `concepts/dbt-compatibility/scenarios.mdx`
+
+End-to-end scenario tests for dbt models, with warehouse capture and local DuckDB replay.
+
+Scenario tests stand up a fixture world, run your dbt graph end to end, and assert on the results. Where a unit test checks one model's output, a scenario test exercises models running together, catching the integration bugs that only surface in combination. Scenarios can read real dbt sources, or mock them, and can be captured from the warehouse and replayed locally on DuckDB.
+
+Scenarios live under `tests/scenarios/` in your SQLBuild project and begin with a `SCENARIO(...)` header:
+
+```sql
+SCENARIO (description: "Mocked dbt ref scenario", tags: ["dbt_ref"]);
+
+WITH
+__dbt_ref__analytics__fact_orders AS (
+  SELECT 1 AS order_id
+),
+__expected__downstream_orders AS (
+  SELECT 1 AS order_id
+),
+__assert__no_zero_orders AS (
+  SELECT * FROM __ref("downstream_orders")
+  WHERE order_id = 0
+)
+SELECT 1
+```
+
+A scenario can mock inputs with the same prefixes as unit tests (`__dbt_ref__`, `__source__`, `__seed__`), assert a model's output with `__expected__`, and add zero-row assertions with `__assert__` CTEs. An `__assert__` CTE passes when it returns no rows, so the example above passes only if no order has `order_id = 0`.
+
+### Running scenarios
+
+```bash
+sqb dbt scenario test
+```
+
+`sqb dbt scenario` defaults to `test`. It compiles the dbt project, resolves the scenarios under `tests/scenarios/`, and runs each one against the warehouse, reporting per-scenario results:
+
+```
+Scenario (1 selected)
+
+  dbt_stg_scenario_orders
+    expect    expected stg_scenario_orders            PASS
+
+PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1
+```
+
+Pass scenario names to run a subset:
+
+```bash
+sqb dbt scenario test dbt_stg_scenario_orders
+```
+
+### Capture and local replay
+
+Running scenarios against the warehouse needs a connection and incurs warehouse cost. You can instead capture a scenario's real input data once and replay it locally on DuckDB.
+
+Capture snapshots the warehouse relations a scenario reads:
+
+```bash
+sqb dbt scenario capture dbt_stg_scenario_orders
+```
+
+This writes a snapshot under `tests/_scenario_snapshots/<scenario>/`: a `scenario.json` manifest plus one JSONL file per captured relation (for example `sources/raw__orders.jsonl`). The manifest records each column's warehouse type and its local DuckDB type so the replay reproduces the same shapes.
+
+Captured snapshots contain real warehouse data. Review them before committing, as they may include sensitive rows.
+
+Replay a captured scenario locally with `--local`:
+
+```bash
+sqb dbt scenario test dbt_stg_scenario_orders --local
+```
+
+`--local` runs the scenario against the captured snapshot on DuckDB instead of the warehouse, so it needs no warehouse connection and is fast and deterministic. This is well suited to CI: capture once against a representative slice, commit the snapshot, and replay in CI without warehouse access.
+
+### On this topic
+
+- [Testing](/concepts/dbt-compatibility/testing) - unit tests against dbt models, with mocks and model chaining.
+- [Diff](/concepts/dbt-compatibility/diff) - compare a dbt build against a production baseline.
+- [Scenarios](/concepts/scenarios) - the full scenario reference, including fixture worlds and assertions.
+
+## Diffing dbt builds
+
+Source: `concepts/dbt-compatibility/diff.mdx`
+
+Compare your dbt build against a production baseline with sqb dbt diff.
+
+`sqb dbt diff` compares the relations your dbt build produces against a production baseline, so you can confirm dev matches prod before you promote. It resolves the production-shaped relations the same way reuse does (by compiling your dbt project at a configured git ref), then compares each model.
+
+Every run requires exactly one comparison mode:
+
+```bash
+sqb dbt diff --schema-only
+sqb dbt diff --full
+sqb dbt diff --bounded <value>
+```
+
+Running without a mode is an error.
+
+### Modes
+
+#### `--schema-only`
+
+Compares column names and types per model, without reading row data. Fast, needs no key, and works on any model:
+
+```
+     Model  stg_orders
+       Key  <not used>
+Comparison  schema-only
+
+Schemas
+- - - - -
+No schema differences.
+```
+
+Use this as a cheap structural check: it catches added, dropped, or retyped columns across the build without scanning rows.
+
+#### `--full`
+
+Compares rows. Full row comparison needs a key to align rows between the two sides, so each compared model must define `config.unique_key` in its dbt config:
+
+```
+error[C341]: dbt diff requires model 'agg_daily_revenue' to define config.unique_key for row comparison
+  = help: Add unique_key to the dbt model config, or run sqb dbt diff --schema-only.
+```
+
+Add `unique_key` to the model config to enable a full row diff, or fall back to `--schema-only` for models without a natural key.
+
+#### `--bounded`
+
+Compares only a recent window of rows instead of the whole table, using the model's SQLBuild cursor metadata. This keeps the comparison cheap on large relations. The value depends on the cursor kind:
+
+- **Timestamp cursor:** a duration like `30d`, `12h`, or `15m` - compares the last N of time.
+- **Integer cursor:** an integer bound.
+
+```bash
+sqb dbt diff --bounded 30d
+```
+
+The model must define SQLBuild cursor metadata for `--bounded` to apply; without it, SQLBuild reports a configuration error pointing you to add cursor metadata or use another mode.
+
+### On this topic
+
+- [Reuse from production](/concepts/dbt-compatibility/reuse-from) - how the production baseline is resolved and reused.
+- [Clone](/concepts/dbt-compatibility/clone) - copy or clone production relations into a target.
+- [Testing](/concepts/dbt-compatibility/testing) - unit tests against dbt models.
+
+## Cloning dbt relations
+
+Source: `concepts/dbt-compatibility/clone.mdx`
+
+Copy or zero-copy clone production-shaped dbt relations into a target with sqb dbt clone.
+
+`sqb dbt clone` populates a target with the already-built relations from your production baseline, without running dbt. It resolves the production-shaped relations the same way reuse does (by compiling your dbt project at the configured `reuse_from` git ref), then clones or copies each one into the target schema.
+
+```bash
+sqb dbt clone
+```
+
+```
+sqb clone  origin=main destination=dev
+
+  agg_daily_revenue    OK     copied
+  dim_customers        OK     copied
+  fct_orders           OK     copied
+  ...
+
+CLONED=0  COPIED=10  RECREATED_VIEWS=0  PASS=10  WARN=0  FAIL=0  TOTAL=10
+```
+
+The origin is the `reuse_from.git_ref` from your configuration; the destination is the active target. Where the warehouse supports zero-copy cloning, relations are cloned (`CLONED`); otherwise they are copied (`COPIED`). Views are recreated to point at the cloned relations (`RECREATED_VIEWS`).
+
+This differs from [reuse from production](/concepts/dbt-compatibility/reuse-from), which runs as a pre-phase inside a build and only brings over the unchanged relations a build needs. `sqb dbt clone` is a standalone operation that populates the whole target (or a selected subset) up front.
+
+### Options
+
+| Flag | Effect |
+|------|--------|
+| `--select` / `-s` | Limit to matching models (dbt selection syntax). |
+| `--exclude` | Exclude matching models. |
+| `--hard-copy` | Force a full copy instead of a zero-copy clone, even where the warehouse supports cloning. |
+| `--no-sql-validation` | Skip SQL validation during the clone. |
+
+```bash
+sqb dbt clone --select path:models/marts
+sqb dbt clone --hard-copy
+```
+
+### On this topic
+
+- [Reuse from production](/concepts/dbt-compatibility/reuse-from) - reuse unchanged relations as a build pre-phase.
+- [Diff](/concepts/dbt-compatibility/diff) - compare a build against the production baseline.
+
+## Adding SQLBuild models
+
+Source: `concepts/dbt-compatibility/adding-sqlbuild-models.mdx`
+
+Grow into SQLBuild's own models, tests, audits, and scenarios downstream of your dbt project.
+
+The [change-aware builds](/concepts/dbt-compatibility/change-aware-builds) and [reuse from production](/concepts/dbt-compatibility/reuse-from) workflows need no SQLBuild models. This page is the optional next step: once that workflow is in place, you can write SQLBuild models, tests, audits, and scenarios downstream of your dbt project without leaving it.
+
+This is purely additive. Your dbt models stay in dbt, and the layout gains a `models/` directory in the SQLBuild project.
+
+```
+my-workspace/
+  analytics/                  # your existing dbt project, untouched
+    dbt_project.yml
+    models/
+    target/
+      manifest.json
+  sqlbuild_project/           # created by SQLBuild
+    sqlbuild_project.toml
+    models/
+      marts/downstream_orders.sql   # references dbt models via __dbt_ref
+    tests/
+      unit/test_downstream_orders.sql
+```
+
+### Referencing dbt models
+
+SQLBuild models reference dbt model outputs with `__dbt_ref("package", "model")`:
+
+```sql
+MODEL (
+  tags [finance],
+  columns (order_id (audits [not_null])),
+);
+
+SELECT order_id FROM __dbt_ref("analytics", "fact_orders")
+```
+
+This resolves to the qualified warehouse table name from the dbt manifest (e.g. `analytics.fact_orders`). The dbt model becomes an upstream dependency in the combined graph, so change detection and reuse continue to work across the boundary: when a referenced dbt model changes, the SQLBuild models downstream of it rebuild.
+
+SQLBuild models can also reference other SQLBuild models with `__ref()` as usual:
+
+```sql
+MODEL (tags [marts]);
+
+SELECT order_id FROM __ref("downstream_orders")
+```
+
+### Tests, audits, and scenarios
+
+SQLBuild models added downstream of dbt get SQLBuild's full validation surface:
+
+- **Unit tests** can mock dbt model dependencies with `__dbt_ref__` fixture CTEs, so you can test a SQLBuild model without a warehouse connection or a compiled dbt manifest. See [Testing](/concepts/dbt-compatibility/testing).
+- **Audits** declared inline in the `MODEL()` header block promotion when they fail, the same as in a standalone SQLBuild project. See [Audits](/concepts/audits).
+- **Scenarios** run the combined graph against fixture inputs for end-to-end checks. See [Scenarios](/concepts/scenarios).
+
+For the full model authoring reference (materializations, incremental strategies, contracts, and more), see [Models](/concepts/models).
 
 ## Project Configuration
 
@@ -916,7 +1719,7 @@ A target is a named build context - the schema, database, or connection you buil
 | `connection` | Override the base connection config |
 | `vars` | Target-specific project variables |
 | `defer_sources_to` | Target name to read managed source data from (see [Loaders](/concepts/python-nodes/loaders#source-deferral)) |
-| `reuse_from` | Target name to reuse relations from when version identities match (see [Planning: Reuse from production](/concepts/planning#reuse-from-production)) |
+| `reuse_from` | Target name to reuse relations from when version identities match (see [Reuse from production](/concepts/reuse-from-production)) |
 | `reuse_hard_copy` | Force a full data copy instead of zero-copy clone when reusing (default: `false`) |
 | `clone` | Clone policy (see below) |
 
@@ -1029,7 +1832,7 @@ default_audit_run_scope = "final"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
-| `virtual_environments` | `false` | Enable [virtual environments](/concepts/advanced/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in standard mode. |
+| `virtual_environments` | `false` | Enable [virtual environments](/concepts/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in standard mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
@@ -1123,6 +1926,11 @@ project_dir = "../dbt_project"
 profiles_dir = "../profiles"
 target_path = "../dbt_project/target"
 target = "dev"
+replay_on_change = "full"
+
+[dbt.reuse_from]
+git_ref = "main"
+generate_schema_name_override = "dbt/macros/generate_schema_name.sql"
 ```
 
 | Field | Description |
@@ -1131,8 +1939,11 @@ target = "dev"
 | `profiles_dir` | Path to the directory containing `profiles.yml` |
 | `target_path` | Path to dbt's `target/` directory (where `manifest.json` is written) |
 | `target` | dbt target name override (optional) |
+| `replay_on_change` | Project-wide policy for rerunning changed dbt models: `forward_only` (default) or `full` (optional). See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds#replay-on-change). |
+| `reuse_from.git_ref` | Production-shaped git branch or tag whose built tables are reused (optional). See [Reuse from production](/concepts/dbt-compatibility/reuse-from). |
+| `reuse_from.generate_schema_name_override` | Relative path under `dbt/macros/` to the `generate_schema_name` macro used when compiling the reuse ref. |
 
-Paths can be absolute or relative to the SQLBuild project root. See [dbt Interop](/concepts/dbt-interop) for setup and usage details.
+Paths can be absolute or relative to the SQLBuild project root. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for setup and usage details.
 
 ### Skills
 
@@ -1785,6 +2596,13 @@ sources:
 Managed sources support incremental write strategies (`table`, `append`, `delete_insert`, `merge`), cursor-based loading, and concurrent execution.
 
 See [Loaders](/concepts/python-nodes/loaders) for the full guide on writing loader functions, write strategies, the loader context API, and auto-load behavior during builds.
+
+#### Declarative integrations (no Python)
+
+For common ingestion you can declare the source entirely in YAML, with no `@loader` function. SQLBuild generates the loader for you and runs it during the build:
+
+- [dlt](/integrations/dlt) - declare `dlt_sources` for `rest_api`, `sql_database`, and `filesystem` sources.
+- [ingestr](/integrations/ingestr) - add an `ingestr` block to a source to pull from 50+ sources.
 
 ### Source freshness
 
@@ -2445,9 +3263,10 @@ Python hooks receive a `HookContext` as their first parameter (named `ctx`, `con
 | `ctx.execute_sql(sql)` | Execute SQL on the connection |
 | `ctx.query(sql)` | Execute SQL and return rows |
 | `ctx.log(message)` | Log to the run output |
+| `ctx.skip(reason, mode=...)` | Skip the model's materialization. `mode` accepts `"soft"` (default) or `"hard"` (blocks downstream models). |
 | `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) by name |
 
-Providers can also be injected directly as hook function parameters by name. See [Providers](/concepts/python-nodes/providers).
+Pre-hooks can return `ctx.skip(...)` to skip the model's materialization entirely. A soft skip skips only this model; a hard skip also blocks downstream models. Providers can also be injected directly as hook function parameters by name. See [Providers](/concepts/python-nodes/providers).
 
 #### Hook decorator
 
@@ -3158,11 +3977,22 @@ MODEL (
 );
 ```
 
-SQLBuild uses these to compute `MIN/MAX` across all upstream inputs and determine the replay window.
+SQLBuild uses these to compute `MIN/MAX` across the listed inputs and determine the replay window.
+
+##### Listed inputs bound the window; unlisted inputs do not
+
+Only the inputs you list in `cursor_inputs` bound the replay window. This is an explicit choice, and it has two consequences worth understanding:
+
+- **Listed inputs** drive the window. Their new data advances the `MAX`, which is what tells SQLBuild how far to reprocess and which rows of the target to rewrite.
+- **Unlisted inputs are read in full.** SQLBuild does not add a cursor filter to them, and they do not bound the window. This is correct for lookup or dimension tables that have no meaningful cursor column: you do not list them, and SQLBuild reads them whole rather than trying to filter on a column that may not exist.
+
+The implication for `delete_insert` and `merge`: the target rows that get rewritten are the ones whose cursor falls inside the window derived from the listed inputs. If an unlisted input changes in a way that should affect target rows outside that window, those rows are not rewritten on a normal incremental run. List every input whose new data should drive reprocessing; leave unlisted only the inputs you intend to read in full.
+
+To capture changes that fall outside the normal forward window, see [Lookback](#lookback) for late-arriving data and [Replay on change](#replay-on-change) for model changes.
 
 #### Lookback
 
-Lookback extends the start of the replay window backwards to re-process recent data. This is useful for handling late-arriving records:
+Lookback extends the start of the replay window backwards to re-process recent data. The cursor is forward-moving, so use lookback to capture late-arriving or backfilled records that land just behind the current position:
 
 ```sql
 MODEL (
@@ -3204,7 +4034,9 @@ Without microbatch mode, the entire replay range is processed in one pass.
 
 #### Mixed-grain chains
 
-When a downstream microbatch model depends on an upstream model with a coarser time grain, SQLBuild automatically widens the replay window to the largest participating grain. For example, an hourly model downstream of a daily model will process in day-sized batches to prevent empty windows:
+When a downstream microbatch model reads from an upstream model with a coarser time grain, SQLBuild aligns the replay to the coarsest participating grain (the model's own grain and its cursor-input grains). This happens on every run that resolves cursor bounds from upstream models, not only when something changes. It is independent of the `replay_on_change` cascade behavior described below.
+
+Alignment does two things: it floors the replay window edges to the coarsest grain, and it coarsens the batch size to that grain. For example, an hourly model downstream of a daily model processes in day-sized batches, so each batch lines up with a unit of upstream data that actually advances instead of producing empty or boundary-straddling windows:
 
 ```sql
 -- Upstream: daily grain, 2d batches
@@ -3221,7 +4053,7 @@ MODEL (
   batch_size 2d,
 );
 
--- Downstream: hourly grain, but widens to day automatically
+-- Downstream: hourly grain, but aligns to day automatically
 MODEL (
   materialized incremental,
   incremental_strategy delete_insert,
@@ -3238,7 +4070,7 @@ MODEL (
 
 ### Replay on change
 
-When a model's version identity changes (query, config, upstream cascade, or any other change reason), `replay_on_change` controls how much data to reprocess:
+When a model's version identity changes (query, config, upstream cascade, or any other change reason), `replay_on_change` is the explicit, per-model policy for how much data to reprocess. Reprocessing is a policy you set, not an automatic forced rebuild, so a definition change does not silently trigger a full rebuild of large downstream tables. You choose the cost per model:
 
 | Value | Effect |
 |-------|--------|
@@ -3397,27 +4229,7 @@ See [Incremental Models: Replay on change](/concepts/incremental#replay-on-chang
 
 ### Reuse from production
 
-Dev targets can opt into reusing relations from another target (e.g. prod) instead of rebuilding from scratch. When a model's version identity in dev matches the version already built in prod, SQLBuild clones or copies the relation rather than re-executing the query.
-
-Configure this on the target:
-
-```toml
-[targets.dev]
-schema = "dev"
-reuse_from = "prod"
-```
-
-The planner checks each model against the `reuse_from` target's fingerprints and relation state. Models are reused when:
-
-- The expected version identity matches the `reuse_from` target's built version.
-- The relation exists in the `reuse_from` target.
-- Source freshness in the `reuse_from` target is current.
-
-For incremental models, reuse clones or copies the prod relation as a baseline, then runs the incremental delta on top.
-
-Use `reuse_hard_copy = true` on the target to force a full data copy instead of a zero-copy clone (useful when the adapter doesn't support cloning or when you need an independent copy).
-
-`reuse_from` cannot be used together with `defer_sources_to` on the same target.
+When a model's version identity matches a relation already built in another target, the planner can reuse that relation instead of rebuilding it, and can clone the upstream inputs a partial build needs from production. This reuses the same fingerprints described above. See [Reuse from production](/concepts/reuse-from-production) for configuration and behavior.
 
 ### Run despite unchanged
 
@@ -3454,6 +4266,7 @@ In standard mode, all change-tracking state lives in the warehouse as append-onl
 
 - **`_sqlbuild_fingerprints`** - stores version identities for models, functions, seeds, and Python nodes. One row per successful build per identity.
 - **`_sqlbuild_source_freshness`** - stores source freshness observations. One row per successful build per source identity.
+- **`_sqlbuild_node_results`** - stores Python node runtime results (payload, metadata, status, errors). One row per execution per node. Results persist across runs for observability and downstream consumption.
 
 There is no external state database, no manifest files, and no state machine with transitions that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as immutable history.
 
@@ -3463,7 +4276,54 @@ Use `sqb janitor` to prune old state history rows while retaining the latest per
 
 ### Virtual environments
 
-Virtual environments store identities and change-tracking state in the VDE state backend (PostgreSQL or DuckDB) rather than in warehouse fingerprint tables. Identities are scoped per virtual environment, so each environment tracks its own version hashes, source freshness observations, and Python node identities independently. Change detection uses version hash comparison and VDE state refs. See [Virtual Environments: Building](/concepts/advanced/virtual-environments/building) for details.
+Virtual environments store identities and change-tracking state in the VDE state backend (PostgreSQL or DuckDB) rather than in warehouse fingerprint tables. Identities are scoped per virtual environment, so each environment tracks its own version hashes, source freshness observations, and Python node identities independently. Change detection uses version hash comparison and VDE state refs. See [Virtual Environments: Building](/concepts/virtual-environments/building) for details.
+
+## Reuse from production
+
+Source: `concepts/reuse-from-production.mdx`
+
+Stop rebuilding in dev what production already built. Reuse matching relations, and clone upstream inputs, from another target.
+
+Rebuilding a project in dev wastes compute when most models are identical to what production already built. SQLBuild can reuse already-built relations from another target instead of re-executing the query, and can clone the upstream inputs a partial build needs straight from production.
+
+This is the native, warehouse-to-warehouse form of reuse. The [dbt compatibility](/concepts/dbt-compatibility/reuse-from) page covers the counterpart that reuses dbt-built tables described by a production git branch.
+
+### Reuse matching relations
+
+Dev targets can opt into reusing relations from another target (for example prod) instead of rebuilding from scratch. When a model's version identity in dev matches the version already built in prod, SQLBuild clones or copies the relation rather than re-executing the query, zero compute for models that match.
+
+Configure it on the target:
+
+```toml
+[targets.dev]
+schema = "dev"
+reuse_from = "prod"
+```
+
+The planner checks each model against the `reuse_from` target's fingerprints and relation state. A model is reused when:
+
+- The expected version identity matches the `reuse_from` target's built version.
+- The relation exists in the `reuse_from` target.
+- Source freshness in the `reuse_from` target is current.
+
+For incremental models, reuse clones or copies the prod relation as a baseline, then runs the incremental delta on top.
+
+Use `reuse_hard_copy = true` on the target to force a full data copy instead of a zero-copy clone. This is useful when the adapter does not support cloning, or when you need an independent copy.
+
+`reuse_from` cannot be used together with `defer_sources_to` on the same target.
+
+Reuse keys on the same fingerprints SQLBuild uses for change detection. See [Planning and Change Detection](/concepts/planning) for how version identities are computed.
+
+### Cloning upstream inputs
+
+When you build a slice of your project with `--select`, the **root models of your selection** (the ones whose upstream dependencies you did not also select) still need their inputs to exist. If a direct upstream is missing or stale, SQLBuild can clone it from production instead of forcing you to build the whole upstream chain.
+
+For each unselected direct upstream of a root model, SQLBuild clones (or copies) whatever the reuse origin currently has into your target. Two things to be clear about:
+
+- **No catch-up.** You get production's current data as the input, exactly as it is. SQLBuild does not run an incremental delta on a cloned input, even if the upstream is an incremental model.
+- **Not fingerprinted.** A cloned input is materialized only to feed the build, so SQLBuild does not write a fingerprint for it. This is deliberate: the upstream was never actually built or validated in this target, so recording it as current would let change detection wrongly skip it later. The next time you select that model, it is planned from scratch as if the clone had never happened.
+
+This lets you build and test a subgraph in dev against real production inputs without rebuilding everything upstream of it. Cloned inputs respect the same `reuse_hard_copy` and zero-copy clone behavior as reuse above, and appear under `Dependency baseline` in the plan output.
 
 ## Snapshots (SCD Type 2)
 
@@ -4974,7 +5834,7 @@ These checks run automatically during `sqb compile` and report diagnostics with 
 
 ## Data Diffs
 
-Source: `concepts/diffs.mdx`
+Source: `concepts/diff.mdx`
 
 Compare schemas and data between targets or virtual environments to validate changes before promotion.
 
@@ -4983,7 +5843,7 @@ SQLBuild can compare schemas and row-level data between two build contexts. This
 `sqb diff FROM:TO` compares:
 
 - **two targets** (e.g. `prod:dev`) in standard mode, or
-- **two virtual environments** (VDEs) when [virtual environments](/concepts/advanced/virtual-environments) are enabled.
+- **two virtual environments** (VDEs) when [virtual environments](/concepts/virtual-environments) are enabled.
 
 The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
 
@@ -5197,7 +6057,8 @@ Each node receives a context object as its first argument (`TaskContext`, `Asset
 | `ctx.query(sql)` / `ctx.execute_sql(sql)` | Run SQL on the connection |
 | `ctx.qualify_name(name)` | Qualify a relation name |
 | `ctx.relation(ref)` | Resolve a declared `model()`/`source()` reference to a relation |
-| `ctx.payload(node_fn)` / `ctx.metadata(node_fn)` | Read an upstream node's result in the same run |
+| `ctx.result_of(node_fn)` | Read the latest persisted result of an upstream node (current or previous run) |
+| `ctx.results_of(node_fn, limit=N)` | Read the last N successful results of an upstream node, newest first |
 | `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) by name |
 
 Task and asset contexts add `ctx.result(...)` and `ctx.skip(...)`. Check contexts add `ctx.pass_(...)`, `ctx.fail(...)`, and `ctx.warn(...)`.
@@ -5219,6 +6080,10 @@ def export_orders(ctx):
 - Assets may pass `materialized=True`/`False` to record whether an artifact was produced.
 
 Downstream nodes run only if at least one upstream succeeded. If all upstreams are skipped, the downstream is skipped. A failed or hard-skipped upstream blocks its dependents.
+
+### Result persistence
+
+Node results (payload, metadata, status, errors) are persisted after each execution. In standard mode, results are stored in `_sqlbuild_node_results` in the warehouse alongside your data. In virtual mode, results are stored in the VDE state backend scoped per environment. Results persist across runs, so they are available for observability, debugging, and downstream consumption.
 
 ### Selection
 
@@ -5480,6 +6345,9 @@ Every loader function receives a `LoaderContext` as its first argument. It provi
 | `log(message)` | Log a message to the execution lifecycle output |
 | `qualify_name(name)` | Return a fully-qualified relation name in the destination database/schema |
 | `skip(reason, mode=...)` | Skip this loader. `mode` is `"soft"` (default, skip only this loader) or `"hard"` (also block dependents) |
+| `result(payload=, metadata=, materialized=)` | Return a structured result for a self-managed loader |
+| `result_of(node_fn)` | Read the latest persisted result of an upstream node (current or previous run) |
+| `results_of(node_fn, limit=N)` | Read the last N successful results of an upstream node, newest first |
 | `loader(loader_fn)` | Return a `LoaderRelationRef` for an upstream loader dependency |
 | `source(source_name)` | Return a `LoaderRelationRef` for a project source by YAML name |
 
@@ -5659,11 +6527,11 @@ def fetch_orders(ctx: TaskContext):
 
 @task(depends_on=fetch_orders)
 def summarize_orders(ctx: TaskContext):
-    orders = ctx.payload(fetch_orders)
-    return ctx.result(metadata={"count": len(orders)})
+    result = ctx.result_of(fetch_orders)
+    return ctx.result(metadata={"count": len(result.payload)})
 ```
 
-`ctx.payload(node_fn)` and `ctx.metadata(node_fn)` read an upstream node's result within the same run. Reading a missing or unsuccessful upstream raises unless you pass `default=`.
+`ctx.result_of(node_fn)` reads the latest persisted result of an upstream node, returning a `NodeResultEnvelope` with `payload`, `metadata`, `status`, and `ts` fields. Results persist across runs. Use `ctx.results_of(node_fn, limit=N)` to read result history. Reading a missing or unsuccessful upstream raises unless you pass `default=`.
 
 Tasks may depend on other tasks, assets, and loaders. They may **not** depend on SQL models or sources as graph dependencies, but they can read them at runtime with typed references - see [SQL references](/concepts/python-nodes/sql-references).
 
@@ -5678,7 +6546,7 @@ def build_export(ctx: TaskContext):
     )
 ```
 
-- `payload` is the value downstream nodes read with `ctx.payload(...)`.
+- `payload` is the value downstream nodes read with `ctx.result_of(...)`.
 - `metadata` is structured JSON for catalogs and downstream reads.
 - Tasks cannot set `materialized` - that is for [assets](/concepts/python-nodes/assets).
 
@@ -5807,8 +6675,8 @@ from tasks.orders import export_orders
 
 @asset(depends_on=export_orders)
 def orders_dashboard(ctx):
-    rows = ctx.payload(export_orders)["rows"]
-    return ctx.result(metadata={"rows": rows}, materialized=True)
+    result = ctx.result_of(export_orders)
+    return ctx.result(metadata={"rows": result.payload["rows"]}, materialized=True)
 ```
 
 To read a SQL model or source, declare a typed reference and resolve it at runtime - see [SQL references](/concepts/python-nodes/sql-references):
@@ -5912,13 +6780,13 @@ from tasks.orders import export_orders
 
 @check(depends_on=export_orders)
 def check_orders_exported(ctx: CheckContext):
-    rows = ctx.metadata(export_orders)["rows"]
-    if rows == 0:
+    result = ctx.result_of(export_orders)
+    if result.metadata.get("rows", 0) == 0:
         return ctx.fail("no orders exported")
     return ctx.pass_("orders exported")
 ```
 
-The check receives a `CheckContext` and reads its dependencies' results with `ctx.payload(...)` / `ctx.metadata(...)`.
+The check receives a `CheckContext` and reads its dependencies' persisted results with `ctx.result_of(...)`.
 
 ### Results
 
@@ -5927,7 +6795,7 @@ Return a result through the context helpers, or a bool shorthand:
 ```python
 @check(depends_on=orders_asset)
 def rows_present(ctx):
-    return ctx.payload(orders_asset)["rows"] > 0   # True -> pass, False -> fail
+    return ctx.result_of(orders_asset).payload["rows"] > 0   # True -> pass, False -> fail
 ```
 
 | Return | Meaning |
@@ -6361,7 +7229,7 @@ Do not hardcode model or source names in raw SQL. In virtual mode a model resolv
 
 ## Overview
 
-Source: `concepts/advanced/virtual-environments.mdx`
+Source: `concepts/virtual-environments.mdx`
 
 Version-controlled SQL pipeline environments with instant promotion and rollback.
 
@@ -6455,21 +7323,21 @@ sqb promote --from pr_123 --to dev
 
 ### What's next
 
-- [Setup](/concepts/advanced/virtual-environments/setup) - configuration and state initialization
-- [Building](/concepts/advanced/virtual-environments/building) - virtual builds, partial builds, seeded incrementals
-- [Promotion](/concepts/advanced/virtual-environments/promotion) - promoting VDEs
-- [Rollback](/concepts/advanced/virtual-environments/rollback) - checkpoints and rollback
-- [Clone](/concepts/advanced/virtual-environments/clone) - hydrating physical versions from a source warehouse
-- [Diff](/concepts/advanced/virtual-environments/diff) - comparing VDE ref sets
-- [Adopt and Detach](/concepts/advanced/virtual-environments/adopt-detach) - migrating existing projects
-- [Reconcile](/concepts/advanced/virtual-environments/reconcile) - diagnosing and repairing drift
-- [Locks](/concepts/advanced/virtual-environments/locks) - concurrent access control
-- [Janitor](/concepts/advanced/virtual-environments/janitor) - cleanup and retention
-- [Recovery](/concepts/advanced/virtual-environments/recovery) - what to do when things break
+- [Setup](/concepts/virtual-environments/setup) - configuration and state initialization
+- [Building](/concepts/virtual-environments/building) - virtual builds, partial builds, seeded incrementals
+- [Promotion](/concepts/virtual-environments/promotion) - promoting VDEs
+- [Rollback](/concepts/virtual-environments/rollback) - checkpoints and rollback
+- [Clone](/concepts/virtual-environments/clone) - hydrating physical versions from a source warehouse
+- [Diff](/concepts/virtual-environments/diff) - comparing VDE ref sets
+- [Adopt and Detach](/concepts/virtual-environments/adopt-detach) - migrating existing projects
+- [Reconcile](/concepts/virtual-environments/reconcile) - diagnosing and repairing drift
+- [Locks](/concepts/virtual-environments/locks) - concurrent access control
+- [Janitor](/concepts/virtual-environments/janitor) - cleanup and retention
+- [Recovery](/concepts/virtual-environments/recovery) - what to do when things break
 
 ## Setup
 
-Source: `concepts/advanced/virtual-environments/setup.mdx`
+Source: `concepts/virtual-environments/setup.mdx`
 
 Configure virtual environments and initialize the state store.
 
@@ -6511,7 +7379,7 @@ Each physical target that uses virtual mode needs a `[targets.<name>.state]` blo
 | `schema` | Yes | Schema name for state tables |
 | `connection` | Yes | Backend-specific connection config |
 | `allow_reset` | No | Whether `sqb state reset` is permitted (default: `false`) |
-| `unsuffixed_virtual_env` | No | VDE name that uses the base schema without a suffix (for [adopt/detach](/concepts/advanced/virtual-environments/adopt-detach)) |
+| `unsuffixed_virtual_env` | No | VDE name that uses the base schema without a suffix (for [adopt/detach](/concepts/virtual-environments/adopt-detach)) |
 
 #### DuckDB state backend
 
@@ -6619,7 +7487,7 @@ database = "state.duckdb"
 
 With this config, VDE `dev` uses `dev.fact_orders` while other VDEs like `kevin` use `dev__kevin.fact_orders`.
 
-This setting is also required for [adopt and detach](/concepts/advanced/virtual-environments/adopt-detach) operations so that existing consumer queries continue to work after migrating to virtual mode.
+This setting is also required for [adopt and detach](/concepts/virtual-environments/adopt-detach) operations so that existing consumer queries continue to work after migrating to virtual mode.
 
 ### Janitor configuration
 
@@ -6632,7 +7500,7 @@ retention_days = 30
 max_checkpoints = 20
 ```
 
-See [Janitor](/concepts/advanced/virtual-environments/janitor) for details on what gets cleaned up and how retention works.
+See [Janitor](/concepts/virtual-environments/janitor) for details on what gets cleaned up and how retention works.
 
 ### State tables
 
@@ -6644,11 +7512,13 @@ The state store contains current-state tables and append-only history tables. Yo
 
 ## Building
 
-Source: `concepts/advanced/virtual-environments/building.mdx`
+Source: `concepts/virtual-environments/building.mdx`
 
 Virtual builds, VDE creation, partial builds, and seeded incrementals.
 
 Virtual builds create versioned physical relations and update VDE pointer sets. The build lifecycle is the same as standard mode (seeds, tests, models, audits), but model outputs are written to versioned physical tables and exposed through logical VDE views.
+
+Virtual builds run ingress (loaders and Python nodes that feed sources) as a separate phase before SQL model execution. This means independent SQL models that do not depend on loaders will wait for all ingress to complete before starting. Standard mode does not have this limitation. This keeps VDE state persistence simpler and safer but may add wall time when ingress is slow and independent SQL work is available. A future optimization may allow overlapping ingress with independent SQL execution.
 
 ### Default VDE
 
@@ -6816,7 +7686,7 @@ Virtual plan output shows:
 
 ## Promotion
 
-Source: `concepts/advanced/virtual-environments/promotion.mdx`
+Source: `concepts/virtual-environments/promotion.mdx`
 
 Promote VDE refs and diff virtual environments.
 
@@ -6883,11 +7753,11 @@ sqb promote --from pr_123 --to dev --select fact_orders --include-stale-upstream
 
 ### Comparing VDEs before promotion
 
-Use `sqb diff` to compare VDE ref sets before promoting. See [Diff](/concepts/advanced/virtual-environments/diff) for details.
+Use `sqb diff` to compare VDE ref sets before promoting. See [Diff](/concepts/virtual-environments/diff) for details.
 
 ## Rollback
 
-Source: `concepts/advanced/virtual-environments/rollback.mdx`
+Source: `concepts/virtual-environments/rollback.mdx`
 
 Checkpoints and rollback for virtual environments.
 
@@ -6995,7 +7865,7 @@ sqb state checkpoints diff <checkpoint_id>
 
 ## Adopt and Detach
 
-Source: `concepts/advanced/virtual-environments/adopt-detach.mdx`
+Source: `concepts/virtual-environments/adopt-detach.mdx`
 
 Migrate existing projects to and from virtual mode.
 
@@ -7091,7 +7961,7 @@ The project can continue operating in standard mode, or you can re-adopt to retu
 
 #### Detached VDE cleanup
 
-Detached VDE refs and state rows are cleaned up by the [janitor](/concepts/advanced/virtual-environments/janitor), not by detach itself. This preserves refs for recovery if detach fails partway through.
+Detached VDE refs and state rows are cleaned up by the [janitor](/concepts/virtual-environments/janitor), not by detach itself. This preserves refs for recovery if detach fails partway through.
 
 ### Interrupted operations
 
@@ -7111,7 +7981,7 @@ There is no automatic resume command. SQLBuild records the failure state and lea
 
 ## Clone
 
-Source: `concepts/advanced/virtual-environments/clone.mdx`
+Source: `concepts/virtual-environments/clone.mdx`
 
 Hydrate physical versions from a source warehouse.
 
@@ -7173,7 +8043,7 @@ sqb clone --from prod --to dev --skip-locked
 - Does not read the source state database (it uses warehouse-level artifact discovery)
 - Does not change the target VDE status
 
-Clone is a physical-layer operation. VDE pointer management is handled by [build](/concepts/advanced/virtual-environments/building) and [promote](/concepts/advanced/virtual-environments/promotion).
+Clone is a physical-layer operation. VDE pointer management is handled by [build](/concepts/virtual-environments/building) and [promote](/concepts/virtual-environments/promotion).
 
 ### Comparison with standard-mode clone
 
@@ -7181,7 +8051,7 @@ In standard mode, `sqb clone` copies model relations between targets using zero-
 
 ## Diff
 
-Source: `concepts/advanced/virtual-environments/diff.mdx`
+Source: `concepts/virtual-environments/diff.mdx`
 
 Compare virtual data environments.
 
@@ -7241,7 +8111,7 @@ The output format is the same - schema diffs, row counts, changed columns, and e
 
 ## Reconcile
 
-Source: `concepts/advanced/virtual-environments/reconcile.mdx`
+Source: `concepts/virtual-environments/reconcile.mdx`
 
 Diagnose and repair drift between state and warehouse.
 
@@ -7314,7 +8184,7 @@ Reconcile repairs pointer/view state. It does not rebuild physical versions. If 
 
 ## Locks
 
-Source: `concepts/advanced/virtual-environments/locks.mdx`
+Source: `concepts/virtual-environments/locks.mdx`
 
 Advisory locks for concurrent access control.
 
@@ -7373,7 +8243,7 @@ If operations consistently exceed the lock TTL, the TTL may need to be increased
 
 ## Janitor
 
-Source: `concepts/advanced/virtual-environments/janitor.mdx`
+Source: `concepts/virtual-environments/janitor.mdx`
 
 Cleanup of virtual environment artifacts and retention policies.
 
@@ -7448,7 +8318,7 @@ The janitor shows a preview of all candidates (checkpoints, VDEs, physical versi
 
 ## Recovery
 
-Source: `concepts/advanced/virtual-environments/recovery.mdx`
+Source: `concepts/virtual-environments/recovery.mdx`
 
 Diagnosing and recovering from failures in virtual mode.
 
@@ -8111,37 +8981,129 @@ uv run rivers dev rivers_pipeline.definitions
 
 Source: `integrations/dlt.mdx`
 
-Use dlt pipelines inside SQLBuild source loaders.
+Declarative dlt sources in YAML, or full dlt pipelines inside Python source loaders.
 
-[dlt](https://dlthub.com) is an open-source Python library for loading data from APIs, databases, cloud storage, and other sources. You can use dlt inside a SQLBuild [source loader](/concepts/python-nodes/loaders) to ingest data as part of your build lifecycle.
+[dlt](https://dlthub.com) is an open-source Python library for loading data from APIs, databases, cloud storage, and more. SQLBuild integrates with dlt two ways:
+
+- **Declarative dlt sources** - configure dlt directly in your source YAML, no Python code. SQLBuild runs the dlt pipeline as part of the build lifecycle. Best for the common REST API, SQL database, and filesystem cases.
+- **dlt inside a Python loader** - wrap any `dlt.pipeline(...)` in a SQLBuild [source loader](/concepts/python-nodes/loaders) for full control when you need dlt features beyond the declarative surface.
 
 ### Install
 
 ```bash
-pip install 'dlt[duckdb]'
-# or for Snowflake
-pip install 'dlt[snowflake]'
+pip install 'sqlbuild[dlt]'
+# or
+uv pip install 'sqlbuild[dlt]'
 ```
 
-Install dlt with the extras matching your SQLBuild adapter.
+This installs dlt with the `duckdb`, `filesystem`, and `sql_database` extras alongside SQLBuild.
 
-### How it works
+### Declarative dlt sources (YAML)
 
-A self-managed loader calls `dlt.pipeline(...).run(...)` to load data into the same database that SQLBuild manages. The loader returns `None` - dlt handles the writes, and SQLBuild treats the source as loaded.
+Declare a `dlt_sources` list in a `sources/*.yml` file. Each entry has a `type`, a `config` block passed to the dlt source, and a list of `resources` that become SQLBuild managed sources. SQLBuild generates a synthetic loader per resource and writes into the database its adapter manages, no Python and no destination setup required.
 
+Supported source types: `rest_api`, `sql_database`, `filesystem`.
+
+#### REST API
+
+```yaml
+# sources/github.yml
+dlt_sources:
+  - type: rest_api
+    config:
+      client:
+        base_url: https://api.github.com/
+        headers:
+          Authorization: "Bearer ${github_token}"
+        paginator:
+          type: header_link
+    resources:
+      - name: raw_github_issues
+        write_disposition: append
+        endpoint:
+          path: "repos/${github_owner}/${github_repo}/issues"
+          params:
+            state: all
+            per_page: 100
 ```
-loaders/               # dlt pipelines wrapped as loaders
-  github_sources.py
-sources/
-  github.yml           # source declarations bound to loaders
-models/
-  staging/
-    stg_issues.sql     # __source("raw_github_issues")
+
+`rest_api` requires `client.base_url` in `config`. Each resource needs an `endpoint` mapping; the dlt resource name comes from `endpoint.name` if present, otherwise the resource `name`.
+
+#### SQL database
+
+```yaml
+# sources/postgres.yml
+dlt_sources:
+  - type: sql_database
+    config:
+      credentials: "${postgres_connection_string}"
+    resources:
+      - name: raw_customers
+        table: customers
+        write_disposition: merge
+        primary_key: id
 ```
 
-### Example: REST API source
+`sql_database` requires `credentials` in `config`, and each resource requires a `table`.
 
-Load GitHub issues into a source table using dlt's REST API source:
+#### Filesystem
+
+```yaml
+# sources/files.yml
+dlt_sources:
+  - type: filesystem
+    config:
+      bucket_url: "s3://my-bucket/events/"
+    resources:
+      - name: raw_events
+        write_disposition: append
+```
+
+`filesystem` requires `bucket_url` in `config`.
+
+#### Resource options
+
+| Key | Description |
+|-----|-------------|
+| `name` | Source name SQLBuild exposes (referenced via `__source("name")`). Required. |
+| `table` | Source table to replicate (`sql_database` only). Required for that type. |
+| `endpoint` | Endpoint mapping (`rest_api` only). Required for that type. |
+| `write_disposition` | dlt write disposition: `replace`, `append`, or `merge`. `merge` requires `primary_key`. |
+| `primary_key` / `merge_key` | dlt keys for `merge`. |
+| `incremental` | dlt incremental config mapping (e.g. cursor column and start value). |
+| `schema` | Per-resource schema override (falls back to the group `schema`). |
+
+Use SQLBuild's `write_disposition` (dlt's term), not `write_strategy`. `delete_insert` is not available declaratively; use a Python loader for that. Config values support SQLBuild's [interpolation](/concepts/interpolation): `${name}` for a project variable, `${ENV:NAME}` for an environment variable, and `${CTX:...}` for context, resolved at load time, so credentials stay out of the YAML.
+
+#### Destination
+
+By default each resource loads into the database SQLBuild's adapter manages, with the dataset/schema derived from your target. An optional `destination` mapping passes extra settings to the dlt destination, but it cannot set `credentials`, `dataset_name`, or `default_schema_name` (SQLBuild manages those):
+
+```yaml
+dlt_sources:
+  - type: rest_api
+    destination:
+      loader_file_format: parquet
+    config:
+      client:
+        base_url: https://api.example.com/
+    resources:
+      - name: raw_widgets
+        endpoint:
+          path: widgets
+```
+
+#### Reference in models
+
+Declared resources are managed sources, reference them like any other source:
+
+```sql
+SELECT id, title, state FROM __source("raw_github_issues")
+```
+
+### dlt inside a Python loader
+
+When you need dlt capabilities beyond the declarative surface (custom transforms, `delete_insert`, sources not covered above), wrap a dlt pipeline in a [source loader](/concepts/python-nodes/loaders). The loader calls `dlt.pipeline(...).run(...)` and returns `None`; dlt handles the writes and SQLBuild treats the source as loaded.
 
 ```python
 # loaders/github_sources.py
@@ -8158,20 +9120,18 @@ def raw_github_issues(ctx: LoaderContext):
             "headers": {"Authorization": f"Bearer {ctx.vars['github_token']}"},
             "paginator": {"type": "header_link"},
         },
-        "resources": [
-            {
-                "name": "issues",
-                "endpoint": {
-                    "path": "repos/{owner}/{repo}/issues",
-                    "params": {
-                        "owner": ctx.vars["github_owner"],
-                        "repo": ctx.vars["github_repo"],
-                        "state": "all",
-                        "per_page": 100,
-                    },
+        "resources": [{
+            "name": "issues",
+            "endpoint": {
+                "path": "repos/{owner}/{repo}/issues",
+                "params": {
+                    "owner": ctx.vars["github_owner"],
+                    "repo": ctx.vars["github_repo"],
+                    "state": "all",
+                    "per_page": 100,
                 },
             },
-        ],
+        }],
     })
 
     pipeline = dlt.pipeline(
@@ -8182,7 +9142,7 @@ def raw_github_issues(ctx: LoaderContext):
     pipeline.run(source)
 ```
 
-Bind it to a source:
+Bind it to a source with `managed: true` in `sources/*.yml`:
 
 ```yaml
 # sources/github.yml
@@ -8195,68 +9155,11 @@ sources:
         type: INTEGER
       - name: title
         type: VARCHAR
-      - name: state
-        type: VARCHAR
-      - name: created_at
-        type: TIMESTAMP
 ```
 
-Reference it in models:
+#### DuckDB connection sharing
 
-```sql
-SELECT id, title, state FROM __source("raw_github_issues")
-```
-
-### Example: SQL database source
-
-Replicate a table from a PostgreSQL database:
-
-```python
-# loaders/postgres_sources.py
-import dlt
-from dlt.sources.sql_database import sql_database
-from sqlbuild.loaders import loader
-from sqlbuild.executor.load.models import LoaderContext
-
-@loader
-def raw_pg_customers(ctx: LoaderContext):
-    source = sql_database(
-        ctx.vars["postgres_connection_string"],
-        table_names=["customers"],
-    )
-
-    pipeline = dlt.pipeline(
-        pipeline_name="pg_customers",
-        destination=dlt.destinations.duckdb(ctx.connection),
-        dataset_name=ctx.destination_schema or "main",
-    )
-    pipeline.run(source)
-```
-
-### Passing credentials
-
-Use SQLBuild [project variables](/concepts/project-configuration#project-variables) to pass credentials to dlt without hardcoding them:
-
-```toml
-# sqlbuild_local.toml (gitignored)
-[vars]
-github_token = "ghp_..."
-postgres_connection_string = "postgresql://user:pass@host:5432/db"
-```
-
-Access them in the loader via `ctx.vars["github_token"]`.
-
-For production, set variables via environment variables or per-environment config:
-
-```toml
-# sqlbuild_project.toml
-[targets.prod.vars]
-github_token = "${GITHUB_TOKEN}"
-```
-
-### DuckDB connection sharing
-
-When using the DuckDB adapter, you can pass `ctx.connection` directly to dlt's DuckDB destination. This reuses SQLBuild's open connection, so dlt writes into the same database file without needing a separate connection string:
+With the DuckDB adapter, pass `ctx.connection` to dlt's DuckDB destination to reuse SQLBuild's open connection, so dlt writes into the same database without a separate connection string:
 
 ```python
 pipeline = dlt.pipeline(
@@ -8266,41 +9169,31 @@ pipeline = dlt.pipeline(
 )
 ```
 
-### Warehouse destinations
+#### Warehouse destinations
 
-For Snowflake, BigQuery, or Databricks, configure dlt with its own connection credentials. dlt writes directly to the warehouse, and SQLBuild reads the resulting tables as sources:
+For Snowflake, BigQuery, or Databricks, configure dlt with its own credentials. dlt writes directly to the warehouse, and SQLBuild reads the resulting tables as sources:
 
 ```python
-@loader
-def raw_api_data(ctx: LoaderContext):
-    source = rest_api_source({...})
-
-    pipeline = dlt.pipeline(
-        pipeline_name="api_data",
-        destination="snowflake",
-        dataset_name=ctx.destination_schema or "public",
-    )
-    pipeline.run(source)
+pipeline = dlt.pipeline(
+    pipeline_name="api_data",
+    destination="snowflake",
+    dataset_name=ctx.destination_schema or "public",
+)
 ```
 
-Configure dlt credentials via its own `secrets.toml` or environment variables as described in the [dlt documentation](https://dlthub.com/docs/general-usage/credentials/setup).
+Configure dlt credentials via its own `secrets.toml` or environment variables, as in the [dlt documentation](https://dlthub.com/docs/general-usage/credentials/setup).
 
 ### Build integration
 
-Loaders run automatically during `sqb build` (when `auto_load_sources` is enabled). This means dlt pipelines execute as part of the normal build lifecycle:
+Whether declarative or Python, loaders run automatically during `sqb build` (when `auto_load_sources` is enabled), so dlt pipelines execute as part of the normal build lifecycle:
 
 ```bash
-# dlt loaders run, then models build
-sqb build
-
-# skip loading (use existing source data)
-sqb build --no-load
-
-# run loaders standalone
-sqb load
+sqb build            # loaders run, then models build
+sqb build --no-load  # skip loading, use existing source data
+sqb load             # run loaders standalone
 ```
 
-See [Loaders](/concepts/python-nodes/loaders) for details on write strategies, the loader context API, auto-load behavior, and source deferral.
+See [Loaders](/concepts/python-nodes/loaders) for write strategies, the loader context API, auto-load behavior, and source deferral.
 
 ## ingestr
 
@@ -9604,7 +10497,7 @@ Source: `cli/diff.mdx`
 
 Compare schemas and data between targets or virtual environments.
 
-Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in standard mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diffs) for detailed usage.
+Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in standard mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diff) for detailed usage.
 
 ### Usage
 
@@ -10305,7 +11198,7 @@ Run SQLBuild alongside an existing dbt project.
 
 ## sqb dbt
 
-Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. See [dbt Interop](/concepts/dbt-interop) for concepts and selection behavior.
+Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. `sqb dbt build`, `sqb dbt run`, and `sqb dbt plan` are [change-aware](/concepts/dbt-compatibility/change-aware-builds): they prune dbt models that have not changed, and honor [reuse from production](/concepts/dbt-compatibility/reuse-from) when configured. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for concepts and selection behavior.
 
 ### sqb dbt plan
 
@@ -10315,7 +11208,7 @@ Preview combined dbt and SQLBuild work without executing.
 sqb dbt plan [--select <selector>...] [--exclude <selector>...] [--json] [--verbose]
 ```
 
-Shows which dbt models will run, which SQLBuild models will run, and the dbt/SQLBuild commands that would be executed.
+Shows which dbt models will run, which dbt models are current and pruned, which relations will be reused from production, which SQLBuild models will run, and the dbt/SQLBuild commands that would be executed.
 
 ### sqb dbt run
 
@@ -10375,7 +11268,7 @@ sqb dbt build --select path:marts
 sqb dbt build --select fact_orders+ --exclude tag:nightly
 ```
 
-See [dbt Interop - Selection behavior](/concepts/dbt-interop#selection-behavior) for full details on how selectors route work between dbt and SQLBuild.
+See [Selection](/concepts/dbt-compatibility/selection) for full details on how selectors route work between dbt and SQLBuild.
 
 ### Configuration
 
@@ -10388,7 +11281,7 @@ profiles_dir = "../profiles"
 target_path = "../dbt_project/target"
 ```
 
-See [Project Configuration](/concepts/project-configuration) for details.
+See [Project Configuration](/concepts/project-configuration#dbt) for all fields, including `replay_on_change` and `reuse_from`.
 
 ## state
 
@@ -10456,7 +11349,7 @@ sqb state adopt [--allow-copy]
 |------|-------------|
 | `--allow-copy` | Allow CTAS copy fallback when native rename is not available |
 
-See [Adopt and Detach](/concepts/advanced/virtual-environments/adopt-detach) for details.
+See [Adopt and Detach](/concepts/virtual-environments/adopt-detach) for details.
 
 #### detach
 
@@ -10557,7 +11450,7 @@ sqb promote --from pr_123 --to dev --select fact_orders --allow-partial-promotio
 sqb promote --from pr_123 --to dev --select fact_orders --include-stale-upstreams
 ```
 
-See [Promotion](/concepts/advanced/virtual-environments/promotion) for details on promotion behavior, source requirements, and guards.
+See [Promotion](/concepts/virtual-environments/promotion) for details on promotion behavior, source requirements, and guards.
 
 ## rollback
 
@@ -10604,7 +11497,7 @@ sqb rollback --checkpoint-id <id>
 sqb rollback --select fact_orders --allow-partial-rollback
 ```
 
-See [Rollback](/concepts/advanced/virtual-environments/rollback) for details on checkpoints, rollback behavior, and guards.
+See [Rollback](/concepts/virtual-environments/rollback) for details on checkpoints, rollback behavior, and guards.
 
 ## reconcile
 
@@ -10669,4 +11562,4 @@ sqb reconcile attach --virtual-env dev --model fact_orders \
   --physical-relation dev__sqb_physical.fact_orders__v_71d0e4ab
 ```
 
-See [Reconcile](/concepts/advanced/virtual-environments/reconcile) for details on guards and when to use each subcommand.
+See [Reconcile](/concepts/virtual-environments/reconcile) for details on guards and when to use each subcommand.

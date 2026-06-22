@@ -8,12 +8,12 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.standard_scope_pruning import (
     build_standard_identity_stale_model_names,
+    mark_direct_parent_run_actions,
     mark_version_identity_stale_actions,
     prune_standard_unchanged_scope,
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
-    CascadeResult,
     ChangeDetectionResult,
     FunctionChangeResult,
     PlannerChangeResults,
@@ -28,6 +28,7 @@ from sqlbuild.compiler.source_freshness.models import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     DirectIdentityStaleModelNamesTestCase,
+    DirectParentRunActionTestCase,
     MarkVersionIdentityStaleActionsTestCase,
     PruneUnchangedScopeTestCase,
 )
@@ -52,10 +53,48 @@ FUNCTION_CHANGED: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.UDF,
     name="changed_function",
 )
+SOURCE_KEY: CompiledObjectKey = CompiledObjectKey(
+    resource_type=CompiledResourceType.SOURCE,
+    name="raw_orders",
+)
 SEED_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.SEED,
     name="seed_orders",
 )
+
+EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES: list[DirectParentRunActionTestCase] = [
+    DirectParentRunActionTestCase(
+        description="direct model run marks child as upstream changed",
+        parent_key=MODEL_CHANGED,
+        child_key=MODEL_UNCHANGED,
+        expected_cascade_present=True,
+        expected_root_cause=MODEL_CHANGED.name,
+        expected_root_reason=PlanReason.UPSTREAM_CHANGED,
+    ),
+    DirectParentRunActionTestCase(
+        description="direct seed run marks child as upstream changed",
+        parent_key=SEED_KEY,
+        child_key=MODEL_UNCHANGED,
+        expected_cascade_present=True,
+        expected_root_cause=SEED_KEY.name,
+        expected_root_reason=PlanReason.UPSTREAM_CHANGED,
+    ),
+]
+
+NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES: list[DirectParentRunActionTestCase] = [
+    DirectParentRunActionTestCase(
+        description="selected source parent does not mark child as upstream changed",
+        parent_key=SOURCE_KEY,
+        child_key=MODEL_UNCHANGED,
+        expected_cascade_present=False,
+    ),
+    DirectParentRunActionTestCase(
+        description="selected function parent does not mark child as upstream changed",
+        parent_key=FUNCTION_CHANGED,
+        child_key=MODEL_UNCHANGED,
+        expected_cascade_present=False,
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -248,17 +287,17 @@ def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
     "test_case",
     [
         MarkVersionIdentityStaleActionsTestCase(
-            description="composed version stale model adds upstream cascade",
+            description="composed version stale model does not add upstream cascade",
             model_key=MODEL_UNCHANGED,
             change_kind=ChangeKind.NO_CHANGE,
             previous_version_hash="old_version",
             expected_version_hash="new_version",
-            expected_cascade_present=True,
+            expected_cascade_present=False,
         )
     ],
-    ids=["composed version stale model adds upstream cascade"],
+    ids=["composed version stale model does not add upstream cascade"],
 )
-def test_given_composed_version_stale_model_when_marking_actions_then_adds_upstream_cascade(
+def test_given_composed_version_stale_model_when_marking_actions_then_does_not_add_upstream_cascade(
     test_case: MarkVersionIdentityStaleActionsTestCase,
 ) -> None:
     scope: PlannerScope = PlannerScope(
@@ -290,10 +329,6 @@ def test_given_composed_version_stale_model_when_marking_actions_then_adds_upstr
 
     marked_action: ResolvedModelAction = result.models[test_case.model_key.name]
     assert (marked_action.cascade is not None) == test_case.expected_cascade_present
-    assert marked_action.cascade is not None
-    cascade: CascadeResult = marked_action.cascade
-    assert cascade.effective_action == BackfillAction.FORWARD_ONLY
-    assert cascade.effective_duration is None
 
 
 @pytest.mark.parametrize(
@@ -341,4 +376,98 @@ def test_given_locally_changed_model_when_marking_actions_then_keeps_existing_re
     )
 
     marked_action: ResolvedModelAction = result.models[test_case.model_key.name]
+    assert (marked_action.cascade is not None) == test_case.expected_cascade_present
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES,
+    ids=[case.description for case in EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES],
+)
+def test_given_executable_direct_parent_run_scope_when_marking_then_child_gets_cascade(
+    test_case: DirectParentRunActionTestCase,
+) -> None:
+    parent_key: CompiledObjectKey = test_case.parent_key
+    child_key: CompiledObjectKey = test_case.child_key
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={child_key: (parent_key,)},
+        downstream_deps={parent_key: (child_key,)},
+        all_keys={},
+        models_by_name={},
+        selected_keys=frozenset({parent_key, child_key}),
+        execution_order=(),
+    )
+    resolved_actions: PlannerResolvedActions = PlannerResolvedActions(
+        models={
+            parent_key.name: ResolvedModelAction(
+                change=ChangeDetectionResult(
+                    model_name=parent_key.name,
+                    change_kind=ChangeKind.QUERY_CHANGED,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            ),
+            child_key.name: ResolvedModelAction(
+                change=ChangeDetectionResult(
+                    model_name=child_key.name,
+                    change_kind=ChangeKind.NO_CHANGE,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            ),
+        }
+    )
+
+    result: PlannerResolvedActions = mark_direct_parent_run_actions(
+        scope=scope,
+        resolved_actions=resolved_actions,
+    )
+
+    marked_action: ResolvedModelAction = result.models[child_key.name]
+    assert marked_action.cascade is not None
+    assert marked_action.cascade.root_cause == test_case.expected_root_cause
+    assert marked_action.cascade.root_reason == test_case.expected_root_reason
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES,
+    ids=[case.description for case in NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES],
+)
+def test_given_non_executable_direct_parent_in_scope_when_marking_then_child_has_no_cascade(
+    test_case: DirectParentRunActionTestCase,
+) -> None:
+    parent_key: CompiledObjectKey = test_case.parent_key
+    child_key: CompiledObjectKey = test_case.child_key
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={child_key: (parent_key,)},
+        downstream_deps={parent_key: (child_key,)},
+        all_keys={},
+        models_by_name={},
+        selected_keys=frozenset({parent_key, child_key}),
+        execution_order=(),
+    )
+    resolved_actions: PlannerResolvedActions = PlannerResolvedActions(
+        models={
+            parent_key.name: ResolvedModelAction(
+                change=ChangeDetectionResult(
+                    model_name=parent_key.name,
+                    change_kind=ChangeKind.QUERY_CHANGED,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            ),
+            child_key.name: ResolvedModelAction(
+                change=ChangeDetectionResult(
+                    model_name=child_key.name,
+                    change_kind=ChangeKind.NO_CHANGE,
+                ),
+                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            ),
+        }
+    )
+
+    result: PlannerResolvedActions = mark_direct_parent_run_actions(
+        scope=scope,
+        resolved_actions=resolved_actions,
+    )
+
+    marked_action: ResolvedModelAction = result.models[child_key.name]
     assert (marked_action.cascade is not None) == test_case.expected_cascade_present

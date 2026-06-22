@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 import time
 from collections.abc import Callable
@@ -10,6 +12,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.connection_progress import build_connection_progress_reporter
 from sqlbuild.cli.commands.main.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
@@ -24,9 +27,12 @@ from sqlbuild.integrations.dbt.helpers.arg_parser import parse_dbt_execution_arg
 from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
-from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph, dbt_model_graph_key
 from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
+from sqlbuild.integrations.dbt.helpers.model_planning import (
+    build_expected_dbt_model_version_hashes,
+)
 from sqlbuild.integrations.dbt.helpers.plan_orchestration import (
     plan_dbt_interop_command,
     resolve_sqlbuild_test_actions,
@@ -41,6 +47,8 @@ from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManif
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
     DbtCommandExecutionResult,
     DbtCommandResult,
     DbtExecutionOutcome,
@@ -55,6 +63,8 @@ from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
     dependency_baseline_unique_ids,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    append_manifest_seed_warnings,
+    append_stale_out_of_selection_warning,
     build_dbt_execution_outcome,
     build_dbt_non_model_run_unique_ids,
     build_dbt_pruned_seed_unique_ids,
@@ -229,6 +239,7 @@ def execute_dbt_interop_from_project(
                 )
             )
         ),
+        selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh="--full-refresh" in routed.dbt_args,
         on_connection_start=connection_progress.on_connection_start,
         on_connection_complete=connection_progress.on_connection_complete,
@@ -236,6 +247,8 @@ def execute_dbt_interop_from_project(
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
+        plan = append_stale_out_of_selection_warning(plan=plan, dbt_model_plan=dbt_model_plan)
+    plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
     reuse_git_ref: str | None = None
     reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
     if reuse_from.git_ref is not None and reuse_from.generate_schema_name_override is not None:
@@ -252,6 +265,7 @@ def execute_dbt_interop_from_project(
         _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
     dbt_reuse_plan: DbtReusePlanningResult | None = None
     if dbt_reuse_enabled and has_explicit_dbt_reuse_scope:
+        reuse_warnings: list[str] = []
         dbt_reuse_plan = build_dbt_reuse_plan_output(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -262,7 +276,10 @@ def execute_dbt_interop_from_project(
             plan=plan,
             dbt_options=dbt_options,
             runner=runner,
+            warnings=reuse_warnings,
         )
+        if reuse_warnings:
+            plan = replace(plan, warnings=(*plan.warnings, *reuse_warnings))
     if reuse_plan_start is not None:
         _report_progress(
             on_progress,
@@ -287,6 +304,7 @@ def execute_dbt_interop_from_project(
             manifest=manifest,
             graph=graph,
             candidate_unique_ids=dependency_baseline_ids,
+            selected_unique_ids=dependency_baseline_ids,
             full_refresh="--full-refresh" in routed.dbt_args,
             on_connection_start=connection_progress.on_connection_start,
             on_connection_complete=connection_progress.on_connection_complete,
@@ -470,13 +488,60 @@ def execute_dbt_interop_from_project(
     dbt_query_sql_by_unique_id: dict[str, str] = {
         unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
     }
-    if project.settings.query_change_tracking and adapter_name != "duckdb":
+    dbt_seed_identity_by_unique_id: dict[str, str] = {
+        unique_id: seed.identity_hash
+        for unique_id, seed in manifest.seeds_by_unique_id.items()
+        if seed.identity_hash is not None
+    }
+    expected_dbt_version_hash_by_unique_id: dict[str, str | None] = (
+        build_expected_dbt_model_version_hashes(manifest=manifest, graph=graph)
+    )
+    previous_dbt_version_hash_by_unique_id: dict[str, str] = {
+        entry.unique_id: entry.previous_version_hash
+        for entry in (plan.dbt_model_plan.entries if plan.dbt_model_plan is not None else ())
+        if entry.previous_version_hash is not None
+    }
+    actual_dbt_version_hash_by_unique_id: dict[str, str] = dict(
+        previous_dbt_version_hash_by_unique_id
+    )
+
+    def resolve_actual_dbt_version_hash(unique_id: str) -> str | None:
+        model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
+        if model is None or model.node_checksum is None:
+            return None
+        upstream_hashes: list[tuple[str, str]] = []
+        key: Any
+        for key in graph.upstream_deps.get(dbt_model_graph_key(unique_id), ()):
+            if key.owner != DbtCombinedGraphOwner.DBT:
+                continue
+            upstream_hash: str | None = None
+            if key.resource_type == DbtCombinedGraphResourceType.MODEL:
+                upstream_hash = actual_dbt_version_hash_by_unique_id.get(key.name)
+                if upstream_hash is None:
+                    upstream_hash = expected_dbt_version_hash_by_unique_id.get(key.name)
+            elif key.resource_type == DbtCombinedGraphResourceType.SOURCE:
+                upstream_hash = dbt_seed_identity_by_unique_id.get(key.name)
+            if upstream_hash is not None:
+                upstream_hashes.append((key.name, upstream_hash))
+        if not upstream_hashes:
+            return model.node_checksum
+        payload: str = json.dumps(
+            {"own": model.node_checksum, "upstream": sorted(upstream_hashes)},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    if project.settings.query_change_tracking and adapter_name != BuiltinAdapter.DUCKDB:
         dbt_state_connection = adapter.connect(connection_config)
 
     def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
         if not project.settings.query_change_tracking:
             return
-        if adapter_name == "duckdb":
+        version_hash_override: str | None = resolve_actual_dbt_version_hash(result.unique_id)
+        if version_hash_override is not None:
+            actual_dbt_version_hash_by_unique_id[result.unique_id] = version_hash_override
+        if adapter_name == BuiltinAdapter.DUCKDB:
             buffered_dbt_results.append(result)
             return
         if dbt_state_connection is None:
@@ -491,6 +556,8 @@ def execute_dbt_interop_from_project(
             target_name=project.effective_target_name,
             warnings=dbt_fingerprint_warnings,
             query_sql=dbt_query_sql_by_unique_id.get(result.unique_id),
+            seed_identity_hash=dbt_seed_identity_by_unique_id.get(result.unique_id),
+            version_hash_override=version_hash_override,
         )
 
     try:
@@ -528,6 +595,10 @@ def execute_dbt_interop_from_project(
                     target_name=project.effective_target_name,
                     warnings=dbt_fingerprint_warnings,
                     query_sql=dbt_query_sql_by_unique_id.get(dbt_result.unique_id),
+                    seed_identity_hash=dbt_seed_identity_by_unique_id.get(dbt_result.unique_id),
+                    version_hash_override=actual_dbt_version_hash_by_unique_id.get(
+                        dbt_result.unique_id
+                    ),
                 )
         finally:
             adapter.close(duckdb_connection)
