@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.37.3](https://github.com/chio-labs/sqlbuild/compare/v0.37.2...v0.37.3) (2026-06-22)
+
+
+### Bug Fixes
+
+* **dbt:** fold independent seed content hash and full config into seed identity ([d11e1a7](https://github.com/chio-labs/sqlbuild/commit/d11e1a7878a2b6ef57d2bb33def14e212b329f7e))
+* **dbt:** harden exact selection staleness ([7b3fb12](https://github.com/chio-labs/sqlbuild/commit/7b3fb1272fddf755e54b72321e5a8b1325bee401))
+* **dbt:** selection-aware seed change tracking, full-refresh scoping, reuse graceful skip ([fe21783](https://github.com/chio-labs/sqlbuild/commit/fe217837b4ad77704073c122eb34f1c0ba938ee1))
+* **planner:** harden selection-aware staleness ([da37882](https://github.com/chio-labs/sqlbuild/commit/da3788281610541f0ce6e111498dd66528b7e36c))
+* **planner:** share selection staleness classification ([99c24a5](https://github.com/chio-labs/sqlbuild/commit/99c24a59cb6777f1d2b131d3399c99c2b083fdb9))
+
 ## [0.37.2](https://github.com/chio-labs/sqlbuild/compare/v0.37.1...v0.37.2) (2026-06-22)
 
 
