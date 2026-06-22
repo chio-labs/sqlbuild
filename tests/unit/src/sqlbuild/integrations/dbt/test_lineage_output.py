@@ -27,9 +27,9 @@ LINEAGE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
         description="formats list output",
         output_format=DbtLineageOutputFormat.LIST,
         expected_fragments=(
-            "dbt:stg_orders",
-            "dbt:int_orders",
-            "sqb:fact_orders",
+            "stg_orders [dbt]",
+            "int_orders [dbt]",
+            "fact_orders [sqb]",
             "->",
         ),
     ),
@@ -38,9 +38,10 @@ LINEAGE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
         output_format=DbtLineageOutputFormat.TREE,
         expected_fragments=(
             "Lineage",
-            "sqb:fact_orders",
-            "dbt:int_orders",
-            "dbt:stg_orders",
+            "fact_orders [sqb]",
+            "int_orders [dbt]",
+            "stg_orders [dbt]",
+            "└─",
         ),
     ),
 )
@@ -49,12 +50,12 @@ LINEAGE_SINGLE_NODE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
     DbtLineageOutputTestCase(
         description="formats single node list output",
         output_format=DbtLineageOutputFormat.LIST,
-        expected_fragments=("sqb:mart_orders",),
+        expected_fragments=("mart_orders [sqb]",),
     ),
     DbtLineageOutputTestCase(
         description="formats single node tree output",
         output_format=DbtLineageOutputFormat.TREE,
-        expected_fragments=("Lineage", "sqb:mart_orders", "upstream"),
+        expected_fragments=("Lineage", "mart_orders [sqb]", "upstream"),
     ),
 )
 
@@ -146,7 +147,7 @@ def test_given_single_node_lineage_graph_when_formatting_human_output_then_inclu
         DbtLineageOutputTestCase(
             description="formats summary fallback without focus",
             output_format=DbtLineageOutputFormat.TREE,
-            expected_fragments=("Lineage graph", "sqb:mart_orders"),
+            expected_fragments=("Lineage graph", "mart_orders [sqb]"),
         )
     ],
     ids=["formats summary fallback without focus"],
