@@ -51,6 +51,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtModelPlanAction,
     DbtModelPlanReason,
+    DbtSupportedResourceType,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -225,9 +226,13 @@ def _neutral_upstream_deps(
 def _neutral_key(
     *, key: DbtCombinedGraphKey, manifest: DbtManifestIndex
 ) -> SelectionStalenessNodeKey:
-    resource_type: str = "model"
+    resource_type: str = DbtSupportedResourceType.MODEL
     if key.resource_type == DbtCombinedGraphResourceType.SOURCE:
-        resource_type = "seed" if key.name in manifest.seeds_by_unique_id else "source"
+        resource_type = (
+            DbtSupportedResourceType.SEED
+            if key.name in manifest.seeds_by_unique_id
+            else DbtSupportedResourceType.SOURCE
+        )
     return SelectionStalenessNodeKey(resource_type=resource_type, name=key.name)
 
 

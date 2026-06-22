@@ -25,6 +25,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanReason,
     DbtReusePlanAction,
     DbtReusePlanReason,
+    DbtSupportedResourceType,
 )
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
@@ -695,17 +696,17 @@ def _format_dbt_non_model_sections(
     seed_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
         nodes=plan.dbt_selected_nodes,
         unique_ids=run_ids,
-        resource_type="seed",
+        resource_type=DbtSupportedResourceType.SEED,
     )
     test_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
         nodes=plan.dbt_selected_nodes,
         unique_ids=run_ids,
-        resource_type="test",
+        resource_type=DbtSupportedResourceType.TEST,
     )
     unit_test_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
         nodes=plan.dbt_selected_nodes,
         unique_ids=run_ids,
-        resource_type="unit_test",
+        resource_type=DbtSupportedResourceType.UNIT_TEST,
     )
     if seed_nodes or test_nodes or unit_test_nodes:
         style: CliStyle = CliStyle(use_color=True)
@@ -736,7 +737,7 @@ def _format_dbt_non_model_sections(
         pruned_seed_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
             nodes=plan.dbt_selected_nodes,
             unique_ids=pruned_seed_ids,
-            resource_type="seed",
+            resource_type=DbtSupportedResourceType.SEED,
         )
         _format_dbt_pruned_non_model_group(
             lines,
@@ -749,7 +750,7 @@ def _format_dbt_non_model_sections(
         pruned_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
             nodes=plan.dbt_selected_nodes,
             unique_ids=pruned_test_ids,
-            resource_type="test",
+            resource_type=DbtSupportedResourceType.TEST,
         )
         _format_dbt_pruned_non_model_group(
             lines,
@@ -761,7 +762,7 @@ def _format_dbt_non_model_sections(
         pruned_unit_test_nodes: tuple[DbtLsNode, ...] = _nodes_by_unique_ids(
             nodes=plan.dbt_selected_nodes,
             unique_ids=pruned_test_ids,
-            resource_type="unit_test",
+            resource_type=DbtSupportedResourceType.UNIT_TEST,
         )
         _format_dbt_pruned_non_model_group(
             lines,
@@ -818,7 +819,10 @@ def _format_dbt_pruned_non_model_group(
 
 
 def _nodes_by_unique_ids(
-    *, nodes: tuple[DbtLsNode, ...], unique_ids: frozenset[str], resource_type: str
+    *,
+    nodes: tuple[DbtLsNode, ...],
+    unique_ids: frozenset[str],
+    resource_type: DbtSupportedResourceType,
 ) -> tuple[DbtLsNode, ...]:
     return tuple(
         sorted(
@@ -1193,14 +1197,16 @@ def _dbt_test_model_names(plan: DbtInteropPlan) -> tuple[str, ...]:
     names: list[str] = []
     node: DbtLsNode
     for node in plan.dbt_selected_nodes:
-        if node.resource_type == "model":
+        if node.resource_type == DbtSupportedResourceType.MODEL:
             names.append(_dbt_node_display_name(node))
     return tuple(dict.fromkeys(names))
 
 
 def _dbt_test_nodes(plan: DbtInteropPlan) -> tuple[DbtLsNode, ...]:
     return tuple(
-        node for node in plan.dbt_selected_nodes if node.resource_type in {"test", "unit_test"}
+        node
+        for node in plan.dbt_selected_nodes
+        if node.resource_type in {DbtSupportedResourceType.TEST, DbtSupportedResourceType.UNIT_TEST}
     )
 
 
@@ -1283,7 +1289,7 @@ def _format_warning_section(lines: list[str], plan: DbtInteropPlan) -> None:
     lines.append(style.warning_strong(f"Warnings ({len(plan.warnings)})"))
     warning: str
     for warning in plan.warnings:
-        lines.append(f"  - {warning}")
+        lines.append(f"  {style.warning(f'- {warning}')}")
 
 
 def _strip_ansi(text: str) -> str:

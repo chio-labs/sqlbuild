@@ -17,6 +17,7 @@ from sqlbuild.integrations.dbt.constants import (
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtCloneOptions, DbtLsNode
+from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 
 
 def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
@@ -79,7 +80,7 @@ def execute_dbt_clone(
     results: list[CloneItemResult] = []
     node: DbtLsNode
     for node in selected_nodes:
-        if node.resource_type != "model":
+        if node.resource_type != DbtSupportedResourceType.MODEL:
             continue
         current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(
             node.unique_id

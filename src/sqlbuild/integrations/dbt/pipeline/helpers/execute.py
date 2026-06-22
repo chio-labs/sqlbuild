@@ -40,6 +40,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtReusePlanAction,
+    DbtSupportedResourceType,
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
@@ -196,7 +197,7 @@ def build_dbt_execution_outcome(
             )
     result: DbtNodeExecutionResult
     for result in node_results:
-        if result.resource_type != "model":
+        if result.resource_type != DbtSupportedResourceType.MODEL:
             continue
         planned_entry: DbtModelPlanEntry | None = planned_entries.get(result.unique_id)
         planned_action: DbtModelPlanAction | None = (
@@ -398,7 +399,7 @@ def build_deferred_dbt_relations(
     unique_ids: set[str] = set(plan.selection.dbt_required_unique_ids)
     node: DbtLsNode
     for node in plan.dbt_selected_nodes:
-        if node.resource_type == "model":
+        if node.resource_type == DbtSupportedResourceType.MODEL:
             unique_ids.add(node.unique_id)
     unique_id: str
     for unique_id in unique_ids:
@@ -424,13 +425,13 @@ def build_dbt_non_model_run_unique_ids(
     if plan.dbt_model_plan is None:
         return ()
     seed_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
-        plan=plan, resource_type="seed"
+        plan=plan, resource_type=DbtSupportedResourceType.SEED
     )
     test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
-        plan=plan, resource_type="test"
+        plan=plan, resource_type=DbtSupportedResourceType.TEST
     )
     unit_test_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
-        plan=plan, resource_type="unit_test"
+        plan=plan, resource_type=DbtSupportedResourceType.UNIT_TEST
     )
     if command == DbtInteropCommand.TEST:
         return tuple(sorted(frozenset((*test_unique_ids, *unit_test_unique_ids))))
@@ -457,8 +458,12 @@ def build_dbt_pruned_test_unique_ids(
         sorted(
             frozenset(
                 (
-                    *_selected_non_model_unique_ids(plan=plan, resource_type="test"),
-                    *_selected_non_model_unique_ids(plan=plan, resource_type="unit_test"),
+                    *_selected_non_model_unique_ids(
+                        plan=plan, resource_type=DbtSupportedResourceType.TEST
+                    ),
+                    *_selected_non_model_unique_ids(
+                        plan=plan, resource_type=DbtSupportedResourceType.UNIT_TEST
+                    ),
                 )
             )
         )
@@ -511,7 +516,9 @@ def build_dbt_pruned_seed_unique_ids(
     changed: frozenset[str] = frozenset(plan.dbt_model_plan.changed_seed_unique_ids)
     return tuple(
         unique_id
-        for unique_id in _selected_non_model_unique_ids(plan=plan, resource_type="seed")
+        for unique_id in _selected_non_model_unique_ids(
+            plan=plan, resource_type=DbtSupportedResourceType.SEED
+        )
         if unique_id not in changed
     )
 
@@ -607,7 +614,9 @@ def _planned_dbt_select_terms(
     return tuple(sorted(frozenset((*model_terms, *non_model_terms))))
 
 
-def _selected_non_model_unique_ids(*, plan: DbtInteropPlan, resource_type: str) -> tuple[str, ...]:
+def _selected_non_model_unique_ids(
+    *, plan: DbtInteropPlan, resource_type: DbtSupportedResourceType
+) -> tuple[str, ...]:
     return tuple(
         sorted(
             node.unique_id

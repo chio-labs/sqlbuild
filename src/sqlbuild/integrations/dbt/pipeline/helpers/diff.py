@@ -12,6 +12,7 @@ from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtDiffOptions, DbtLsNode
+from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 
 
 def parse_dbt_diff_options(args: tuple[str, ...]) -> DbtDiffOptions:
@@ -110,7 +111,7 @@ def execute_dbt_diff(
     results: list[ModelDiffResult] = []
     node: DbtLsNode
     for node in selected_nodes:
-        if node.resource_type != "model":
+        if node.resource_type != DbtSupportedResourceType.MODEL:
             continue
         current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(
             node.unique_id

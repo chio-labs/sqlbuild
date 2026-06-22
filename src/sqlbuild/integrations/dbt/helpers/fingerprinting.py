@@ -12,7 +12,7 @@ from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
-from sqlbuild.integrations.dbt.types import DbtNodeResourceType
+from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 from sqlbuild.shared.helpers.hashing import compute_query_hash
 
 
@@ -50,7 +50,7 @@ def try_write_dbt_node_fingerprint(
             sort_keys=True,
             separators=(",", ":"),
         )
-        if result.resource_type == DbtNodeResourceType.MODEL:
+        if result.resource_type == DbtSupportedResourceType.MODEL:
             if query_sql is None:
                 warnings.append(
                     f"dbt fingerprint write skipped for '{result.unique_id}': "
@@ -62,7 +62,8 @@ def try_write_dbt_node_fingerprint(
             definition = metadata
         definition_hash: str = (
             seed_identity_hash
-            if result.resource_type == DbtNodeResourceType.SEED and seed_identity_hash is not None
+            if result.resource_type == DbtSupportedResourceType.SEED
+            and seed_identity_hash is not None
             else result.node_checksum or compute_query_hash(definition)
         )
         version_hash: str = version_hash_override or definition_hash
