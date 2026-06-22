@@ -50,8 +50,8 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
-from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
+from sqlbuild.compiler.planner.helpers.graph.core import build_downstream_deps
+from sqlbuild.compiler.planner.helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
@@ -1593,7 +1593,7 @@ def build_scheduling_graph(
 ]:
     """Build upstream and downstream dep dicts from simple name-based edges."""
 
-    from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
+    from sqlbuild.compiler.planner.helpers.graph.core import build_downstream_deps
 
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
     name: str

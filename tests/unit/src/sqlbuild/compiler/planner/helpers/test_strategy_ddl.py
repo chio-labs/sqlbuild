@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.planner.helpers.strategy import build_logical_ddl
+from sqlbuild.compiler.planner.helpers.output.strategy import build_logical_ddl
 from sqlbuild.compiler.planner.types import PlanAction
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildLogicalDdlTestCase,

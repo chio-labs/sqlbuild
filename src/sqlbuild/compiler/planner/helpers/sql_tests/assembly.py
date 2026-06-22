@@ -31,7 +31,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_table_function_references,
     resolve_udf_references,
 )
-from sqlbuild.compiler.planner.helpers.sql_analysis_sql_test_assembly import (
+from sqlbuild.compiler.planner.helpers.sql_tests.analysis_assembly import (
     try_resolve_test_model_sql_with_sql_analysis,
 )
 from sqlbuild.compiler.planner.models import (

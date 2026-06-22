@@ -1016,6 +1016,32 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC033",),
     ),
     CheckPathsTestCase(
+        description="allows sibling helper subpackage import",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/changes/__init__.py": '"""Changes."""\n',
+            "src/sqlbuild/example/widget/helpers/changes/detect.py": dedent(
+                """
+                from sqlbuild.example.widget.helpers.identity.hashing import hash_value
+
+
+                def detect() -> str:
+                    return hash_value("demo")
+                """
+            ).strip()
+            + "\n",
+            "src/sqlbuild/example/widget/helpers/identity/__init__.py": '"""Identity."""\n',
+            "src/sqlbuild/example/widget/helpers/identity/hashing.py": dedent(
+                """
+                def hash_value(value: str) -> str:
+                    return value
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="allows sibling models import",
         repo_files=compliant_repo_files()
         | {

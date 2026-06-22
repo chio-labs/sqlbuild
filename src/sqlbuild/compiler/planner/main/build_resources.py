@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.planner.helpers.selectors import expand_required_build_resources
+from sqlbuild.compiler.planner.helpers.graph.selectors import expand_required_build_resources
 
 
 def expand_build_resource_selection(

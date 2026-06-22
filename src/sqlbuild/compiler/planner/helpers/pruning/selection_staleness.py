@@ -5,10 +5,10 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
-from sqlbuild.compiler.planner.helpers.selection_staleness_classifier import (
+from sqlbuild.compiler.planner.helpers.pruning.selection_classifier import (
     classify_selection_staleness_warnings,
 )
+from sqlbuild.compiler.planner.main.model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,

@@ -1236,6 +1236,8 @@ def check_no_sibling_package_imports(
             continue
         if len(imported_parts) <= len(parent_package_parts):
             continue
+        if _is_within_same_helpers_package(current_package_parts, imported_parts):
+            continue
 
         sibling_name = imported_parts[len(parent_package_parts)]
         if sibling_name == "helpers" and current_subpackage_name in {
@@ -1285,6 +1287,8 @@ def check_no_sibling_package_imports(
                 continue
             if len(imported_parts) <= len(parent_package_parts) + 1:
                 continue
+            if _is_within_same_helpers_package(current_package_parts, imported_parts):
+                continue
             if _is_allowed_sibling_public_surface(parent_package_parts, imported_parts):
                 continue
 
@@ -1318,6 +1322,20 @@ def check_no_sibling_package_imports(
             )
 
     return violations
+
+
+def _is_within_same_helpers_package(
+    current_package_parts: tuple[str, ...], imported_parts: tuple[str, ...]
+) -> bool:
+    if "helpers" not in current_package_parts:
+        return False
+    helpers_index: int = current_package_parts.index("helpers")
+    helpers_prefix: tuple[str, ...] = current_package_parts[: helpers_index + 1]
+    if imported_parts[: len(helpers_prefix)] != helpers_prefix:
+        return False
+    return len(current_package_parts) > helpers_index + 1 and len(imported_parts) > len(
+        helpers_prefix
+    )
 
 
 def check_shared_package_imports(

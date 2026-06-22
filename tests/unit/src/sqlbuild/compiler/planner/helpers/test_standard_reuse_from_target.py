@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.standard_reuse_from_target import (
+from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
     build_standard_reuse_from_target_snapshot,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, StandardReuseFromTargetSnapshot

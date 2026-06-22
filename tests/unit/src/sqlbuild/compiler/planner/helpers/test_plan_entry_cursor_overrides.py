@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.plan_entry import _compute_plan_cursor_bounds
+from sqlbuild.compiler.planner.helpers.output.plan_entry import _compute_plan_cursor_bounds
 from sqlbuild.compiler.planner.models import BackfillResult, CursorBounds, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (

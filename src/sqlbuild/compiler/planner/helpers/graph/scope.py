@@ -11,15 +11,15 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSource,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.auto_load import managed_source_upstream_keys
-from sqlbuild.compiler.planner.helpers.graph import (
+from sqlbuild.compiler.planner.helpers.graph.auto_load import managed_source_upstream_keys
+from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_upstream_deps,
     topologically_order_keys,
 )
-from sqlbuild.compiler.planner.helpers.loader_dag import expand_selected_loader_dependencies
-from sqlbuild.compiler.planner.helpers.plan_entry import build_path_index, build_tag_index
-from sqlbuild.compiler.planner.helpers.selectors import parse_selector, resolve_selectors
+from sqlbuild.compiler.planner.helpers.graph.loader_dag import expand_selected_loader_dependencies
+from sqlbuild.compiler.planner.helpers.graph.selectors import parse_selector, resolve_selectors
+from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index, build_tag_index
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, PlannerScope
 from sqlbuild.compiler.planner.types import SelectorKind
 

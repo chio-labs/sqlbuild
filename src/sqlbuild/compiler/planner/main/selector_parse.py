@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.selectors import parse_selector
+from sqlbuild.compiler.planner.helpers.graph.selectors import parse_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 
 

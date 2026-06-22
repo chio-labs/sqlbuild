@@ -6,11 +6,11 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
 )
-from sqlbuild.compiler.planner.helpers.graph import (
+from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_upstream_deps,
 )
-from sqlbuild.compiler.planner.helpers.plan_entry import build_path_index
+from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_test_project,
     model_key,

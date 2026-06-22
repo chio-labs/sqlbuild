@@ -8,8 +8,8 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
-from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.warehouse_snapshot import build_warehouse_snapshot
+from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner.helpers.warehouse.snapshot import build_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlannerWarehouseSnapshotResult,

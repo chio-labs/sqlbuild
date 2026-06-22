@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.helpers.strategy import build_model_warnings
+from sqlbuild.compiler.planner.helpers.output.strategy import build_model_warnings
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlanWarning,

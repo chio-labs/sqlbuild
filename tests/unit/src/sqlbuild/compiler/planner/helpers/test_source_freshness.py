@@ -6,7 +6,9 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.helpers.source_freshness import build_planner_source_freshness_result
+from sqlbuild.compiler.planner.helpers.warehouse.source_freshness import (
+    build_planner_source_freshness_result,
+)
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig

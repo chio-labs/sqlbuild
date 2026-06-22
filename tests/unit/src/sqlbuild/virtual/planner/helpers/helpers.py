@@ -20,7 +20,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.helpers.graph import (
+from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_upstream_deps,
 )

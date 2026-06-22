@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledAudit,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
+from sqlbuild.compiler.planner.helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (

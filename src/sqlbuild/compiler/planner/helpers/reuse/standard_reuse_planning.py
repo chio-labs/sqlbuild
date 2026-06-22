@@ -7,14 +7,14 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.source_freshness import (
-    build_reuse_from_source_freshness_result,
-)
-from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
+from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_decisions import (
     build_standard_reuse_decisions,
 )
-from sqlbuild.compiler.planner.helpers.standard_reuse_from_target import (
+from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
     build_standard_reuse_from_target_snapshot,
+)
+from sqlbuild.compiler.planner.helpers.warehouse.source_freshness import (
+    build_reuse_from_source_freshness_result,
 )
 from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
