@@ -64,6 +64,18 @@ def prepare_dependency_baseline_project(
     return project_dir
 
 
+def build_virtual_wide_dag_repo_files(*, model_count: int) -> dict[str, str]:
+    repo_files: dict[str, str] = {
+        "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+    }
+    for index in range(1, model_count + 1):
+        model_name: str = f"model_{index:02d}"
+        repo_files[f"models/{model_name}.sql"] = (
+            f"MODEL (materialized table);\n\nSELECT {index} AS id, '{model_name}' AS model_name\n"
+        )
+    return repo_files
+
+
 def table_upstream_model_sql(*, amount: int = 100) -> str:
     return f"MODEL (materialized table);\n\nSELECT id, {amount} AS amount FROM main.raw_orders\n"
 

@@ -30,6 +30,7 @@ from sqlbuild.cli.commands.main.shared.helpers.parsers import (
     add_select_args,
     add_vars_args,
     read_selector_files,
+    resolve_env_default_concurrency,
 )
 from sqlbuild.cli.commands.main.shared.types import CliCommand
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
@@ -609,6 +610,11 @@ def _main_with_dependencies(
             args.dbt_args = unknown_args
         elif unknown_args:
             parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
+        if args.command in {CliCommand.BUILD, CliCommand.LOAD, CliCommand.SEED}:
+            try:
+                args.concurrency = resolve_env_default_concurrency(args.concurrency)
+            except argparse.ArgumentTypeError as error:
+                parser.error(str(error))
     except SystemExit as error:
         if isinstance(error.code, int):
             return error.code

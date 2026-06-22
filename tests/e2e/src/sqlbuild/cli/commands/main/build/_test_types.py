@@ -237,6 +237,16 @@ class VirtualBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualConcurrentBuildE2ETestCase:
+    """Test case for concurrent virtual build e2e behavior."""
+
+    description: str
+    concurrency: int
+    expected_model_count: int
+    expected_build_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class VirtualSeedBuildE2ETestCase:
     """Test case for virtual seed build state behavior."""
 

@@ -605,6 +605,11 @@ def run_virtual_build(
             status=BuildStatus.FAILED, load_results=ingress_load_results
         )
     else:
+        _prepare_virtual_physical_schemas(
+            adapter=adapter,
+            connection_config=connection_config,
+            plan_output=executor_plan_output,
+        )
         result = run_build_pipeline(
             plan=executor_plan_output,
             connection_config=connection_config,
@@ -888,6 +893,33 @@ def _load_result_key(*, plan: PlanOutput, result: LoadExecutionResult) -> Compil
     raise PlannerInputError(
         f"No source-load plan entry found for load result '{result.source_name}'"
     )
+
+
+def _prepare_virtual_physical_schemas(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    plan_output: PlanOutput,
+) -> None:
+    schemas: set[tuple[str | None, str]] = set()
+    for entry in (*plan_output.model_entries, *plan_output.seed_entries):
+        if entry.destination.schema is not None:
+            schemas.add((entry.destination.database, entry.destination.schema))
+    if not schemas:
+        return
+
+    connection: Any = adapter.connect(connection_config)
+    recorder: StatementRecorder = StatementRecorder()
+    try:
+        for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
+            adapter.ensure_schema(
+                connection,
+                database=database,
+                schema=schema,
+                statement_recorder=recorder,
+            )
+    finally:
+        adapter.close(connection)
 
 
 def _prepare_custom_virtual_version(
