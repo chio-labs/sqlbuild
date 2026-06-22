@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.2](https://github.com/chio-labs/sqlbuild/compare/v0.37.1...v0.37.2) (2026-06-22)
+
+
+### Bug Fixes
+
+* **executor:** preflight schemas before concurrent builds ([591401b](https://github.com/chio-labs/sqlbuild/commit/591401b96e40abe7ae838eff458c6ca3046b5123))
+* **executor:** preflight schemas before concurrent builds ([58c5cce](https://github.com/chio-labs/sqlbuild/commit/58c5ccefa55f1686bcbd51241bf2d6b6b3f3ac09))
+
 ## [0.37.1](https://github.com/chio-labs/sqlbuild/compare/v0.37.0...v0.37.1) (2026-06-21)
 
 
