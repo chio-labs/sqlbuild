@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.graph import (
+from sqlbuild.compiler.planner.helpers.graph.core import (
     expand_downstream,
     expand_upstream,
     find_path_keys,

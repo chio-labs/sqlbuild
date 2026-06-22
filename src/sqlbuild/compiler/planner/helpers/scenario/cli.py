@@ -10,12 +10,12 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.scenario_artifacts import (
+from sqlbuild.compiler.planner.helpers.scenario.artifacts import (
     build_scenario_hash_index,
     build_scenario_relation_map,
 )
-from sqlbuild.compiler.planner.helpers.scenario_graph import plan_scenario_graph
-from sqlbuild.compiler.planner.helpers.scenario_relations import (
+from sqlbuild.compiler.planner.helpers.scenario.graph import plan_scenario_graph
+from sqlbuild.compiler.planner.helpers.scenario.relations import (
     build_scenario_execution_plan,
     build_scenario_relation_plan,
 )

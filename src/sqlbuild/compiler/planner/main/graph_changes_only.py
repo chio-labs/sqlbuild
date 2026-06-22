@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.planner.helpers.graph_changes_only import (
+from sqlbuild.compiler.planner.helpers.pruning.graph_changes_only import (
     build_graph_changes_only_propagation as _build_graph_changes_only_propagation,
 )
 from sqlbuild.compiler.planner.models import GraphChangesOnlyPropagationResult, GraphNodeKey

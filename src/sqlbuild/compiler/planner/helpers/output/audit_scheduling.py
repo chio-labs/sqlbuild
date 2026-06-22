@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.graph import expand_downstream
+from sqlbuild.compiler.planner.helpers.graph.core import expand_downstream
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.shared.types import SqlReferenceKind
 

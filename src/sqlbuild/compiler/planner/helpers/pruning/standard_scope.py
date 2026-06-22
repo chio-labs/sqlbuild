@@ -8,11 +8,11 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.selectors import expand_required_build_resources
-from sqlbuild.compiler.planner.helpers.version_identity_hashing import (
+from sqlbuild.compiler.planner.helpers.graph.selectors import expand_required_build_resources
+from sqlbuild.compiler.planner.helpers.shared.identity_hashing import (
     graph_key_for_compiled_resource,
 )
-from sqlbuild.compiler.planner.helpers.version_staleness import (
+from sqlbuild.compiler.planner.helpers.shared.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
 from sqlbuild.compiler.planner.main.graph_changes_only import build_graph_changes_only_propagation

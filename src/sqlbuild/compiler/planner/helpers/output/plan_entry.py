@@ -23,9 +23,15 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.changes.detect import detect_model_changes
-from sqlbuild.compiler.planner.helpers.cursor_type_check import (
+from sqlbuild.compiler.planner.helpers.graph.source_load_nodes import build_source_load_map
+from sqlbuild.compiler.planner.helpers.output.cursor_type_check import (
     check_cursor_type_consistency,
+)
+from sqlbuild.compiler.planner.helpers.output.strategy import (
+    build_model_warnings,
+    get_materialization_type,
+    resolve_model_plan_action,
+    resolve_schema_actions,
 )
 from sqlbuild.compiler.planner.helpers.resolve.cursor import (
     compute_cursor_bounds,
@@ -37,14 +43,8 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     build_seed_locations,
 )
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
-from sqlbuild.compiler.planner.helpers.source_deferral import build_source_read_map
-from sqlbuild.compiler.planner.helpers.source_load_nodes import build_source_load_map
-from sqlbuild.compiler.planner.helpers.strategy import (
-    build_model_warnings,
-    get_materialization_type,
-    resolve_model_plan_action,
-    resolve_schema_actions,
-)
+from sqlbuild.compiler.planner.helpers.warehouse.source_deferral import build_source_read_map
+from sqlbuild.compiler.planner.main.model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,

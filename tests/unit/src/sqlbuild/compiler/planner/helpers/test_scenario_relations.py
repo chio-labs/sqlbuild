@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.helpers.scenario_relations import (
+from sqlbuild.compiler.planner.helpers.scenario.relations import (
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
     build_scenario_relation_plan,

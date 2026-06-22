@@ -29,11 +29,14 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.function_fingerprints import (
+from sqlbuild.compiler.planner.helpers.graph.core import (
+    build_upstream_deps,
+    topologically_order_keys,
+)
+from sqlbuild.compiler.planner.helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
-from sqlbuild.compiler.planner.helpers.graph import build_upstream_deps, topologically_order_keys
-from sqlbuild.compiler.planner.helpers.plan_entry import extract_seed_columns, plan_model
+from sqlbuild.compiler.planner.helpers.output.plan_entry import extract_seed_columns, plan_model
 from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_locations
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.models import (

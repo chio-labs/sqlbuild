@@ -6,7 +6,7 @@ from datetime import datetime
 
 from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.strategy import get_materialization_type
+from sqlbuild.compiler.planner.helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
     PlannerScope,

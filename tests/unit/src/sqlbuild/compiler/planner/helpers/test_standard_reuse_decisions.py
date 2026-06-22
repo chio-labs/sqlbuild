@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.helpers.standard_reuse_decisions import (
+from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_decisions import (
     build_standard_reuse_decisions,
 )
 from sqlbuild.compiler.planner.models import (

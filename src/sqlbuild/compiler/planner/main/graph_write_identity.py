@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from sqlbuild.compiler.planner.helpers.graph_identity import (
+from sqlbuild.compiler.planner.helpers.identity.graph import (
     build_graph_write_identity_hashes as _build_graph_write_identity_hashes,
 )
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey

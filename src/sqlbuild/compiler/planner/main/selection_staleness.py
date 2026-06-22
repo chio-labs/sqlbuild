@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.selection_staleness_classifier import (
+from sqlbuild.compiler.planner.helpers.pruning.selection_classifier import (
     classify_selection_staleness_warnings as _classify_selection_staleness_warnings,
 )
 from sqlbuild.compiler.planner.models import SelectionStalenessGraph, SelectionStalenessWarning

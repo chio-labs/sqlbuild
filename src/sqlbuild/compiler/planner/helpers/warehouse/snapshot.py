@@ -31,8 +31,10 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.buildability import check_buildability
-from sqlbuild.compiler.planner.helpers.loader_dag import build_upstream_intermediate_source_map
+from sqlbuild.compiler.planner.helpers.graph.buildability import check_buildability
+from sqlbuild.compiler.planner.helpers.graph.loader_dag import (
+    build_upstream_intermediate_source_map,
+)
 from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ModelCursorSnapshot,

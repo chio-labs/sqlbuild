@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestCte
-from sqlbuild.compiler.planner.helpers.scenario_relations import (
+from sqlbuild.compiler.planner.helpers.scenario.relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
 from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql

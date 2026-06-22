@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.selection_staleness import (
+from sqlbuild.compiler.planner.helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
 )
 from sqlbuild.compiler.planner.models import (
