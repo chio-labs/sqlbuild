@@ -6,8 +6,8 @@ import re
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
-from sqlbuild.compiler.discovery.helpers.constants import FUNCTION_HEADER_PATTERN
-from sqlbuild.compiler.discovery.helpers.sql_models import _parse_model_header
+from sqlbuild.compiler.discovery.helpers.sql.constants import FUNCTION_HEADER_PATTERN
+from sqlbuild.compiler.discovery.helpers.sql.model_files import _parse_model_header
 
 
 def parse_function_sql(contents: str, file_path: Path) -> tuple[dict[str, object], str]:

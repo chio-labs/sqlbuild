@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.filesystem import (
+from sqlbuild.compiler.discovery.helpers.filesystem.core import (
     discover_materialization_files,
     discover_provider_classes,
 )

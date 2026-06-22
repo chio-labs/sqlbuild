@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.reuse_from import compile_reuse_from_manifest
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.reuse.reuse_from import compile_reuse_from_manifest
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtReuseFromCompileResult
 from sqlbuild.spec.models.project import DbtReuseFromConfig
 

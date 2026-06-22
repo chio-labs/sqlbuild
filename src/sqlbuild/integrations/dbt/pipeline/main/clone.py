@@ -14,18 +14,18 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.manifest import (
+from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.manifest.core import (
     build_dbt_manifest_index,
     load_dbt_manifest_index,
 )
-from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.plan_runtime import (
+from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_interop_adapter,
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
 )
-from sqlbuild.integrations.dbt.helpers.reuse_from import compile_reuse_from_manifest
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.reuse.reuse_from import compile_reuse_from_manifest
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

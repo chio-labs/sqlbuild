@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
+from sqlbuild.compiler.discovery.helpers.yml.sources import parse_sources_yml
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
 from sqlbuild.spec.models.source import SourceEntry

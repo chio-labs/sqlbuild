@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
-from sqlbuild.compiler.discovery.helpers.integration_loaders import integration_loader_name
+from sqlbuild.compiler.discovery.helpers.integrations.loaders import integration_loader_name
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
-from sqlbuild.compiler.discovery.helpers.yml_primitives import (
+from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     optional_non_empty_string,
     require_non_empty_string,
 )

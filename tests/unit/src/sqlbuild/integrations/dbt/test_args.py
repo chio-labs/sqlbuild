@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.arg_parser import parse_dbt_execution_args
-from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
+from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
+from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.models import DbtInteropParsedArgs, DbtInteropRoutedArgs
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (

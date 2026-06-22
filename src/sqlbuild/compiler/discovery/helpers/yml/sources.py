@@ -9,12 +9,12 @@ import yaml
 from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
-from sqlbuild.compiler.discovery.helpers.integration_loaders import (
+from sqlbuild.compiler.discovery.helpers.integrations.loaders import (
     integration_loader_name,
     parse_dlt_sources,
     parse_source_integration_loader,
 )
-from sqlbuild.compiler.discovery.helpers.yml_primitives import (
+from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     optional_bool,
     optional_mapping,
     optional_non_empty_string,

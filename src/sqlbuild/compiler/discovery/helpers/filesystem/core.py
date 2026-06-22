@@ -22,18 +22,18 @@ from sqlbuild.compiler.discovery.exceptions import (
     PythonNodeDiscoveryError,
     SchemaParseError,
 )
-from sqlbuild.compiler.discovery.helpers.python_functions import parse_python_function
-from sqlbuild.compiler.discovery.helpers.sql_audits import parse_sql_audit_file
-from sqlbuild.compiler.discovery.helpers.sql_functions import parse_function_sql
-from sqlbuild.compiler.discovery.helpers.sql_models import (
+from sqlbuild.compiler.discovery.helpers.python.functions import parse_python_function
+from sqlbuild.compiler.discovery.helpers.sql.audits import parse_sql_audit_file
+from sqlbuild.compiler.discovery.helpers.sql.functions import parse_function_sql
+from sqlbuild.compiler.discovery.helpers.sql.model_files import (
     model_header_column_locations,
     model_output_column_locations,
     parse_model_sql,
 )
-from sqlbuild.compiler.discovery.helpers.sql_scenarios import parse_sql_scenario_file
-from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
-from sqlbuild.compiler.discovery.helpers.yml_schema import parse_schema_yml
-from sqlbuild.compiler.discovery.helpers.yml_sources import parse_sources_yml
+from sqlbuild.compiler.discovery.helpers.sql.scenarios import parse_sql_scenario_file
+from sqlbuild.compiler.discovery.helpers.sql.tests import parse_sql_test_file
+from sqlbuild.compiler.discovery.helpers.yml.schema import parse_schema_yml
+from sqlbuild.compiler.discovery.helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,

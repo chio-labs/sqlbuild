@@ -6,10 +6,10 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.plan_orchestration import plan_dbt_interop_command
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.planning.orchestration import plan_dbt_interop_command
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

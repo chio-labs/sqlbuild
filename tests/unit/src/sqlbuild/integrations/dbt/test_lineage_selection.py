@@ -4,12 +4,12 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.lineage_selection import (
+from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.helpers.lineage.selection import (
     resolve_dbt_lineage_target,
     select_dbt_lineage_target,
 )
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtLineageGraph
 from sqlbuild.integrations.dbt.types import DbtLineageDirection

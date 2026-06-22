@@ -4,7 +4,7 @@ import io
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.event_stream import (
+from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
     execute_dbt_json_event_stream,
     parse_dbt_json_event,
     parse_dbt_node_message,
@@ -332,7 +332,7 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     captured_results: list[DbtNodeExecutionResult] = []
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
 
