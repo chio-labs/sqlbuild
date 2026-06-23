@@ -181,6 +181,7 @@ class DbtConfig:
 class LocalDbtConfig:
     """Local dbt interop configuration overrides."""
 
+    target: str | None = None
     vars: dict[str, object] = field(default_factory=dict)
 
 

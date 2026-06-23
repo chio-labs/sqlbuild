@@ -27,6 +27,7 @@ class DbtDebugWrapperTestCase:
     expected_dbt_args: tuple[str, ...]
     expected_sqlbuild_no_connection: bool
     expected_exit_code: int
+    expected_stderr_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -59,3 +60,18 @@ class DbtInitPromptTestCase:
     input_is_tty: bool
     expected_git_ref: str
     expected_output_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtInitProjectDirDefaultTestCase:
+    description: str
+    dbt_project_text: str
+    expected_dbt_project_dir: str
+
+
+@dataclass(frozen=True)
+class DbtInitValidationOrderTestCase:
+    description: str
+    input_text: str
+    expected_error_fragment: str
+    unexpected_output_fragments: tuple[str, ...]
