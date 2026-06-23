@@ -10,6 +10,10 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 
+_DBT_PROFILE_CONNECTION_ROUTING_KEYS: frozenset[str] = frozenset(
+    {"source", "profile", "target", "project_dir", "profiles_dir"}
+)
+
 
 def resolve_connection_config(
     *,
@@ -32,7 +36,12 @@ def resolve_connection_config(
     if resolved_dbt_profile is not None:
         for warning in resolved_dbt_profile.warnings:
             print(f"Warning: {warning}", file=sys.stderr)
-        config = resolved_dbt_profile.connection
+        user_overrides: dict[str, object] = {
+            key: value
+            for key, value in raw_config.items()
+            if key not in _DBT_PROFILE_CONNECTION_ROUTING_KEYS
+        }
+        config = {**resolved_dbt_profile.connection, **user_overrides}
     database: object | None = config.get("database")
     if (
         adapter_name == BuiltinAdapter.DUCKDB

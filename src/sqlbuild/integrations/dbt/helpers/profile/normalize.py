@@ -130,40 +130,9 @@ def _normalize_postgres(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtP
 
 def _normalize_snowflake(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtProfileConnection:
     output: dict[str, object] = dict(resolved.output)
-    connection: dict[str, object] = _copy_present(
-        output,
-        (
-            "account",
-            "user",
-            "warehouse",
-            "database",
-            "schema",
-            "role",
-            "password",
-            "authenticator",
-            "private_key",
-            "private_key_path",
-            "private_key_passphrase",
-            "token",
-            "oauth_client_id",
-            "oauth_client_secret",
-            "query_tag",
-            "client_session_keep_alive",
-            "host",
-            "port",
-            "proxy_host",
-            "proxy_port",
-            "protocol",
-            "connect_retries",
-            "connect_timeout",
-            "retry_on_database_errors",
-            "retry_all",
-            "insecure_mode",
-            "reuse_connections",
-            "s3_stage_vpce_dns_name",
-            "platform_detection_timeout_seconds",
-        ),
-    )
+    connection: dict[str, object] = dict(output)
+    connection.pop("type", None)
+    connection.pop("threads", None)
     return NormalizedDbtProfileConnection(
         adapter=BuiltinAdapter.SNOWFLAKE.value,
         connection=connection,

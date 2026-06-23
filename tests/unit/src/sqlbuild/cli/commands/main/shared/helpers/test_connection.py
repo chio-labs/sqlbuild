@@ -5,15 +5,18 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.cli.commands.main.shared.helpers.connection import core as connection_core
 from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
     resolve_connection_config,
     resolve_project_connection_config,
     resolve_target_connection_config,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     ResolveConnectionConfigWarningTestCase,
+    ResolveDbtProfileConnectionConfigTestCase,
     ResolveEnvironmentConnectionConfigTestCase,
     ResolveProjectConnectionConfigTestCase,
 )
@@ -107,6 +110,68 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
     captured_err: str = capsys.readouterr().err
     assert connection == test_case.expected_connection
     assert captured_err == test_case.expected_warning
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveDbtProfileConnectionConfigTestCase(
+            description="merges user connection overrides over resolved dbt profile connection",
+            raw_config={
+                "source": "dbt_profile",
+                "profile": "analytics",
+                "target": "dev",
+                "profiles_dir": "../profiles",
+                "account": "override-acct",
+                "client_request_mfa_token": True,
+            },
+            profile_connection={
+                "account": "profile-acct",
+                "user": "analytics",
+                "database": "RAW",
+                "schema": "ANALYTICS",
+            },
+            expected_connection={
+                "account": "override-acct",
+                "user": "analytics",
+                "database": "RAW",
+                "schema": "ANALYTICS",
+                "client_request_mfa_token": True,
+            },
+        )
+    ],
+    ids=["merges user connection overrides over resolved dbt profile connection"],
+)
+def test_given_dbt_profile_connection_when_resolving_then_merges_user_overrides(
+    test_case: ResolveDbtProfileConnectionConfigTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(name="demo", adapter="snowflake"),
+        local_config=LocalConfig(),
+    )
+
+    def resolve_raw_dbt_profile_connection(**kwargs: object) -> NormalizedDbtProfileConnection:
+        return NormalizedDbtProfileConnection(
+            adapter=BuiltinAdapter.SNOWFLAKE.value,
+            connection=test_case.profile_connection,
+        )
+
+    monkeypatch.setattr(
+        connection_core,
+        "resolve_raw_dbt_profile_connection",
+        resolve_raw_dbt_profile_connection,
+    )
+
+    connection: dict[str, object] = resolve_connection_config(
+        raw_config=test_case.raw_config,
+        project_dir=tmp_path,
+        adapter_name=BuiltinAdapter.SNOWFLAKE,
+        discovered_inputs=discovered_inputs,
+    )
+
+    assert connection == test_case.expected_connection
 
 
 @pytest.mark.parametrize(

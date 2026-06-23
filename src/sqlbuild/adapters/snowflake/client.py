@@ -1308,6 +1308,12 @@ class SnowflakeAdapter(BaseAdapter):
             ) from error
 
         connect_config: dict[str, Any] = dict(config)
+        authenticator: str = str(connect_config.get("authenticator", "")).lower()
+        if authenticator == "username_password_mfa":
+            connect_config.setdefault("client_request_mfa_token", True)
+            connect_config.setdefault("client_store_temporary_credential", True)
+        elif authenticator == "externalbrowser":
+            connect_config.setdefault("client_store_temporary_credential", True)
         role: object | None = connect_config.get("role")
         warehouse: object | None = connect_config.get("warehouse")
         database: object | None = connect_config.get("database")

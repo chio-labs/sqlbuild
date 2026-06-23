@@ -27,6 +27,12 @@ class DbtProfileInitTomlTestCase:
 
 
 @dataclass(frozen=True)
+class DbtProfileInitDiscoveryTestCase:
+    description: str
+    expected_profiles_dir_fragment: str
+
+
+@dataclass(frozen=True)
 class DbtProfileNormalizeTestCase:
     description: str
     output: dict[str, object]

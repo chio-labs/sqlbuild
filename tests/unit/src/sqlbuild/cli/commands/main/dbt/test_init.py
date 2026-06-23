@@ -8,6 +8,7 @@ from _pytest.capture import CaptureResult
 
 import sqlbuild.cli.commands.main.dbt_init as dbt_init_module
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
+from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtInitOutputTestCase,
@@ -150,6 +151,11 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
         "sqlbuild.cli.commands.main.dbt_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
+    monkeypatch.setattr(
+        dbt_init_module,
+        "validate_dbt_profile_init_request",
+        lambda *, request: None,
+    )
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
         cwd=Path("/workspace"),
@@ -223,6 +229,11 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.dbt_init.run_dbt_profile_init",
         run_dbt_profile_init,
+    )
+    monkeypatch.setattr(
+        dbt_init_module,
+        "validate_dbt_profile_init_request",
+        lambda *, request: None,
     )
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
@@ -298,6 +309,11 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
         "run_dbt_profile_init",
         run_dbt_profile_init,
     )
+    monkeypatch.setattr(
+        dbt_init_module,
+        "validate_dbt_profile_init_request",
+        lambda *, request: None,
+    )
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
         cwd=Path("/workspace"),
@@ -315,3 +331,90 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
     assert exit_code == 0
     for fragment in test_case.expected_color_fragments:
         assert fragment in captured.out
+
+
+def test_given_dbt_project_in_cwd_when_running_dbt_init_then_project_dir_defaults_to_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "dbt_project.yml").write_text(
+        "name: analytics\nprofile: analytics\n",
+        encoding="utf-8",
+    )
+    captured_request: dict[str, DbtInitRequest] = {}
+
+    def validate_dbt_profile_init_request(*, request: DbtInitRequest) -> None:
+        assert request.dbt_project_dir == Path(".")
+
+    def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
+        captured_request["request"] = request
+        return DbtInitResult(
+            output_dir=tmp_path / "sqlbuild_project",
+            project_file=tmp_path / "sqlbuild_project" / "sqlbuild_project.toml",
+            project_name="analytics",
+            macro_file=tmp_path / "sqlbuild_project" / "dbt/macros/generate_schema_name.sql",
+            production_git_ref="main",
+            adapter="duckdb",
+            target_name="dev",
+            profile_name="analytics",
+            toml='name = "analytics"\n',
+        )
+
+    monkeypatch.setattr(
+        dbt_init_module, "validate_dbt_profile_init_request", validate_dbt_profile_init_request
+    )
+    monkeypatch.setattr(dbt_init_module, "run_dbt_profile_init", run_dbt_profile_init)
+
+    exit_code: int = dbt_init_module.run_dbt_init_command(
+        cwd=tmp_path,
+        dbt_project_dir=None,
+        profiles_dir=None,
+        profile_name=None,
+        target_name=None,
+        sqb_output_dir=None,
+        dry_run=True,
+        overwrite=False,
+        skip_dbt_debug=True,
+        production_git_ref="main",
+    )
+
+    assert exit_code == 0
+    assert captured_request["request"].dbt_project_dir == Path(".")
+
+
+def test_given_invalid_dbt_init_inputs_when_running_then_validation_happens_before_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_stream: StringIO = StringIO("prod\n")
+    monkeypatch.setattr(input_stream, "isatty", lambda: True)
+    monkeypatch.setattr(dbt_init_module.sys, "stdin", input_stream)
+
+    def validate_dbt_profile_init_request(*, request: DbtInitRequest) -> None:
+        raise DbtProfileError("dbt config file not found: profiles.yml")
+
+    def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
+        raise AssertionError("init should not run after validation failure")
+
+    monkeypatch.setattr(
+        dbt_init_module, "validate_dbt_profile_init_request", validate_dbt_profile_init_request
+    )
+    monkeypatch.setattr(dbt_init_module, "run_dbt_profile_init", run_dbt_profile_init)
+
+    with pytest.raises(DbtProfileError, match="profiles.yml"):
+        dbt_init_module.run_dbt_init_command(
+            cwd=tmp_path,
+            dbt_project_dir=".",
+            profiles_dir=None,
+            profile_name=None,
+            target_name=None,
+            sqb_output_dir=None,
+            dry_run=True,
+            overwrite=False,
+            skip_dbt_debug=True,
+            production_git_ref=None,
+        )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert "Production git ref" not in captured.out

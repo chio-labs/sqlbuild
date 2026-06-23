@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
+    SnowflakeConnectConfigTestCase,
     SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeLoadSeedTestCase,
     SnowflakeMoveOrCopyRelationTestCase,
@@ -43,7 +44,43 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeDescribeCursor,
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
+    install_fake_snowflake_connector,
 )
+
+SNOWFLAKE_CONNECT_CONFIG_TEST_CASES: list[SnowflakeConnectConfigTestCase] = [
+    SnowflakeConnectConfigTestCase(
+        description="defaults MFA token cache flags for username password MFA",
+        config={
+            "account": "acct",
+            "user": "analytics",
+            "password": "secret",
+            "authenticator": "username_password_mfa",
+        },
+        expected_connect_kwargs={
+            "account": "acct",
+            "user": "analytics",
+            "password": "secret",
+            "authenticator": "username_password_mfa",
+            "client_request_mfa_token": True,
+            "client_store_temporary_credential": True,
+        },
+    ),
+    SnowflakeConnectConfigTestCase(
+        description="preserves explicit MFA token cache flags",
+        config={
+            "account": "acct",
+            "authenticator": "username_password_mfa",
+            "client_request_mfa_token": False,
+            "client_store_temporary_credential": False,
+        },
+        expected_connect_kwargs={
+            "account": "acct",
+            "authenticator": "username_password_mfa",
+            "client_request_mfa_token": False,
+            "client_store_temporary_credential": False,
+        },
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -85,6 +122,23 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
         == test_case.expected_rule_results["IFF"]
     )
     assert upper_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["UPPER"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SNOWFLAKE_CONNECT_CONFIG_TEST_CASES,
+    ids=[case.description for case in SNOWFLAKE_CONNECT_CONFIG_TEST_CASES],
+)
+def test_given_mfa_authenticator_when_connecting_then_uses_expected_token_cache_kwargs(
+    test_case: SnowflakeConnectConfigTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, object] = install_fake_snowflake_connector(monkeypatch)
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    adapter.connect(test_case.config)
+
+    assert captured_kwargs == test_case.expected_connect_kwargs
 
 
 @pytest.mark.parametrize(
