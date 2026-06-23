@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.37.5](https://github.com/chio-labs/sqlbuild/compare/v0.37.4...v0.37.5) (2026-06-23)
+
+
+### Bug Fixes
+
+* **tests:** align real warehouse targets with current dbt behavior ([e57e857](https://github.com/chio-labs/sqlbuild/commit/e57e8575fcb8248a8f399bf0240b63a6ae5fa1e5))
+* **tests:** align real warehouse targets with current dbt behavior ([f9818dc](https://github.com/chio-labs/sqlbuild/commit/f9818dc9d10462f93cafd1c049c5094f749b8dbd))
+* **tests:** restore dbt profile prebuild table check ([b5a0812](https://github.com/chio-labs/sqlbuild/commit/b5a08121ca49150279ba00ea89f4cf3a81176b80))
+* **tests:** restore dbt profile prebuild table check ([9aad85f](https://github.com/chio-labs/sqlbuild/commit/9aad85f11fc45a6efec8032362c4f5d842908108))
+* **tests:** unskip databricks warehouse coverage ([80a37bc](https://github.com/chio-labs/sqlbuild/commit/80a37bc95c91f33dbe1bed10d531b7ab2d1ed914))
+* **tests:** unskip databricks warehouse coverage ([8a5b661](https://github.com/chio-labs/sqlbuild/commit/8a5b661a5f1ee0dd8c05cb046546a1b55087fab5))
+
 ## [0.37.4](https://github.com/chio-labs/sqlbuild/compare/v0.37.3...v0.37.4) (2026-06-22)
 
 
