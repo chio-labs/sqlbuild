@@ -16,6 +16,9 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 _DUCKDB_SNOWFLAKE_LIKE_WARNING_KEYS: frozenset[str] = frozenset(
     {"account", "authenticator", "role", "token", "warehouse"}
 )
+_DBT_PROFILE_CONNECTION_ROUTING_KEYS: frozenset[str] = frozenset(
+    {"source", "profile", "target", "project_dir", "profiles_dir"}
+)
 
 
 def resolve_connection_config(
@@ -42,7 +45,12 @@ def resolve_connection_config(
         if resolved_dbt_profile is not None:
             for warning in resolved_dbt_profile.warnings:
                 print(f"Warning: {warning}", file=sys.stderr)
-            config = resolved_dbt_profile.connection
+            user_overrides: dict[str, object] = {
+                key: value
+                for key, value in raw_config.items()
+                if key not in _DBT_PROFILE_CONNECTION_ROUTING_KEYS
+            }
+            config = {**resolved_dbt_profile.connection, **user_overrides}
     elif config.get("source") == "dbt_profile":
         raise DbtProfileError("connection.source = 'dbt_profile' requires project configuration")
     _warn_if_duckdb_has_snowflake_like_keys(adapter_name=adapter_name, config=config)

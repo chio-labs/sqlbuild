@@ -108,3 +108,10 @@ class SnowflakePruneSqlTestCase:
     schema: str
     retain_versions: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeConnectConfigTestCase:
+    description: str
+    config: dict[str, object]
+    expected_connect_kwargs: dict[str, object]
