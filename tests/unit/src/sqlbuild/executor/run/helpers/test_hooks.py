@@ -11,8 +11,8 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
-from sqlbuild.executor.run.helpers.view import execute_view_entry
+from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.materializations.view import execute_view_entry
 from sqlbuild.executor.run.models import HookContext, HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError

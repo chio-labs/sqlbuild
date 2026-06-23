@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.lineage_output import (
+from sqlbuild.integrations.dbt.helpers.lineage.output import (
     format_dbt_lineage_json,
     format_dbt_lineage_list,
     format_dbt_lineage_tree,
@@ -41,7 +41,7 @@ LINEAGE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
             "fact_orders [sqb]",
             "int_orders [dbt]",
             "stg_orders [dbt]",
-            "└─",
+            "└── ",
         ),
     ),
 )

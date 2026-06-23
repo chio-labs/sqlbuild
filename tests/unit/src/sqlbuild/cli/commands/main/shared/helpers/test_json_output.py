@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sqlbuild.cli.commands.main.shared.helpers.json_output import (
+from sqlbuild.cli.commands.main.shared.helpers.output.json import (
     format_compile_json,
     format_plan_json,
 )

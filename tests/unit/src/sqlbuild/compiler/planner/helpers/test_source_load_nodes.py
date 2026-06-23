@@ -6,11 +6,11 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.loader_dag import (
+from sqlbuild.compiler.planner.helpers.graph.loader_dag import (
     build_intermediate_source_map,
     expand_selected_loader_dependencies,
 )
-from sqlbuild.compiler.planner.helpers.source_load_nodes import (
+from sqlbuild.compiler.planner.helpers.graph.source_load_nodes import (
     build_source_load_entries,
     build_source_load_map,
 )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.mode import (
+from sqlbuild.cli.commands.main.shared.helpers.config.mode import (
     enforce_no_defer_to_in_virtual_mode,
     enforce_standard_mode_command_support,
 )

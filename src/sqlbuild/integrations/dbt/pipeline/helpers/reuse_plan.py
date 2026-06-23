@@ -11,15 +11,15 @@ from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtReuseUnavailableError
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.reuse_candidates import (
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.reuse.candidates import (
     build_dbt_reuse_planning_result,
     mark_missing_dbt_reuse_origin_relations,
     resolve_dbt_reuse_candidates,
     resolve_dbt_reuse_candidates_for_plan,
 )
-from sqlbuild.integrations.dbt.helpers.reuse_from import compile_reuse_from_manifest
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.reuse.reuse_from import compile_reuse_from_manifest
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

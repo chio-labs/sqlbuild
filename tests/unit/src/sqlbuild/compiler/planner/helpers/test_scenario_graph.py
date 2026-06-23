@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.scenario_graph import plan_scenario_graph
+from sqlbuild.compiler.planner.helpers.scenario.graph import plan_scenario_graph
 from sqlbuild.compiler.planner.models import ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (

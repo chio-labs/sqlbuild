@@ -20,15 +20,15 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.helpers.expectations import (
+from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
+from sqlbuild.executor.scenario.helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
     execute_scenario_expected_expectations,
 )
-from sqlbuild.executor.scenario.helpers.fixtures import (
+from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
-from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import (

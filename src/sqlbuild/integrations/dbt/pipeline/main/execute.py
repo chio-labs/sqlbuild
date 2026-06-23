@@ -19,35 +19,44 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
-from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry, PlanOutput
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.arg_parser import parse_dbt_execution_args
-from sqlbuild.integrations.dbt.helpers.args import route_dbt_interop_args
-from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.fingerprinting import try_write_dbt_node_fingerprint
-from sqlbuild.integrations.dbt.helpers.graph import build_dbt_combined_graph, dbt_model_graph_key
-from sqlbuild.integrations.dbt.helpers.manifest import load_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.model_planning import (
-    build_expected_dbt_model_version_hashes,
-    compose_dbt_version_hash,
+from sqlbuild.compiler.planner.main.graph_write_identity import build_graph_write_identity_hashes
+from sqlbuild.compiler.planner.models import (
+    DependencyBaselinePlanEntry,
+    GraphIdentityNode,
+    GraphNodeKey,
+    PlanOutput,
 )
-from sqlbuild.integrations.dbt.helpers.plan_orchestration import (
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
+from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
+from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
+from sqlbuild.integrations.dbt.helpers.manifest.core import load_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
+from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
+    build_dbt_graph_identity_nodes,
+    compose_dbt_graph_version_hash,
+    dbt_graph_identity_execution_order,
+    dbt_graph_node_key,
+)
+from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+    build_expected_dbt_model_version_hashes,
+)
+from sqlbuild.integrations.dbt.helpers.planning.orchestration import (
     plan_dbt_interop_command,
     resolve_sqlbuild_test_actions,
 )
-from sqlbuild.integrations.dbt.helpers.plan_runtime import (
+from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_interop_adapter,
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
 )
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
-    DbtCombinedGraphOwner,
-    DbtCombinedGraphResourceType,
     DbtCommandExecutionResult,
     DbtCommandResult,
     DbtExecutionOutcome,
@@ -350,6 +359,44 @@ def execute_dbt_interop_from_project(
     expected_dbt_version_hash_by_unique_id: dict[str, str | None] = (
         build_expected_dbt_model_version_hashes(manifest=manifest, graph=graph)
     )
+    dbt_seed_identity_by_unique_id: dict[str, str] = {
+        unique_id: seed.identity_hash
+        for unique_id, seed in manifest.seeds_by_unique_id.items()
+        if seed.identity_hash is not None
+    }
+    previous_dbt_version_hash_by_unique_id: dict[str, str] = {
+        entry.unique_id: entry.previous_version_hash
+        for entry in (plan.dbt_model_plan.entries if plan.dbt_model_plan is not None else ())
+        if entry.previous_version_hash is not None
+    }
+    dbt_graph_nodes: dict[GraphNodeKey, GraphIdentityNode] = build_dbt_graph_identity_nodes(
+        manifest=manifest,
+        graph=graph,
+    )
+    dbt_base_identity_hashes: dict[GraphNodeKey, str] = {
+        dbt_graph_node_key(unique_id): version_hash
+        for unique_id, version_hash in previous_dbt_version_hash_by_unique_id.items()
+    }
+    for unique_id, version_hash in expected_dbt_version_hash_by_unique_id.items():
+        if version_hash is not None:
+            dbt_base_identity_hashes.setdefault(dbt_graph_node_key(unique_id), version_hash)
+    for unique_id, seed_hash in dbt_seed_identity_by_unique_id.items():
+        dbt_base_identity_hashes[dbt_graph_node_key(unique_id)] = seed_hash
+    dbt_write_identity_hashes: dict[GraphNodeKey, str] = build_graph_write_identity_hashes(
+        nodes=dbt_graph_nodes,
+        execution_order=dbt_graph_identity_execution_order(manifest=manifest),
+        selected_keys=frozenset(
+            dbt_graph_node_key(unique_id)
+            for unique_id in (
+                plan.dbt_model_plan.run_unique_ids if plan.dbt_model_plan is not None else ()
+            )
+        ),
+        base_identity_hashes=dbt_base_identity_hashes,
+        compose_identity=compose_dbt_graph_version_hash,
+    )
+    dbt_write_identity_hash_by_unique_id: dict[str, str] = {
+        key.node_name: version_hash for key, version_hash in dbt_write_identity_hashes.items()
+    }
     reused_dbt_unique_ids: tuple[str, ...] = ()
     baseline_reused_dbt_unique_ids: tuple[str, ...] = ()
     if has_physical_dbt_reuse_work(plan):
@@ -369,7 +416,7 @@ def execute_dbt_interop_from_project(
                 fingerprint_schema=project.effective_target_schema,
                 target_name=project.effective_target_name,
                 warnings=dbt_fingerprint_warnings,
-                expected_version_hashes=expected_dbt_version_hash_by_unique_id,
+                write_version_hashes=dbt_write_identity_hash_by_unique_id,
             )
             baseline_reused_dbt_unique_ids = execute_dbt_seeded_reuse_plan(
                 adapter=adapter,
@@ -491,53 +538,15 @@ def execute_dbt_interop_from_project(
     dbt_query_sql_by_unique_id: dict[str, str] = {
         unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
     }
-    dbt_seed_identity_by_unique_id: dict[str, str] = {
-        unique_id: seed.identity_hash
-        for unique_id, seed in manifest.seeds_by_unique_id.items()
-        if seed.identity_hash is not None
-    }
-    previous_dbt_version_hash_by_unique_id: dict[str, str] = {
-        entry.unique_id: entry.previous_version_hash
-        for entry in (plan.dbt_model_plan.entries if plan.dbt_model_plan is not None else ())
-        if entry.previous_version_hash is not None
-    }
-    actual_dbt_version_hash_by_unique_id: dict[str, str] = dict(
-        previous_dbt_version_hash_by_unique_id
-    )
-
-    def resolve_actual_dbt_version_hash(unique_id: str) -> str | None:
-        model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
-        if model is None or model.node_checksum is None:
-            return None
-        upstream_hashes: list[tuple[str, str]] = []
-        key: Any
-        for key in graph.upstream_deps.get(dbt_model_graph_key(unique_id), ()):
-            if key.owner != DbtCombinedGraphOwner.DBT:
-                continue
-            upstream_hash: str | None = None
-            if key.resource_type == DbtCombinedGraphResourceType.MODEL:
-                upstream_hash = actual_dbt_version_hash_by_unique_id.get(key.name)
-                if upstream_hash is None:
-                    upstream_hash = previous_dbt_version_hash_by_unique_id.get(key.name)
-                if upstream_hash is None:
-                    upstream_hash = expected_dbt_version_hash_by_unique_id.get(key.name)
-            elif key.resource_type == DbtCombinedGraphResourceType.SOURCE:
-                upstream_hash = dbt_seed_identity_by_unique_id.get(key.name)
-            if upstream_hash is not None:
-                upstream_hashes.append((key.name, upstream_hash))
-        return compose_dbt_version_hash(
-            own_hash=model.node_checksum, upstream_hashes=upstream_hashes
-        )
-
     if project.settings.query_change_tracking and adapter_name != BuiltinAdapter.DUCKDB:
         dbt_state_connection = adapter.connect(connection_config)
 
     def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
         if not project.settings.query_change_tracking:
             return
-        version_hash_override: str | None = resolve_actual_dbt_version_hash(result.unique_id)
-        if version_hash_override is not None:
-            actual_dbt_version_hash_by_unique_id[result.unique_id] = version_hash_override
+        version_hash_override: str | None = dbt_write_identity_hashes.get(
+            dbt_graph_node_key(result.unique_id)
+        )
         if adapter_name == BuiltinAdapter.DUCKDB:
             buffered_dbt_results.append(result)
             return
@@ -593,8 +602,8 @@ def execute_dbt_interop_from_project(
                     warnings=dbt_fingerprint_warnings,
                     query_sql=dbt_query_sql_by_unique_id.get(dbt_result.unique_id),
                     seed_identity_hash=dbt_seed_identity_by_unique_id.get(dbt_result.unique_id),
-                    version_hash_override=actual_dbt_version_hash_by_unique_id.get(
-                        dbt_result.unique_id
+                    version_hash_override=dbt_write_identity_hashes.get(
+                        dbt_graph_node_key(dbt_result.unique_id)
                     ),
                 )
         finally:

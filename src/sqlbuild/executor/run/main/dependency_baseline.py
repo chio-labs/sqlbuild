@@ -8,7 +8,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
-from sqlbuild.executor.run.helpers.reuse import (
+from sqlbuild.executor.run.helpers.reuse.core import (
     create_relation_from_reuse_origin,
     create_relation_from_reuse_plan,
 )

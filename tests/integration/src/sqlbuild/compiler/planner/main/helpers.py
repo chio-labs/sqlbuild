@@ -9,8 +9,8 @@ from tempfile import gettempdir
 from typing import Any
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
-from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
@@ -36,11 +36,11 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.function_fingerprints import (
+from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner.helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
-from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.version_identity import (
+from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.models import StandardModelVersionIdentities

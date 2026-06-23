@@ -25,6 +25,7 @@ from scripts.structure.structure_conventions.rules import (
     check_entry_module_shape,
     check_exception_declarations_outside_exceptions,
     check_helpers_module_name,
+    check_helpers_package_layout,
     check_helpers_package_shape,
     check_init_module,
     check_integration_adapter_helpers_module,
@@ -45,6 +46,7 @@ from scripts.structure.structure_conventions.rules import (
     check_public_provider_module_shape,
     check_shared_package_imports,
     check_shared_package_structure,
+    check_source_file_line_count,
     check_target_reuse_terminology,
     check_top_level_domain_direct_modules,
     check_top_level_domain_role_placement,
@@ -68,6 +70,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
     violations: list[Violation] = []
     for file_path in python_files:
         module: object = parse_python_module(file_path)
+        violations.extend(check_source_file_line_count(actual_repo_root, file_path))
         violations.extend(check_no_relative_imports(file_path, module))
         violations.extend(check_dev_tooling_location(actual_repo_root, file_path))
         violations.extend(check_top_level_domain_role_placement(actual_repo_root, file_path))
@@ -99,6 +102,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_exception_declarations_outside_exceptions(file_path, module))
         violations.extend(check_constants_outside_constants(file_path, module))
         violations.extend(check_helpers_package_shape(actual_repo_root, file_path))
+        violations.extend(check_helpers_package_layout(actual_repo_root, file_path))
         violations.extend(check_shared_package_structure(actual_repo_root, file_path))
         violations.extend(check_integrations_package_structure(actual_repo_root, file_path))
         violations.extend(check_integration_adapter_helpers_module(actual_repo_root, file_path))

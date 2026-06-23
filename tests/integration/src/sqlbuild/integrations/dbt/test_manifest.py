@@ -9,8 +9,8 @@ from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_in
 from sqlbuild.compiler.compile.models.core import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (

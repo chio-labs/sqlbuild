@@ -6,14 +6,14 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import QueryResult
-from sqlbuild.executor.scenario.helpers.capture_columns import build_scenario_snapshot_columns
-from sqlbuild.executor.scenario.helpers.capture_safety import (
+from sqlbuild.executor.scenario.helpers.capture.columns import build_scenario_snapshot_columns
+from sqlbuild.executor.scenario.helpers.capture.safety import (
     capture_error_help,
     max_relation_write_bytes,
     query_capture_relation_row_count,
     validate_capture_row_limits,
 )
-from sqlbuild.executor.scenario.helpers.snapshots import (
+from sqlbuild.executor.scenario.helpers.snapshots.core import (
     write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
 )

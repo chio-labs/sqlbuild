@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.manifest import (
+from sqlbuild.integrations.dbt.helpers.manifest.core import (
     load_dbt_manifest_index,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.exceptions import LoaderDiscoveryError
-from sqlbuild.compiler.discovery.helpers.filesystem import discover_loader_functions
+from sqlbuild.compiler.discovery.helpers.filesystem.core import discover_loader_functions
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     DiscoverLoaderFunctionsTestCase,

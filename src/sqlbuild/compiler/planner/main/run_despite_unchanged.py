@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.compiler.planner.helpers.run_despite_unchanged import (
+from sqlbuild.compiler.planner.helpers.pruning.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result as _build_result,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult

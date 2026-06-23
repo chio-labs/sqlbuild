@@ -13,7 +13,7 @@ from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.executor.run.helpers.snapshot import (
+from sqlbuild.executor.run.helpers.materializations.snapshot import (
     _apply_snapshot_schema_change,
     execute_snapshot_entry,
 )

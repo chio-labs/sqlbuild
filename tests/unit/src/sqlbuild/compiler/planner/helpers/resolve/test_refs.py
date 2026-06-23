@@ -19,8 +19,8 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_udf_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,

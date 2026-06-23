@@ -5,7 +5,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from sqlbuild.executor.scenario.helpers.local_snapshots import (
+from sqlbuild.executor.scenario.helpers.local.snapshots import (
     load_scenario_snapshot_into_duckdb,
 )
 from sqlbuild.executor.scenario.models import (

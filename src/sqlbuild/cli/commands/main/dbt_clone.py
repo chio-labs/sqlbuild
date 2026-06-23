@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.helpers.clone.output import is_clone_success, render_clone_output
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.integrations.dbt.models import DbtCloneRun
 from sqlbuild.integrations.dbt.pipeline.main.clone import run_dbt_clone_from_project
 from sqlbuild.shared.helpers.colors import supports_color

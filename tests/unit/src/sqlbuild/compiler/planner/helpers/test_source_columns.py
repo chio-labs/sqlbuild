@@ -10,7 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.plan_entry import (
+from sqlbuild.compiler.planner.helpers.output.plan_entry import (
     gather_source_columns,
     validate_source_cursor_input_columns,
 )

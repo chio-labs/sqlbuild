@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.planner.helpers.cursor_type_check import (
+from sqlbuild.compiler.planner.helpers.output.cursor_type_check import (
     check_cursor_type_consistency,
 )
 from sqlbuild.compiler.planner.models import PlanWarning

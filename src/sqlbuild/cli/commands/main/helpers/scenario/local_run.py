@@ -7,7 +7,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.result_output import complete_scenario_run
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
     format_scenario_execution_json,
     write_execution_json_output,
 )

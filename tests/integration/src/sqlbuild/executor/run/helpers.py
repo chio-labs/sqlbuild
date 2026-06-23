@@ -31,7 +31,7 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry

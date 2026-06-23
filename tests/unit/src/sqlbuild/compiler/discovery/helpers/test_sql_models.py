@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.sql_models import (
+from sqlbuild.compiler.discovery.helpers.sql.model_files import (
     model_header_column_locations,
     model_output_column_locations,
     parse_model_sql,

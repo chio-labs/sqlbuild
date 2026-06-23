@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.integrations.dbt.helpers.plan import (
+from sqlbuild.integrations.dbt.helpers.planning.plan import (
     format_dbt_interop_plan,
     format_dbt_interop_plan_json,
 )

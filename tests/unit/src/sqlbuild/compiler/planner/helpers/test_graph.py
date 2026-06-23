@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.planner.helpers.graph import (
+from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_upstream_deps,
     expand_downstream,

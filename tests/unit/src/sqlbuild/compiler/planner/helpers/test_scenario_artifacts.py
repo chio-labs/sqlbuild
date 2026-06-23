@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.scenario_artifacts import (
+from sqlbuild.compiler.planner.helpers.scenario.artifacts import (
     build_scenario_artifact_name,
     build_scenario_hash_index,
     build_scenario_relation_map,

@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
 )
-from sqlbuild.compiler.planner.helpers.audit_scheduling import (
+from sqlbuild.compiler.planner.helpers.output.audit_scheduling import (
     resolve_attachment_kind,
     resolve_effective_run_scope,
 )

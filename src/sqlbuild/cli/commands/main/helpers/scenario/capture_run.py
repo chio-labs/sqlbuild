@@ -10,7 +10,7 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.main.helpers.scenario.result_output import render_result_error
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan

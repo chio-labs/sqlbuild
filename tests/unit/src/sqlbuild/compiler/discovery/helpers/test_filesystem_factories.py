@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
-from sqlbuild.compiler.discovery.helpers.filesystem import discover_python_node_functions
+from sqlbuild.compiler.discovery.helpers.filesystem.core import discover_python_node_functions
 from sqlbuild.compiler.discovery.models import DiscoveredPythonNodeFunctions
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     DiscoverPythonNodeFactoriesTestCase,

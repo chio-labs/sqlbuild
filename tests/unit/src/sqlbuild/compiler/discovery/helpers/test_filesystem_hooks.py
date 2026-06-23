@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
-from sqlbuild.compiler.discovery.helpers.filesystem import (
+from sqlbuild.compiler.discovery.helpers.filesystem.core import (
     discover_hook_functions,
     discover_provider_classes,
 )

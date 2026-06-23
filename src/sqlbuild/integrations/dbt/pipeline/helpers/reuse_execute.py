@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -44,13 +45,13 @@ def execute_dbt_complete_reuse_plan(
     fingerprint_schema: str | None,
     target_name: str | None,
     warnings: list[str],
-    expected_version_hashes: dict[str, str | None] | None = None,
+    write_version_hashes: Mapping[str, str | None] | None = None,
 ) -> tuple[str, ...]:
     """Execute complete table reuse entries and return reused dbt unique IDs."""
 
     if plan.dbt_reuse_plan is None:
         return ()
-    expected_hashes: dict[str, str | None] = expected_version_hashes or {}
+    write_hashes: Mapping[str, str | None] = write_version_hashes or {}
     reused_unique_ids: list[str] = []
     entry: DbtReusePlanEntry
     for entry in plan.dbt_reuse_plan.entries:
@@ -71,7 +72,7 @@ def execute_dbt_complete_reuse_plan(
             fingerprint_schema=fingerprint_schema,
             target_name=target_name,
             warnings=warnings,
-            expected_version_hash=expected_hashes.get(entry.unique_id),
+            expected_version_hash=write_hashes.get(entry.unique_id),
         )
         reused_unique_ids.append(entry.unique_id)
     return tuple(reused_unique_ids)
