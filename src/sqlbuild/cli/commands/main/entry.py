@@ -607,7 +607,17 @@ def _main_with_dependencies(
             "diff",
             "clone",
         }:
-            args.dbt_args = unknown_args
+            dbt_passthrough_args: list[str] = []
+            dbt_arg: str
+            for dbt_arg in unknown_args:
+                if dbt_arg == "--no-color":
+                    args.no_color = True
+                    continue
+                if dbt_arg == "--debug":
+                    args.debug = True
+                    continue
+                dbt_passthrough_args.append(dbt_arg)
+            args.dbt_args = dbt_passthrough_args
         elif unknown_args:
             parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
         if args.command in {CliCommand.BUILD, CliCommand.LOAD, CliCommand.SEED}:

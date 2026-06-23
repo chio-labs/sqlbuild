@@ -30,6 +30,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
 from sqlbuild.spec.models.project import DbtReuseFromConfig
 
 
@@ -63,7 +64,7 @@ def build_dbt_reuse_plan_output(
         )
     except DbtReuseUnavailableError as error:
         if warnings is not None:
-            warnings.append(f"dbt reuse_from skipped: {error.message}. Running standard build.")
+            warnings.append(_reuse_unavailable_message(error=error, git_ref=reuse_from.git_ref))
         return None
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
@@ -212,4 +213,35 @@ def build_dbt_dependency_baseline_plan_output(
             ),
         ),
         dbt_model_plan=dbt_model_plan,
+    )
+
+
+def _reuse_unavailable_message(*, error: DbtReuseUnavailableError, git_ref: str | None) -> str:
+    ref: str = git_ref or "production"
+    if error.reason is DbtReuseUnavailableReason.NO_GIT_REPOSITORY:
+        return (
+            "dbt reuse-from-production is enabled but inactive: this project is not in a "
+            "git repository, so there is no production branch to reuse tables from. Built "
+            "normally. Run inside your dbt project's git repository to enable reuse."
+        )
+    if error.reason is DbtReuseUnavailableReason.GIT_REF_IS_CURRENT_BRANCH:
+        return (
+            f"dbt reuse-from-production is enabled but inactive: you are on branch '{ref}', "
+            "the configured production ref, so there is nothing to reuse. Built normally. "
+            "Switch to a feature branch to reuse unchanged production tables."
+        )
+    if error.reason is DbtReuseUnavailableReason.GIT_REF_MISSING:
+        return (
+            f"dbt reuse-from-production is enabled but git ref '{ref}' was not found. Set "
+            "[dbt.reuse_from].git_ref to your production branch or tag. Built normally."
+        )
+    if error.reason is DbtReuseUnavailableReason.PROJECT_OUTSIDE_GIT_ROOT:
+        return (
+            "dbt reuse-from-production is enabled but inactive: the project is outside the "
+            "git repository root, so its history cannot be read. Built normally. "
+            f"{error.help or ''}".rstrip()
+        )
+    return (
+        f"dbt reuse-from-production is enabled but git ref '{ref}' could not be refreshed "
+        "from its remote. Built normally with local history. Check network or remote access."
     )

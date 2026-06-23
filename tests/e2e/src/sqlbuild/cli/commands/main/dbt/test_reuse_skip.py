@@ -24,8 +24,8 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             description="reuse_from in a non-git project skips reuse with a warning and builds",
             expected_returncode=0,
             expected_stdout_fragments=(
-                "dbt reuse_from skipped",
-                "requires the SQLBuild project to be in a git repository",
+                "dbt reuse-from-production is enabled but inactive",
+                "not in a git repository",
                 "Plan ready",
             ),
             expected_stderr_fragments=(),
@@ -58,8 +58,8 @@ def test_given_reuse_from_in_non_git_project_when_building_then_skips_with_warni
             description="reuse_from git_ref equal to current branch skips with a warning",
             expected_returncode=0,
             expected_stdout_fragments=(
-                "dbt reuse_from skipped",
-                "must not be the current branch",
+                "dbt reuse-from-production is enabled but inactive",
+                "the configured production ref",
                 "Plan ready",
             ),
             expected_stderr_fragments=(),

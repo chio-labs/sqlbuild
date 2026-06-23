@@ -8,6 +8,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtAutoInitE2ETestCase,
     DbtCliFlagAmbiguityE2ETestCase,
+    DbtInitDetectedReuseRefE2ETestCase,
     DbtInitDuckDbE2ETestCase,
     DbtInitGeneratedReuseE2ETestCase,
     DbtInitInteractiveE2ETestCase,
@@ -272,8 +273,8 @@ def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
         DbtInitInvalidReuseRefE2ETestCase(
             description="interactive typed invalid reuse ref skips reuse with a warning",
             expected_stdout_fragments=(
-                "dbt reuse_from skipped",
-                "does not exist in this repository",
+                "dbt reuse-from-production is enabled but git ref",
+                "was not found",
                 "Plan ready",
             ),
         )
@@ -642,26 +643,24 @@ def test_given_generated_dbt_init_config_without_prod_table_when_building_then_r
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtInitInvalidReuseRefE2ETestCase(
-            description="auto-init invalid default reuse ref skips reuse with a warning",
-            expected_stdout_fragments=(
-                "dbt reuse_from skipped",
-                "does not exist in this repository",
-                "Plan ready",
-            ),
+        DbtInitDetectedReuseRefE2ETestCase(
+            description="auto-init detects the existing default branch for reuse config",
+            production_ref="prod",
+            expected_config_git_ref='git_ref = "main"',
+            unexpected_stdout_fragments=("was not found",),
         )
     ],
-    ids=["auto-init invalid default reuse ref skips reuse with a warning"],
+    ids=["auto-init detects the existing default branch for reuse config"],
 )
-def test_given_auto_init_default_ref_is_missing_when_planning_then_skips_reuse_with_warning(
+def test_given_auto_init_when_planning_then_detects_existing_default_branch(
     tmp_path: Path,
-    test_case: DbtInitInvalidReuseRefE2ETestCase,
+    test_case: DbtInitDetectedReuseRefE2ETestCase,
 ) -> None:
     skip_unless_dbt_is_runnable()
     workspace: Path = prepare_dbt_init_duckdb_workspace(
-        tmp_path=tmp_path, workspace_name="invalid_reuse_ref_workspace"
+        tmp_path=tmp_path, workspace_name="detected_reuse_ref_workspace"
     )
-    initialize_dbt_init_git_repo(workspace=workspace, production_ref="prod")
+    initialize_dbt_init_git_repo(workspace=workspace, production_ref=test_case.production_ref)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("dbt", "plan", "--profiles-dir", "../profiles", "--select", "dbt_orders"),
@@ -669,6 +668,10 @@ def test_given_auto_init_default_ref_is_missing_when_planning_then_skips_reuse_w
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in result.stdout
+    generated_toml: str = (workspace / "sqlbuild_project" / "sqlbuild_project.toml").read_text(
+        encoding="utf-8"
+    )
+    assert test_case.expected_config_git_ref in generated_toml
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_fragment not in result.stdout

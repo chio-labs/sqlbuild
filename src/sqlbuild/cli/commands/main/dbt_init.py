@@ -5,6 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlbuild.cli.commands.main.helpers.dbt_init.branch_detection import (
+    detect_default_production_git_ref,
+)
 from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgressReporter
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
@@ -49,6 +52,7 @@ def run_dbt_init_command(
         input_stream=sys.stdin,
         output_stream=sys.stdout,
         use_color=use_color,
+        default_ref=detect_default_production_git_ref(git_probe_dir=Path(dbt_project_dir)),
     )
     result: DbtInitResult = run_dbt_profile_init(
         request=DbtInitRequest(
