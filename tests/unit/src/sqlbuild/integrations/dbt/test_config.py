@@ -55,6 +55,23 @@ CONFIG_RESOLUTION_TEST_CASES: list[DbtConfigResolutionTestCase] = [
         expected_target_path=Path("/dbt-target"),
     ),
     DbtConfigResolutionTestCase(
+        description="local target overrides project target when cli target is absent",
+        config=DbtConfig(
+            project_dir="dbt",
+            target="dev",
+        ),
+        local_config=LocalDbtConfig(target="pat"),
+        cli_project_dir=None,
+        cli_profiles_dir=None,
+        cli_target=None,
+        cli_target_path=None,
+        require_project_dir=True,
+        expected_project_dir=Path("/repo/dbt"),
+        expected_profiles_dir=None,
+        expected_target="pat",
+        expected_target_path=None,
+    ),
+    DbtConfigResolutionTestCase(
         description="normal sqb commands can omit project dir when dbt is not required",
         config=DbtConfig(),
         cli_project_dir=None,
@@ -88,6 +105,7 @@ def test_given_dbt_config_when_resolving_then_returns_expected_values(
             target_path=test_case.cli_target_path,
         ),
         require_project_dir=test_case.require_project_dir,
+        local_config=test_case.local_config,
     )
 
     assert result.project_dir == test_case.expected_project_dir

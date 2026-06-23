@@ -69,6 +69,9 @@ class SnowflakeAdapter(BaseAdapter):
     adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value
     sql_analysis_dialect_name: ClassVar[str | None] = "snowflake"
     max_identifier_length: ClassVar[int] = 255
+    connection_routing_keys: ClassVar[frozenset[str]] = frozenset(
+        {"source", "profile", "target", "project_dir", "profiles_dir"}
+    )
 
     def render_read_latest_fingerprints_sql(
         self,
@@ -1308,6 +1311,8 @@ class SnowflakeAdapter(BaseAdapter):
             ) from error
 
         connect_config: dict[str, Any] = dict(config)
+        for routing_key in self.connection_routing_keys:
+            connect_config.pop(routing_key, None)
         authenticator: str = str(connect_config.get("authenticator", "")).lower()
         if authenticator == "username_password_mfa":
             connect_config.setdefault("client_request_mfa_token", True)

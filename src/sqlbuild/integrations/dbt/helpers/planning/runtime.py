@@ -28,6 +28,7 @@ def resolve_dbt_plan_options(
     resolved: ResolvedDbtConfig = resolve_dbt_config(
         project_root=project_dir,
         config=discovered_inputs.project_config.dbt,
+        local_config=discovered_inputs.local_config.dbt,
         overrides=overrides,
         require_project_dir=True,
     )

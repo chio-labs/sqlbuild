@@ -12,8 +12,8 @@ from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgress
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.integrations.dbt.main.profile_init import (
+    _validate_dbt_profile_init_request,
     run_dbt_profile_init,
-    validate_dbt_profile_init_request,
 )
 from sqlbuild.integrations.dbt.models import (
     DbtInitProgressCallbacks,
@@ -66,7 +66,7 @@ def run_dbt_init_command(
         overwrite=overwrite,
         skip_dbt_debug=skip_dbt_debug,
     )
-    validate_dbt_profile_init_request(request=base_request)
+    _validate_dbt_profile_init_request(request=base_request)
     resolved_production_git_ref: str = resolve_production_git_ref(
         explicit_git_ref=production_git_ref,
         input_stream=sys.stdin,

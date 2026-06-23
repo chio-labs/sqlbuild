@@ -70,6 +70,7 @@ class LoadLocalConfigTestCase:
     expected_max_concurrency: int
     expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
+    expected_dbt_target: str | None = None
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_auto_load_sources: bool = True
     expected_force: bool = False
