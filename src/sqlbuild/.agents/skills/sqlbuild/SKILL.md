@@ -41,6 +41,9 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/functions`
 - `concepts/incremental`
 - `concepts/planning`
+- `concepts/planning/cascade-propagation`
+- `concepts/planning/source-freshness`
+- `concepts/planning/selection-and-staleness`
 - `concepts/reuse-from-production`
 - `concepts/snapshots`
 - `concepts/audits`
@@ -838,7 +841,7 @@ sqb dbt debug
 
 Source: `concepts/dbt-compatibility/selection.mdx`
 
-How --select and --exclude route work across the dbt and SQLBuild graphs.
+How select and exclude flags route work across the dbt and SQLBuild graphs.
 
 The `sqb dbt` commands use `--select` and `--exclude` to scope what runs. Selectors work across both dbt and SQLBuild, with the system determining which side owns each selector and how to route work.
 
@@ -1200,7 +1203,7 @@ replay_on_change = "forward_only"
 | `forward_only` (default) | Changed models run incrementally, picking up new data from where they left off. |
 | `full` | Changed models are rebuilt in full. SQLBuild adds `--full-refresh` to the dbt run when there is model work to do. |
 
-Unlike SQLBuild's own per-model [`replay_on_change`](/concepts/planning#replay-on-change), the dbt setting is all-or-nothing across the run and does not support bounded windows. A `bounded-<duration>` value is rejected for dbt.
+Unlike SQLBuild's own per-model [`replay_on_change`](/concepts/planning/cascade-propagation#replay-on-change), the dbt setting is all-or-nothing across the run and does not support bounded windows. A `bounded-<duration>` value is rejected for dbt.
 
 ### What is never touched
 
@@ -1214,33 +1217,56 @@ Source: `concepts/dbt-compatibility/column-lineage.mdx`
 
 Trace a column through your dbt and SQLBuild models, plus model-level lineage, from one command.
 
-`sqb dbt lineage` traces dependencies across the combined dbt and SQLBuild graph. Point it at a column to see exactly where that column's values come from (or go), through every intermediate model. Point it at a model for the model-level dependency graph. It compiles your dbt project, reads the manifest, and analyzes the SQL, so lineage works whether a node is a dbt model or a SQLBuild model.
+`sqb dbt lineage` traces dependencies across the combined dbt and SQLBuild graph:
+
+- Point it at a **column** (`resource:column`) to trace where that column's values come from, or go, through every intermediate model.
+- Point it at a **model** (no colon) for the model-level dependency graph.
+
+It compiles the dbt project, reads the manifest, and analyzes the SQL, so lineage works whether a node is a dbt model or a SQLBuild model, and traces straight across the boundary between them.
 
 ### Column lineage
 
-Target a column with `resource:column` (a colon between the model and the column name):
+Target a column with `resource:column` (a colon between the model and the column):
 
 ```bash
-sqb dbt lineage fct_orders:order_amount_usd
+sqb dbt lineage agg_daily_revenue:revenue_cents
 ```
 
 ```
-Column trace  model.jaffle_analytics.fct_orders:order_amount_usd  upstream
+Column trace  agg_daily_revenue:revenue_cents  upstream
 
-  <- model.jaffle_analytics.int_order_payments:order_amount_cents (expression)
+└── fct_orders:order_amount_cents (aggregation)
+    └── int_order_payments:order_amount_cents (direct)
+        └── stg_payments:amount_cents (aggregation)
+            └── raw_payments:amount_cents (direct)
 ```
 
-SQLBuild parses each model's SQL to follow the column back through the transformations that produced it, annotating how each step derived the value (for example `expression` for a computed column). This works across the dbt/SQLBuild boundary: a SQLBuild column that reads from a dbt model via `__dbt_ref` traces straight into the dbt model's columns.
+Each hop is annotated with how the value was derived (`direct`, `aggregation`, `expression`, ...), and the trace follows the column all the way back to the source - here through four models down to a seed. It also crosses the dbt/SQLBuild boundary: a SQLBuild column that reads a dbt model via `__dbt_ref` traces straight into the dbt model's columns. See [Column lineage](/concepts/column-lineage) for the full list of transform types and confidence levels.
 
-Use `--direction downstream` to trace the other way (every column that is derived from this one):
+Use `--direction downstream` to trace the other way - every column derived from this one:
 
 ```bash
 sqb dbt lineage stg_payments:amount_cents --direction downstream
 ```
 
-Column lineage supports `--direction upstream` (default) or `downstream`. It does not support `both`, the same restriction as the native [`sqb lineage`](/concepts/column-lineage) command.
+```
+Column trace  stg_payments:amount_cents  downstream
 
-The dbt column target uses a colon: `model:column`. The native `sqb lineage` command uses a dot: `model.column`. The dbt command uses a colon because dbt model and package references already use dots.
+├── fct_payments:amount_cents (direct)
+└── int_order_payments:order_amount_cents (aggregation)
+    ├── fct_orders:order_amount_cents (direct)
+    │   ├── agg_daily_revenue:avg_order_usd (aggregation)
+    │   ├── agg_daily_revenue:revenue_cents (aggregation)
+    │   └── agg_daily_revenue:revenue_usd (aggregation)
+    ├── fct_orders:order_amount_usd (expression)
+    └── int_customer_orders:lifetime_amount_cents (aggregation)
+        ├── dim_customers:lifetime_amount_cents (expression)
+        └── dim_customers:lifetime_amount_usd (expression)
+```
+
+Column lineage supports `--direction upstream` (default) or `downstream`, but not `both` - the same restriction as the native [`sqb lineage`](/concepts/column-lineage) command.
+
+The dbt column target uses a colon (`model:column`); the native `sqb lineage` command uses a dot (`model.column`). The colon is used here because dbt model and package references already contain dots.
 
 ### Model lineage
 
@@ -1251,30 +1277,36 @@ sqb dbt lineage fct_orders
 ```
 
 ```
-Lineage  dbt:fct_orders  upstream
-`- dbt:int_order_payments
-  +- dbt:stg_order_statuses
-  | `- dbt:stg_orders
-  +- dbt:stg_orders
-  `- dbt:stg_payments
+Lineage  fct_orders [dbt]  upstream
+└── int_order_payments [dbt]
+    ├── stg_order_statuses [dbt]
+    │   └── stg_orders [dbt]
+    │       └── seed.jaffle_analytics.raw_orders [dbt]
+    ├── stg_orders [dbt]
+    │   └── seed.jaffle_analytics.raw_orders [dbt]
+    └── stg_payments [dbt]
+        └── seed.jaffle_analytics.raw_payments [dbt]
 ```
 
-Model lineage supports `--direction both`, which shows upstream and downstream in one view:
+The `[dbt]` / `[sqb]` tag on each node shows whether it is a dbt or SQLBuild resource. `--direction both` shows upstream and downstream together:
 
 ```bash
 sqb dbt lineage fct_orders --direction both
 ```
 
 ```
-Lineage  dbt:fct_orders  both
+Lineage  fct_orders [dbt]  both
 upstream
-`- dbt:int_order_payments
-  +- dbt:stg_order_statuses
-  | `- dbt:stg_orders
-  +- dbt:stg_orders
-  `- dbt:stg_payments
+└── int_order_payments [dbt]
+    ├── stg_order_statuses [dbt]
+    │   └── stg_orders [dbt]
+    │       └── seed.jaffle_analytics.raw_orders [dbt]
+    ├── stg_orders [dbt]
+    │   └── seed.jaffle_analytics.raw_orders [dbt]
+    └── stg_payments [dbt]
+        └── seed.jaffle_analytics.raw_payments [dbt]
 downstream
-`- dbt:agg_daily_revenue
+└── agg_daily_revenue [dbt]
 ```
 
 ### Options
@@ -1285,6 +1317,8 @@ downstream
 | `--depth` | How many hops to traverse: an integer or `all` (default `all`). |
 | `--format` | `tree` (default), `list` (an edge list of `a -> b` pairs), or `json`. |
 | `--no-sql-validation` | Skip SQL validation while compiling the SQLBuild side. |
+
+The `list` and `json` formats keep fully-qualified resource names (e.g. `model.jaffle_analytics.fct_orders`) for unambiguous scripting; the `tree` format shortens them for readability.
 
 See [Selection](/concepts/dbt-compatibility/selection) for how dbt and SQLBuild resources are named in the combined graph.
 
@@ -2695,7 +2729,7 @@ Sources without an explicit `freshness:` block are auto-observed using the `adap
 
 This means most unmanaged table sources get freshness tracking automatically on adapters that support it, with no configuration needed.
 
-Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build. See [Planning and Change Detection](/concepts/planning#source-freshness) for how freshness feeds into change-aware builds.
+Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build. See [Source freshness](/concepts/planning/source-freshness) for how freshness feeds into change-aware builds.
 
 #### Freshness config reference
 
@@ -4091,7 +4125,7 @@ MODEL (
 );
 ```
 
-See [Planning and Change Detection: Cascade propagation](/concepts/planning#cascade-propagation) for how replay policies propagate through the DAG and how downstream models can override inherited replay behavior.
+See [Cascade propagation](/concepts/planning/cascade-propagation) for how replay policies propagate through the DAG and how downstream models can override inherited replay behavior.
 
 #### on_schema_change
 
@@ -4108,9 +4142,9 @@ Controls how schema differences are handled at execution time when the increment
 
 Source: `concepts/planning.mdx`
 
-How SQLBuild decides what to build: fingerprints, source freshness, and warehouse-native state.
+How SQLBuild decides what to build: fingerprints, change reasons, and warehouse-native state.
 
-When you run `sqb plan` or `sqb build`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. By default, only stale work runs. Unchanged models, seeds, audits, and Python nodes are skipped automatically.
+When you run `sqb plan` or `sqb build`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. By default, only stale work runs - unchanged models, seeds, audits, and Python nodes are skipped automatically.
 
 Use `--force` to override change detection and run everything selected, regardless of state.
 
@@ -4132,19 +4166,13 @@ Seeds are fingerprinted by content hash and load-affecting config. Unchanged see
 
 #### Python nodes
 
-Loaders, tasks, assets, checks, and hooks are fingerprinted by:
+Loaders, tasks, assets, checks, and hooks are fingerprinted by source-code hash, transitive project-dependency hashes (scoped to the git root, so third-party package changes don't count), and decorator config.
 
-- **Source code hash** - the normalized source of the decorated function.
-- **Dependency hashes** - transitive hashes of imported project modules, scoped to the git root. Changes to third-party packages (in `.venv`, `site-packages`, etc.) do not affect the identity; changes to your project's own helper modules do.
-- **Decorator config hash** - the arguments passed to the decorator.
-
-Python identity tracking is primarily a **visual indicator** in the plan output. When a node's identity changes, the plan shows source and dependency diffs so you can see exactly what changed. However, unlike SQL models where SQLBuild can observe inputs (fingerprints, source freshness) and skip unchanged work automatically, Python nodes may depend on external inputs that the framework cannot observe: an API, a file on disk, a third-party service.
-
-For this reason, skip/run decisions for Python nodes are **user-controlled** via `ctx.skip()`. The node's own logic decides whether it needs to run based on whatever semantics are appropriate: checking an API timestamp, comparing a file hash, querying a metadata table. If the condition is met, `ctx.skip()` short-circuits the node (and optionally its downstream dependents via soft or hard skip mode). This keeps the mechanism flexible and powerful without requiring the framework to infer things it cannot know.
+Python identity tracking is primarily a **visual indicator** in the plan: when a node's identity changes, the plan shows source and dependency diffs. Unlike SQL models, the framework can't observe a Python node's external inputs (an API, a file, a service), so skip/run decisions are **user-controlled** via `ctx.skip()` - the node's own logic decides whether it needs to run. See [Python node pruning](#python-node-pruning).
 
 #### Audits
 
-Audits that already passed for the same model version identity are not re-run. When a model's version changes, its audits are re-validated. This avoids redundant audit work on unchanged models while ensuring changed models are always fully validated.
+Audits that already passed for the same model version identity are not re-run. When a model's version changes, its audits are re-validated.
 
 ### Change reasons
 
@@ -4153,83 +4181,23 @@ The plan assigns a reason to each node that needs work:
 | Reason | Meaning |
 |--------|---------|
 | First run | No fingerprint exists in the target schema |
-| Query changed | The model's query SQL differs from the stored fingerprint |
+| Query changed / checksum changed | The model's query SQL differs from the stored fingerprint (the plan can show a query diff) |
 | Config changed | Version-identity config values differ |
 | Schema changed | Upstream schema changes detected (column additions, removals, type changes) |
-| Upstream changed | An upstream model's change cascades downstream |
+| Upstream changed | An upstream model's change cascades downstream (see [Cascade propagation](/concepts/planning/cascade-propagation)) |
 | Run despite unchanged | The model is configured to run periodically even without changes (see [Run despite unchanged](#run-despite-unchanged)) |
 
-Unchanged nodes are skipped and show as `Normal` in the plan output.
+Unchanged nodes are skipped and show as current in the plan output.
 
-### Source freshness
+### On this topic
 
-Source freshness lets SQLBuild observe whether external source data has actually changed between runs. Models downstream of unchanged sources are skipped automatically.
-
-#### Configuration
-
-Source freshness is configured per source in `sources/*.yml` with a `freshness:` block. See [Sources: Source freshness](/concepts/sources#source-freshness) for the full configuration reference.
-
-#### How observations work
-
-During planning, SQLBuild observes the current data version of each source that has freshness configured (or that the adapter can observe automatically):
-
-1. **Observe** - query the source's current data version using the configured strategy.
-2. **Compare** - compare the observed version against the last recorded observation from `_sqlbuild_source_freshness` in the target schema.
-3. **Propagate** - walk the DAG downstream from changed or unknown sources to identify which models are affected.
-
-Sources without explicit `freshness:` config are auto-observed using the `adapter` strategy if the adapter supports table metadata and the source has a physical table (not an expression source, not a managed source).
-
-#### Lag tolerance
-
-For timestamp-based freshness, `lag_tolerance` controls how much the observed value can drift before being considered a real change. If the current timestamp is within the tolerance of the previous observation, the source is treated as unchanged. This is useful for sources where the freshness timestamp moves by seconds or minutes on every query but the underlying data hasn't meaningfully changed.
-
-#### State storage
-
-Source freshness observations are stored in `_sqlbuild_source_freshness` in each target schema. Records are appended only after the affected downstream models build successfully. If a build fails, the previous observation is preserved so the next run still sees the source as changed.
-
-Observations are resolved across all target schemas in the project, so a source referenced by models in different schemas is tracked consistently.
-
-Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build.
-
-### Cascade propagation
-
-When a model or function changes, the change signal propagates downstream through the DAG. Every model downstream of a changed node is marked `Upstream changed` in the plan, even if its own SQL and config are identical.
-
-The cascade walk is topological: it processes models in dependency order, so each model sees the resolved state of all its upstreams before deciding its own effective action.
-
-**What cascades:**
-
-- A query, config, or schema change on any model cascades to all its downstream dependents.
-- A function change cascades to every model that calls it (directly or transitively).
-- Source freshness changes propagate downstream the same way.
-
-**How materialization types respond:**
-
-- **Views** are recreated on every build regardless, so a cascade has no extra cost.
-- **Tables** are fully rebuilt, same as if they had changed themselves.
-- **Incremental models** receive a replay window from the cascade. A `full` replay always cascades. A `bounded` replay only cascades when the upstream and downstream models share the same `cursor_type` (e.g. both use `timestamp`), so unrelated cursor types don't inherit bounded windows that don't apply. The downstream model's own `replay_on_change` policy takes precedence over any cascaded signal.
-
-**Resolution when multiple upstreams are stale:**
-
-If a model has multiple stale upstreams with different replay actions, the most aggressive action wins. `full` beats `bounded`, and among bounded actions, the longer duration wins. Ties are broken alphabetically by model name for determinism.
-
-**Overriding cascaded replay:**
-
-Downstream incremental models can set their own `replay_on_change` policy to override the cascaded signal. If a downstream model declares its own policy, that policy applies instead of the upstream's. If it has no policy, it inherits the upstream's replay scope. See [Incremental Models: Replay on change](/concepts/incremental#replay-on-change) for configuration details.
-
-### Replay on change
-
-When a change is detected on an incremental model, `replay_on_change` controls how much data to reprocess:
-
-- **`forward`** (default) - run the normal incremental delta from the cursor. No reprocessing.
-- **`bounded-<duration>`** (e.g. `bounded-14d`) - replay the specified window of data.
-- **`full`** - drop and rebuild the entire table.
-
-See [Incremental Models: Replay on change](/concepts/incremental#replay-on-change) for configuration details.
+- [Cascade propagation](/concepts/planning/cascade-propagation) - how a change signal propagates downstream, and how each materialization type responds.
+- [Source freshness](/concepts/planning/source-freshness) - observing whether external source data has actually changed between runs.
+- [Selection and staleness](/concepts/planning/selection-and-staleness) - how `--select` interacts with change detection, and the stale warnings that prevent silent partial rebuilds.
 
 ### Reuse from production
 
-When a model's version identity matches a relation already built in another target, the planner can reuse that relation instead of rebuilding it, and can clone the upstream inputs a partial build needs from production. This reuses the same fingerprints described above. See [Reuse from production](/concepts/reuse-from-production) for configuration and behavior.
+When a model's version identity matches a relation already built in another target, the planner can reuse that relation instead of rebuilding it, and can clone the upstream inputs a partial build needs from production. This uses the same fingerprints described above. See [Reuse from production](/concepts/reuse-from-production).
 
 ### Run despite unchanged
 
@@ -4242,13 +4210,6 @@ MODEL (
 );
 ```
 
-```sql
-MODEL (
-  materialized table,
-  run_despite_unchanged "24h",
-);
-```
-
 - **`always`** - run on every build regardless of state.
 - **Duration** (e.g. `24h`, `30d`, `90m`) - run if at least the specified time has passed since the model's upstream source freshness was last observed. Requires at least one upstream source with timestamp freshness tracking.
 
@@ -4258,25 +4219,171 @@ Only table materializations support `run_despite_unchanged`. When triggered, dow
 
 When unchanged SQL models are skipped, read-side Python nodes (tasks, assets, checks) that depend on those models are also skipped. Loaders always run regardless of pruning, since they populate sources that the SQL graph depends on.
 
-Python nodes also have their own identity fingerprints. If a node's source code or dependencies change, it runs even if its SQL dependencies haven't changed.
+Python nodes also have their own identity fingerprints: if a node's source code or dependencies change, it runs even if its SQL dependencies haven't.
 
 ### Warehouse-native state (standard mode)
 
 In standard mode, all change-tracking state lives in the warehouse as append-only tables in the same schemas as your data:
 
-- **`_sqlbuild_fingerprints`** - stores version identities for models, functions, seeds, and Python nodes. One row per successful build per identity.
-- **`_sqlbuild_source_freshness`** - stores source freshness observations. One row per successful build per source identity.
-- **`_sqlbuild_node_results`** - stores Python node runtime results (payload, metadata, status, errors). One row per execution per node. Results persist across runs for observability and downstream consumption.
+- **`_sqlbuild_fingerprints`** - version identities for models, functions, seeds, and Python nodes. One row per successful build per identity.
+- **`_sqlbuild_source_freshness`** - source freshness observations. One row per successful build per source identity.
+- **`_sqlbuild_node_results`** - Python node runtime results (payload, metadata, status, errors). One row per execution per node.
 
 There is no external state database, no manifest files, and no state machine with transitions that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as immutable history.
 
-State tables are read across all target schemas in the project, so fingerprints and freshness observations are resolved consistently regardless of which schema a model targets.
+State tables are read across all target schemas in the project, so fingerprints and freshness observations resolve consistently regardless of which schema a model targets.
 
 Use `sqb janitor` to prune old state history rows while retaining the latest per identity.
 
 ### Virtual environments
 
-Virtual environments store identities and change-tracking state in the VDE state backend (PostgreSQL or DuckDB) rather than in warehouse fingerprint tables. Identities are scoped per virtual environment, so each environment tracks its own version hashes, source freshness observations, and Python node identities independently. Change detection uses version hash comparison and VDE state refs. See [Virtual Environments: Building](/concepts/virtual-environments/building) for details.
+Virtual environments store identities and change-tracking state in the VDE state backend (PostgreSQL or DuckDB) rather than in warehouse fingerprint tables, scoped per environment. See [Virtual Environments: Building](/concepts/virtual-environments/building).
+
+## Cascade propagation
+
+Source: `concepts/planning/cascade-propagation.mdx`
+
+How a change signal propagates downstream through the DAG, and how each materialization type responds.
+
+When a model or function changes, the change signal propagates downstream through the DAG. Every model downstream of a changed node is marked `Upstream changed` in the plan, even if its own SQL and config are identical.
+
+The cascade walk is topological: it processes models in dependency order, so each model sees the resolved state of all its upstreams before deciding its own effective action.
+
+### What cascades
+
+- A query, config, or schema change on any model cascades to all its downstream dependents.
+- A function change cascades to every model that calls it (directly or transitively).
+- Source freshness changes propagate downstream the same way. See [Source freshness](/concepts/planning/source-freshness).
+
+### How materialization types respond
+
+- **Views** are recreated on every build regardless, so a cascade has no extra cost.
+- **Tables** are fully rebuilt, same as if they had changed themselves.
+- **Incremental models** receive a replay window from the cascade. A `full` replay always cascades. A `bounded` replay only cascades when the upstream and downstream models share the same `cursor_type` (e.g. both use `timestamp`), so unrelated cursor types don't inherit bounded windows that don't apply. The downstream model's own `replay_on_change` policy takes precedence over any cascaded signal.
+
+### Resolution when multiple upstreams are stale
+
+If a model has multiple stale upstreams with different replay actions, the most aggressive action wins. `full` beats `bounded`, and among bounded actions, the longer duration wins. Ties are broken alphabetically by model name for determinism.
+
+### Overriding cascaded replay
+
+Downstream incremental models can set their own `replay_on_change` policy to override the cascaded signal. If a downstream model declares its own policy, that policy applies instead of the upstream's. If it has no policy, it inherits the upstream's replay scope.
+
+### Replay on change
+
+When a change is detected on an incremental model, `replay_on_change` controls how much data to reprocess:
+
+- **`forward`** (default) - run the normal incremental delta from the cursor. No reprocessing.
+- **`bounded-<duration>`** (e.g. `bounded-14d`) - replay the specified window of data.
+- **`full`** - drop and rebuild the entire table.
+
+See [Incremental Models: Replay on change](/concepts/incremental#replay-on-change) for configuration details.
+
+## Source freshness
+
+Source: `concepts/planning/source-freshness.mdx`
+
+Observing whether external source data has actually changed between runs, so downstream models are skipped when sources are unchanged.
+
+Source freshness lets SQLBuild observe whether external source data has actually changed between runs. Models downstream of unchanged sources are skipped automatically.
+
+### Configuration
+
+Source freshness is configured per source in `sources/*.yml` with a `freshness:` block. See [Sources: Source freshness](/concepts/sources#source-freshness) for the full configuration reference.
+
+### How observations work
+
+During planning, SQLBuild observes the current data version of each source that has freshness configured (or that the adapter can observe automatically):
+
+1. **Observe** - query the source's current data version using the configured strategy.
+2. **Compare** - compare the observed version against the last recorded observation from `_sqlbuild_source_freshness` in the target schema.
+3. **Propagate** - walk the DAG downstream from changed or unknown sources to identify which models are affected.
+
+Sources without explicit `freshness:` config are auto-observed using the `adapter` strategy if the adapter supports table metadata and the source has a physical table (not an expression source, not a managed source).
+
+### Lag tolerance
+
+For timestamp-based freshness, `lag_tolerance` controls how much the observed value can drift before being considered a real change. If the current timestamp is within the tolerance of the previous observation, the source is treated as unchanged. This is useful for sources where the freshness timestamp moves by seconds or minutes on every query but the underlying data hasn't meaningfully changed.
+
+### State storage
+
+Source freshness observations are stored in `_sqlbuild_source_freshness` in each target schema. Records are appended only after the affected downstream models build successfully. If a build fails, the previous observation is preserved so the next run still sees the source as changed.
+
+Observations are resolved across all target schemas in the project, so a source referenced by models in different schemas is tracked consistently.
+
+Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build.
+
+## Selection and staleness
+
+Source: `concepts/planning/selection-and-staleness.mdx`
+
+How selection interacts with change detection, and the stale warnings that stop silent partial rebuilds.
+
+Change detection is selection-aware. When you scope a run with `--select`, SQLBuild only runs (and only displays) the resources you selected, but it still reasons about the *whole* graph to keep the result honest. The key case it handles: a selected model whose upstream changed but is **not** in the selection.
+
+### Only selected resources appear in the plan
+
+For a scoped run like `sqb dbt build --select agg_daily_revenue`, the plan shows only the selected resources, not their passive upstream closure. SQLBuild still walks upstreams internally for change propagation (a selected model flips to run when an upstream changed), but those passive upstreams are not listed as plan entries or counted in the header.
+
+`--full-refresh` is likewise scoped to the selected models, not the expanded upstream closure.
+
+### Stale warnings instead of silent partial rebuilds
+
+If a selected model has an upstream that changed but is **outside the selection**, rebuilding the selected model alone would run it on top of a stale upstream and silently produce a result that looks current but isn't. SQLBuild does not do that. It leaves the selected model current (it is not rebuilt) and emits a stale warning naming the changed upstreams, with the selector you can use to incorporate them.
+
+Suppose `stg_orders` (upstream) changed, and you select only the downstream `agg_daily_revenue`:
+
+```bash
+sqb dbt plan --select agg_daily_revenue
+```
+
+```
+Plan ready (1 selected resources)
+
+dbt (1 selected resources)
+  planned models: 0 run, 1 current, 0 blocked
+
+  Model plan
+    Current (1)
+      model.jaffle_analytics.agg_daily_revenue  no change
+
+Warnings (1)
+  - selected dbt model 'agg_daily_revenue' is stale: upstream stg_orders changed
+    but will not be rebuilt or is stale; rebuild with a closure selector
+    (e.g. +model) to incorporate it
+```
+
+The model stays current rather than being rebuilt on a stale input, and the warning tells you exactly which upstreams changed and how to pull them in.
+
+### Incorporating the changed upstreams
+
+Use a closure selector to include the changed upstreams in the run. With `+agg_daily_revenue`, SQLBuild pulls in the changed `stg_orders`, cascades the change through the intermediate models, and rebuilds:
+
+```bash
+sqb dbt plan --select +agg_daily_revenue
+```
+
+```
+Plan ready (8 selected resources)
+  planned models: 5 run, 1 current, 0 blocked
+
+  Model plan
+    Checksum changed (1)
+      model.jaffle_analytics.stg_orders         checksum changed
+    Upstream changed (4)
+      model.jaffle_analytics.agg_daily_revenue  upstream changed
+      model.jaffle_analytics.fct_orders         upstream changed
+      model.jaffle_analytics.int_order_payments upstream changed
+      model.jaffle_analytics.stg_order_statuses upstream changed
+```
+
+### Seeds follow the same rule
+
+Seed changes are tracked the same selection-aware way. A changed seed that is outside the current selection does not trigger a partial rebuild of its dependents; instead the dependents are left current and a stale warning is emitted, exactly as for models. This keeps a scoped run from quietly building on a seed that the run didn't reload.
+
+### Why this matters
+
+A run that reports success but silently built a model on stale inputs is a correctness hazard - the data looks fresh but isn't. Surfacing staleness as an explicit warning (and refusing the misleading partial rebuild) keeps scoped runs honest: you either get a result built on current inputs, or a clear warning telling you it would not be, with the fix.
 
 ## Reuse from production
 
@@ -5426,7 +5533,7 @@ Scenario artifacts are physically isolated from production:
 6. Run zero-row assertions
 7. Clean up all scenario-owned artifacts (unless `--retain`)
 
-#### Inspecting with --retain
+#### Inspecting with `--retain`
 
 When a scenario fails or you want to inspect intermediate state:
 
@@ -5566,7 +5673,7 @@ See the [CLI reference](/cli/scenario) for full command documentation.
 
 Source: `concepts/selectors.mdx`
 
-Target specific models, paths, tags, or DAG subsets with --select and --exclude.
+Target specific models, paths, tags, or DAG subsets with select and exclude flags.
 
 Selectors let you scope commands to specific subsets of your project. They work with `plan`, `build`, `test`, `audit`, `seed`, `clone`, and `diff`.
 
@@ -5716,6 +5823,8 @@ Source: `concepts/column-lineage.mdx`
 
 Trace individual columns through your SQL pipeline - understand where data comes from and where it goes.
 
+Using SQLBuild alongside a dbt project? See [dbt column lineage](/concepts/dbt-compatibility/column-lineage) for tracing columns across the combined dbt and SQLBuild graph with `sqb dbt lineage`.
+
 ### Why column lineage matters
 
 **Impact analysis** - Before changing a source column, see exactly which downstream models and columns are affected. A rename or type change in `raw__orders.id` can be traced through every model that consumes it, even indirectly.
@@ -5767,30 +5876,90 @@ Column lineage supports two analysis modes that trade off speed against depth of
 
 ```bash
 sqb compile --lineage-mode rich
-sqb lineage fact_orders.total_cents --mode fast
+sqb lineage fact_orders.payment_amount_cents --mode fast
 ```
 
 ### Using column lineage
 
 #### Interactive tracing with `sqb lineage`
 
-Trace a specific column upstream or downstream:
+The target syntax is `model_name.column_name`. Trace a column upstream to see where its values come from:
 
 ```bash
-# Where does this column come from?
-sqb lineage fact_orders.total_cents
-
-# What consumes this column?
-sqb lineage fact_orders.order_id --direction downstream
-
-# Limit to 1 hop
-sqb lineage fact_orders.total_cents --depth 1
-
-# JSON output
-sqb lineage fact_orders.total_cents --format json
+sqb lineage daily_revenue.total_revenue_cents
 ```
 
-The target syntax is `model_name.column_name`. Column lineage supports `upstream` and `downstream` directions (not `both` - model lineage supports `both`).
+```
+Column trace  daily_revenue.total_revenue_cents  upstream
+
+└── stg_payments.amount_cents (aggregation)
+    └── raw__payments.amount_cents (direct)
+```
+
+Each hop is annotated with how the value was derived. Here `total_revenue_cents` is an aggregation of `stg_payments.amount_cents`, which is a direct passthrough from the source.
+
+Use `--direction downstream` to trace the other way - every column derived from this one:
+
+```bash
+sqb lineage stg_payments.amount_cents --direction downstream
+```
+
+```
+Column trace  stg_payments.amount_cents  downstream
+
+├── daily_revenue.avg_order_value_cents (aggregation)
+├── daily_revenue.total_revenue_cents (aggregation)
+├── daily_revenue.total_revenue_dollars (aggregation)
+├── dim_customers.lifetime_spend_cents (aggregation)
+└── fact_orders.payment_amount_cents (direct)
+```
+
+Column lineage supports `upstream` (default) and `downstream` directions (not `both` - model lineage supports `both`).
+
+#### Model lineage
+
+`sqb lineage` also traces model-level dependencies when the target has no column (no dot):
+
+```bash
+sqb lineage fact_orders
+```
+
+```
+Lineage  model  fact_orders  models/marts/fact_orders.sql  upstream
+
+├── model  stg_orders  models/staging/stg_orders.sql
+│   └── source  raw__orders  sources/raw.yml
+├── model  stg_payments  models/staging/stg_payments.sql
+│   └── source  raw__payments  sources/raw.yml
+├── seed  waffle_types  seeds/waffle_types.csv
+└── udf  udf__is_completed_order
+```
+
+Each node is tagged with its resource type (`model`, `source`, `seed`, `udf`) and file path. Use `--direction both` to show upstream and downstream together:
+
+```bash
+sqb lineage daily_revenue --direction both
+```
+
+```
+Lineage  model  daily_revenue  models/marts/daily_revenue.sql  both
+
+upstream
+├── model  stg_orders  models/staging/stg_orders.sql
+│   └── source  raw__orders  sources/raw.yml
+└── model  stg_payments  models/staging/stg_payments.sql
+    └── source  raw__payments  sources/raw.yml
+downstream
+```
+
+#### Options
+
+| Flag            | Description                                                                       |
+| --------------- | --------------------------------------------------------------------------------- |
+| `--direction`   | `upstream` (default), `downstream`, or `both`. `both` is model lineage only.      |
+| `--depth`       | How many hops to traverse: an integer or `all` (default `all`).                   |
+| `--format`      | `tree` (default), `list` (an edge list of `a -> b` pairs), or `json`.             |
+| `--mode`        | Column lineage mode: `rich` (default) or `fast`.                                  |
 
 See the [lineage CLI reference](/cli/lineage) for full flag documentation and output format examples.
 
@@ -7910,7 +8079,7 @@ The command prints an adoption plan and requires typed confirmation:
 Type "adopt dev" to confirm: adopt dev
 ```
 
-`--allow-copy` is required when the adapter does not support native same-schema rename (cross-schema moves, some adapters). Without it, adopt blocks with "requires --allow-copy" if a copy fallback would be needed.
+`--allow-copy` is required when the adapter does not support native same-schema rename (cross-schema moves, some adapters). Without it, adopt blocks with `requires --allow-copy` if a copy fallback would be needed.
 
 #### View models
 
@@ -8409,7 +8578,7 @@ The project can continue in standard mode or re-adopt to return to virtual mode.
 | Condition | Error |
 |-----------|-------|
 | No `unsuffixed_virtual_env` configured | Blocks with config guidance |
-| Copy fallback needed without `--allow-copy` | "requires --allow-copy" |
+| Copy fallback needed without `--allow-copy` | `requires --allow-copy` |
 | Wrong typed confirmation | Cancelled, no changes made |
 
 ### Detach guards
@@ -8417,7 +8586,7 @@ The project can continue in standard mode or re-adopt to return to virtual mode.
 | Condition | Error |
 |-----------|-------|
 | VDE not finalized | "requires a finalized virtual environment" |
-| Copy fallback needed without `--allow-copy` | "requires --allow-copy" |
+| Copy fallback needed without `--allow-copy` | `requires --allow-copy` |
 | Wrong typed confirmation | Cancelled, no changes made |
 
 ### General recovery strategy
