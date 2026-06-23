@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.1](https://github.com/chio-labs/sqlbuild/compare/v0.38.0...v0.38.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **dbt:** preserve snowflake auth cache ([1ab74d0](https://github.com/chio-labs/sqlbuild/commit/1ab74d07d19a9491c5d52352dcc466a795633de6))
+* **dbt:** preserve snowflake auth cache ([e95e18a](https://github.com/chio-labs/sqlbuild/commit/e95e18acfc4aafd488bb71b8b65172f15cbecf29))
+
 ## [0.38.0](https://github.com/chio-labs/sqlbuild/compare/v0.37.7...v0.38.0) (2026-06-23)
 
 
