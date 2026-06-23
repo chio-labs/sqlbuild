@@ -3,7 +3,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from sqlbuild.executor.scenario.helpers.capture_columns import local_type_for_warehouse_type
+from sqlbuild.executor.scenario.helpers.capture.columns import local_type_for_warehouse_type
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotLocalTypeMappingTestCase,
 )

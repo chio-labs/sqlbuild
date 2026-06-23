@@ -1,51 +1,43 @@
-"""Helpers for running scenario snapshot capture steps."""
+"""Helpers for running a planned scenario."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
-from sqlbuild.executor.scenario.helpers.fixtures import (
+from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
+from sqlbuild.executor.scenario.helpers.lifecycle.expectations import (
+    execute_scenario_assertion_expectations,
+    execute_scenario_expected_expectations,
+)
+from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
-from sqlbuild.executor.scenario.helpers.snapshots import (
-    build_scenario_snapshot_capture_plan,
-    build_scenario_snapshot_manifest_shell,
-)
-from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
 from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
+    ScenarioAssertionExpectationExecutionResult,
     ScenarioCleanupExecutionResult,
+    ScenarioExpectedExpectationExecutionResult,
     ScenarioFixtureExecutionResult,
-    ScenarioSnapshotCaptureLimits,
-    ScenarioSnapshotCapturePlan,
-    ScenarioSnapshotCaptureResult,
-    ScenarioSnapshotCaptureRunResult,
-    ScenarioSnapshotManifest,
+    ScenarioRunResult,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 
-def execute_scenario_snapshot_capture_steps(
+def execute_scenario_run_steps(
     *,
-    project_dir: Path,
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     connection: Any,
-    captured_at: str,
-    capture_adapter: str,
-    capture_dialect: str,
-    sqlbuild_version: str,
+    run_id: str,
     retain: bool,
-    local_type_overrides: dict[str, str] | None = None,
-    limits: ScenarioSnapshotCaptureLimits | None = None,
-) -> ScenarioSnapshotCaptureRunResult:
-    """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
+) -> ScenarioRunResult:
+    """Execute a planned scenario and apply cleanup policy."""
 
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,
@@ -53,9 +45,9 @@ def execute_scenario_snapshot_capture_steps(
         connection=connection,
     )
     if prepare_result.status == ExecutionStatus.FAILED:
-        return ScenarioSnapshotCaptureRunResult(
+        return _scenario_failure(
             scenario_name=scenario_plan.name,
-            status=ExecutionStatus.FAILED,
+            relation_map=scenario_plan.relation_plan.relation_map,
             retained=retain,
             prepare_cleanup_result=prepare_result,
             error_code=prepare_result.error_code,
@@ -69,9 +61,8 @@ def execute_scenario_snapshot_capture_steps(
         adapter=adapter,
         connection=connection,
     )
-    fixture_error: str | None = _first_error(fixture_results)
-    if fixture_error is not None:
-        return _finish_capture_run(
+    if _has_failed(fixture_results):
+        return _finish_scenario(
             scenario_plan=scenario_plan,
             adapter=adapter,
             connection=connection,
@@ -80,7 +71,7 @@ def execute_scenario_snapshot_capture_steps(
             fixture_results=fixture_results,
             error_code=_first_error_code(fixture_results),
             error_help=_first_error_help(fixture_results),
-            error_message=fixture_error,
+            error_message=_first_error(fixture_results),
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
@@ -88,9 +79,8 @@ def execute_scenario_snapshot_capture_steps(
         adapter=adapter,
         connection=connection,
     )
-    seed_error: str | None = _first_error(seed_results)
-    if seed_error is not None:
-        return _finish_capture_run(
+    if _has_failed(seed_results):
+        return _finish_scenario(
             scenario_plan=scenario_plan,
             adapter=adapter,
             connection=connection,
@@ -100,32 +90,46 @@ def execute_scenario_snapshot_capture_steps(
             seed_results=seed_results,
             error_code=_first_error_code(seed_results),
             error_help=_first_error_help(seed_results),
-            error_message=seed_error,
+            error_message=_first_error(seed_results),
         )
 
-    capture_plan: ScenarioSnapshotCapturePlan = build_scenario_snapshot_capture_plan(
-        project_dir=project_dir,
+    model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
         scenario_plan=scenario_plan,
-        capture_adapter=capture_adapter,
-        capture_dialect=capture_dialect,
-    )
-    manifest: ScenarioSnapshotManifest = build_scenario_snapshot_manifest_shell(
-        capture_plan=capture_plan,
-        captured_at=captured_at,
-        capture_adapter=capture_adapter,
-        capture_dialect=capture_dialect,
-        sqlbuild_version=sqlbuild_version,
-    )
-    capture_result: ScenarioSnapshotCaptureResult = execute_scenario_snapshot_capture(
-        capture_plan=capture_plan,
-        manifest=manifest,
         adapter=adapter,
         connection=connection,
-        local_type_overrides=local_type_overrides,
-        limits=limits,
+        run_id=run_id,
     )
+    if _has_failed(model_results):
+        return _finish_scenario(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+            retain=retain,
+            prepare_cleanup_result=prepare_result,
+            fixture_results=fixture_results,
+            seed_results=seed_results,
+            model_results=model_results,
+            error_code=_first_error_code(model_results),
+            error_help=_first_error_help(model_results),
+            error_message=_first_error(model_results),
+        )
 
-    return _finish_capture_run(
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
+    expected_results = execute_scenario_expected_expectations(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...]
+    assertion_results = execute_scenario_assertion_expectations(
+        scenario_plan=scenario_plan,
+        adapter=adapter,
+        connection=connection,
+    )
+    failed_check_message: str | None = _first_error((*expected_results, *assertion_results))
+    failed_check_code: str | None = _first_error_code((*expected_results, *assertion_results))
+    failed_check_help: str | None = _first_error_help((*expected_results, *assertion_results))
+    return _finish_scenario(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
@@ -133,14 +137,16 @@ def execute_scenario_snapshot_capture_steps(
         prepare_cleanup_result=prepare_result,
         fixture_results=fixture_results,
         seed_results=seed_results,
-        capture_result=capture_result,
-        error_code=capture_result.error_code,
-        error_help=capture_result.error_help,
-        error_message=capture_result.error_message,
+        model_results=model_results,
+        expected_results=expected_results,
+        assertion_results=assertion_results,
+        error_code=failed_check_code,
+        error_help=failed_check_help,
+        error_message=failed_check_message,
     )
 
 
-def _finish_capture_run(
+def _finish_scenario(
     *,
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
@@ -149,11 +155,13 @@ def _finish_capture_run(
     prepare_cleanup_result: ScenarioCleanupExecutionResult,
     fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = (),
     seed_results: tuple[SeedExecutionResult, ...] = (),
-    capture_result: ScenarioSnapshotCaptureResult | None = None,
+    model_results: tuple[ModelExecutionResult, ...] = (),
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = (),
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = (),
     error_code: str | None = None,
     error_help: str | None = None,
     error_message: str | None = None,
-) -> ScenarioSnapshotCaptureRunResult:
+) -> ScenarioRunResult:
     status: ExecutionStatus = (
         ExecutionStatus.FAILED if error_message is not None else ExecutionStatus.SUCCESS
     )
@@ -174,14 +182,16 @@ def _finish_capture_run(
                 error_message = f"Cleanup failed: {cleanup_error}"
             else:
                 error_message = f"{error_message}\nCleanup failed: {cleanup_error}"
-
-    return ScenarioSnapshotCaptureRunResult(
+    return ScenarioRunResult(
         scenario_name=scenario_plan.name,
         status=status,
         retained=retain,
+        relation_map=scenario_plan.relation_plan.relation_map,
         fixture_results=fixture_results,
         seed_results=seed_results,
-        capture_result=capture_result,
+        model_results=model_results,
+        expected_results=expected_results,
+        assertion_results=assertion_results,
         prepare_cleanup_result=prepare_cleanup_result,
         cleanup_result=cleanup_result,
         error_code=error_code,
@@ -190,11 +200,40 @@ def _finish_capture_run(
     )
 
 
+def _scenario_failure(
+    *,
+    scenario_name: str,
+    relation_map: ScenarioRelationMap | None,
+    retained: bool,
+    error_message: str | None,
+    prepare_cleanup_result: ScenarioCleanupExecutionResult | None = None,
+    error_code: str | None = None,
+    error_help: str | None = None,
+) -> ScenarioRunResult:
+    return ScenarioRunResult(
+        scenario_name=scenario_name,
+        status=ExecutionStatus.FAILED,
+        retained=retained,
+        relation_map=relation_map,
+        prepare_cleanup_result=prepare_cleanup_result,
+        error_code=error_code,
+        error_help=error_help,
+        error_message=error_message,
+    )
+
+
+def _has_failed(results: tuple[object, ...]) -> bool:
+    return any(getattr(result, "status", None) == ExecutionStatus.FAILED for result in results)
+
+
 def _first_error(results: tuple[object, ...]) -> str | None:
     result: object
     for result in results:
         if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            return str(getattr(result, "error_message", "scenario snapshot capture failed"))
+            error_message: object | None = getattr(result, "error_message", None)
+            if isinstance(error_message, str) and error_message:
+                return error_message
+            return "scenario step failed"
     return None
 
 

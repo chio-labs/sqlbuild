@@ -28,7 +28,7 @@ from sqlbuild.executor.custom.models import (
     MaterializationResult,
     PrepareVersionContext,
 )
-from sqlbuild.executor.run.helpers.custom import execute_custom_entry
+from sqlbuild.executor.run.helpers.materializations.custom import execute_custom_entry
 from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
 
 

@@ -18,43 +18,47 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compi
 from sqlbuild.cli.commands.main.helpers.source_freshness import (
     append_eligible_standard_source_freshness_records,
 )
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
-    ConnectionProgressReporter,
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.config.mode import (
+    enforce_no_defer_to_in_virtual_mode,
 )
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
-    format_build_execution_json,
-    write_execution_json_output,
-)
-from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
-    resolve_external_sql_reference_resolver,
-)
-from sqlbuild.cli.commands.main.shared.helpers.mode import enforce_no_defer_to_in_virtual_mode
-from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands.main.shared.helpers.plan_format import format_plan
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress import (
+from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+    resolve_project_connection_config,
+)
+from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
+from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
+    format_build_execution_json,
+    write_execution_json_output,
+)
+from sqlbuild.cli.commands.main.shared.helpers.output.plan_format import format_plan
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
+    ConnectionProgressReporter,
+)
+from sqlbuild.cli.commands.main.shared.helpers.progress.core import (
     BuildProgressCallbacks,
     format_build_footer,
     write_execution_header,
 )
-from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.python_nodes.core import (
     python_node_results_failed,
 )
-from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
-    write_python_check_runtime_target,
-    write_runtime_target,
-)
-from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
-    enforce_snapshot_full_refresh_policy,
-)
-from sqlbuild.cli.commands.main.shared.helpers.standard_python_lifecycle import (
+from sqlbuild.cli.commands.main.shared.helpers.python_nodes.standard_lifecycle import (
     StandardPythonLifecycleState,
     prepare_standard_python_lifecycle,
+)
+from sqlbuild.cli.commands.main.shared.helpers.snapshots.full_refresh import (
+    enforce_snapshot_full_refresh_policy,
+)
+from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import (
+    write_python_check_runtime_target,
+    write_runtime_target,
 )
 from sqlbuild.cli.commands.main.virtual_build import run_virtual_build
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.executor.scenario.helpers.capture import execute_scenario_snapshot_capture_steps
+from sqlbuild.executor.scenario.helpers.capture.core import execute_scenario_snapshot_capture_steps
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (

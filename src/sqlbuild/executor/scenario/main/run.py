@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.executor.scenario.helpers.run import execute_scenario_run_steps
+from sqlbuild.executor.scenario.helpers.execution.run import execute_scenario_run_steps
 from sqlbuild.executor.scenario.models import ScenarioRunResult
 
 

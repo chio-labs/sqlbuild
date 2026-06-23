@@ -21,7 +21,7 @@ from sqlbuild.cli.commands.main.helpers.lineage.selection import (
     select_target_lineage,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

@@ -24,7 +24,7 @@ from sqlbuild.cli.commands.main.helpers.compile.status import (
 )
 from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts

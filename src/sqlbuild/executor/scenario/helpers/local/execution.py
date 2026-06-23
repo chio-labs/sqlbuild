@@ -22,20 +22,20 @@ from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.helpers.expectations import (
+from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
+from sqlbuild.executor.scenario.helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
     execute_scenario_expected_expectations,
 )
-from sqlbuild.executor.scenario.helpers.local_snapshots import (
+from sqlbuild.executor.scenario.helpers.local.snapshots import (
     load_scenario_snapshot_into_duckdb,
     local_snapshot_table_name,
 )
-from sqlbuild.executor.scenario.helpers.local_sql import (
+from sqlbuild.executor.scenario.helpers.local.sql import (
     replace_local_relations,
     transpile_sql_for_local_duckdb,
 )
-from sqlbuild.executor.scenario.helpers.model_execution import execute_scenario_models
-from sqlbuild.executor.scenario.helpers.snapshots import (
+from sqlbuild.executor.scenario.helpers.snapshots.core import (
     build_scenario_snapshot_input_fingerprint,
     build_scenario_snapshot_input_specs,
     classify_scenario_snapshot_state,

@@ -41,9 +41,9 @@ from sqlbuild.cli.commands.main.helpers.janitor.state_cleanup import (
     virtual_state_prune_candidates,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.connection.core import resolve_connection_config
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation

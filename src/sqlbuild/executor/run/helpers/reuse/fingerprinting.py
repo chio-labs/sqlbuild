@@ -12,7 +12,7 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.shared.helpers.hashing import compute_query_hash

@@ -8,7 +8,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.executor.scenario.helpers.cleanup import collect_scenario_cleanup_targets
+from sqlbuild.executor.scenario.helpers.lifecycle.cleanup import collect_scenario_cleanup_targets
 from sqlbuild.executor.scenario.models import (
     ScenarioCleanupExecutionResult,
     ScenarioCleanupTarget,

@@ -6,7 +6,7 @@ from sqlbuild.compiler.auditing.main.identity import build_audit_gate_identity
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope, AuditSeverity
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     reuse_from_audit_gate_reuse_decision,
 )
 from sqlbuild.executor.run.models import AuditGateReuseDecision

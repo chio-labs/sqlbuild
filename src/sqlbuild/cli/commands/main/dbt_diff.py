@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures, render_diff_output
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.integrations.dbt.models import DbtDiffRun
 from sqlbuild.integrations.dbt.pipeline.main.diff import run_dbt_diff_from_project
 from sqlbuild.shared.helpers.colors import supports_color

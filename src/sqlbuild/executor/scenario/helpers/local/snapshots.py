@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.scenario.helpers.snapshots import (
+from sqlbuild.executor.scenario.helpers.snapshots.core import (
     is_scenario_snapshot_fresh,
     read_scenario_snapshot_jsonl,
     read_scenario_snapshot_manifest,

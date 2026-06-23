@@ -21,7 +21,7 @@ from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandler
 from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.main.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
     add_cursor_override_args,
     add_dbt_config_args,
     add_execution_args,

@@ -17,7 +17,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.run.helpers.snapshot import execute_snapshot_entry
+from sqlbuild.executor.run.helpers.materializations.snapshot import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
