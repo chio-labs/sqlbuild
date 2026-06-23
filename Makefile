@@ -15,23 +15,62 @@ type:
 
 
 test:
-	uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-all:
-	uv run pytest tests -m "not real_warehouse and not dbt" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-all-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "not real_warehouse and not dbt" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_ALL_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-e2e-duckdb:
-	uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv -n auto --dist loadfile
-	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-e2e-duckdb-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	{ \
+		status=0; \
+		run_step() { \
+			label="$$1"; shift; \
+			echo; \
+			echo "==> $$label"; \
+			"$$@"; \
+			rc=$$?; \
+			if [ $$rc -ne 0 ]; then \
+				echo "STEP_FAILED[$$rc]: $$label"; \
+				if [ $$status -eq 0 ]; then status=$$rc; fi; \
+			fi; \
+		}; \
+		run_step "duckdb e2e" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
+		run_step "duckdb performance" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
+		exit $$status; \
+	} 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_E2E_DUCKDB_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-virtual:
-	TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest \
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-virtual-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest \
 		$(VIRTUAL_TEST_ROOTS) \
 		-k "$(VIRTUAL_TEST_KEYWORD)" \
-		-m "not dbt and not performance" -vv -n auto --dist loadfile
+		-m "not dbt and not performance" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_VIRTUAL_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 skills:
@@ -39,18 +78,11 @@ skills:
 	uv run python -m scripts.skills.update_structure_skill
 
 
-# dbt executable used by interop tests. Defaults to `dbt` on PATH; override with
-# the Fusion binary for faster compiles, e.g. `make test-dbt DBT_EXECUTABLE=dbtf`
-# or by exporting DBT_EXECUTABLE in your shell.
 DBT_EXECUTABLE ?= dbt
 export DBT_EXECUTABLE
 
-# Default per-project SQLBuild execution concurrency for verify runs. Override with
-# `make verify SQLBUILD_CONCURRENCY=8` or by exporting SQLBUILD_CONCURRENCY.
 SQLBUILD_CONCURRENCY ?= 8
 
-# Virtual-environment focused test selection. Override roots/keyword to zoom in,
-# e.g. `make test-virtual VIRTUAL_TEST_ROOTS=tests/e2e/src/sqlbuild/cli/commands/main/build`.
 VIRTUAL_TEST_ROOTS ?= tests/e2e/src/sqlbuild/cli/commands/main tests/e2e/src/sqlbuild/integrations/dagster
 VIRTUAL_TEST_KEYWORD ?= virtual or reconcile or diff or janitor or snapshot or dagster
 
@@ -69,7 +101,13 @@ DBT_TEST_PATHS := tests/integration/src/sqlbuild/integrations/dbt tests/e2e/src/
 
 
 test-dbt-real:
-	uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse" -vv -n auto --dist load
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-dbt-real-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest $(DBT_TEST_PATHS) -m "dbt and real_warehouse" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_DBT_REAL_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-dbt-real-snowflake:
@@ -101,46 +139,106 @@ waffle-shop:
 
 
 test-real:
-	uv run pytest tests -m real_warehouse -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m real_warehouse -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-real-all: test-real
 
 
 test-real-snowflake:
-	uv run pytest tests -m "real_warehouse and snowflake" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-snowflake-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and snowflake" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_SNOWFLAKE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-real-bigquery:
-	uv run pytest tests -m "real_warehouse and bigquery" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-bigquery-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and bigquery" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_BIGQUERY_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-real-databricks:
-	uv run pytest tests -m "real_warehouse and databricks" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-databricks-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and databricks" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_DATABRICKS_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-real-postgres:
-	TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests -m "real_warehouse and postgres" -vv -n auto --dist load
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-postgres-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and postgres" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_POSTGRES_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-real-sqlserver:
-	uv run pytest tests -m "real_warehouse and sqlserver" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-sqlserver-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and sqlserver" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_SQLSERVER_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-real-motherduck:
-	uv run pytest tests -m "real_warehouse and motherduck" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-motherduck-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and motherduck" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_MOTHERDUCK_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-e2e-real-snowflake:
-	uv run pytest tests/e2e -m "real_warehouse and snowflake" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-e2e-real-snowflake-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "real_warehouse and snowflake" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_E2E_REAL_SNOWFLAKE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-e2e-real-bigquery:
-	uv run pytest tests/e2e -m "real_warehouse and bigquery" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-e2e-real-bigquery-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "real_warehouse and bigquery" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_E2E_REAL_BIGQUERY_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 test-e2e-real-databricks:
-	uv run pytest tests/e2e -m "real_warehouse and databricks" -vv
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-e2e-real-databricks-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "real_warehouse and databricks" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_E2E_REAL_DATABRICKS_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
 
 
 check-test-conventions:
@@ -255,7 +353,7 @@ verify-ci:
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
-	uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv
+	uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv -n auto --dist loadfile
 	uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv -n auto --dist loadfile
 	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
 	uv run check-test-conventions tests
