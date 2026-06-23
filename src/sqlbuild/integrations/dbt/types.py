@@ -169,3 +169,13 @@ class DbtReuseMetadataStatus(StrEnum):
     """dbt reuse_from fingerprint metadata status values."""
 
     SUCCESS = "success"
+
+
+class DbtReuseUnavailableReason(StrEnum):
+    """Why reuse_from could not run, to drive clear user-facing messaging."""
+
+    NO_GIT_REPOSITORY = "no_git_repository"
+    PROJECT_OUTSIDE_GIT_ROOT = "project_outside_git_root"
+    GIT_REF_IS_CURRENT_BRANCH = "git_ref_is_current_branch"
+    GIT_REF_MISSING = "git_ref_missing"
+    REMOTE_REFRESH_FAILED = "remote_refresh_failed"

@@ -13,12 +13,12 @@ def resolve_production_git_ref(
     input_stream: TextIO,
     output_stream: TextIO,
     use_color: bool,
+    default_ref: str = "main",
 ) -> str:
     """Return the production-shaped git ref to write into dbt reuse config."""
 
     if explicit_git_ref is not None and explicit_git_ref.strip():
         return explicit_git_ref.strip()
-    default_ref: str = "main"
     if not input_stream.isatty():
         return default_ref
     style: CliStyle = CliStyle(use_color=use_color)

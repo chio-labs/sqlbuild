@@ -459,7 +459,7 @@ def test_given_out_of_selection_seed_change_when_running_then_warns(
             description="reuse skipped in a non-git project still cascades a changed seed",
             select=("+fct_customer_revenue",),
             expected_stdout_fragments=(
-                "dbt reuse_from skipped",
+                "dbt reuse-from-production is enabled but inactive",
                 "Upstream changed",
                 "fct_customer_revenue",
             ),

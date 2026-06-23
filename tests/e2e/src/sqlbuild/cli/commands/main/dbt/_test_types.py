@@ -347,6 +347,14 @@ class DbtInitInvalidReuseRefE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DbtInitDetectedReuseRefE2ETestCase:
+    description: str
+    production_ref: str
+    expected_config_git_ref: str
+    unexpected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtPhase11ExecutionTestCase:
     description: str
     expected_current_stdout_fragments: tuple[str, ...]

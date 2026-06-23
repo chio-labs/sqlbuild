@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild.cli.commands.main.helpers.dbt_init.branch_detection import (
+    detect_default_production_git_ref,
+)
 from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgressReporter
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
@@ -48,6 +51,7 @@ def ensure_sqlbuild_project_for_dbt_command(
         input_stream=sys.stdin,
         output_stream=progress_stream,
         use_color=use_color,
+        default_ref=detect_default_production_git_ref(git_probe_dir=dbt_project_dir),
     )
     result: DbtInitResult = run_dbt_profile_init(
         request=DbtInitRequest(
