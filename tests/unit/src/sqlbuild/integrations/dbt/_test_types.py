@@ -231,6 +231,7 @@ class DbtModelPlanningTestCase:
     fingerprint_hash: str | None
     expected_action: DbtModelPlanAction
     expected_reason: DbtModelPlanReason
+    force: bool = False
 
 
 @dataclass(frozen=True)

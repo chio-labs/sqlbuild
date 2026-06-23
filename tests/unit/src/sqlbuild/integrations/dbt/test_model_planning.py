@@ -100,6 +100,14 @@ MODEL_PLANNING_TEST_CASES: tuple[DbtModelPlanningTestCase, ...] = (
         expected_action=DbtModelPlanAction.CURRENT,
         expected_reason=DbtModelPlanReason.NO_CHANGE,
     ),
+    DbtModelPlanningTestCase(
+        description="force plans matching checksum and relation for rerun",
+        create_relation=True,
+        fingerprint_hash="same_hash",
+        force=True,
+        expected_action=DbtModelPlanAction.RUN,
+        expected_reason=DbtModelPlanReason.FORCED,
+    ),
 )
 
 
@@ -148,6 +156,7 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
             project=project,
             adapter=adapter,
             connection=connection,
+            force=test_case.force,
         )
     finally:
         adapter.close(connection)
