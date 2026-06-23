@@ -59,14 +59,14 @@ COLUMN_LINEAGE_OUTPUT_TEST_CASES: list[ColumnLineageOutputTestCase] = [
         output_format="tree",
         expected_output=(
             "Column trace  fact_orders.line_total_cents  upstream\n\n"
-            "  <- stg_orders.quantity (expression)\n"
-            "  <- wide_model_1.line_total_cents (from SELECT *)"
+            "├── stg_orders.quantity (expression)\n"
+            "└── wide_model_1.line_total_cents (from SELECT *)"
         ),
         expected_color_fragments=(
             "\033[34m\033[1mColumn trace\033[0m",
             "\033[1mfact_orders.line_total_cents\033[0m",
             "\033[2mupstream\033[0m",
-            "\033[2m<-\033[0m \033[1mstg_orders.quantity\033[0m",
+            "\033[2m├── \033[0m\033[1mstg_orders.quantity\033[0m",
         ),
     ),
     ColumnLineageOutputTestCase(
@@ -204,7 +204,7 @@ def test_given_lineage_graph_when_formatting_with_color_then_styles_semantic_par
                 "\033[34m\033[1mColumn trace\033[0m",
                 "\033[1mfact_orders.line_total_cents\033[0m",
                 "\033[2mupstream\033[0m",
-                "\033[2m<-\033[0m \033[1mstg_orders.quantity\033[0m",
+                "\033[2m├── \033[0m\033[1mstg_orders.quantity\033[0m",
             ),
         ),
     ],
