@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
 from typing import Any
 
 
@@ -77,3 +79,31 @@ class FakeSnowflakeMetadataConnection:
 
     def cursor(self) -> FakeSnowflakeMetadataCursor:
         return self._cursor
+
+
+class FakeSnowflakeRawConnection:
+    """Raw connector connection double for connect() tests."""
+
+    def cursor(self) -> Any:
+        raise AssertionError("connect test should not execute SQL")
+
+    def close(self) -> None:
+        pass
+
+
+def install_fake_snowflake_connector(monkeypatch: Any) -> dict[str, object]:
+    """Install a fake optional snowflake.connector module and capture connect kwargs."""
+
+    captured_kwargs: dict[str, object] = {}
+    snowflake_module: ModuleType = ModuleType("snowflake")
+    connector_module: ModuleType = ModuleType("snowflake.connector")
+
+    def connect(**kwargs: object) -> FakeSnowflakeRawConnection:
+        captured_kwargs.update(kwargs)
+        return FakeSnowflakeRawConnection()
+
+    connector_module.__dict__["connect"] = connect
+    snowflake_module.__dict__["connector"] = connector_module
+    monkeypatch.setitem(sys.modules, "snowflake", snowflake_module)
+    monkeypatch.setitem(sys.modules, "snowflake.connector", connector_module)
+    return captured_kwargs

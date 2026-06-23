@@ -30,10 +30,10 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
     """Create or render a minimal SQLBuild project from a dbt project."""
 
     dbt_project_dir: Path = _resolve_path(root=request.cwd, path=request.dbt_project_dir)
-    profiles_dir: Path = (
-        _resolve_path(root=request.cwd, path=request.profiles_dir)
-        if request.profiles_dir is not None
-        else default_profiles_dir()
+    profiles_dir: Path = _resolve_profiles_dir(
+        cwd=request.cwd,
+        dbt_project_dir=dbt_project_dir,
+        profiles_dir=request.profiles_dir,
     )
     output_dir: Path = (
         _resolve_path(root=request.cwd, path=request.sqb_output_dir)
@@ -113,11 +113,41 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
     )
 
 
+def validate_dbt_init_project(*, request: DbtInitRequest) -> None:
+    """Validate dbt init project/profile discovery before interactive prompting."""
+
+    dbt_project_dir: Path = _resolve_path(root=request.cwd, path=request.dbt_project_dir)
+    profiles_dir: Path = _resolve_profiles_dir(
+        cwd=request.cwd,
+        dbt_project_dir=dbt_project_dir,
+        profiles_dir=request.profiles_dir,
+    )
+    metadata: DbtProjectProfileMetadata = load_dbt_project_metadata(project_dir=dbt_project_dir)
+    profile_name: str = request.profile_name or metadata.profile_name
+    select_dbt_profile_output(
+        profile=load_raw_dbt_profile(profiles_dir=profiles_dir, profile_name=profile_name),
+        target_name=request.target_name,
+    )
+
+
 def _resolve_path(*, root: Path, path: Path) -> Path:
     expanded: Path = path.expanduser()
     if expanded.is_absolute():
         return expanded.resolve()
     return (root / expanded).resolve()
+
+
+def _resolve_profiles_dir(*, cwd: Path, dbt_project_dir: Path, profiles_dir: Path | None) -> Path:
+    if profiles_dir is not None:
+        return _resolve_path(root=cwd, path=profiles_dir)
+    env_profiles_dir: str | None = os.environ.get("DBT_PROFILES_DIR")
+    if env_profiles_dir:
+        return _resolve_path(root=cwd, path=Path(env_profiles_dir))
+    if (dbt_project_dir / "profiles.yml").exists():
+        return dbt_project_dir
+    if (cwd / "profiles.yml").exists():
+        return cwd.resolve()
+    return default_profiles_dir()
 
 
 def _start_progress(callbacks: DbtInitProgressCallbacks, message: str) -> None:
