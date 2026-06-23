@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild.compiler.lineage.main.render_column_trace_limit_note import (
+    render_column_trace_limit_note,
+)
+from sqlbuild.compiler.lineage.main.render_column_trace_tree import render_column_trace_tree
+from sqlbuild.compiler.lineage.main.render_dependency_tree import render_dependency_tree
+from sqlbuild.compiler.lineage.main.serialize_column import serialize_column
+from sqlbuild.compiler.lineage.main.serialize_column_edge import serialize_column_edge
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
@@ -57,7 +64,7 @@ def format_dbt_column_lineage_json(trace: DbtColumnLineageTrace) -> str:
     """Serialize mixed dbt/SQLBuild column lineage as stable JSON."""
 
     payload: dict[str, object] = {
-        "target": _serialize_column(trace.target),
+        "target": serialize_column(trace.target, render_resource_type=_render_resource_type),
         "direction": trace.direction.value,
         "metadata": {
             "max_depth": trace.max_depth,
@@ -65,7 +72,10 @@ def format_dbt_column_lineage_json(trace: DbtColumnLineageTrace) -> str:
             "truncated": trace.truncated,
             "warnings": list(trace.warnings),
         },
-        "trace": [_serialize_column_edge(edge) for edge in trace.trace],
+        "trace": [
+            serialize_column_edge(edge, render_resource_type=_render_resource_type)
+            for edge in trace.trace
+        ],
     }
     return json.dumps(payload, indent=2)
 
@@ -99,7 +109,13 @@ def format_dbt_column_lineage_list(
         f"{style.muted(str(edge.transform_kind))}"
         for edge in displayed_trace
     )
-    lines.extend(_format_column_trace_limit_note(trace, style=style))
+    lines.extend(
+        render_column_trace_limit_note(
+            total=len(trace.trace),
+            limit=_HUMAN_COLUMN_TRACE_LIMIT,
+            note_style=style.muted,
+        )
+    )
     lines.extend(_format_warnings(trace.warnings, style=style))
     return "\n".join(lines)
 
@@ -125,13 +141,14 @@ def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -
         if graph.direction == DbtLineageDirection.BOTH:
             lines.append(style.object_name("upstream"))
         lines.extend(
-            _format_branch(
-                focus,
-                upstream,
-                node_by_key,
-                prefix="",
+            render_dependency_tree(
+                focus=focus,
+                deps=upstream,
                 seen={focus},
-                style=style,
+                format_node=lambda key: _format_node(node_by_key[key], style=style),
+                sort_key=lambda key: key.stable_id,
+                branch_style=style.muted,
+                already_shown=lambda: style.muted(" (already shown)"),
             )
         )
     if graph.direction in {DbtLineageDirection.DOWNSTREAM, DbtLineageDirection.BOTH}:
@@ -141,13 +158,14 @@ def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -
         if graph.direction == DbtLineageDirection.BOTH:
             lines.append(style.object_name("downstream"))
         lines.extend(
-            _format_branch(
-                focus,
-                downstream,
-                node_by_key,
-                prefix="",
+            render_dependency_tree(
+                focus=focus,
+                deps=downstream,
                 seen={focus},
-                style=style,
+                format_node=lambda key: _format_node(node_by_key[key], style=style),
+                sort_key=lambda key: key.stable_id,
+                branch_style=style.muted,
+                already_shown=lambda: style.muted(" (already shown)"),
             )
         )
     return "\n".join(lines)
@@ -170,37 +188,37 @@ def format_dbt_column_lineage_tree(
         lines.append(style.muted("  No column dependencies found"))
         lines.extend(_format_warnings(trace.warnings, style=style))
         return "\n".join(lines)
-    if trace.direction == DbtLineageDirection.DOWNSTREAM:
-        deps: dict[str, list[ColumnLineageEdge]] = {}
-        for edge in trace.trace[:_HUMAN_COLUMN_TRACE_LIMIT]:
-            deps.setdefault(_column_id(edge.source), []).append(edge)
-        lines.extend(
-            _format_column_trace_branch(
-                trace.target,
-                deps,
-                direction=DbtLineageDirection.DOWNSTREAM,
-                prefix="",
-                seen={_column_id(trace.target)},
-                style=style,
-            )
+    is_downstream: bool = trace.direction == DbtLineageDirection.DOWNSTREAM
+    deps: dict[str, list[ColumnLineageEdge]] = {}
+    for edge in trace.trace[:_HUMAN_COLUMN_TRACE_LIMIT]:
+        key_column: QualifiedLineageColumn = edge.source if is_downstream else edge.target
+        deps.setdefault(_column_id(key_column), []).append(edge)
+    lines.extend(
+        render_column_trace_tree(
+            target=trace.target,
+            deps=deps,
+            total=len(trace.trace),
+            limit=_HUMAN_COLUMN_TRACE_LIMIT,
+            column_id=_column_id,
+            related_column=lambda edge: edge.target if is_downstream else edge.source,
+            format_related=lambda edge: _format_related_column(
+                edge, is_downstream=is_downstream, style=style
+            ),
+            branch_style=style.muted,
+            already_shown=lambda: style.muted(" (already shown)"),
+            note_style=style.muted,
         )
-    else:
-        deps = {}
-        for edge in trace.trace[:_HUMAN_COLUMN_TRACE_LIMIT]:
-            deps.setdefault(_column_id(edge.target), []).append(edge)
-        lines.extend(
-            _format_column_trace_branch(
-                trace.target,
-                deps,
-                direction=DbtLineageDirection.UPSTREAM,
-                prefix="",
-                seen={_column_id(trace.target)},
-                style=style,
-            )
-        )
-    lines.extend(_format_column_trace_limit_note(trace, style=style))
+    )
     lines.extend(_format_warnings(trace.warnings, style=style))
     return "\n".join(lines)
+
+
+def _format_related_column(edge: ColumnLineageEdge, *, is_downstream: bool, style: CliStyle) -> str:
+    related_column: QualifiedLineageColumn = edge.target if is_downstream else edge.source
+    return (
+        f"{_format_column_short(related_column, style=style)} "
+        f"{style.muted(f'({edge.transform_kind})')}"
+    )
 
 
 def _serialize_node(node: DbtLineageNode) -> dict[str, object]:
@@ -218,21 +236,8 @@ def _serialize_node(node: DbtLineageNode) -> dict[str, object]:
     return payload
 
 
-def _serialize_column_edge(edge: ColumnLineageEdge) -> dict[str, object]:
-    return {
-        "source": _serialize_column(edge.source),
-        "target": _serialize_column(edge.target),
-        "transform": str(edge.transform_kind),
-        "confidence": str(edge.confidence),
-    }
-
-
-def _serialize_column(column: QualifiedLineageColumn) -> dict[str, object]:
-    return {
-        "resource_type": str(column.resource_type),
-        "resource_name": column.resource_name,
-        "column_name": column.column_name,
-    }
+def _render_resource_type(column: QualifiedLineageColumn) -> str:
+    return str(column.resource_type)
 
 
 def _format_node(node: DbtLineageNode, *, style: CliStyle) -> str:
@@ -261,66 +266,6 @@ def _column_id(column: QualifiedLineageColumn) -> str:
     return f"{column.resource_name}:{column.column_name}"
 
 
-def _format_column_trace_branch(
-    column: QualifiedLineageColumn,
-    deps: dict[str, list[ColumnLineageEdge]],
-    *,
-    direction: DbtLineageDirection,
-    prefix: str,
-    seen: set[str],
-    style: CliStyle,
-) -> list[str]:
-    lines: list[str] = []
-    edges: list[ColumnLineageEdge] = sorted(
-        deps.get(_column_id(column), ()),
-        key=lambda edge: _column_id(
-            edge.target if direction == DbtLineageDirection.DOWNSTREAM else edge.source
-        ),
-    )
-    for index, edge in enumerate(edges):
-        is_last: bool = index == len(edges) - 1
-        branch: str = "└── " if is_last else "├── "
-        continuation: str = "    " if is_last else "│   "
-        related_column: QualifiedLineageColumn = (
-            edge.target if direction == DbtLineageDirection.DOWNSTREAM else edge.source
-        )
-        related_id: str = _column_id(related_column)
-        suffix: str = style.muted(" (already shown)") if related_id in seen else ""
-        lines.append(
-            f"{prefix}{style.muted(branch)}"
-            f"{_format_column_short(related_column, style=style)} "
-            f"{style.muted(f'({edge.transform_kind})')}{suffix}"
-        )
-        if related_id in seen:
-            continue
-        lines.extend(
-            _format_column_trace_branch(
-                related_column,
-                deps,
-                direction=direction,
-                prefix=prefix + continuation,
-                seen=seen | {related_id},
-                style=style,
-            )
-        )
-    return lines
-
-
-def _format_column_trace_limit_note(
-    trace: DbtColumnLineageTrace,
-    *,
-    style: CliStyle,
-) -> list[str]:
-    if len(trace.trace) <= _HUMAN_COLUMN_TRACE_LIMIT:
-        return []
-    return [
-        "",
-        style.muted(f"Showing {_HUMAN_COLUMN_TRACE_LIMIT} of {len(trace.trace)} columns."),
-        style.muted("Use --depth 1 to show direct column dependencies only."),
-        style.muted("Use --format json for the full trace."),
-    ]
-
-
 def _format_warnings(warnings: tuple[str, ...], *, style: CliStyle) -> list[str]:
     if not warnings:
         return []
@@ -329,42 +274,6 @@ def _format_warnings(warnings: tuple[str, ...], *, style: CliStyle) -> list[str]
         style.object_name("Warnings"),
         *(style.muted(f"  {warning}") for warning in warnings),
     ]
-
-
-def _format_branch(
-    key: DbtCombinedGraphKey,
-    deps: dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]],
-    node_by_key: dict[DbtCombinedGraphKey, DbtLineageNode],
-    *,
-    prefix: str,
-    seen: set[DbtCombinedGraphKey],
-    style: CliStyle,
-) -> list[str]:
-    lines: list[str] = []
-    children: list[DbtCombinedGraphKey] = sorted(
-        deps.get(key, ()), key=lambda child: child.stable_id
-    )
-    for index, child in enumerate(children):
-        is_last: bool = index == len(children) - 1
-        branch: str = "└── " if is_last else "├── "
-        continuation: str = "    " if is_last else "│   "
-        suffix: str = style.muted(" (already shown)") if child in seen else ""
-        lines.append(
-            f"{prefix}{style.muted(branch)}{_format_node(node_by_key[child], style=style)}{suffix}"
-        )
-        if child in seen:
-            continue
-        lines.extend(
-            _format_branch(
-                child,
-                deps,
-                node_by_key,
-                prefix=prefix + continuation,
-                seen=seen | {child},
-                style=style,
-            )
-        )
-    return lines
 
 
 def _format_graph_summary(*, graph: DbtLineageGraph, use_color: bool) -> str:
