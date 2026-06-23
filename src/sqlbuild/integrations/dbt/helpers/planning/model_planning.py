@@ -75,6 +75,7 @@ def build_dbt_model_planning_result(
     project: CompiledProject,
     graph: DbtCombinedGraph | None = None,
     full_refresh: bool = False,
+    force: bool = False,
     adapter: BaseAdapter,
     connection: Any,
 ) -> DbtModelPlanningResult:
@@ -131,6 +132,11 @@ def build_dbt_model_planning_result(
             full_refresh=full_refresh and unique_id in selected_unique_ids_set,
             expected_version_hash=expected_version_hashes.get(unique_id),
         )
+    if force:
+        entries_by_unique_id = _force_selected_current_entries(
+            entries_by_unique_id=entries_by_unique_id,
+            selected_unique_ids=selected_unique_ids_set,
+        )
     in_selection_changed_seed_unique_ids: frozenset[str] = (
         changed_seed_unique_ids & selected_unique_ids_set
     )
@@ -181,6 +187,25 @@ def build_dbt_model_planning_result(
             sorted(stale_out_of_selection_seed_unique_ids)
         ),
     )
+
+
+def _force_selected_current_entries(
+    *,
+    entries_by_unique_id: dict[str, DbtModelPlanEntry],
+    selected_unique_ids: frozenset[str],
+) -> dict[str, DbtModelPlanEntry]:
+    forced: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
+    unique_id: str
+    for unique_id in selected_unique_ids:
+        entry: DbtModelPlanEntry | None = forced.get(unique_id)
+        if entry is None or entry.action != DbtModelPlanAction.CURRENT:
+            continue
+        forced[unique_id] = replace(
+            entry,
+            action=DbtModelPlanAction.RUN,
+            reason=DbtModelPlanReason.FORCED,
+        )
+    return forced
 
 
 def _stale_out_of_selection_warning_messages(

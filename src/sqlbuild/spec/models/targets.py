@@ -70,6 +70,7 @@ def resolve_target_config(
             if local_target.reuse_from is not None
             else project_target.reuse_from
         ),
+        force=local_target.force if local_target.force is not None else project_target.force,
         reuse_hard_copy=(
             local_target.reuse_hard_copy
             if local_target.reuse_hard_copy is not None
@@ -91,6 +92,37 @@ def resolve_target_config(
         local_config=local_config,
     )
     return target_config
+
+
+def resolve_effective_force(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    selected_target: str | None,
+    cli_force: bool,
+) -> bool:
+    """Resolve configured force with CLI, target, and settings precedence."""
+
+    if cli_force:
+        return True
+    target_name: str | None = resolve_target_name(
+        project_config=project_config,
+        local_config=local_config,
+        selected_target=selected_target,
+    )
+    if target_name is not None:
+        target_config: TargetConfig = resolve_target_config(
+            project_config=project_config,
+            local_config=local_config,
+            target_name=target_name,
+        )
+        if target_config.force is not None:
+            return target_config.force
+    return (
+        local_config.settings.force
+        if "force" in local_config.setting_overrides
+        else project_config.settings.force
+    )
 
 
 def _validate_reuse_config(

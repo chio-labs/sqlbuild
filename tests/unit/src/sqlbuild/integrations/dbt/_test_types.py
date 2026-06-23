@@ -19,7 +19,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtReusePlanAction,
     DbtReusePlanReason,
 )
-from sqlbuild.spec.models.project import DbtConfig
+from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,15 @@ class DbtConfigErrorTestCase:
     expected_error_fragment: str
     expected_code: str
     expected_help_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtVarsResolutionTestCase:
+    description: str
+    project_config: DbtConfig
+    local_config: LocalDbtConfig
+    dbt_args: tuple[str, ...]
+    expected_vars: dict[str, object]
 
 
 @dataclass(frozen=True)

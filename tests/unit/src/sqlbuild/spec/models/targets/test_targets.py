@@ -8,11 +8,13 @@ from sqlbuild.spec.models.project import (
     LocalStateConfig,
     LocalTargetConfig,
     ProjectConfig,
+    SettingsConfig,
     StateConfig,
     TargetConfig,
 )
-from sqlbuild.spec.models.targets import resolve_target_config
+from sqlbuild.spec.models.targets import resolve_effective_force, resolve_target_config
 from tests.unit.src.sqlbuild.spec.models.targets._test_types import (
+    EffectiveForceResolutionTestCase,
     TargetConfigResolutionTestCase,
     TargetConfigReuseErrorTestCase,
     TargetConfigReuseLocalSourceTestCase,
@@ -33,6 +35,72 @@ TARGET_CONFIG_REUSE_ERROR_TEST_CASES: list[TargetConfigReuseErrorTestCase] = [
     ),
 ]
 
+EFFECTIVE_FORCE_TEST_CASES: list[EffectiveForceResolutionTestCase] = [
+    EffectiveForceResolutionTestCase(
+        description="uses default false when nothing is configured",
+        project_config=ProjectConfig(name="demo", adapter="duckdb"),
+        local_config=LocalConfig(),
+        cli_force=False,
+        expected_force=False,
+    ),
+    EffectiveForceResolutionTestCase(
+        description="uses global settings force when target does not override",
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            default_target="dev",
+            settings=SettingsConfig(force=True),
+            targets={"dev": TargetConfig()},
+        ),
+        local_config=LocalConfig(),
+        cli_force=False,
+        expected_force=True,
+    ),
+    EffectiveForceResolutionTestCase(
+        description="allows target false to override global true",
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            default_target="prod",
+            settings=SettingsConfig(force=True),
+            targets={"prod": TargetConfig(force=False)},
+        ),
+        local_config=LocalConfig(),
+        cli_force=False,
+        expected_force=False,
+    ),
+    EffectiveForceResolutionTestCase(
+        description="allows cli force to override target false",
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            default_target="prod",
+            targets={"prod": TargetConfig(force=False)},
+        ),
+        local_config=LocalConfig(),
+        cli_force=True,
+        expected_force=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    EFFECTIVE_FORCE_TEST_CASES,
+    ids=[case.description for case in EFFECTIVE_FORCE_TEST_CASES],
+)
+def test_given_force_config_when_resolving_effective_force_then_precedence_is_applied(
+    test_case: EffectiveForceResolutionTestCase,
+) -> None:
+    force: bool = resolve_effective_force(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+        selected_target=None,
+        cli_force=test_case.cli_force,
+    )
+
+    assert force is test_case.expected_force
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -44,6 +112,7 @@ TARGET_CONFIG_REUSE_ERROR_TEST_CASES: list[TargetConfigReuseErrorTestCase] = [
                 adapter="duckdb",
                 targets={
                     "dev": TargetConfig(
+                        force=True,
                         state=StateConfig(
                             backend="postgres",
                             schema="sqlbuild_state",
@@ -63,6 +132,7 @@ TARGET_CONFIG_REUSE_ERROR_TEST_CASES: list[TargetConfigReuseErrorTestCase] = [
                             connection={"database": "local-state.duckdb"},
                             allow_reset=True,
                         ),
+                        force=False,
                         reuse_hard_copy=True,
                     )
                 }
@@ -77,6 +147,7 @@ TARGET_CONFIG_REUSE_ERROR_TEST_CASES: list[TargetConfigReuseErrorTestCase] = [
             },
             expected_allow_reset=True,
             expected_reuse_from="prod",
+            expected_force=False,
             expected_reuse_hard_copy=True,
         )
     ],
@@ -96,6 +167,7 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.state.connection == test_case.expected_connection
     assert target_config.state.allow_reset is test_case.expected_allow_reset
     assert target_config.reuse_from == test_case.expected_reuse_from
+    assert target_config.force is test_case.expected_force
     assert target_config.reuse_hard_copy is test_case.expected_reuse_hard_copy
 
 

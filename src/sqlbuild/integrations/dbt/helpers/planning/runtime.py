@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import cast
+
+import yaml
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
@@ -13,6 +16,7 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config.core import resolve_dbt_config
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, DbtCliOptions, ResolvedDbtConfig
 from sqlbuild.shared.helpers.adapters import discover_project_adapters
+from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
 
 
 def resolve_dbt_plan_options(
@@ -32,10 +36,41 @@ def resolve_dbt_plan_options(
         profiles_dir=resolved.profiles_dir,
         target=resolved.target,
         target_path=resolved.target_path,
-        vars=parse_value_flag(dbt_args, "--vars"),
+        vars=resolve_dbt_vars(
+            project_config=discovered_inputs.project_config.dbt,
+            local_config=discovered_inputs.local_config.dbt,
+            dbt_args=dbt_args,
+        ),
         state=parse_optional_path_flag(dbt_args, "--state", project_root=project_dir),
         defer="--defer" in dbt_args,
     )
+
+
+def resolve_dbt_vars(
+    *, project_config: DbtConfig, local_config: LocalDbtConfig, dbt_args: tuple[str, ...]
+) -> str | None:
+    """Merge dbt vars from project config, local config, and CLI args."""
+
+    values: dict[str, object] = resolve_dbt_vars_mapping(
+        project_config=project_config,
+        local_config=local_config,
+        dbt_args=dbt_args,
+    )
+    if not values:
+        return None
+    return json.dumps(values, sort_keys=True)
+
+
+def resolve_dbt_vars_mapping(
+    *, project_config: DbtConfig, local_config: LocalDbtConfig, dbt_args: tuple[str, ...]
+) -> dict[str, object]:
+    """Return merged dbt vars as a structured mapping."""
+
+    values: dict[str, object] = {}
+    values.update(project_config.vars)
+    values.update(local_config.vars)
+    values.update(_parse_cli_dbt_vars(parse_value_flag(dbt_args, "--vars")))
+    return values
 
 
 def parse_dbt_config_overrides(dbt_args: tuple[str, ...]) -> DbtCliConfigOverrides:
@@ -58,6 +93,24 @@ def parse_value_flag(args: tuple[str, ...], flag: str) -> str | None:
     if index + 1 >= len(args):
         return None
     return args[index + 1]
+
+
+def _parse_cli_dbt_vars(raw_value: str | None) -> dict[str, object]:
+    if raw_value is None:
+        return {}
+    parsed: object = yaml.safe_load(raw_value)
+    if parsed is None:
+        return {}
+    if not isinstance(parsed, dict):
+        raise DbtInteropConfigError("dbt --vars must be a mapping")
+    result: dict[str, object] = {}
+    key: object
+    value: object
+    for key, value in parsed.items():
+        if not isinstance(key, str):
+            raise DbtInteropConfigError("dbt --vars keys must be strings")
+        result[key] = value
+    return result
 
 
 def parse_optional_path_flag(

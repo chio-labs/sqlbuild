@@ -16,7 +16,17 @@ class TargetConfigResolutionTestCase:
     expected_connection: dict[str, object]
     expected_allow_reset: bool
     expected_reuse_from: str | None = None
+    expected_force: bool | None = None
     expected_reuse_hard_copy: bool = False
+
+
+@dataclass(frozen=True)
+class EffectiveForceResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    cli_force: bool
+    expected_force: bool
 
 
 @dataclass(frozen=True)

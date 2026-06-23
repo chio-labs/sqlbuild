@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config.core import resolve_dbt_config
+from sqlbuild.integrations.dbt.helpers.planning.runtime import resolve_dbt_vars
 from sqlbuild.integrations.dbt.models import ResolvedDbtConfig
-from sqlbuild.spec.models.project import DbtConfig
+from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtConfigErrorTestCase,
     DbtConfigResolutionTestCase,
+    DbtVarsResolutionTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_cli_overrides
 
@@ -91,6 +94,40 @@ def test_given_dbt_config_when_resolving_then_returns_expected_values(
     assert result.profiles_dir == test_case.expected_profiles_dir
     assert result.target == test_case.expected_target
     assert result.target_path == test_case.expected_target_path
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtVarsResolutionTestCase(
+            description="merges project local and cli vars with later values winning",
+            project_config=DbtConfig(
+                vars={"country": "US", "limit": 100, "shared": "project"},
+            ),
+            local_config=LocalDbtConfig(vars={"limit": 10, "developer": "kevin"}),
+            dbt_args=("--vars", '{"country": "CA", "cli_only": true}'),
+            expected_vars={
+                "country": "CA",
+                "limit": 10,
+                "shared": "project",
+                "developer": "kevin",
+                "cli_only": True,
+            },
+        )
+    ],
+    ids=["merges project local and cli vars with later values winning"],
+)
+def test_given_dbt_vars_sources_when_resolving_then_vars_are_merged(
+    test_case: DbtVarsResolutionTestCase,
+) -> None:
+    resolved: str | None = resolve_dbt_vars(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+        dbt_args=test_case.dbt_args,
+    )
+
+    assert resolved is not None
+    assert json.loads(resolved) == test_case.expected_vars
 
 
 @pytest.mark.parametrize(
