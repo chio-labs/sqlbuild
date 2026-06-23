@@ -52,6 +52,7 @@ from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_interop_adapter,
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
+    resolve_dbt_vars_mapping,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
@@ -118,6 +119,7 @@ from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.shared.helpers.status import TransientStatusReporter
 from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.targets import resolve_effective_force
 
 
 def execute_dbt_interop_from_project(
@@ -152,9 +154,24 @@ def execute_dbt_interop_from_project(
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
+    effective_force: bool = resolve_effective_force(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=None,
+        cli_force="--force" in routed.sqlbuild_args,
+    )
+    effective_sqlbuild_args: tuple[str, ...] = _with_effective_force(
+        args=routed.sqlbuild_args,
+        force=effective_force,
+    )
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
+        dbt_args=routed.dbt_args,
+    )
+    dbt_vars: dict[str, object] = resolve_dbt_vars_mapping(
+        project_config=discovered_inputs.project_config.dbt,
+        local_config=discovered_inputs.local_config.dbt,
         dbt_args=routed.dbt_args,
     )
     runner: DbtRunner = dbt_runner or DbtRunner(dbt_executable=dbt_executable)
@@ -190,6 +207,7 @@ def execute_dbt_interop_from_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
+        cli_vars=dbt_vars,
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
     _report_progress(
@@ -216,7 +234,7 @@ def execute_dbt_interop_from_project(
         select=routed.select,
         exclude=routed.exclude,
         dbt_command_args=routed.dbt_args,
-        sqlbuild_command_args=routed.sqlbuild_args,
+        sqlbuild_command_args=effective_sqlbuild_args,
         dbt_executable=dbt_executable,
         sqlbuild_executable=sqlbuild_executable,
     )
@@ -249,6 +267,7 @@ def execute_dbt_interop_from_project(
         ),
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh="--full-refresh" in routed.dbt_args,
+        force=effective_force,
         on_connection_start=connection_progress.on_connection_start,
         on_connection_complete=connection_progress.on_connection_complete,
         on_connection_error=connection_progress.on_connection_error,
@@ -314,6 +333,7 @@ def execute_dbt_interop_from_project(
             candidate_unique_ids=dependency_baseline_ids,
             selected_unique_ids=dependency_baseline_ids,
             full_refresh="--full-refresh" in routed.dbt_args,
+            force=effective_force,
             on_connection_start=connection_progress.on_connection_start,
             on_connection_complete=connection_progress.on_connection_complete,
             on_connection_error=connection_progress.on_connection_error,
@@ -482,7 +502,7 @@ def execute_dbt_interop_from_project(
                 ),
                 *missing_dbt_relation_blocked_models,
             ),
-            sqlbuild_args=routed.sqlbuild_args,
+            sqlbuild_args=effective_sqlbuild_args,
             on_progress=None,
             on_connection_start=connection_progress.on_connection_start,
             on_connection_complete=connection_progress.on_connection_complete,
@@ -678,7 +698,7 @@ def execute_dbt_interop_from_project(
                 *dbt_outcome.blocked_sqlbuild_model_names,
                 *missing_dbt_relation_blocked_models,
             ),
-            sqlbuild_args=routed.sqlbuild_args,
+            sqlbuild_args=effective_sqlbuild_args,
             on_progress=None,
             on_connection_start=execution_plan_connection_progress.on_connection_start,
             on_connection_complete=execution_plan_connection_progress.on_connection_complete,
@@ -757,3 +777,9 @@ def execute_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _with_effective_force(*, args: tuple[str, ...], force: bool) -> tuple[str, ...]:
+    if not force or "--force" in args:
+        return args
+    return (*args, "--force")

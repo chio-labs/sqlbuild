@@ -32,6 +32,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.targets import resolve_effective_force
 from sqlbuild.virtual.planner.main.plan import run_virtual_plan_pipeline
 
 
@@ -59,6 +60,12 @@ def run_plan(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    effective_force: bool = resolve_effective_force(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=None,
+        cli_force=force,
     )
     enforce_no_defer_to_in_virtual_mode(
         discovered_inputs=discovered_inputs,
@@ -113,7 +120,7 @@ def run_plan(
             full_refresh=full_refresh,
             virtual_environment_name=virtual_env,
             include_stale_upstreams=include_stale_upstreams,
-            changes_only=not force,
+            changes_only=not effective_force,
             auto_load_sources=should_load_sources,
             include_python=include_python,
             select=select,
@@ -135,7 +142,7 @@ def run_plan(
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,
             full_refresh=full_refresh,
-            changes_only=not force,
+            changes_only=not effective_force,
             auto_load_sources=should_load_sources,
             select=select,
             exclude=exclude,

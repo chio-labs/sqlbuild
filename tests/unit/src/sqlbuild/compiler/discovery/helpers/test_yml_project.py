@@ -46,9 +46,14 @@ sql_analysis = false
 sql_validation = false
 concurrency = 4
 auto_load_sources = false
+force = true
 
 [vars]
 user = "kevin"
+
+[dbt.vars]
+shared = "local"
+threads = 2
 
 [scenario.local_type_overrides.snowflake]
 "NUMBER(*,0)" = "BIGINT"
@@ -69,9 +74,11 @@ max_total_bytes = 78
         expected_max_concurrency=4,
         expected_auto_load_sources=False,
         expected_setting_overrides=frozenset(
-            {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources"}
+            {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources", "force"}
         ),
         expected_vars={"user": "kevin"},
+        expected_dbt_vars={"shared": "local", "threads": 2},
+        expected_force=True,
         expected_scenario_local_type_overrides={
             "snowflake": {
                 "NUMBER(*,0)": "BIGINT",
@@ -143,6 +150,7 @@ database = "local_db"
 schema = "local_schema"
 defer_sources_to = "prod"
 reuse_from = "prod"
+force = false
 reuse_hard_copy = true
 
 [targets.dev.connection]
@@ -172,6 +180,7 @@ allow_as_clone_destination = false
                 "schema": "local_schema",
                 "defer_sources_to": "prod",
                 "reuse_from": "prod",
+                "force": False,
                 "reuse_hard_copy": True,
                 "allow_as_clone_origin": True,
                 "allow_as_clone_destination": False,
@@ -725,6 +734,7 @@ schema = "dev"
                 "schema": "dev",
                 "defer_sources_to": None,
                 "reuse_from": None,
+                "force": None,
                 "reuse_hard_copy": False,
                 "allow_as_clone_origin": False,
                 "allow_as_clone_destination": False,
@@ -752,6 +762,7 @@ sql_analysis = false
 query_change_tracking = true
 concurrency = 8
 auto_load_sources = false
+force = true
 
 [defaults]
 materialized = "table"
@@ -775,6 +786,7 @@ user = "kevin"
 schema = "dev_${user}"
 defer_sources_to = "prod"
 reuse_from = "prod"
+force = true
 reuse_hard_copy = true
 
 [targets.dev.connection]
@@ -820,6 +832,11 @@ profiles_dir = "../profiles"
 target = "prod"
 target_path = "target/dbt"
 
+[dbt.vars]
+country = "US"
+limit = 100
+enabled = true
+
 [dbt.reuse_from]
 git_ref = "prod"
 generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
@@ -832,6 +849,7 @@ generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
         expected_sql_analysis=False,
         expected_max_concurrency=8,
         expected_auto_load_sources=False,
+        expected_force=True,
         expected_materialized="table",
         expected_row_diff_exclude_columns=("loaded_at",),
         expected_row_diff_tolerances={
@@ -853,6 +871,7 @@ generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
                 "schema": "dev_${user}",
                 "defer_sources_to": "prod",
                 "reuse_from": "prod",
+                "force": True,
                 "reuse_hard_copy": True,
                 "allow_as_clone_origin": True,
                 "allow_as_clone_destination": True,
@@ -885,6 +904,7 @@ generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
         expected_dbt_profiles_dir="../profiles",
         expected_dbt_target="prod",
         expected_dbt_target_path="target/dbt",
+        expected_dbt_vars={"country": "US", "limit": 100, "enabled": True},
         expected_dbt_reuse_from_git_ref="prod",
         expected_dbt_reuse_from_generate_schema_name_override=(
             "dbt/macros/prod_generate_schema_name.sql"
@@ -914,6 +934,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.settings.sql_analysis is test_case.expected_sql_analysis
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
+    assert config.settings.force is test_case.expected_force
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -928,6 +949,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
             "reuse_from": target_config.reuse_from,
+            "force": target_config.force,
             "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
@@ -963,6 +985,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.dbt.profiles_dir == test_case.expected_dbt_profiles_dir
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.target_path == test_case.expected_dbt_target_path
+    assert config.dbt.vars == test_case.expected_dbt_vars
     assert config.dbt.reuse_from.git_ref == test_case.expected_dbt_reuse_from_git_ref
     assert (
         config.dbt.reuse_from.generate_schema_name_override
@@ -995,8 +1018,10 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.sql_validation is test_case.expected_sql_validation
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
+    assert config.settings.force is test_case.expected_force
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
+    assert config.dbt.vars == test_case.expected_dbt_vars
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
     assert {
         "max_rows_per_relation": config.scenario.snapshot_limits.max_rows_per_relation,
@@ -1012,6 +1037,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
             "reuse_from": target_config.reuse_from,
+            "force": target_config.force,
             "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,

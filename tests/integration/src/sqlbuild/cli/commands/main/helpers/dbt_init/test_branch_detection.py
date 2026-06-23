@@ -14,7 +14,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers.dbt_init.helpers i
     build_git_repo_for_case,
 )
 
-TEST_CASES = [
+TEST_CASES: list[DefaultBranchDetectionTestCase] = [
     DefaultBranchDetectionTestCase(
         description="non-git directory falls back to main",
         init_branch=None,

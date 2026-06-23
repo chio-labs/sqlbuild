@@ -82,6 +82,7 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.models.targets import resolve_effective_force
 
 
 def run_build(
@@ -117,6 +118,12 @@ def run_build(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
+    )
+    effective_force: bool = resolve_effective_force(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=None,
+        cli_force=force,
     )
     enforce_no_defer_to_in_virtual_mode(
         discovered_inputs=discovered_inputs,
@@ -167,7 +174,7 @@ def run_build(
                 full_refresh=full_refresh,
                 virtual_environment_name=virtual_env,
                 include_stale_upstreams=include_stale_upstreams,
-                changes_only=not force,
+                changes_only=not effective_force,
                 auto_load_sources=should_load_sources,
                 reload_sources=reload_sources,
                 include_python=include_python,
@@ -200,7 +207,7 @@ def run_build(
             select=select,
             exclude=exclude,
             full_refresh=full_refresh,
-            changes_only=not force,
+            changes_only=not effective_force,
             auto_load_sources=should_load_sources,
             reload_sources=reload_sources,
             connection_config=connection_config,
