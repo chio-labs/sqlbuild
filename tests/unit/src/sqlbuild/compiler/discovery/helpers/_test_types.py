@@ -50,10 +50,12 @@ class LoadProjectConfigTestCase:
     expected_dbt_profiles_dir: str | None = None
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
+    expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_dbt_reuse_from_git_ref: str | None = None
     expected_dbt_reuse_from_generate_schema_name_override: str | None = None
     expected_auto_load_sources: bool = True
     expected_virtual_environments: bool = False
+    expected_force: bool = False
 
 
 @dataclass(frozen=True)
@@ -68,7 +70,9 @@ class LoadLocalConfigTestCase:
     expected_max_concurrency: int
     expected_setting_overrides: frozenset[str]
     expected_vars: dict[str, str]
+    expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_auto_load_sources: bool = True
+    expected_force: bool = False
     expected_targets: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)

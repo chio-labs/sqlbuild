@@ -26,6 +26,7 @@ from sqlbuild.spec.models.project import (
     JanitorConfig,
     LocalClonePolicy,
     LocalConfig,
+    LocalDbtConfig,
     LocalStateConfig,
     LocalTargetConfig,
     ProjectConfig,
@@ -124,6 +125,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     vars_map: dict[str, str] = _load_string_mapping(
         payload=payload.get("vars"), file_path=file_path
     )
+    dbt: LocalDbtConfig = _load_local_dbt(payload=payload.get("dbt"), file_path=file_path)
     scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     return LocalConfig(
         target=target,
@@ -133,6 +135,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
         settings=settings,
         setting_overrides=setting_overrides,
         vars=vars_map,
+        dbt=dbt,
         scenario=scenario,
     )
 
@@ -258,6 +261,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         key="virtual_environments",
         default=False,
     )
+    force: bool = _optional_bool(mapping=mapping, key="force", default=False)
     concurrency_key: str = "max_concurrency" if "max_concurrency" in mapping else "concurrency"
     concurrency: int = _optional_int(mapping=mapping, key=concurrency_key, default=1)
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
@@ -273,6 +277,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         sql_validation=sql_validation,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
+        force=force,
         virtual_environments=virtual_environments,
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
@@ -444,6 +449,7 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
+            force=_optional_nullable_bool(mapping=target_mapping, key="force"),
             reuse_hard_copy=_optional_bool(
                 mapping=target_mapping,
                 key="reuse_hard_copy",
@@ -509,6 +515,7 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
+            force=_optional_nullable_bool(mapping=target_mapping, key="force"),
             reuse_hard_copy=_optional_nullable_bool(
                 mapping=target_mapping,
                 key="reuse_hard_copy",
@@ -669,6 +676,7 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
                 "profiles_dir",
                 "target",
                 "target_path",
+                "vars",
                 "replay_on_change",
                 "reuse_from",
             }
@@ -681,11 +689,27 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         profiles_dir=_optional_str(payload=mapping, key="profiles_dir"),
         target=_optional_str(payload=mapping, key="target"),
         target_path=_optional_str(payload=mapping, key="target_path"),
+        vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
         reuse_from=_load_dbt_reuse_from(
             payload=mapping.get("reuse_from"),
             file_path=file_path,
         ),
+    )
+
+
+def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
+    """Load optional local dbt interop configuration."""
+
+    mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"vars"}),
+        label="dbt",
+        file_path=file_path,
+    )
+    return LocalDbtConfig(
+        vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
     )
 
 
@@ -796,6 +820,13 @@ def _load_string_mapping(*, payload: object, file_path: Path) -> dict[str, str]:
             raise ProjectConfigError(f"{file_path} expected string value for '{key}'")
         result[key] = value
     return result
+
+
+def _load_object_mapping(*, payload: object, file_path: Path) -> dict[str, object]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="mapping", file_path=file_path
+    )
+    return dict(mapping)
 
 
 def _load_string_sequence(*, payload: object, label: str, file_path: Path) -> list[str]:

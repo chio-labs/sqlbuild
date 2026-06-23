@@ -53,6 +53,7 @@ class TargetConfig:
     schema: str | None = None
     defer_sources_to: str | None = None
     reuse_from: str | None = None
+    force: bool | None = None
     reuse_hard_copy: bool = False
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
@@ -68,6 +69,7 @@ class LocalTargetConfig:
     schema: str | None = None
     defer_sources_to: str | None = None
     reuse_from: str | None = None
+    force: bool | None = None
     reuse_hard_copy: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
@@ -82,6 +84,7 @@ class SettingsConfig:
     sql_validation: bool = True
     concurrency: int = 1
     auto_load_sources: bool = True
+    force: bool = False
     virtual_environments: bool = False
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
@@ -169,8 +172,16 @@ class DbtConfig:
     profiles_dir: str | None = None
     target: str | None = None
     target_path: str | None = None
+    vars: dict[str, object] = field(default_factory=dict)
     replay_on_change: str | None = None
     reuse_from: DbtReuseFromConfig = field(default_factory=DbtReuseFromConfig)
+
+
+@dataclass(frozen=True)
+class LocalDbtConfig:
+    """Local dbt interop configuration overrides."""
+
+    vars: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -203,6 +214,7 @@ class LocalConfig:
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     setting_overrides: frozenset[str] = field(default_factory=frozenset)
     vars: dict[str, str] = field(default_factory=dict)
+    dbt: LocalDbtConfig = field(default_factory=LocalDbtConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
 
 
