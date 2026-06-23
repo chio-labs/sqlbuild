@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.profile_connection import resolve_dbt_profile_raw_connection
+from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_dbt_profile_raw_connection
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.models.project import ProjectConfig
 

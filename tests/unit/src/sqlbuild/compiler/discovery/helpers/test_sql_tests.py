@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.sql_tests import parse_sql_test_file
+from sqlbuild.compiler.discovery.helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSqlTestFileErrorTestCase,

@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
 )
-from sqlbuild.compiler.planner.helpers.selectors import (
+from sqlbuild.compiler.planner.helpers.graph.selectors import (
     parse_selector,
     resolve_selectors,
 )
@@ -624,7 +624,7 @@ BUILD_PATH_INDEX_TEST_CASES: list[BuildPathIndexTestCase] = [
 def test_given_model_paths_when_building_path_index_then_returns_expected_folders(
     test_case: BuildPathIndexTestCase,
 ) -> None:
-    from sqlbuild.compiler.planner.helpers.plan_entry import build_path_index
+    from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index
 
     project: CompiledProject = build_test_project(
         model_deps={name: () for name in test_case.model_paths},

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.integrations.dbt.helpers.manifest import (
+from sqlbuild.integrations.dbt.helpers.manifest.core import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )

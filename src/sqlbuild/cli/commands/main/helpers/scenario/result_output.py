@@ -7,7 +7,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.scenario.constants import FAILED_STATUS, SUCCESS_STATUS
-from sqlbuild.cli.commands.main.shared.helpers.scenario_runtime_target_writer import (
+from sqlbuild.cli.commands.main.shared.helpers.targets.scenario_runtime import (
     write_local_scenario_runtime_target,
     write_scenario_runtime_target,
 )

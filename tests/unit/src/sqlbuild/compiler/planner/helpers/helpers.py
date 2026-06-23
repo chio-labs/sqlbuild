@@ -50,12 +50,13 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
-from sqlbuild.compiler.planner.helpers.scenario_artifacts import build_scenario_relation_map
+from sqlbuild.compiler.planner.helpers.graph.core import build_downstream_deps
+from sqlbuild.compiler.planner.helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    GraphNodeKey,
     PlannerScope,
     PlanOutput,
     ScenarioArtifactIdentity,
@@ -116,6 +117,17 @@ class StandardReuseFromTargetTestResult:
 
     def fetchall(self) -> tuple[tuple[object, ...], ...]:
         return self._rows
+
+
+def compose_readable_identity(
+    local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+) -> str:
+    if not upstream_hashes:
+        return local_hash
+    rendered: str = ",".join(
+        f"{key.node_type}:{key.node_name}={upstream_hash}" for key, upstream_hash in upstream_hashes
+    )
+    return f"{local_hash}|{rendered}"
 
 
 class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
@@ -1581,7 +1593,7 @@ def build_scheduling_graph(
 ]:
     """Build upstream and downstream dep dicts from simple name-based edges."""
 
-    from sqlbuild.compiler.planner.helpers.graph import build_downstream_deps
+    from sqlbuild.compiler.planner.helpers.graph.core import build_downstream_deps
 
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
     name: str

@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.mode import enforce_dbt_interop_standard_mode
+from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtModeGuardTestCase
 

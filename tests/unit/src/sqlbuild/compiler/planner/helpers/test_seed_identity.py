@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.planner.helpers.seed_identity import build_seed_identity
+from sqlbuild.compiler.planner.helpers.identity.seed import build_seed_identity
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     SeedIdentityCsvConfigTestCase,

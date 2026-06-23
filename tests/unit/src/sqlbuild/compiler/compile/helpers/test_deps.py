@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.helpers.deps import (
+from sqlbuild.compiler.compile.helpers.deps.dependencies import (
     audit_scope_deps,
     model_build_deps,
     sql_test_scope_deps,

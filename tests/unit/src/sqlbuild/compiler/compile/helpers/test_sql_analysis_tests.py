@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("polyglot_sql")
 
-from sqlbuild.compiler.compile.helpers.sql_analysis_tests import (  # noqa: E402
+from sqlbuild.compiler.compile.helpers.analysis.tests import (  # noqa: E402
     extract_expected_branch_column_names_with_sql_analysis,
 )
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (  # noqa: E402

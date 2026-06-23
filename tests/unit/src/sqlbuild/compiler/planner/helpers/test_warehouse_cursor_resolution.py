@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
     CompileSqlReference,
 )
-from sqlbuild.compiler.planner.helpers.warehouse_snapshot import (
+from sqlbuild.compiler.planner.helpers.warehouse.snapshot import (
     _resolve_upstream_qualified_name,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (

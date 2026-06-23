@@ -16,8 +16,8 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
-from sqlbuild.compiler.planner.helpers.plan_entry import gather_source_columns
-from sqlbuild.compiler.planner.helpers.warehouse_snapshot import gather_warehouse_snapshot
+from sqlbuild.compiler.planner.helpers.output.plan_entry import gather_source_columns
+from sqlbuild.compiler.planner.helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import (
     GatherCursorSnapshotTestCase,

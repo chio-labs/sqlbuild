@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.templating import expand_template_data
+from sqlbuild.compiler.compile.helpers.render.templating import expand_template_data
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ExpandTemplateDataErrorTestCase,
     ExpandTemplateDataTestCase,

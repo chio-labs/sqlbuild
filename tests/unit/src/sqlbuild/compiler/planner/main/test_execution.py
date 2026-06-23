@@ -14,8 +14,8 @@ from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_insert_sql,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.version_identity import (
+from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.main.execution import build_execution_plan

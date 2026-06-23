@@ -186,9 +186,9 @@ LINEAGE_TEXT_TEST_CASES: tuple[DbtLineageTextE2ETestCase, ...] = (
         command=("--no-color", "dbt", "lineage", "downstream_orders", "--format", "tree"),
         expected_stdout_fragments=(
             "Lineage  downstream_orders [sqb]  upstream",
-            "└─ fact_orders [dbt]",
-            "└─ stg_orders [dbt]",
-            "└─ raw.orders [dbt]",
+            "└── fact_orders [dbt]",
+            "└── stg_orders [dbt]",
+            "└── raw.orders [dbt]",
         ),
         expected_stderr_fragments=("Compiling dbt project...", "Loaded dbt manifest."),
     ),

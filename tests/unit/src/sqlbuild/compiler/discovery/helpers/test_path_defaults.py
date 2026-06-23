@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.helpers.discovery_validation import (
+from sqlbuild.compiler.discovery.helpers.validation.discovery import (
     _validate_path_defaults_match_models,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile

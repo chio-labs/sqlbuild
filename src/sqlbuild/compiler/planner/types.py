@@ -27,6 +27,13 @@ class StandardScopePruning(StrEnum):
     PRUNE_UNCHANGED = "prune_unchanged"
 
 
+class GraphResourceKind(StrEnum):
+    MODEL = "model"
+    SEED = "seed"
+    SOURCE = "source"
+    FUNCTION = "function"
+
+
 class ChangeKind(StrEnum):
     FIRST_RUN = "first_run"
     QUERY_CHANGED = "query_changed"

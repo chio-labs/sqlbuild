@@ -16,7 +16,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
 )
-from sqlbuild.compiler.planner.helpers.audit_entry import plan_audit
+from sqlbuild.compiler.planner.helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner.helpers._test_types import (

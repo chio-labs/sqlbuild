@@ -8,12 +8,12 @@ import pytest
 
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.helpers.attachment import (
+from sqlbuild.compiler.compile.helpers.attachment.audits import (
     resolve_audit_run_scope,
     resolve_audit_severity,
-    validate_audit_references,
     validate_model_attached_audit_references,
 )
+from sqlbuild.compiler.compile.helpers.attachment.references import validate_audit_references
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import DiscoveredAuditFile

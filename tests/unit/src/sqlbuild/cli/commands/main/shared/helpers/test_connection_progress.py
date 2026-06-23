@@ -6,7 +6,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import (
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )
 from sqlbuild.shared.helpers.colors import dim

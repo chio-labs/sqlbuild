@@ -12,8 +12,8 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RelationInfo, RowDiffResult
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
-from sqlbuild.compiler.compile.helpers.assembly import assemble_compiled_project
-from sqlbuild.compiler.compile.helpers.refs import extract_sql_references
+from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
@@ -52,17 +52,17 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.integrations.dbt.helpers.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.graph import (
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.lineage_selection import select_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.plan import build_dbt_interop_plan
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,

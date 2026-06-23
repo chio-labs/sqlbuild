@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.standard_scope_pruning import (
+from sqlbuild.compiler.planner.helpers.pruning.standard_scope import (
     build_standard_identity_stale_model_names,
     mark_direct_parent_run_actions,
     mark_version_identity_stale_actions,

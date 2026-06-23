@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.helpers.discovery_validation import validate_discovered_inputs
-from sqlbuild.compiler.discovery.helpers.filesystem import (
+from sqlbuild.compiler.discovery.helpers.filesystem.core import (
     discover_adapter_file,
     discover_audit_files,
     discover_hook_functions,
@@ -22,10 +21,11 @@ from sqlbuild.compiler.discovery.helpers.filesystem import (
     discover_sql_function_files,
     discover_test_files,
 )
-from sqlbuild.compiler.discovery.helpers.integration_loaders import (
+from sqlbuild.compiler.discovery.helpers.integrations.loaders import (
     build_integration_loader_functions,
 )
-from sqlbuild.compiler.discovery.helpers.yml_project import (
+from sqlbuild.compiler.discovery.helpers.validation.discovery import validate_discovered_inputs
+from sqlbuild.compiler.discovery.helpers.yml.project import (
     load_local_config,
     load_project_config,
 )

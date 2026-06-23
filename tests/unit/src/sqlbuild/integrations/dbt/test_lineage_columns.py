@@ -9,20 +9,20 @@ import pytest
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph import (
+from sqlbuild.integrations.dbt.helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_source_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.lineage_columns import (
+from sqlbuild.integrations.dbt.helpers.lineage.columns import (
     inspect_dbt_source_schemas,
     select_dbt_column_lineage_target,
 )
-from sqlbuild.integrations.dbt.helpers.lineage_output import (
+from sqlbuild.integrations.dbt.helpers.lineage.output import (
     format_dbt_column_lineage_json,
     format_dbt_column_lineage_list,
     format_dbt_column_lineage_tree,
 )
-from sqlbuild.integrations.dbt.helpers.manifest import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
@@ -157,7 +157,7 @@ COLUMN_LINEAGE_OUTPUT_TEST_CASES: tuple[DbtColumnLineageOutputTestCase, ...] = (
             "Column trace",
             "downstream_orders:downstream_amount",
             "fact_orders:amount",
-            "└─",
+            "└── ",
         ),
     ),
 )

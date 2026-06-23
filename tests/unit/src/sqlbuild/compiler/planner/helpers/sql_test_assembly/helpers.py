@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.constants import (
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.helpers.macros import expand_sql_macros
+from sqlbuild.compiler.compile.helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,

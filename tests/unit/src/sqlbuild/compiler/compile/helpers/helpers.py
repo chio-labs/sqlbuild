@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlbuild.compiler.compile.helpers.macros import load_project_macros
+from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models.core import LoadedMacro
 from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledDirectLogicSqlTestPayload,

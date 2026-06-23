@@ -11,8 +11,8 @@ from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropRuntimeError,
     DbtReuseUnavailableError,
 )
-from sqlbuild.integrations.dbt.helpers import reuse_from
-from sqlbuild.integrations.dbt.helpers.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.reuse import reuse_from
 from sqlbuild.integrations.dbt.main.compile_reuse_from_manifest import (
     compile_reuse_from_dbt_manifest,
 )

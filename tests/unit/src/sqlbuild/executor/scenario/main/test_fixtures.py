@@ -5,7 +5,7 @@ import pytest
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.scenario.helpers.fixtures import execute_scenario_fixtures
+from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import execute_scenario_fixtures
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus

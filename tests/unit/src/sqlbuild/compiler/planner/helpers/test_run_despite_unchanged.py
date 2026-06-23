@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.run_despite_unchanged import (
+from sqlbuild.compiler.planner.helpers.pruning.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult
