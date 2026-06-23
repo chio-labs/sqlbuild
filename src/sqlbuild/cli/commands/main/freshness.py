@@ -22,9 +22,13 @@ from sqlbuild.cli.commands.main.helpers.freshness.state import (
     read_virtual_freshness_state_for_command,
 )
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import write_execution_json_output
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+    resolve_project_connection_config,
+)
+from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
+    write_execution_json_output,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph

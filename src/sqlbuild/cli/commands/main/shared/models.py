@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
+from sqlbuild.cli.commands.main.shared.helpers.python_nodes.core import (
     load_result_key_or_none,
     python_node_result_names,
     sql_loader_functions_for_lifecycle_handoff,

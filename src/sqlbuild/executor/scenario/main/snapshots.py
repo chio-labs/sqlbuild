@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.executor.scenario.helpers.snapshots import (
+from sqlbuild.executor.scenario.helpers.snapshots.core import (
     classify_scenario_snapshot_state as _classify_scenario_snapshot_state,
 )
 from sqlbuild.executor.scenario.models import ScenarioSnapshotStateResult

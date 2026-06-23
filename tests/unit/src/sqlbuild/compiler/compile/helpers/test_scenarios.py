@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.helpers.attachment.core import build_scenario_inputs
+from sqlbuild.compiler.compile.helpers.attachment.sql_tests import build_scenario_inputs
 from sqlbuild.compiler.compile.helpers.scenarios.core import extract_sql_scenario_ctes
 from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCtes,

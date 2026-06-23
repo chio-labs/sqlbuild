@@ -7,7 +7,7 @@ from io import StringIO
 import pytest
 
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.snapshot_full_refresh import (
+from sqlbuild.cli.commands.main.shared.helpers.snapshots.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
 from sqlbuild.compiler.planner.models import PlanOutput

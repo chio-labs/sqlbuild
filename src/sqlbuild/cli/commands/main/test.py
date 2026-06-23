@@ -12,20 +12,22 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
 )
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.execution_json import (
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+    resolve_project_connection_config,
+)
+from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
+from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
     format_test_execution_json,
     write_execution_json_output,
 )
-from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
-    resolve_external_sql_reference_resolver,
-)
-from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress import write_execution_header
-from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import (
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.core import write_execution_header
+from sqlbuild.cli.commands.main.shared.helpers.progress.nested import NestedCommandProgressCallbacks
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import (
     write_test_runtime_target,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs

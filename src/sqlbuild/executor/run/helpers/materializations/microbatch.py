@@ -32,19 +32,22 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.helpers.cursor_bounds import (
+from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.execution.results import (
+    build_failed_result,
+    build_skipped_result,
+)
+from sqlbuild.executor.run.helpers.materializations.incremental import (
+    _apply_schema_change,
+    _execute_dml,
+)
+from sqlbuild.executor.run.helpers.reuse.fingerprinting import try_write_fingerprint
+from sqlbuild.executor.run.helpers.validation.cursor_bounds import (
     has_model_backed_cursor_inputs,
     resolve_effective_timestamp_grain,
     resolve_runtime_cursor_bounds,
 )
-from sqlbuild.executor.run.helpers.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.helpers.hooks import execute_hooks, render_hooks
-from sqlbuild.executor.run.helpers.incremental import (
-    _apply_schema_change,
-    _execute_dml,
-)
-from sqlbuild.executor.run.helpers.results import build_failed_result, build_skipped_result
-from sqlbuild.executor.run.helpers.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.helpers.validation.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import BatchWindow, HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError

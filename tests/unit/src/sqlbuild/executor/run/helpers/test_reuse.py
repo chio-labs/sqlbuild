@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_origin
+from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     RelationReuseOriginExecutionTestCase,

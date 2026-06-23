@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.shared.helpers.python_nodes import (
+from sqlbuild.cli.commands.main.shared.helpers.python_nodes.core import (
     python_node_result_names,
     task_asset_python_node_names,
     write_python_node_results,

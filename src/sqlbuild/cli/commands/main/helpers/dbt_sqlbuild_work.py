@@ -11,14 +11,14 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
 )
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.nested_progress import NestedCommandProgressCallbacks
-from sqlbuild.cli.commands.main.shared.helpers.progress import (
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.core import (
     BuildProgressCallbacks,
     format_build_footer,
     format_build_header,
 )
-from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
+from sqlbuild.cli.commands.main.shared.helpers.progress.nested import NestedCommandProgressCallbacks
+from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import write_runtime_target
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import (

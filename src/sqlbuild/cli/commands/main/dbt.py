@@ -14,7 +14,7 @@ from sqlbuild.cli.commands.main.dbt_scenario import run_dbt_scenario_command
 from sqlbuild.cli.commands.main.helpers.dbt_auto_init import (
     ensure_sqlbuild_project_for_dbt_command,
 )
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.integrations.dbt.main.validate_execution_args import validate_dbt_execution_args
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project

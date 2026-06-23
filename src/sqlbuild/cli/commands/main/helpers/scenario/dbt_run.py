@@ -19,12 +19,12 @@ from sqlbuild.cli.commands.main.helpers.scenario.snapshot_limits import (
 )
 from sqlbuild.cli.commands.main.helpers.scenario.warehouse_run import run_warehouse_scenarios
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.parsers import (
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
     add_execution_json_output_arg,
     add_select_args,
 )
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput

@@ -8,13 +8,15 @@ from pathlib import Path
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.rollback.output import format_rollback_output
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection import resolve_project_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.connection_progress import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+    resolve_project_connection_config,
+)
+from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.planning_progress import PlanningProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.colors import supports_color

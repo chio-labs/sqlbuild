@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.shared.helpers.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.external_refs import (
+from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.compiler.dag.main.build import build_dag_json

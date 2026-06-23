@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.executor.run.helpers.promotion import promote_relation_to_destination
+from sqlbuild.executor.run.helpers.execution.promotion import promote_relation_to_destination
 
 
 def promote_run_relation_to_destination(

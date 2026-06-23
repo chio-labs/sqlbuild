@@ -21,7 +21,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.adapters.postgres.client import PostgresAdapter
-from sqlbuild.executor.run.helpers.reuse import create_relation_from_reuse_origin
+from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
 from tests.integration.src.sqlbuild.adapters.postgres._test_types import (
     PostgresBuildFlowTestCase,
     PostgresCountRowsTestCase,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.shared.helpers.runtime_target_writer import write_runtime_target
+from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import write_runtime_target
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import TargetWriterTestCase

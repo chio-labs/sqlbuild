@@ -142,6 +142,96 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC047",),
     ),
     CheckPathsTestCase(
+        description="reports oversized source file outside allowlisted boundaries",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/constants.py": "DEFAULT_NAME = 'demo'\n" * 2001,
+        },
+        expected_violation_codes=("SC048",),
+    ),
+    CheckPathsTestCase(
+        description="allows oversized scripts file",
+        repo_files=compliant_repo_files()
+        | {
+            "scripts/example_tool/constants.py": "EXIT_CODE = 0\n" * 2001,
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows oversized adapter client source file",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/adapters/example/client.py": "class ExampleAdapter:\n    pass\n"
+            + "    # implementation detail\n" * 2000,
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows oversized virtual state backend source file",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/virtual/state/classes/example.py": "class ExampleState:\n    pass\n"
+            + "    # implementation detail\n" * 2000,
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="reports mixed flat helper modules and concern subfolders",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/build.py": (
+                "def build() -> str:\n    return 'demo'\n"
+            ),
+            "src/sqlbuild/example/widget/helpers/render/name.py": (
+                "def render() -> str:\n    return 'demo'\n"
+            ),
+        },
+        expected_violation_codes=("SC049",),
+    ),
+    CheckPathsTestCase(
+        description="reports shared subfolder mixed with flat helper modules",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/build.py": (
+                "def build() -> str:\n    return 'demo'\n"
+            ),
+            "src/sqlbuild/example/widget/helpers/shared/name.py": (
+                "def render() -> str:\n    return 'demo'\n"
+            ),
+        },
+        expected_violation_codes=("SC049",),
+    ),
+    CheckPathsTestCase(
+        description="allows shared subfolder when helpers are fully subfoldered",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            "src/sqlbuild/example/widget/helpers/build/core.py": (
+                "def build() -> str:\n    return 'demo'\n"
+            ),
+            "src/sqlbuild/example/widget/helpers/shared/name.py": (
+                "def render() -> str:\n    return 'demo'\n"
+            ),
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="reports helpers package with too many flat modules",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            **{
+                f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
+                    f"def build_{index}() -> int:\n    return {index}\n"
+                )
+                for index in range(11)
+            },
+        },
+        expected_violation_codes=("SC050",),
+    ),
+    CheckPathsTestCase(
         description="reports ambiguous target reuse source terminology",
         repo_files=compliant_repo_files()
         | {

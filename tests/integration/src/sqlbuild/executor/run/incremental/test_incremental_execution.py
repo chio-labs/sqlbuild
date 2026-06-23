@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
-from sqlbuild.executor.run.helpers.incremental import execute_incremental_entry
+from sqlbuild.executor.run.helpers.materializations.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry

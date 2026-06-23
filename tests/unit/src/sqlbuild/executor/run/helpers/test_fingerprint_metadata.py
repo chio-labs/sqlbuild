@@ -12,8 +12,8 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.helpers import fingerprinting
-from sqlbuild.executor.run.helpers.fingerprint_metadata import (
+from sqlbuild.executor.run.helpers.reuse import fingerprinting
+from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
     reuse_from_audit_gate_reuse_decision,
     same_target_audit_gate_reuse_decision,

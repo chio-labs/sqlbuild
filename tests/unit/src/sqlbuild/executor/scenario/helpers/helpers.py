@@ -210,7 +210,7 @@ def write_local_snapshot_load_test_files(
     manifest: ScenarioSnapshotManifest,
     rows: tuple[dict[str, object], ...],
 ) -> None:
-    from sqlbuild.executor.scenario.helpers.snapshots import (
+    from sqlbuild.executor.scenario.helpers.snapshots.core import (
         scenario_snapshot_root,
         write_scenario_snapshot_jsonl,
         write_scenario_snapshot_manifest,
@@ -233,7 +233,7 @@ def write_local_snapshot_load_test_files(
 def write_local_snapshot_load_test_file_contents(
     *, project_dir: Path, manifest: ScenarioSnapshotManifest, file_contents: str
 ) -> None:
-    from sqlbuild.executor.scenario.helpers.snapshots import (
+    from sqlbuild.executor.scenario.helpers.snapshots.core import (
         scenario_snapshot_root,
         write_scenario_snapshot_manifest,
     )
@@ -255,7 +255,9 @@ def write_snapshot_state_test_manifest(
     *, manifest_path: Path, test_case: ScenarioSnapshotStateTestCase
 ) -> None:
     if test_case.manifest is not None:
-        from sqlbuild.executor.scenario.helpers.snapshots import write_scenario_snapshot_manifest
+        from sqlbuild.executor.scenario.helpers.snapshots.core import (
+            write_scenario_snapshot_manifest,
+        )
 
         write_scenario_snapshot_manifest(
             manifest_path=manifest_path,

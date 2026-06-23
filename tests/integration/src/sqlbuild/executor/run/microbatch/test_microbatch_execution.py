@@ -18,7 +18,7 @@ from sqlbuild.compiler.planner.constants import (
 )
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
-from sqlbuild.executor.run.helpers.microbatch import execute_microbatch_entry
+from sqlbuild.executor.run.helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry

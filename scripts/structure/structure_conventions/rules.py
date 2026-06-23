@@ -38,6 +38,14 @@ _TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "target relation",
     "target_cursor",
 )
+_MAX_SOURCE_FILE_LINES: int = 2000
+_MAX_HELPER_FLAT_MODULES: int = 10
+_MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
+    "src/sqlbuild/adapters/*/client.py",
+    "src/sqlbuild/adapters/shared/classes/*.py",
+    "src/sqlbuild/adapter/base/base_adapter.py",
+    "src/sqlbuild/virtual/state/classes/*.py",
+)
 
 
 def parse_python_module(file_path: Path) -> ast.Module:
@@ -191,6 +199,81 @@ def check_no_internal_helper_exports(
                     ),
                 )
             )
+    return violations
+
+
+def check_source_file_line_count(repo_root: Path, file_path: Path) -> list[Violation]:
+    """Reject oversized runtime source files outside explicit backend allowlists."""
+
+    relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())
+    relative_text: str = relative_path.as_posix()
+    if not relative_text.startswith("src/sqlbuild/"):
+        return []
+    if any(relative_path.match(pattern) for pattern in _MAX_SOURCE_LINE_ALLOWED_PATTERNS):
+        return []
+
+    line_count: int = len(file_path.read_text(encoding="utf-8").splitlines())
+    if line_count <= _MAX_SOURCE_FILE_LINES:
+        return []
+
+    return [
+        Violation(
+            code="SC048",
+            path=file_path,
+            line=None,
+            message=(
+                f"source file exceeds {_MAX_SOURCE_FILE_LINES} lines ({line_count}); "
+                "split by concern unless this path is explicitly allowlisted as an "
+                "adapter/client or virtual-state backend boundary"
+            ),
+        )
+    ]
+
+
+def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
+    """Enforce consistent flat-or-subfolder helper package layout."""
+
+    if file_path.name != "__init__.py" or file_path.parent.name != "helpers":
+        return []
+
+    direct_modules: list[Path] = sorted(
+        child
+        for child in file_path.parent.glob("*.py")
+        if child.name != "__init__.py" and child.is_file()
+    )
+    concern_subfolders: list[Path] = sorted(
+        child
+        for child in file_path.parent.iterdir()
+        if child.is_dir() and child.name != "__pycache__"
+    )
+
+    violations: list[Violation] = []
+    if direct_modules and concern_subfolders:
+        violations.append(
+            Violation(
+                code="SC049",
+                path=file_path,
+                line=None,
+                message=(
+                    "helpers package mixes flat helper modules with concern subfolders; "
+                    "use either flat files or move all helper modules into subfolders"
+                ),
+            )
+        )
+    if len(direct_modules) > _MAX_HELPER_FLAT_MODULES:
+        violations.append(
+            Violation(
+                code="SC050",
+                path=file_path,
+                line=None,
+                message=(
+                    f"helpers package has too many direct helper modules "
+                    f"({len(direct_modules)} > {_MAX_HELPER_FLAT_MODULES}); organize the "
+                    "entire helpers package into concern subfolders consistently, not just "
+                    "one file"
+                ),
+            )
+        )
     return violations
 
 
