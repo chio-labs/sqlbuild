@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.2](https://github.com/chio-labs/sqlbuild/compare/v0.38.1...v0.38.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* **dbt:** improve target and routing resolution ([8235bc7](https://github.com/chio-labs/sqlbuild/commit/8235bc7f0667fb48a3fee55f4f4a762cedfa7706))
+* **dbt:** improve target and routing resolution ([5b03b6c](https://github.com/chio-labs/sqlbuild/commit/5b03b6cc3ee1a0eb22b28481ff7632c3a0ef2d0e))
+
 ## [0.38.1](https://github.com/chio-labs/sqlbuild/compare/v0.38.0...v0.38.1) (2026-06-23)
 
 
