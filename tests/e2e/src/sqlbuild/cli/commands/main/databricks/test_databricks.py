@@ -466,7 +466,6 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
         cleanup_databricks_schema(schema_name=schema_name)
 
 
-@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -585,7 +584,6 @@ def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds
         cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
-@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -658,7 +656,6 @@ def test_given_missing_logical_view_when_repairing_on_databricks_then_view_is_re
         cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
-@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -732,7 +729,6 @@ def test_given_stateless_table_when_adopting_and_detaching_on_databricks_then_ta
         cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
-@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -932,7 +928,6 @@ DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
 ]
 
 
-@pytest.mark.skip(reason="Databricks warehouse access is currently unavailable")
 @pytest.mark.parametrize(
     "test_case",
     DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
