@@ -20,6 +20,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtReuseFromCompileResult,
 )
+from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
 from sqlbuild.spec.models.project import DbtReuseFromConfig
 
 
@@ -111,6 +112,7 @@ def _git_root(*, path: Path) -> Path:
     if result.returncode != 0:
         raise DbtReuseUnavailableError(
             "dbt reuse_from requires the SQLBuild project to be in a git repository",
+            reason=DbtReuseUnavailableReason.NO_GIT_REPOSITORY,
             help=result.stderr or result.stdout or None,
         )
     return Path(result.stdout.strip()).resolve()
@@ -123,6 +125,7 @@ def _relative_to_git_root(*, path: Path, git_root: Path, label: str) -> Path:
     except ValueError as error:
         raise DbtReuseUnavailableError(
             f"dbt reuse_from requires the {label} to be inside the git repository",
+            reason=DbtReuseUnavailableReason.PROJECT_OUTSIDE_GIT_ROOT,
             help=f"{resolved_path} is not under {git_root}.",
         ) from error
 
@@ -137,6 +140,7 @@ def _raise_if_current_branch(*, git_root: Path, git_ref: str) -> None:
     if current_branch and current_branch == git_ref:
         raise DbtReuseUnavailableError(
             "dbt reuse_from git_ref must not be the current branch",
+            reason=DbtReuseUnavailableReason.GIT_REF_IS_CURRENT_BRANCH,
             help=(
                 "Choose a production-shaped branch or tag that differs from the active "
                 "worktree branch."
@@ -159,6 +163,7 @@ def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
     if result.returncode != 0:
         raise DbtReuseUnavailableError(
             "dbt reuse_from git_ref could not be refreshed from its remote",
+            reason=DbtReuseUnavailableReason.REMOTE_REFRESH_FAILED,
             help=result.stderr or result.stdout or None,
         )
     return remote_ref
@@ -180,6 +185,7 @@ def _raise_if_missing_git_ref(
         )
     raise DbtReuseUnavailableError(
         f"dbt reuse_from git_ref '{configured_ref}' does not exist in this repository",
+        reason=DbtReuseUnavailableReason.GIT_REF_MISSING,
         help=(
             f"SQLBuild tried to archive git ref '{configured_ref}' from {git_root}. "
             "Choose the branch or tag that represents production, then update "

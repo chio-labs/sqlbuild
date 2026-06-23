@@ -91,12 +91,13 @@ def write_dbt_init_orders_model(*, workspace: Path, amount_cents: int) -> None:
 def initialize_dbt_init_git_repo(*, workspace: Path, production_ref: str) -> None:
     """Create a production ref and feature branch for generated reuse config E2Es."""
 
-    _run_git(args=("init",), cwd=workspace)
+    _run_git(args=("init", "--initial-branch=main"), cwd=workspace)
     _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
     _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
     _run_git(args=("add", "."), cwd=workspace)
     _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
-    _run_git(args=("branch", production_ref), cwd=workspace)
+    if production_ref != "main":
+        _run_git(args=("branch", production_ref), cwd=workspace)
     _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
 
 
