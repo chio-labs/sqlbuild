@@ -265,6 +265,7 @@ def assert_dbt_profile_lifecycle(
         assert fragment not in generated_toml
 
     add_dbt_profile_downstream_model(sqlbuild_project_dir=sqlbuild_project_dir)
+    assert no_profile_tables_exist()
 
     plain_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
