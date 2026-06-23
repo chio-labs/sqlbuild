@@ -35,6 +35,7 @@ class DbtConfigResolutionTestCase:
     expected_profiles_dir: Path | None
     expected_target: str | None
     expected_target_path: Path | None
+    local_config: LocalDbtConfig = field(default_factory=LocalDbtConfig)
 
 
 @dataclass(frozen=True)

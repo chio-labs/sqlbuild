@@ -75,6 +75,10 @@ DEBUG_WRAPPER_TEST_CASES: list[DbtDebugWrapperTestCase] = [
         expected_dbt_args=("--project-dir", "dbt_project", "--no-connection"),
         expected_sqlbuild_no_connection=True,
         expected_exit_code=0,
+        expected_stderr_fragments=(
+            "Running dbt debug...",
+            "Running SQLBuild diagnostics...",
+        ),
     ),
     DbtDebugWrapperTestCase(
         description="debug returns failure when dbt debug fails after SQLBuild diagnostics",
@@ -228,6 +232,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
 def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debug(
     test_case: DbtDebugWrapperTestCase,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     dbt_calls: list[tuple[Path, tuple[str, ...], object, object]] = []
     sqlbuild_calls: list[tuple[Path | None, bool, bool, bool]] = []
@@ -277,6 +282,9 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     assert sqlbuild_calls == [
         (Path("/project"), True, test_case.expected_sqlbuild_no_connection, False)
     ]
+    captured: CaptureResult[str] = capsys.readouterr()
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in captured.err
 
 
 @pytest.mark.parametrize(

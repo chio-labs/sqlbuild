@@ -30,6 +30,7 @@ def debug_dbt_from_project(
     resolved: ResolvedDbtConfig = resolve_dbt_config(
         project_root=project_dir,
         config=discovered_inputs.project_config.dbt,
+        local_config=discovered_inputs.local_config.dbt,
         overrides=parse_dbt_config_overrides(args),
         require_project_dir=True,
     )
