@@ -537,6 +537,66 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
 @pytest.mark.parametrize(
     "test_case",
     [
+        ColumnLineageAnalyzerTestCase(
+            description="normalizes postgres dialect for Polyglot rich lineage",
+            model_name="orders_distinct",
+            query_sql=(
+                'SELECT DISTINCT ON (orders.order_id) orders.order_id FROM __ref("orders") orders'
+            ),
+            inferred_columns=("order_id",),
+            upstream_model_columns={"orders": ("order_id",)},
+            upstream_seed_columns={},
+            expected_column="order_id",
+            expected_upstream_columns=("model:orders.order_id",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        )
+    ],
+    ids=["normalizes postgres dialect for Polyglot rich lineage"],
+)
+def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_polyglot_name(
+    test_case: ColumnLineageAnalyzerTestCase,
+) -> None:
+    upstream_models: tuple[CompiledModel, ...] = tuple(
+        make_compiled_model(
+            name=model_name,
+            query_sql="SELECT 1",
+            inferred_columns=columns,
+        )
+        for model_name, columns in test_case.upstream_model_columns.items()
+    )
+    target_model: CompiledModel = make_compiled_model(
+        name=test_case.model_name,
+        query_sql=test_case.query_sql,
+        inferred_columns=test_case.inferred_columns,
+    )
+    project: CompiledProject = make_compiled_project(models=upstream_models + (target_model,))
+
+    result: ProjectColumnLineage | None = build_project_column_lineage(
+        project,
+        dialect="postgres",
+        mode=ColumnLineageMode.RICH,
+    )
+
+    assert result is not None
+    model_lineage: ModelColumnLineage = result.models[test_case.model_name]
+    column_lineage: ColumnLineage = next(
+        column
+        for column in model_lineage.columns
+        if column.output_column == test_case.expected_column
+    )
+    upstream_columns: tuple[str, ...] = tuple(
+        sorted(
+            f"{CompiledResourceType(source.resource_type).value}:{source.resource_name}.{source.column_name}"
+            for source in column_lineage.upstream_columns
+        )
+    )
+    assert upstream_columns == tuple(sorted(test_case.expected_upstream_columns))
+    assert column_lineage.transform_kind == test_case.expected_transform_kind
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlAnalysisDisabledLineageTestCase(
             description="returns no lineage when SQL analysis is disabled",
             sql_analysis_enabled=False,
