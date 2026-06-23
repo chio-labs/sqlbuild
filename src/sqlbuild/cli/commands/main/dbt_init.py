@@ -11,7 +11,10 @@ from sqlbuild.cli.commands.main.helpers.dbt_init.branch_detection import (
 from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgressReporter
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.integrations.dbt.main.profile_init import run_dbt_profile_init
+from sqlbuild.integrations.dbt.main.profile_init import (
+    run_dbt_profile_init,
+    validate_dbt_profile_init_request,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtInitProgressCallbacks,
     DbtInitRequest,
@@ -37,7 +40,12 @@ def run_dbt_init_command(
 ) -> int:
     """Execute SQLBuild-owned `sqb dbt init`."""
 
-    if dbt_project_dir is None:
+    resolved_dbt_project_dir: Path | None = (
+        None if dbt_project_dir is None else Path(dbt_project_dir)
+    )
+    if resolved_dbt_project_dir is None and (cwd / "dbt_project.yml").exists():
+        resolved_dbt_project_dir = Path(".")
+    if resolved_dbt_project_dir is None:
         raise CliUserError(
             "sqb dbt init requires --project-dir pointing at a dbt project",
             code="C242",
@@ -47,24 +55,36 @@ def run_dbt_init_command(
         stream=sys.stdout,
         use_color=use_color,
     )
+    base_request: DbtInitRequest = DbtInitRequest(
+        cwd=cwd,
+        dbt_project_dir=resolved_dbt_project_dir,
+        profiles_dir=None if profiles_dir is None else Path(profiles_dir),
+        profile_name=profile_name,
+        target_name=target_name,
+        sqb_output_dir=None if sqb_output_dir is None else Path(sqb_output_dir),
+        dry_run=dry_run,
+        overwrite=overwrite,
+        skip_dbt_debug=skip_dbt_debug,
+    )
+    validate_dbt_profile_init_request(request=base_request)
     resolved_production_git_ref: str = resolve_production_git_ref(
         explicit_git_ref=production_git_ref,
         input_stream=sys.stdin,
         output_stream=sys.stdout,
         use_color=use_color,
-        default_ref=detect_default_production_git_ref(git_probe_dir=Path(dbt_project_dir)),
+        default_ref=detect_default_production_git_ref(git_probe_dir=cwd / resolved_dbt_project_dir),
     )
     result: DbtInitResult = run_dbt_profile_init(
         request=DbtInitRequest(
             cwd=cwd,
-            dbt_project_dir=Path(dbt_project_dir),
-            profiles_dir=None if profiles_dir is None else Path(profiles_dir),
-            profile_name=profile_name,
-            target_name=target_name,
-            sqb_output_dir=None if sqb_output_dir is None else Path(sqb_output_dir),
-            dry_run=dry_run,
-            overwrite=overwrite,
-            skip_dbt_debug=skip_dbt_debug,
+            dbt_project_dir=base_request.dbt_project_dir,
+            profiles_dir=base_request.profiles_dir,
+            profile_name=base_request.profile_name,
+            target_name=base_request.target_name,
+            sqb_output_dir=base_request.sqb_output_dir,
+            dry_run=base_request.dry_run,
+            overwrite=base_request.overwrite,
+            skip_dbt_debug=base_request.skip_dbt_debug,
             production_git_ref=resolved_production_git_ref,
             progress_callbacks=(
                 DbtInitProgressCallbacks(

@@ -230,6 +230,14 @@ class ResolveConnectionConfigWarningTestCase:
 
 
 @dataclass(frozen=True)
+class ResolveDbtProfileConnectionConfigTestCase:
+    description: str
+    raw_config: dict[str, object]
+    profile_connection: dict[str, object]
+    expected_connection: dict[str, object]
+
+
+@dataclass(frozen=True)
 class SnapshotFullRefreshPolicyTestCase:
     description: str
     plan_output: PlanOutput
