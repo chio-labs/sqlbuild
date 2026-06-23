@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.7](https://github.com/chio-labs/sqlbuild/compare/v0.37.6...v0.37.7) (2026-06-23)
+
+
+### Bug Fixes
+
+* refresh docs skill and dependency lock ([544171b](https://github.com/chio-labs/sqlbuild/commit/544171b9d01ee298407957da5b2f07709d3893df))
+* refresh docs skill and dependency lock ([fb5e52c](https://github.com/chio-labs/sqlbuild/commit/fb5e52c43a887109e2dd85e73917d54b50d0a082))
+
 ## [0.37.6](https://github.com/chio-labs/sqlbuild/compare/v0.37.5...v0.37.6) (2026-06-23)
 
 
