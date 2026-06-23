@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.6](https://github.com/chio-labs/sqlbuild/compare/v0.37.5...v0.37.6) (2026-06-23)
+
+
+### Bug Fixes
+
+* **dbt:** clarify reuse skip messaging, detect default branch, accept  trailing global flags ([cd3d093](https://github.com/chio-labs/sqlbuild/commit/cd3d093a6b4732d17b01d76b468271f166373139))
+* **dbt:** clarify reuse skip messaging, detect default branch, accept trailing global flags ([7d0a3b7](https://github.com/chio-labs/sqlbuild/commit/7d0a3b77a4185bd976628eb7957eb619f7ce6284))
+
 ## [0.37.5](https://github.com/chio-labs/sqlbuild/compare/v0.37.4...v0.37.5) (2026-06-23)
 
 
