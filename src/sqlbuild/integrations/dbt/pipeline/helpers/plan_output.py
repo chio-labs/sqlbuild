@@ -205,6 +205,7 @@ def build_dbt_model_plan_output(
     candidate_unique_ids: tuple[str, ...],
     selected_unique_ids: tuple[str, ...],
     full_refresh: bool = False,
+    force: bool = False,
     on_connection_start: Callable[[int], None] | None,
     on_connection_complete: Callable[[int, float], None] | None,
     on_connection_error: Callable[[int, float], None] | None,
@@ -236,6 +237,7 @@ def build_dbt_model_plan_output(
             project=project,
             graph=graph,
             full_refresh=full_refresh,
+            force=force,
             adapter=adapter,
             connection=connection,
         )
