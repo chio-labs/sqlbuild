@@ -704,11 +704,12 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"vars"}),
+        allowed_keys=frozenset({"target", "vars"}),
         label="dbt",
         file_path=file_path,
     )
     return LocalDbtConfig(
+        target=_optional_str(payload=mapping, key="target"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
     )
 

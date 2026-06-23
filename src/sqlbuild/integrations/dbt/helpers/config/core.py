@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, ResolvedDbtConfig
-from sqlbuild.spec.models.project import DbtConfig
+from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
 
 
 def resolve_dbt_config(
@@ -15,6 +15,7 @@ def resolve_dbt_config(
     config: DbtConfig,
     overrides: DbtCliConfigOverrides,
     require_project_dir: bool,
+    local_config: LocalDbtConfig | None = None,
 ) -> ResolvedDbtConfig:
     """Resolve dbt config from CLI overrides and project config."""
 
@@ -45,7 +46,13 @@ def resolve_dbt_config(
         project_root=project_root,
         raw_value=raw_target_path,
     )
-    target: str | None = overrides.target if overrides.target is not None else config.target
+    target: str | None = (
+        overrides.target
+        if overrides.target is not None
+        else local_config.target
+        if local_config is not None and local_config.target is not None
+        else config.target
+    )
 
     return ResolvedDbtConfig(
         project_dir=project_dir,

@@ -15,7 +15,7 @@ def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
     return build_dbt_init_project(request=request)
 
 
-def validate_dbt_profile_init_request(*, request: DbtInitRequest) -> None:
+def _validate_dbt_profile_init_request(*, request: DbtInitRequest) -> None:
     """Validate dbt profile init inputs without writing files or prompting."""
 
     validate_dbt_init_project(request=request)

@@ -80,6 +80,24 @@ SNOWFLAKE_CONNECT_CONFIG_TEST_CASES: list[SnowflakeConnectConfigTestCase] = [
             "client_store_temporary_credential": False,
         },
     ),
+    SnowflakeConnectConfigTestCase(
+        description="strips SQLBuild routing keys before connector call",
+        config={
+            "source": "explicit",
+            "profile": "analytics",
+            "target": "dev",
+            "project_dir": "dbt_project",
+            "profiles_dir": "profiles",
+            "account": "acct",
+            "authenticator": "programmatic_access_token",
+            "token": "secret-token",
+        },
+        expected_connect_kwargs={
+            "account": "acct",
+            "authenticator": "programmatic_access_token",
+            "token": "secret-token",
+        },
+    ),
 ]
 
 

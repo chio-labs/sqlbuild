@@ -51,6 +51,9 @@ force = true
 [vars]
 user = "kevin"
 
+[dbt]
+target = "pat"
+
 [dbt.vars]
 shared = "local"
 threads = 2
@@ -77,6 +80,7 @@ max_total_bytes = 78
             {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources", "force"}
         ),
         expected_vars={"user": "kevin"},
+        expected_dbt_target="pat",
         expected_dbt_vars={"shared": "local", "threads": 2},
         expected_force=True,
         expected_scenario_local_type_overrides={
@@ -1021,6 +1025,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.force is test_case.expected_force
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
+    assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.vars == test_case.expected_dbt_vars
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
     assert {
