@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.38.0](https://github.com/chio-labs/sqlbuild/compare/v0.37.7...v0.38.0) (2026-06-23)
+
+
+### Features
+
+* **dbt:** add configured force and vars merging ([b8bf236](https://github.com/chio-labs/sqlbuild/commit/b8bf23629c37c1808870b03f45830f0119b72cb1))
+* **dbt:** add configured force and vars merging ([fecc042](https://github.com/chio-labs/sqlbuild/commit/fecc04240c3dd9e30fbd718b01add1e61f9f7a78))
+* **lineage:** use polyglot for rich column lineage ([e269447](https://github.com/chio-labs/sqlbuild/commit/e269447cfc33d1f195390f4e0632bfa57dbdda7c))
+* **lineage:** use polyglot for rich column lineage ([7493ecf](https://github.com/chio-labs/sqlbuild/commit/7493ecf3df3bfd18373c3a9182be801725eb766e))
+
 ## [0.37.7](https://github.com/chio-labs/sqlbuild/compare/v0.37.6...v0.37.7) (2026-06-23)
 
 
