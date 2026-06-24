@@ -44,7 +44,7 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
             ),
         ),
         selected_unique_ids=("model.analytics.orders",),
-        expected_output_fragments=("WOULD-REUSE", "no identity differences"),
+        expected_output_fragments=("Selected (1)", "WOULD-REUSE", "No identity differences"),
         expected_json_fragments=('"verdict": "would_reuse"',),
     ),
     DbtIdentityDiffTestCase(
@@ -61,8 +61,9 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
         ),
         selected_unique_ids=("model.analytics.orders",),
         expected_output_fragments=(
-            "CAUSE",
-            "QUERY",
+            "Selected (1)",
+            "Causes (1)",
+            "query",
             "-select 1 as order_id",
             "+select 2 as order_id",
         ),
@@ -93,8 +94,8 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
             ),
         ),
         selected_unique_ids=("model.analytics.fact_orders",),
-        expected_output_fragments=("UPSTREAM only", "stg_orders", "CAUSE", "QUERY"),
-        expected_json_fragments=('"upstream_only"', '"query"'),
+        expected_output_fragments=("Inherited only (1)", "stg_orders", "query"),
+        expected_json_fragments=('"inherited_only"', '"query"'),
     ),
     DbtIdentityDiffTestCase(
         description="reports config and schema causes",
@@ -117,7 +118,7 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
             ),
         ),
         selected_unique_ids=("model.analytics.orders",),
-        expected_output_fragments=("CONFIG", "SCHEMA", "materialized", "data_type"),
+        expected_output_fragments=("config", "schema", "materialized", "data_type"),
         expected_json_fragments=('"config"', '"schema"'),
     ),
     DbtIdentityDiffTestCase(
@@ -151,7 +152,7 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
             ),
         ),
         selected_unique_ids=("model.analytics.joined",),
-        expected_output_fragments=("2 cause(s)", "left", "right"),
+        expected_output_fragments=("Causes (2)", "left", "right"),
         expected_json_fragments=('"model.analytics.left"', '"model.analytics.right"'),
     ),
     DbtIdentityDiffTestCase(
@@ -176,7 +177,7 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
             ),
         ),
         selected_unique_ids=("model.analytics.orders",),
-        expected_output_fragments=("UPSTREAM SET", "+ model.analytics.base"),
+        expected_output_fragments=("upstream set", "+ model.analytics.base"),
         expected_json_fragments=('"upstream_set"', '"model.analytics.base"'),
     ),
     DbtIdentityDiffTestCase(
@@ -240,7 +241,7 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
             ),
         ),
         selected_unique_ids=("model.analytics.selected",),
-        expected_output_fragments=("UPSTREAM only", "root", "CAUSE", "-select 1 as id"),
+        expected_output_fragments=("Inherited only (4)", "root", "-select 1 as id"),
         expected_json_fragments=('"model.analytics.root"', '"query"'),
     ),
 )
@@ -270,6 +271,8 @@ def test_given_current_and_ref_manifests_when_building_identity_diff_then_report
     rendered: str = render_dbt_identity_diff_result(
         result=result,
         quiet=False,
+        show_inherited=False,
+        show_paths=False,
         use_color=False,
     )
     rendered_json: str = format_dbt_identity_diff_json(result)
@@ -309,7 +312,7 @@ def test_given_current_and_ref_manifests_when_building_identity_diff_then_report
                 ),
             ),
             selected_unique_ids=("model.analytics.large_sql",),
-            expected_output_fragments=("SQL differs", "full diff suppressed", "--full-diff"),
+            expected_output_fragments=("SQL differs", "full diff suppressed", "--max-diff"),
             expected_json_fragments=(),
             expected_absent_fragments=("-select 0 as c_0", "+select 2600 as c_2600"),
         )
@@ -344,6 +347,8 @@ def test_given_large_changed_sql_when_rendering_identity_diff_then_suppresses_ex
     rendered: str = render_dbt_identity_diff_result(
         result=result,
         quiet=False,
+        show_inherited=False,
+        show_paths=False,
         use_color=False,
     )
 
@@ -369,7 +374,7 @@ def test_given_large_changed_sql_when_rendering_identity_diff_then_suppresses_ex
                 ),
             ),
             selected_unique_ids=("model.analytics.orders",),
-            expected_output_fragments=("CAUSE", "QUERY"),
+            expected_output_fragments=("Causes (1)", "query"),
             expected_json_fragments=(),
         )
     ],
@@ -394,6 +399,8 @@ def test_given_quiet_identity_diff_when_rendering_then_suppresses_diff_bodies(
     rendered: str = render_dbt_identity_diff_result(
         result=result,
         quiet=True,
+        show_inherited=False,
+        show_paths=False,
         use_color=False,
     )
 
@@ -401,6 +408,179 @@ def test_given_quiet_identity_diff_when_rendering_then_suppresses_diff_bodies(
         assert fragment in rendered
     assert "-select 1 as order_id" not in rendered
     assert "+select 2 as order_id" not in rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtIdentityDiffTestCase(
+            description="shared upstream cause is rendered once for multiple selected nodes",
+            current_nodes=(
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.shared_source", checksum="new", raw_code="select 2 as id"
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.left_selected",
+                    checksum="left",
+                    raw_code="select * from shared_source",
+                    depends_on_nodes=("model.analytics.shared_source",),
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.right_selected",
+                    checksum="right",
+                    raw_code="select * from shared_source",
+                    depends_on_nodes=("model.analytics.shared_source",),
+                ),
+            ),
+            ref_nodes=(
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.shared_source", checksum="old", raw_code="select 1 as id"
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.left_selected",
+                    checksum="left",
+                    raw_code="select * from shared_source",
+                    depends_on_nodes=("model.analytics.shared_source",),
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.right_selected",
+                    checksum="right",
+                    raw_code="select * from shared_source",
+                    depends_on_nodes=("model.analytics.shared_source",),
+                ),
+            ),
+            selected_unique_ids=(
+                "model.analytics.left_selected",
+                "model.analytics.right_selected",
+            ),
+            expected_output_fragments=("Causes (1)", "affects: left_selected, right_selected"),
+            expected_json_fragments=(),
+        )
+    ],
+    ids=["shared upstream cause is rendered once"],
+)
+def test_given_shared_upstream_when_building_identity_diff_then_diffs_cause_once(
+    test_case: DbtIdentityDiffTestCase,
+) -> None:
+    current_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=test_case.current_nodes)
+    )
+    ref_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=test_case.ref_nodes)
+    )
+
+    result: DbtIdentityDiffResult = build_dbt_identity_diff_result(
+        current_manifest=current_manifest,
+        ref_manifest=ref_manifest,
+        selected_unique_ids=test_case.selected_unique_ids,
+        against="main",
+    )
+    rendered: str = render_dbt_identity_diff_result(
+        result=result,
+        quiet=False,
+        show_inherited=False,
+        show_paths=False,
+        use_color=False,
+    )
+
+    assert len(result.causes) == 1
+    assert result.causes[0].unique_id == "model.analytics.shared_source"
+    assert result.causes[0].affects_selected == test_case.selected_unique_ids
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtIdentityDiffTestCase(
+            description=(
+                "show inherited and paths expose pass-through lineage without duplicate paths"
+            ),
+            current_nodes=(
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.root", checksum="root_new", raw_code="select 2 as id"
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.mid",
+                    checksum="mid",
+                    raw_code="select * from root",
+                    depends_on_nodes=("model.analytics.root",),
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.selected",
+                    checksum="selected",
+                    raw_code="select * from mid",
+                    depends_on_nodes=("model.analytics.mid",),
+                ),
+            ),
+            ref_nodes=(
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.root", checksum="root_old", raw_code="select 1 as id"
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.mid",
+                    checksum="mid",
+                    raw_code="select * from root",
+                    depends_on_nodes=("model.analytics.root",),
+                ),
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.selected",
+                    checksum="selected",
+                    raw_code="select * from mid",
+                    depends_on_nodes=("model.analytics.mid",),
+                ),
+            ),
+            selected_unique_ids=("model.analytics.selected",),
+            expected_output_fragments=(
+                "Cause paths (1)",
+                "selected <- mid <- root",
+                "mid",
+                "upstream only",
+            ),
+            expected_json_fragments=(),
+        )
+    ],
+    ids=["show inherited and paths"],
+)
+def test_given_pass_through_chain_when_requested_then_lists_inherited_and_one_cause_path(
+    test_case: DbtIdentityDiffTestCase,
+) -> None:
+    current_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=test_case.current_nodes)
+    )
+    ref_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=test_case.ref_nodes)
+    )
+
+    result: DbtIdentityDiffResult = build_dbt_identity_diff_result(
+        current_manifest=current_manifest,
+        ref_manifest=ref_manifest,
+        selected_unique_ids=test_case.selected_unique_ids,
+        against="main",
+        show_paths=True,
+    )
+    rendered: str = render_dbt_identity_diff_result(
+        result=result,
+        quiet=False,
+        show_inherited=True,
+        show_paths=True,
+        use_color=False,
+    )
+
+    assert tuple(cause.unique_id for cause in result.causes) == ("model.analytics.root",)
+    assert tuple(node.unique_id for node in result.inherited_only) == (
+        "model.analytics.mid",
+        "model.analytics.selected",
+    )
+    assert len(result.paths) == 1
+    assert result.paths[0].path == (
+        "model.analytics.selected",
+        "model.analytics.mid",
+        "model.analytics.root",
+    )
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in rendered
 
 
 @pytest.mark.parametrize(
