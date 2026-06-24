@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,9 +12,19 @@ from sqlbuild.integrations.dbt.helpers.identity_diff.core import (
     render_dbt_identity_diff_result,
 )
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.main.identity_diff import build_dbt_identity_diff_output
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtIdentityDiffResult
-from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtIdentityDiffTestCase
+from sqlbuild.integrations.dbt.models import (
+    DbtCliOptions,
+    DbtCommandResult,
+    DbtIdentityDiffResult,
+    DbtReuseFromCompileResult,
+)
+from sqlbuild.spec.models.project import DbtReuseFromConfig
+from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtIdentityDiffProgressTestCase,
+    DbtIdentityDiffTestCase,
+)
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_identity_diff_manifest_model_node,
     build_manifest_data,
@@ -389,3 +401,118 @@ def test_given_quiet_identity_diff_when_rendering_then_suppresses_diff_bodies(
         assert fragment in rendered
     assert "-select 1 as order_id" not in rendered
     assert "+select 2 as order_id" not in rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtIdentityDiffProgressTestCase(
+            description="reports every identity diff phase with timings",
+            args=("--select", "orders", "--against", "main"),
+            expected_progress_fragments=(
+                "Parsing identity-diff arguments...",
+                "Parsed identity-diff arguments. (",
+                "Inspecting project configuration...",
+                "Inspected project configuration. (",
+                "Resolving dbt identity-diff options...",
+                "Resolved dbt identity-diff options. (",
+                "Compiling current dbt project...",
+                "Compiled current dbt project. (",
+                "Loading current dbt manifest...",
+                "Loaded current dbt manifest. (",
+                "Resolving dbt identity-diff selection...",
+                "Resolved dbt identity-diff selection. (",
+                "Compiling dbt identity ref 'main'...",
+                "Compiled dbt identity ref 'main'. (",
+                "Indexing dbt identity ref manifest...",
+                "Indexed dbt identity ref manifest. (",
+                "Building dbt identity diff...",
+                "Built dbt identity diff. (",
+                "Rendering dbt identity diff output...",
+                "Rendered dbt identity diff output. (",
+            ),
+            expected_output_fragments=("dbt identity diff", "orders", "WOULD-REUSE"),
+        )
+    ],
+    ids=["reports every identity diff phase with timings"],
+)
+def test_given_identity_diff_command_when_running_then_reports_each_phase(
+    test_case: DbtIdentityDiffProgressTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node: dict[str, object] = build_identity_diff_manifest_model_node(
+        "model.analytics.orders",
+        checksum="same",
+        raw_code="select 1 as order_id",
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=(node,))
+    )
+    manifest_contents: str = json.dumps(build_manifest_data(nodes=(node,)))
+
+    class FakeRunner:
+        def compile(self, *, options: DbtCliOptions) -> DbtCommandResult:
+            return DbtCommandResult(argv=("dbt", "compile"), returncode=0)
+
+        def ls(
+            self,
+            *,
+            options: DbtCliOptions,
+            select: tuple[str, ...],
+            exclude: tuple[str, ...],
+            resource_types: tuple[str, ...],
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                command=DbtCommandResult(argv=("dbt", "ls"), returncode=0),
+                nodes=(SimpleNamespace(unique_id="model.analytics.orders"),),
+            )
+
+    discovered_inputs: SimpleNamespace = SimpleNamespace(
+        project_config=SimpleNamespace(
+            dbt=SimpleNamespace(
+                reuse_from=DbtReuseFromConfig(git_ref="main"),
+            )
+        )
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.main.identity_diff.discover_project_inputs",
+        lambda *, project_dir: discovered_inputs,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.main.identity_diff.resolve_dbt_plan_options",
+        lambda *, project_dir, discovered_inputs, dbt_args: DbtCliOptions(project_dir=project_dir),
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.main.identity_diff.DbtRunner",
+        FakeRunner,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.main.identity_diff.resolve_dbt_manifest_path",
+        lambda *, options: Path("target/manifest.json"),
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.main.identity_diff.load_dbt_manifest_index",
+        lambda *, manifest_path: manifest,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.main.identity_diff.compile_reuse_from_manifest",
+        lambda *, sqlbuild_project_dir, dbt_options, reuse_from, runner: DbtReuseFromCompileResult(
+            git_ref="main",
+            manifest_contents=manifest_contents,
+            command=DbtCommandResult(argv=("dbt", "compile"), returncode=0),
+        ),
+    )
+    progress_messages: list[str] = []
+
+    output: str = build_dbt_identity_diff_output(
+        project_dir=Path("/tmp/project"),
+        args=test_case.args,
+        use_color=False,
+        on_progress=progress_messages.append,
+    )
+
+    progress_output: str = "\n".join(progress_messages)
+    for fragment in test_case.expected_progress_fragments:
+        assert fragment in progress_output
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output

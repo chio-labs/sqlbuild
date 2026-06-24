@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
 import json
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +15,7 @@ from sqlbuild.integrations.dbt.exceptions import (
     DbtReuseUnavailableError,
 )
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.identity_diff.args import parse_dbt_identity_diff_args
 from sqlbuild.integrations.dbt.helpers.identity_diff.core import (
     build_dbt_identity_diff_result,
     format_dbt_identity_diff_json,
@@ -50,35 +51,61 @@ def build_dbt_identity_diff_output(
 ) -> str:
     """Build formatted dbt identity-diff output."""
 
-    identity_args: DbtIdentityDiffArgs = _parse_identity_diff_args(args=args)
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    dbt_options: DbtCliOptions = resolve_dbt_plan_options(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        dbt_args=(),
+    identity_args: DbtIdentityDiffArgs = _timed_phase(
+        on_progress=on_progress,
+        start_message="Parsing identity-diff arguments...",
+        complete_message="Parsed identity-diff arguments.",
+        operation=lambda: parse_dbt_identity_diff_args(args=args),
+    )
+    discovered_inputs: DiscoveredProjectInputs = _timed_phase(
+        on_progress=on_progress,
+        start_message="Inspecting project configuration...",
+        complete_message="Inspected project configuration.",
+        operation=lambda: discover_project_inputs(project_dir=project_dir),
+    )
+    dbt_options: DbtCliOptions = _timed_phase(
+        on_progress=on_progress,
+        start_message="Resolving dbt identity-diff options...",
+        complete_message="Resolved dbt identity-diff options.",
+        operation=lambda: resolve_dbt_plan_options(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            dbt_args=(),
+        ),
     )
     runner: DbtRunner = DbtRunner()
 
-    if on_progress is not None:
-        on_progress("Compiling current dbt project...")
-    compile_result: DbtCommandResult = runner.compile(options=dbt_options)
+    compile_result: DbtCommandResult = _timed_phase(
+        on_progress=on_progress,
+        start_message="Compiling current dbt project...",
+        complete_message="Compiled current dbt project.",
+        operation=lambda: runner.compile(options=dbt_options),
+    )
     if compile_result.returncode != 0:
         raise DbtInteropRuntimeError(
             "dbt compile failed for identity-diff",
             help=compile_result.stderr or compile_result.stdout,
         )
-    if on_progress is not None:
-        on_progress("Compiled current dbt project.")
 
-    current_manifest: DbtManifestIndex = load_dbt_manifest_index(
-        manifest_path=resolve_dbt_manifest_path(options=dbt_options)
+    current_manifest: DbtManifestIndex = _timed_phase(
+        on_progress=on_progress,
+        start_message="Loading current dbt manifest...",
+        complete_message="Loaded current dbt manifest.",
+        operation=lambda: load_dbt_manifest_index(
+            manifest_path=resolve_dbt_manifest_path(options=dbt_options)
+        ),
     )
-    selected_unique_ids: tuple[str, ...] = _selected_model_unique_ids(
-        runner=runner,
-        dbt_options=dbt_options,
-        select=identity_args.select,
-        exclude=identity_args.exclude,
-        current_manifest=current_manifest,
+    selected_unique_ids: tuple[str, ...] = _timed_phase(
+        on_progress=on_progress,
+        start_message="Resolving dbt identity-diff selection...",
+        complete_message="Resolved dbt identity-diff selection.",
+        operation=lambda: _selected_model_unique_ids(
+            runner=runner,
+            dbt_options=dbt_options,
+            select=identity_args.select,
+            exclude=identity_args.exclude,
+            current_manifest=current_manifest,
+        ),
     )
     if not selected_unique_ids:
         raise DbtInteropRuntimeError("identity-diff selected no dbt models")
@@ -94,39 +121,76 @@ def build_dbt_identity_diff_output(
         discovered_inputs.project_config.dbt.reuse_from,
         git_ref=against,
     )
-    if on_progress is not None:
-        on_progress(f"Compiling dbt identity ref '{against}'...")
     try:
-        ref_compile: DbtReuseFromCompileResult = compile_reuse_from_manifest(
-            sqlbuild_project_dir=project_dir,
-            dbt_options=dbt_options,
-            reuse_from=reuse_from,
-            runner=runner,
+        ref_compile: DbtReuseFromCompileResult = _timed_phase(
+            on_progress=on_progress,
+            start_message=f"Compiling dbt identity ref '{against}'...",
+            complete_message=f"Compiled dbt identity ref '{against}'.",
+            operation=lambda: compile_reuse_from_manifest(
+                sqlbuild_project_dir=project_dir,
+                dbt_options=dbt_options,
+                reuse_from=reuse_from,
+                runner=runner,
+            ),
         )
     except DbtReuseUnavailableError as error:
         raise DbtInteropRuntimeError(str(error), help=error.help) from error
-    if on_progress is not None:
-        on_progress(f"Compiled dbt identity ref '{against}'.")
-    ref_manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=json.loads(ref_compile.manifest_contents)
+    ref_manifest: DbtManifestIndex = _timed_phase(
+        on_progress=on_progress,
+        start_message="Indexing dbt identity ref manifest...",
+        complete_message="Indexed dbt identity ref manifest.",
+        operation=lambda: build_dbt_manifest_index(
+            raw_data=json.loads(ref_compile.manifest_contents)
+        ),
     )
 
-    result: DbtIdentityDiffResult = build_dbt_identity_diff_result(
-        current_manifest=current_manifest,
-        ref_manifest=ref_manifest,
-        selected_unique_ids=selected_unique_ids,
-        against=against,
-        depth=identity_args.depth,
-        full_diff=identity_args.full_diff,
+    result: DbtIdentityDiffResult = _timed_phase(
         on_progress=on_progress,
+        start_message="Building dbt identity diff...",
+        complete_message="Built dbt identity diff.",
+        operation=lambda: build_dbt_identity_diff_result(
+            current_manifest=current_manifest,
+            ref_manifest=ref_manifest,
+            selected_unique_ids=selected_unique_ids,
+            against=against,
+            depth=identity_args.depth,
+            full_diff=identity_args.full_diff,
+            on_progress=on_progress,
+        ),
     )
     if identity_args.json_output:
-        return format_dbt_identity_diff_json(result)
-    return render_dbt_identity_diff_result(
-        result=result,
-        quiet=identity_args.quiet,
-        use_color=use_color,
+        return _timed_phase(
+            on_progress=on_progress,
+            start_message="Rendering dbt identity diff JSON...",
+            complete_message="Rendered dbt identity diff JSON.",
+            operation=lambda: format_dbt_identity_diff_json(result),
+        )
+    return _timed_phase(
+        on_progress=on_progress,
+        start_message="Rendering dbt identity diff output...",
+        complete_message="Rendered dbt identity diff output.",
+        operation=lambda: render_dbt_identity_diff_result(
+            result=result,
+            quiet=identity_args.quiet,
+            use_color=use_color,
+        ),
     )
+
+
+def _timed_phase[T](
+    *,
+    on_progress: Callable[[str], None] | None,
+    start_message: str,
+    complete_message: str,
+    operation: Callable[[], T],
+) -> T:
+    start: float = time.monotonic()
+    if on_progress is not None:
+        on_progress(start_message)
+    result: T = operation()
+    if on_progress is not None:
+        on_progress(f"{complete_message} ({time.monotonic() - start:.2f}s)")
+    return result
 
 
 def _selected_model_unique_ids(
@@ -154,25 +218,4 @@ def _selected_model_unique_ids(
         node.unique_id
         for node in result.nodes
         if node.unique_id in current_manifest.models_by_unique_id
-    )
-
-
-def _parse_identity_diff_args(*, args: tuple[str, ...]) -> DbtIdentityDiffArgs:
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(prog="sqb dbt identity-diff")
-    parser.add_argument("--select", action="append", default=[])
-    parser.add_argument("--exclude", action="append", default=[])
-    parser.add_argument("--against", default=None)
-    parser.add_argument("--quiet", action="store_true", default=False)
-    parser.add_argument("--depth", type=int, default=None)
-    parser.add_argument("--full-diff", action="store_true", default=False)
-    parser.add_argument("--json", dest="json_output", action="store_true", default=False)
-    parsed: argparse.Namespace = parser.parse_args(args)
-    return DbtIdentityDiffArgs(
-        select=tuple(parsed.select),
-        exclude=tuple(parsed.exclude),
-        against=parsed.against,
-        quiet=parsed.quiet,
-        depth=parsed.depth,
-        json_output=parsed.json_output,
-        full_diff=parsed.full_diff,
     )
