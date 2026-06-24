@@ -209,6 +209,7 @@ def build_dbt_model_plan_output(
     on_connection_start: Callable[[int], None] | None,
     on_connection_complete: Callable[[int, float], None] | None,
     on_connection_error: Callable[[int, float], None] | None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> DbtModelPlanningResult | None:
     if not candidate_unique_ids:
         return None
@@ -230,7 +231,9 @@ def build_dbt_model_plan_output(
     if on_connection_complete is not None:
         on_connection_complete(1, time.monotonic() - start)
     try:
-        return build_dbt_model_planning_result(
+        planning_start: float = time.monotonic()
+        _report_progress(on_progress, "Inspecting dbt model state...")
+        result: DbtModelPlanningResult = build_dbt_model_planning_result(
             manifest=manifest,
             candidate_unique_ids=candidate_unique_ids,
             selected_unique_ids=selected_unique_ids,
@@ -241,8 +244,18 @@ def build_dbt_model_plan_output(
             adapter=adapter,
             connection=connection,
         )
+        _report_progress(
+            on_progress,
+            f"Inspected dbt model state. ({time.monotonic() - planning_start:.2f}s)",
+        )
+        return result
     finally:
         adapter.close(connection)
+
+
+def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
+    if on_progress is not None:
+        on_progress(message)
 
 
 def _parse_cursor_overrides(args: tuple[str, ...]) -> CursorOverrides:

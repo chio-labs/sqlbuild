@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,7 @@ def build_dbt_reuse_plan_output(
     dbt_options: DbtCliOptions,
     runner: DbtRunner,
     warnings: list[str] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> DbtReusePlanningResult | None:
     """Build dbt reuse_from plan output when reuse_from is configured."""
 
@@ -56,6 +58,7 @@ def build_dbt_reuse_plan_output(
         return None
 
     try:
+        _report_progress(on_progress, "Compiling dbt reuse checkout...")
         compile_result: DbtReuseFromCompileResult = compile_reuse_from_manifest(
             sqlbuild_project_dir=project_dir,
             dbt_options=dbt_options,
@@ -66,24 +69,31 @@ def build_dbt_reuse_plan_output(
         if warnings is not None:
             warnings.append(_reuse_unavailable_message(error=error, git_ref=reuse_from.git_ref))
         return None
+    _report_progress(on_progress, "Loading dbt reuse manifest...")
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
     )
+    _report_progress(on_progress, "Resolving dbt reuse candidates...")
     candidate_resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates_for_plan(
         current_manifest=current_manifest,
         reuse_manifest=reuse_manifest,
         plan=plan,
     )
+    _report_progress(on_progress, "Checking dbt reuse origin relations...")
+    existing_origin_relation_keys: frozenset[tuple[str | None, str | None, str]] = (
+        _existing_origin_relation_keys(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            adapter_name=adapter_name,
+            candidate_resolution=candidate_resolution,
+        )
+    )
+    _report_progress(on_progress, "Checked dbt reuse origin relations.")
     return build_dbt_reuse_planning_result(
         candidate_resolution=mark_missing_dbt_reuse_origin_relations(
             candidate_resolution=candidate_resolution,
-            existing_origin_relation_keys=_existing_origin_relation_keys(
-                project_dir=project_dir,
-                discovered_inputs=discovered_inputs,
-                adapter=adapter,
-                adapter_name=adapter_name,
-                candidate_resolution=candidate_resolution,
-            ),
+            existing_origin_relation_keys=existing_origin_relation_keys,
         ),
         dbt_model_plan=dbt_model_plan,
     )
@@ -173,6 +183,7 @@ def build_dbt_dependency_baseline_plan_output(
     dbt_options: DbtCliOptions,
     runner: DbtRunner,
     warnings: list[str] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> DbtReusePlanningResult | None:
     """Build physical dependency baseline plan for unselected dbt refs."""
 
@@ -185,6 +196,7 @@ def build_dbt_dependency_baseline_plan_output(
         return None
 
     try:
+        _report_progress(on_progress, "Compiling dbt dependency baseline checkout...")
         compile_result: DbtReuseFromCompileResult = compile_reuse_from_manifest(
             sqlbuild_project_dir=project_dir,
             dbt_options=dbt_options,
@@ -193,24 +205,31 @@ def build_dbt_dependency_baseline_plan_output(
         )
     except DbtReuseUnavailableError:
         return None
+    _report_progress(on_progress, "Loading dbt dependency baseline manifest...")
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
     )
+    _report_progress(on_progress, "Resolving dbt dependency baseline candidates...")
     candidate_resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
         current_manifest=current_manifest,
         reuse_manifest=reuse_manifest,
         scoped_unique_ids=scoped_unique_ids,
     )
+    _report_progress(on_progress, "Checking dbt dependency baseline origin relations...")
+    existing_origin_relation_keys: frozenset[tuple[str | None, str | None, str]] = (
+        _existing_origin_relation_keys(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            adapter_name=adapter_name,
+            candidate_resolution=candidate_resolution,
+        )
+    )
+    _report_progress(on_progress, "Checked dbt dependency baseline origin relations.")
     return build_dbt_reuse_planning_result(
         candidate_resolution=mark_missing_dbt_reuse_origin_relations(
             candidate_resolution=candidate_resolution,
-            existing_origin_relation_keys=_existing_origin_relation_keys(
-                project_dir=project_dir,
-                discovered_inputs=discovered_inputs,
-                adapter=adapter,
-                adapter_name=adapter_name,
-                candidate_resolution=candidate_resolution,
-            ),
+            existing_origin_relation_keys=existing_origin_relation_keys,
         ),
         dbt_model_plan=dbt_model_plan,
     )
@@ -245,3 +264,8 @@ def _reuse_unavailable_message(*, error: DbtReuseUnavailableError, git_ref: str 
         f"dbt reuse-from-production is enabled but git ref '{ref}' could not be refreshed "
         "from its remote. Built normally with local history. Check network or remote access."
     )
+
+
+def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
+    if on_progress is not None:
+        on_progress(message)

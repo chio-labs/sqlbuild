@@ -51,6 +51,7 @@ def _is_planning_completion_message(message: str) -> bool:
     return message.startswith(
         (
             "Built ",
+            "Checked ",
             "Compiled ",
             "Applied ",
             "Generated ",
