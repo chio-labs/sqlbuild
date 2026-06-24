@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_REUSE_CURSOR_KEY,
@@ -14,6 +17,7 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_REUSE_METADATA_ORIGIN_RELATION_KEY,
     DBT_REUSE_METADATA_REUSE_MODE_KEY,
 )
+from sqlbuild.integrations.dbt.helpers.graph.core import dbt_model_graph_key
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.reuse.candidates import (
     build_dbt_reuse_planning_result,
@@ -22,6 +26,8 @@ from sqlbuild.integrations.dbt.helpers.reuse.candidates import (
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
+    DbtCombinedGraph,
+    DbtCombinedGraphKey,
     DbtModelPlanningResult,
     DbtReuseCandidate,
     DbtReuseCandidateResolution,
@@ -30,6 +36,7 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
     build_dbt_native_dependency_baseline_entries,
+    dependency_baseline_unique_ids,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
@@ -42,6 +49,7 @@ from sqlbuild.integrations.dbt.types import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtDefinitionFingerprintTestCase,
+    DbtDependencyBaselineScopeTestCase,
     DbtNativeDependencyBaselineConversionTestCase,
     DbtReuseCandidateResolutionTestCase,
     DbtReuseCascadeTestCase,
@@ -539,6 +547,70 @@ def test_given_dbt_interop_plan_when_resolving_reuse_candidates_then_uses_plan_s
     assert tuple(candidate.unique_id for candidate in result.candidates) == (
         test_case.expected_candidate_unique_ids
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtDependencyBaselineScopeTestCase(
+            description="uses upstream dbt ancestors as dependency baselines",
+            dbt_selected_unique_ids=("model.analytics.fact_orders",),
+            expected_baseline_unique_ids=(
+                "model.analytics.raw_orders",
+                "model.analytics.stg_orders",
+            ),
+        )
+    ],
+    ids=["uses upstream dbt ancestors as dependency baselines"],
+)
+def test_given_selected_dbt_model_when_resolving_dependency_baseline_then_includes_upstream_models(
+    test_case: DbtDependencyBaselineScopeTestCase,
+) -> None:
+    raw_orders_key: DbtCombinedGraphKey = dbt_model_graph_key("model.analytics.raw_orders")
+    stg_orders_key: DbtCombinedGraphKey = dbt_model_graph_key("model.analytics.stg_orders")
+    fact_orders_key: DbtCombinedGraphKey = dbt_model_graph_key("model.analytics.fact_orders")
+    graph: DbtCombinedGraph = DbtCombinedGraph(
+        nodes=frozenset((raw_orders_key, stg_orders_key, fact_orders_key)),
+        upstream_deps={
+            raw_orders_key: (),
+            stg_orders_key: (raw_orders_key,),
+            fact_orders_key: (stg_orders_key,),
+        },
+        downstream_deps={
+            raw_orders_key: (stg_orders_key,),
+            stg_orders_key: (fact_orders_key,),
+            fact_orders_key: (),
+        },
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=tuple(
+                build_manifest_model_node(
+                    unique_id=unique_id,
+                    package_name="analytics",
+                    name=unique_id.rsplit(".", maxsplit=1)[-1],
+                    relation_name=f"dev.{unique_id.rsplit('.', maxsplit=1)[-1]}",
+                    materialized="table",
+                )
+                for unique_id in (
+                    "model.analytics.raw_orders",
+                    "model.analytics.stg_orders",
+                    "model.analytics.fact_orders",
+                )
+            )
+        )
+    )
+
+    result: tuple[str, ...] = dependency_baseline_unique_ids(
+        project=cast(CompiledProject, SimpleNamespace(models=())),
+        manifest=manifest,
+        graph=graph,
+        plan=build_dbt_interop_plan_for_reuse_scope(
+            dbt_selected_unique_ids=test_case.dbt_selected_unique_ids,
+        ),
+    )
+
+    assert result == test_case.expected_baseline_unique_ids
 
 
 @pytest.mark.parametrize(

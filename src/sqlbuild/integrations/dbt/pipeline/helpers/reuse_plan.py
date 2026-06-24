@@ -69,7 +69,10 @@ def build_dbt_reuse_plan_output(
         if warnings is not None:
             warnings.append(_reuse_unavailable_message(error=error, git_ref=reuse_from.git_ref))
         return None
-    _report_progress(on_progress, "Loading dbt reuse manifest...")
+    if compile_result.cache_hit:
+        _report_progress(on_progress, "Loaded cached dbt reuse manifest.")
+    else:
+        _report_progress(on_progress, "Loading dbt reuse manifest...")
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
     )
@@ -205,7 +208,10 @@ def build_dbt_dependency_baseline_plan_output(
         )
     except DbtReuseUnavailableError:
         return None
-    _report_progress(on_progress, "Loading dbt dependency baseline manifest...")
+    if compile_result.cache_hit:
+        _report_progress(on_progress, "Loaded cached dbt dependency baseline manifest.")
+    else:
+        _report_progress(on_progress, "Loading dbt dependency baseline manifest...")
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(compile_result.manifest_contents)
     )

@@ -200,6 +200,7 @@ class DbtReuseFromCompileResult:
     git_ref: str
     manifest_contents: str
     command: DbtCommandResult
+    cache_hit: bool = False
 
 
 @dataclass(frozen=True)

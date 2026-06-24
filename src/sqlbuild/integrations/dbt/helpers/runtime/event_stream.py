@@ -36,6 +36,8 @@ _NODE_MESSAGE_EVENT_NAMES: frozenset[str] = frozenset(
     }
 )
 
+_NODE_STARTED_EVENT_NAMES: frozenset[str] = frozenset({"NodeStarted"})
+
 _DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
     {
         "error",
@@ -102,6 +104,14 @@ def execute_dbt_json_event_stream(
                     if unique_id is not None:
                         pending_messages.setdefault(unique_id, []).append(message)
                     continue
+                node_start_message: str | None = parse_dbt_node_start_message(event=event)
+                if node_start_message is not None:
+                    if status is None:
+                        status = TransientStatusReporter(stream=stream, use_color=use_color)
+                        status.start(node_start_message)
+                    else:
+                        status.update(node_start_message)
+                    continue
                 result: DbtNodeExecutionResult | None = parse_dbt_node_result(
                     event=event,
                     messages_by_unique_id=pending_messages,
@@ -141,6 +151,23 @@ def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusRepo
     )
     status.start("Waiting for dbt node output...")
     return status
+
+
+def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
+    """Parse a dbt node-start event into a user-facing progress message."""
+
+    info: dict[str, object] = _dict_value(event.get("info"))
+    event_name: str | None = _str_value(info.get("name"))
+    if event_name not in _NODE_STARTED_EVENT_NAMES:
+        return None
+    data: dict[str, object] = _dict_value(event.get("data"))
+    node_info: dict[str, object] = _dict_value(data.get("node_info"))
+    unique_id: str | None = _str_value(node_info.get("unique_id"))
+    if unique_id is None or unique_id.startswith("unit_test"):
+        return None
+    resource_type: str = _str_value(node_info.get("resource_type")) or "node"
+    node_name: str = _str_value(node_info.get("node_name")) or unique_id
+    return f"Running dbt {resource_type} {node_name}..."
 
 
 def parse_dbt_json_event(*, line: str) -> dict[str, object] | None:
