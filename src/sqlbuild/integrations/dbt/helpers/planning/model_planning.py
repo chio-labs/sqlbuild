@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -120,6 +121,18 @@ def build_dbt_model_planning_result(
         candidate_unique_ids=candidate_unique_ids,
         graph=graph,
     )
+    candidate_models: tuple[DbtManifestModel, ...] = tuple(
+        model
+        for unique_id in expanded_candidate_unique_ids
+        if (model := manifest.models_by_unique_id.get(unique_id)) is not None
+    )
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = (
+        _existing_model_relation_keys(
+            adapter=adapter,
+            connection=connection,
+            models=candidate_models,
+        )
+    )
     for unique_id in expanded_candidate_unique_ids:
         model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
         if model is None:
@@ -127,8 +140,7 @@ def build_dbt_model_planning_result(
         entries_by_unique_id[unique_id] = _plan_model(
             model=model,
             fingerprint=fingerprints.get((NODE_TYPE_DBT, unique_id)),
-            adapter=adapter,
-            connection=connection,
+            relation_exists=_model_relation_key(model=model) in existing_relation_keys,
             full_refresh=full_refresh and unique_id in selected_unique_ids_set,
             expected_version_hash=expected_version_hashes.get(unique_id),
         )
@@ -582,8 +594,7 @@ def _plan_model(
     *,
     model: DbtManifestModel,
     fingerprint: Fingerprint | None,
-    adapter: BaseAdapter,
-    connection: Any,
+    relation_exists: bool,
     full_refresh: bool,
     expected_version_hash: str | None,
 ) -> DbtModelPlanEntry:
@@ -595,12 +606,6 @@ def _plan_model(
             fingerprint=fingerprint,
             expected_version_hash=expected_version_hash,
         )
-    relation_exists: bool = adapter.relation_exists(
-        connection,
-        database=model.database,
-        schema=model.schema,
-        name=model.alias or model.name,
-    )
     if fingerprint is None:
         return _entry(
             model=model,
@@ -630,6 +635,71 @@ def _plan_model(
         reason=DbtModelPlanReason.NO_CHANGE,
         fingerprint=fingerprint,
         expected_version_hash=expected_version_hash,
+    )
+
+
+def _existing_model_relation_keys(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    models: tuple[DbtManifestModel, ...],
+) -> frozenset[tuple[str | None, str | None, str]]:
+    if not models:
+        return frozenset()
+    model_keys: frozenset[tuple[str | None, str | None, str]] = frozenset(
+        _model_relation_key(model=model) for model in models
+    )
+    keys: set[tuple[str | None, str | None, str]] = set()
+    database: str | None
+    for database in tuple(dict.fromkeys(model.database for model in models)):
+        database_models: tuple[DbtManifestModel, ...] = tuple(
+            model for model in models if model.database == database
+        )
+        schemas: tuple[str | None, ...] = tuple(
+            dict.fromkeys(model.schema for model in database_models)
+        )
+        names: tuple[str, ...] = tuple(
+            dict.fromkeys(model.alias or model.name for model in database_models)
+        )
+        relations: tuple[RelationInfo, ...] = adapter.list_relations(
+            connection,
+            database=database,
+            schemas=None
+            if any(schema is None for schema in schemas)
+            else tuple(schema for schema in schemas if schema is not None),
+            names=names,
+        )
+        relation: RelationInfo
+        for relation in relations:
+            key: tuple[str | None, str | None, str] = _relation_info_key(relation=relation)
+            if key in model_keys:
+                keys.add(key)
+    return frozenset(keys)
+
+
+def _model_relation_key(model: DbtManifestModel) -> tuple[str | None, str | None, str]:
+    return _relation_key(
+        database=model.database,
+        schema=model.schema,
+        name=model.alias or model.name,
+    )
+
+
+def _relation_info_key(*, relation: RelationInfo) -> tuple[str | None, str | None, str]:
+    return _relation_key(
+        database=relation.database,
+        schema=relation.schema,
+        name=relation.name,
+    )
+
+
+def _relation_key(
+    *, database: str | None, schema: str | None, name: str
+) -> tuple[str | None, str | None, str]:
+    return (
+        database.upper() if database is not None else None,
+        schema.upper() if schema is not None else None,
+        name.upper(),
     )
 
 

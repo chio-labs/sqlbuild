@@ -268,6 +268,14 @@ class DbtModelPlanningTestCase:
 
 
 @dataclass(frozen=True)
+class DbtModelPlanningRelationPrefetchTestCase:
+    description: str
+    expected_list_relation_call_count: int
+    expected_relation_exists_call_count: int
+    expected_reasons_by_unique_id: dict[str, DbtModelPlanReason]
+
+
+@dataclass(frozen=True)
 class DbtReuseCandidateResolutionTestCase:
     description: str
     scoped_unique_ids: tuple[str, ...]
