@@ -167,6 +167,70 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
         expected_output_fragments=("UPSTREAM SET", "+ model.analytics.base"),
         expected_json_fragments=('"upstream_set"', '"model.analytics.base"'),
     ),
+    DbtIdentityDiffTestCase(
+        description="reports deep root cause with sql diff",
+        current_nodes=(
+            build_identity_diff_manifest_model_node(
+                "model.analytics.root", checksum="root_new", raw_code="select 2 as id"
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.mid_1",
+                checksum="mid_1",
+                raw_code="select * from root",
+                depends_on_nodes=("model.analytics.root",),
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.mid_2",
+                checksum="mid_2",
+                raw_code="select * from mid_1",
+                depends_on_nodes=("model.analytics.mid_1",),
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.mid_3",
+                checksum="mid_3",
+                raw_code="select * from mid_2",
+                depends_on_nodes=("model.analytics.mid_2",),
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.selected",
+                checksum="selected",
+                raw_code="select * from mid_3",
+                depends_on_nodes=("model.analytics.mid_3",),
+            ),
+        ),
+        ref_nodes=(
+            build_identity_diff_manifest_model_node(
+                "model.analytics.root", checksum="root_old", raw_code="select 1 as id"
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.mid_1",
+                checksum="mid_1",
+                raw_code="select * from root",
+                depends_on_nodes=("model.analytics.root",),
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.mid_2",
+                checksum="mid_2",
+                raw_code="select * from mid_1",
+                depends_on_nodes=("model.analytics.mid_1",),
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.mid_3",
+                checksum="mid_3",
+                raw_code="select * from mid_2",
+                depends_on_nodes=("model.analytics.mid_2",),
+            ),
+            build_identity_diff_manifest_model_node(
+                "model.analytics.selected",
+                checksum="selected",
+                raw_code="select * from mid_3",
+                depends_on_nodes=("model.analytics.mid_3",),
+            ),
+        ),
+        selected_unique_ids=("model.analytics.selected",),
+        expected_output_fragments=("UPSTREAM only", "root", "CAUSE", "-select 1 as id"),
+        expected_json_fragments=('"model.analytics.root"', '"query"'),
+    ),
 )
 
 
@@ -203,6 +267,78 @@ def test_given_current_and_ref_manifests_when_building_identity_diff_then_report
         assert fragment in rendered
     for fragment in test_case.expected_json_fragments:
         assert fragment in rendered_json
+    for fragment in test_case.expected_absent_fragments:
+        assert fragment not in rendered
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtIdentityDiffTestCase(
+            description="suppresses very large changed sql diff",
+            current_nodes=(
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.large_sql",
+                    checksum="new",
+                    raw_code="\n".join(
+                        f"select {index} as c_{index}, '{'x' * 80}' as payload"
+                        for index in range(2600, 5200)
+                    ),
+                ),
+            ),
+            ref_nodes=(
+                build_identity_diff_manifest_model_node(
+                    "model.analytics.large_sql",
+                    checksum="old",
+                    raw_code="\n".join(
+                        f"select {index} as c_{index}, '{'y' * 80}' as payload"
+                        for index in range(2600)
+                    ),
+                ),
+            ),
+            selected_unique_ids=("model.analytics.large_sql",),
+            expected_output_fragments=("SQL differs", "full diff suppressed", "--full-diff"),
+            expected_json_fragments=(),
+            expected_absent_fragments=("-select 0 as c_0", "+select 2600 as c_2600"),
+        )
+    ],
+    ids=["suppresses very large changed sql diff"],
+)
+def test_given_large_changed_sql_when_rendering_identity_diff_then_suppresses_expensive_diff(
+    test_case: DbtIdentityDiffTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=test_case.current_nodes)
+    )
+    ref_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=test_case.ref_nodes)
+    )
+
+    def fail_format_query_diff(previous_query: str, current_query: str) -> tuple[str, ...]:
+        raise AssertionError("large SQL should not call format_query_diff")
+
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.identity_diff.core.format_query_diff",
+        fail_format_query_diff,
+    )
+
+    result: DbtIdentityDiffResult = build_dbt_identity_diff_result(
+        current_manifest=current_manifest,
+        ref_manifest=ref_manifest,
+        selected_unique_ids=test_case.selected_unique_ids,
+        against="main",
+    )
+    rendered: str = render_dbt_identity_diff_result(
+        result=result,
+        quiet=False,
+        use_color=False,
+    )
+
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in rendered
+    for fragment in test_case.expected_absent_fragments:
+        assert fragment not in rendered
 
 
 @pytest.mark.parametrize(
