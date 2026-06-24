@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable, Mapping, Sequence
+import sys
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import cast
 
 from sqlbuild.integrations.dbt.constants import (
@@ -26,6 +28,9 @@ from sqlbuild.integrations.dbt.types import DbtIdentityDiffReason, DbtIdentityDi
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.query_diff import format_query_diff
 
+_MAX_SAFE_SQL_DIFF_CHARS: int = 200_000
+_MAX_SAFE_SQL_DIFF_LINES: int = 2_000
+
 
 def build_dbt_identity_diff_result(
     *,
@@ -34,6 +39,8 @@ def build_dbt_identity_diff_result(
     selected_unique_ids: Sequence[str],
     against: str,
     depth: int | None = None,
+    full_diff: bool = False,
+    on_progress: Callable[[str], None] | None = None,
 ) -> DbtIdentityDiffResult:
     """Build an identity diff tree for selected dbt model IDs."""
 
@@ -49,8 +56,11 @@ def build_dbt_identity_diff_result(
     )
     selected_nodes: list[DbtIdentityDiffNode] = []
     causes_by_unique_id: dict[str, DbtIdentityDiffNode] = {}
+    selected_total: int = len(selected_unique_ids)
     unique_id: str
-    for unique_id in selected_unique_ids:
+    for index, unique_id in enumerate(selected_unique_ids, start=1):
+        if on_progress is not None:
+            on_progress(f"Diffing dbt identity for {unique_id} ({index}/{selected_total})...")
         node: DbtIdentityDiffNode = _build_diff_node(
             unique_id=unique_id,
             current_manifest=current_manifest,
@@ -60,6 +70,8 @@ def build_dbt_identity_diff_result(
             current_hashes=current_hashes,
             ref_hashes=ref_hashes,
             depth=depth,
+            full_diff=full_diff,
+            on_progress=on_progress,
             visited=frozenset(),
         )
         selected_nodes.append(node)
@@ -107,6 +119,10 @@ def render_dbt_identity_diff_result(
 def format_dbt_identity_diff_json(result: DbtIdentityDiffResult) -> str:
     """Render identity diff as stable JSON."""
 
+    recursion_limit: int = sys.getrecursionlimit()
+    required_recursion_limit: int = (_max_node_depth(nodes=result.selected) * 10) + 1_000
+    if required_recursion_limit > recursion_limit:
+        sys.setrecursionlimit(required_recursion_limit)
     payload: dict[str, object] = {
         "against": result.against,
         "selected": [_node_json(node) for node in result.selected],
@@ -126,71 +142,109 @@ def _build_diff_node(
     current_hashes: Mapping[str, str | None],
     ref_hashes: Mapping[str, str | None],
     depth: int | None,
+    full_diff: bool,
+    on_progress: Callable[[str], None] | None,
     visited: frozenset[str],
 ) -> DbtIdentityDiffNode:
-    current_hash: str | None = current_hashes.get(unique_id)
-    ref_hash: str | None = ref_hashes.get(unique_id)
-    name: str = _display_name(unique_id=unique_id, manifest=current_manifest) or _display_name(
-        unique_id=unique_id,
-        manifest=ref_manifest,
-    )
-    if current_hash == ref_hash and current_hash is not None:
-        return DbtIdentityDiffNode(
-            unique_id=unique_id,
-            name=name,
-            verdict=DbtIdentityDiffVerdict.WOULD_REUSE,
-            current_version_hash=current_hash,
-            ref_version_hash=ref_hash,
+    root_key: tuple[str, int | None] = (unique_id, depth)
+    node_cache: dict[tuple[str, int | None], DbtIdentityDiffNode] = {}
+    child_keys_by_node: dict[tuple[str, int | None], tuple[tuple[str, int | None], ...]] = {}
+    local_diff_cache: dict[str, DbtIdentityLocalDiff | None] = {}
+    stack: list[tuple[str, int | None, frozenset[str], bool]] = [(unique_id, depth, visited, False)]
+    while stack:
+        current_unique_id: str
+        current_depth: int | None
+        current_visited: frozenset[str]
+        expanded: bool
+        current_unique_id, current_depth, current_visited, expanded = stack.pop()
+        current_key: tuple[str, int | None] = (current_unique_id, current_depth)
+        if current_key in node_cache:
+            continue
+        current_hash: str | None = current_hashes.get(current_unique_id)
+        ref_hash: str | None = ref_hashes.get(current_unique_id)
+        name: str = _display_name(
+            unique_id=current_unique_id,
+            manifest=current_manifest,
+        ) or _display_name(
+            unique_id=current_unique_id,
+            manifest=ref_manifest,
         )
-    local_diff: DbtIdentityLocalDiff | None = _local_diff(
-        unique_id=unique_id,
-        current_manifest=current_manifest,
-        ref_manifest=ref_manifest,
-        current_graph=current_graph,
-        ref_graph=ref_graph,
-    )
-    child_depth: int | None = None if depth is None else depth - 1
-    children: tuple[DbtIdentityDiffNode, ...] = ()
-    if unique_id not in visited and (depth is None or depth > 0):
-        upstream_ids: tuple[str, ...] = _dedupe_sorted(
-            (*current_graph.get(unique_id, ()), *ref_graph.get(unique_id, ()))
-        )
-        children = tuple(
-            _build_diff_node(
-                unique_id=upstream_id,
+        if current_hash == ref_hash and current_hash is not None:
+            node_cache[current_key] = DbtIdentityDiffNode(
+                unique_id=current_unique_id,
+                name=name,
+                verdict=DbtIdentityDiffVerdict.WOULD_REUSE,
+                current_version_hash=current_hash,
+                ref_version_hash=ref_hash,
+            )
+            continue
+        child_depth: int | None = None if current_depth is None else current_depth - 1
+        if not expanded:
+            upstream_ids: tuple[str, ...] = ()
+            if current_unique_id not in current_visited and (
+                current_depth is None or current_depth > 0
+            ):
+                upstream_ids = _dedupe_sorted(
+                    (
+                        *current_graph.get(current_unique_id, ()),
+                        *ref_graph.get(current_unique_id, ()),
+                    )
+                )
+            child_keys: tuple[tuple[str, int | None], ...] = tuple(
+                (upstream_id, child_depth)
+                for upstream_id in upstream_ids
+                if current_hashes.get(upstream_id) != ref_hashes.get(upstream_id)
+            )
+            child_keys_by_node[current_key] = child_keys
+            stack.append((current_unique_id, current_depth, current_visited, True))
+            upstream_id: str
+            for upstream_id, _ in reversed(child_keys):
+                stack.append(
+                    (
+                        upstream_id,
+                        child_depth,
+                        frozenset((*current_visited, current_unique_id)),
+                        False,
+                    )
+                )
+            continue
+        if current_unique_id not in local_diff_cache:
+            local_diff_cache[current_unique_id] = _local_diff(
+                unique_id=current_unique_id,
                 current_manifest=current_manifest,
                 ref_manifest=ref_manifest,
                 current_graph=current_graph,
                 ref_graph=ref_graph,
-                current_hashes=current_hashes,
-                ref_hashes=ref_hashes,
-                depth=child_depth,
-                visited=frozenset((*visited, unique_id)),
+                full_diff=full_diff,
+                on_progress=on_progress,
             )
-            for upstream_id in upstream_ids
-            if current_hashes.get(upstream_id) != ref_hashes.get(upstream_id)
+        local_diff: DbtIdentityLocalDiff | None = local_diff_cache[current_unique_id]
+        children: tuple[DbtIdentityDiffNode, ...] = tuple(
+            node_cache[child_key] for child_key in child_keys_by_node.get(current_key, ())
         )
-    verdict: DbtIdentityDiffVerdict = (
-        DbtIdentityDiffVerdict.CAUSE
-        if local_diff is not None and local_diff.reasons != (DbtIdentityDiffReason.UPSTREAM_ONLY,)
-        else DbtIdentityDiffVerdict.UPSTREAM_ONLY
-        if children
-        else DbtIdentityDiffVerdict.REBUILD
-    )
-    if local_diff is None and children:
-        local_diff = DbtIdentityLocalDiff(
-            unique_id=unique_id,
-            reasons=(DbtIdentityDiffReason.UPSTREAM_ONLY,),
+        verdict: DbtIdentityDiffVerdict = (
+            DbtIdentityDiffVerdict.CAUSE
+            if local_diff is not None
+            and local_diff.reasons != (DbtIdentityDiffReason.UPSTREAM_ONLY,)
+            else DbtIdentityDiffVerdict.UPSTREAM_ONLY
+            if children
+            else DbtIdentityDiffVerdict.REBUILD
         )
-    return DbtIdentityDiffNode(
-        unique_id=unique_id,
-        name=name,
-        verdict=verdict,
-        current_version_hash=current_hash,
-        ref_version_hash=ref_hash,
-        local_diff=local_diff,
-        children=children,
-    )
+        if local_diff is None and children:
+            local_diff = DbtIdentityLocalDiff(
+                unique_id=current_unique_id,
+                reasons=(DbtIdentityDiffReason.UPSTREAM_ONLY,),
+            )
+        node_cache[current_key] = DbtIdentityDiffNode(
+            unique_id=current_unique_id,
+            name=name,
+            verdict=verdict,
+            current_version_hash=current_hash,
+            ref_version_hash=ref_hash,
+            local_diff=local_diff,
+            children=children,
+        )
+    return node_cache[root_key]
 
 
 def _local_diff(
@@ -200,6 +254,8 @@ def _local_diff(
     ref_manifest: DbtManifestIndex,
     current_graph: Mapping[str, tuple[str, ...]],
     ref_graph: Mapping[str, tuple[str, ...]],
+    full_diff: bool,
+    on_progress: Callable[[str], None] | None,
 ) -> DbtIdentityLocalDiff | None:
     current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
     ref_model: DbtManifestModel | None = ref_manifest.models_by_unique_id.get(unique_id)
@@ -219,10 +275,22 @@ def _local_diff(
     current_sql: str = _authored_sql(current_model)
     if ref_sql != current_sql:
         reasons.append(DbtIdentityDiffReason.QUERY)
-        sql_diff = tuple(format_query_diff(ref_sql, current_sql))
+        sql_diff = _safe_sql_diff(
+            previous=ref_sql,
+            current=current_sql,
+            label=_display_name(unique_id=unique_id, manifest=current_manifest),
+            full_diff=full_diff,
+            on_progress=on_progress,
+        )
     elif _compiled_sql(ref_model) != _compiled_sql(current_model):
         reasons.append(DbtIdentityDiffReason.COMPILED_ONLY)
-        sql_diff = tuple(format_query_diff(_compiled_sql(ref_model), _compiled_sql(current_model)))
+        sql_diff = _safe_sql_diff(
+            previous=_compiled_sql(ref_model),
+            current=_compiled_sql(current_model),
+            label=_display_name(unique_id=unique_id, manifest=current_manifest),
+            full_diff=full_diff,
+            on_progress=on_progress,
+        )
     config_diff: tuple[str, ...] = _mapping_diff(
         previous=_identity_config(ref_model),
         current=_identity_config(current_model),
@@ -299,6 +367,141 @@ def _identity_upstreams(*, manifest: DbtManifestIndex) -> dict[str, tuple[str, .
     return graph
 
 
+def _safe_sql_diff(
+    *,
+    previous: str,
+    current: str,
+    label: str,
+    full_diff: bool,
+    on_progress: Callable[[str], None] | None,
+) -> tuple[str, ...]:
+    previous_lines: tuple[str, ...] = tuple(previous.splitlines())
+    current_lines: tuple[str, ...] = tuple(current.splitlines())
+    previous_size: int = len(previous.encode("utf-8"))
+    current_size: int = len(current.encode("utf-8"))
+    if full_diff:
+        if on_progress is not None:
+            on_progress(
+                _format_sql_diff_progress(
+                    label=label,
+                    previous_size=previous_size,
+                    current_size=current_size,
+                )
+            )
+        return tuple(format_query_diff(previous, current))
+
+    prefix_count: int = _common_prefix_count(
+        previous_lines=previous_lines,
+        current_lines=current_lines,
+    )
+    suffix_count: int = _common_suffix_count(
+        previous_lines=previous_lines,
+        current_lines=current_lines,
+        prefix_count=prefix_count,
+    )
+    previous_middle: tuple[str, ...] = _middle_lines(
+        lines=previous_lines,
+        prefix_count=prefix_count,
+        suffix_count=suffix_count,
+    )
+    current_middle: tuple[str, ...] = _middle_lines(
+        lines=current_lines,
+        prefix_count=prefix_count,
+        suffix_count=suffix_count,
+    )
+    middle_chars: int = sum(len(line) + 1 for line in (*previous_middle, *current_middle))
+    middle_lines: int = len(previous_middle) + len(current_middle)
+    if middle_chars > _MAX_SAFE_SQL_DIFF_CHARS or middle_lines > _MAX_SAFE_SQL_DIFF_LINES:
+        return (
+            _format_suppressed_sql_diff(
+                previous_size=previous_size,
+                current_size=current_size,
+                previous_lines=len(previous_lines),
+                current_lines=len(current_lines),
+                middle_chars=middle_chars,
+                middle_lines=middle_lines,
+            ),
+        )
+    if on_progress is not None:
+        start: float = time.monotonic()
+        on_progress(
+            _format_sql_diff_progress(
+                label=label,
+                previous_size=previous_size,
+                current_size=current_size,
+            )
+        )
+    diff_lines: list[str] = []
+    if prefix_count:
+        diff_lines.append(f"... {prefix_count} unchanged prefix line(s) ...")
+    diff_lines.extend(format_query_diff("\n".join(previous_middle), "\n".join(current_middle)))
+    if suffix_count:
+        diff_lines.append(f"... {suffix_count} unchanged suffix line(s) ...")
+    if on_progress is not None:
+        on_progress(f"Rendered SQL diff for {label}. ({time.monotonic() - start:.2f}s)")
+    return tuple(diff_lines)
+
+
+def _common_prefix_count(*, previous_lines: tuple[str, ...], current_lines: tuple[str, ...]) -> int:
+    count: int = 0
+    for previous_line, current_line in zip(previous_lines, current_lines, strict=False):
+        if previous_line != current_line:
+            return count
+        count += 1
+    return count
+
+
+def _common_suffix_count(
+    *, previous_lines: tuple[str, ...], current_lines: tuple[str, ...], prefix_count: int
+) -> int:
+    count: int = 0
+    max_count: int = min(len(previous_lines), len(current_lines)) - prefix_count
+    while count < max_count:
+        if previous_lines[-count - 1] != current_lines[-count - 1]:
+            return count
+        count += 1
+    return count
+
+
+def _middle_lines(
+    *, lines: tuple[str, ...], prefix_count: int, suffix_count: int
+) -> tuple[str, ...]:
+    end_index: int = len(lines) - suffix_count if suffix_count else len(lines)
+    return lines[prefix_count:end_index]
+
+
+def _format_sql_diff_progress(*, label: str, previous_size: int, current_size: int) -> str:
+    return (
+        f"Rendering SQL diff for {label} "
+        f"({_format_bytes(previous_size)} -> {_format_bytes(current_size)})..."
+    )
+
+
+def _format_suppressed_sql_diff(
+    *,
+    previous_size: int,
+    current_size: int,
+    previous_lines: int,
+    current_lines: int,
+    middle_chars: int,
+    middle_lines: int,
+) -> str:
+    return (
+        "SQL differs "
+        f"({_format_bytes(previous_size)} -> {_format_bytes(current_size)}, "
+        f"{previous_lines} -> {current_lines} lines); "
+        "full diff suppressed because the changed region is too large "
+        f"({_format_bytes(middle_chars)}, {middle_lines} lines). "
+        "Use --full-diff to force it."
+    )
+
+
+def _format_bytes(size: int) -> str:
+    if size < 1024:
+        return f"{size} B"
+    return f"{size / 1024:.1f} KB"
+
+
 def _own_hash(*, unique_id: str, manifest: DbtManifestIndex) -> str | None:
     seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(unique_id)
     if seed is not None:
@@ -312,17 +515,28 @@ def _own_hash(*, unique_id: str, manifest: DbtManifestIndex) -> str | None:
 def _append_node(
     *, lines: list[str], node: DbtIdentityDiffNode, style: CliStyle, quiet: bool, indent: str
 ) -> None:
-    verdict: str = _styled_verdict(node.verdict, style=style)
-    hashes: str = _hash_detail(node=node, style=style)
-    lines.append(f"{indent}{style.dbt_object_name(node.name):<34} {verdict} {hashes}".rstrip())
-    if node.local_diff is not None:
-        reasons: str = _styled_reasons(node.local_diff.reasons, style=style)
-        lines.append(f"{indent}  {style.muted('reason:')} {reasons}")
-        if not quiet:
-            _append_local_diff(lines=lines, diff=node.local_diff, style=style, indent=indent + "  ")
-    child: DbtIdentityDiffNode
-    for child in node.children:
-        _append_node(lines=lines, node=child, style=style, quiet=quiet, indent=indent + "  └─ ")
+    stack: list[tuple[DbtIdentityDiffNode, str]] = [(node, indent)]
+    while stack:
+        current_node: DbtIdentityDiffNode
+        current_indent: str
+        current_node, current_indent = stack.pop()
+        verdict: str = _styled_verdict(current_node.verdict, style=style)
+        hashes: str = _hash_detail(node=current_node, style=style)
+        label: str = f"{current_indent}{style.dbt_object_name(current_node.name):<34}"
+        lines.append(f"{label} {verdict} {hashes}".rstrip())
+        if current_node.local_diff is not None:
+            reasons: str = _styled_reasons(current_node.local_diff.reasons, style=style)
+            lines.append(f"{current_indent}  {style.muted('reason:')} {reasons}")
+            if not quiet:
+                _append_local_diff(
+                    lines=lines,
+                    diff=current_node.local_diff,
+                    style=style,
+                    indent=current_indent + "  ",
+                )
+        child: DbtIdentityDiffNode
+        for child in reversed(current_node.children):
+            stack.append((child, current_indent + "  └─ "))
 
 
 def _append_local_diff(
@@ -377,15 +591,30 @@ def _reason_label(reasons: tuple[DbtIdentityDiffReason, ...]) -> str:
 
 
 def _node_json(node: DbtIdentityDiffNode) -> dict[str, object]:
-    return {
-        "unique_id": node.unique_id,
-        "name": node.name,
-        "verdict": node.verdict.value,
-        "current_version_hash": node.current_version_hash,
-        "ref_version_hash": node.ref_version_hash,
-        "local_diff": None if node.local_diff is None else _local_diff_json(node.local_diff),
-        "children": [_node_json(child) for child in node.children],
-    }
+    payload_by_node_id: dict[int, dict[str, object]] = {}
+    stack: list[tuple[DbtIdentityDiffNode, bool]] = [(node, False)]
+    while stack:
+        current_node: DbtIdentityDiffNode
+        expanded: bool
+        current_node, expanded = stack.pop()
+        if not expanded:
+            stack.append((current_node, True))
+            child: DbtIdentityDiffNode
+            for child in reversed(current_node.children):
+                stack.append((child, False))
+            continue
+        payload_by_node_id[id(current_node)] = {
+            "unique_id": current_node.unique_id,
+            "name": current_node.name,
+            "verdict": current_node.verdict.value,
+            "current_version_hash": current_node.current_version_hash,
+            "ref_version_hash": current_node.ref_version_hash,
+            "local_diff": None
+            if current_node.local_diff is None
+            else _local_diff_json(current_node.local_diff),
+            "children": [payload_by_node_id[id(child)] for child in current_node.children],
+        }
+    return payload_by_node_id[id(node)]
 
 
 def _local_diff_json(diff: DbtIdentityLocalDiff) -> dict[str, object]:
@@ -400,12 +629,29 @@ def _local_diff_json(diff: DbtIdentityLocalDiff) -> dict[str, object]:
     }
 
 
+def _max_node_depth(*, nodes: tuple[DbtIdentityDiffNode, ...]) -> int:
+    max_depth: int = 0
+    stack: list[tuple[DbtIdentityDiffNode, int]] = [(node, 1) for node in nodes]
+    while stack:
+        node: DbtIdentityDiffNode
+        depth: int
+        node, depth = stack.pop()
+        max_depth = max(max_depth, depth)
+        child: DbtIdentityDiffNode
+        for child in node.children:
+            stack.append((child, depth + 1))
+    return max_depth
+
+
 def _collect_causes(*, node: DbtIdentityDiffNode, causes: dict[str, DbtIdentityDiffNode]) -> None:
-    if node.verdict == DbtIdentityDiffVerdict.CAUSE:
-        causes.setdefault(node.unique_id, node)
-    child: DbtIdentityDiffNode
-    for child in node.children:
-        _collect_causes(node=child, causes=causes)
+    stack: list[DbtIdentityDiffNode] = [node]
+    while stack:
+        current_node: DbtIdentityDiffNode = stack.pop()
+        if current_node.verdict == DbtIdentityDiffVerdict.CAUSE:
+            causes.setdefault(current_node.unique_id, current_node)
+        child: DbtIdentityDiffNode
+        for child in reversed(current_node.children):
+            stack.append(child)
 
 
 def _display_name(*, unique_id: str, manifest: DbtManifestIndex) -> str:
