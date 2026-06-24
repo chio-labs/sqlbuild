@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 import time
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import cast
 
@@ -20,16 +20,17 @@ from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestSeed,
 )
 from sqlbuild.integrations.dbt.models import (
-    DbtIdentityDiffNode,
+    DbtIdentityCause,
+    DbtIdentityCausePath,
     DbtIdentityDiffResult,
+    DbtIdentityInheritedOnly,
     DbtIdentityLocalDiff,
+    DbtIdentitySelectedDiff,
 )
 from sqlbuild.integrations.dbt.types import DbtIdentityDiffReason, DbtIdentityDiffVerdict
+from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.query_diff import format_query_diff
-
-_MAX_SAFE_SQL_DIFF_CHARS: int = 200_000
-_MAX_SAFE_SQL_DIFF_LINES: int = 2_000
 
 
 def build_dbt_identity_diff_result(
@@ -38,11 +39,12 @@ def build_dbt_identity_diff_result(
     ref_manifest: DbtManifestIndex,
     selected_unique_ids: Sequence[str],
     against: str,
-    depth: int | None = None,
-    full_diff: bool = False,
+    show_paths: bool = False,
+    max_diff_lines: int = 2_000,
+    max_diff_bytes: int = 200_000,
     on_progress: Callable[[str], None] | None = None,
 ) -> DbtIdentityDiffResult:
-    """Build an identity diff tree for selected dbt model IDs."""
+    """Build a set-based identity diff for selected dbt model IDs."""
 
     current_graph: dict[str, tuple[str, ...]] = _identity_upstreams(manifest=current_manifest)
     ref_graph: dict[str, tuple[str, ...]] = _identity_upstreams(manifest=ref_manifest)
@@ -54,38 +56,132 @@ def build_dbt_identity_diff_result(
         manifest=ref_manifest,
         graph=ref_graph,
     )
-    selected_nodes: list[DbtIdentityDiffNode] = []
-    causes_by_unique_id: dict[str, DbtIdentityDiffNode] = {}
+    local_diff_cache: dict[str, DbtIdentityLocalDiff | None] = {}
+    selected_nodes: list[DbtIdentitySelectedDiff] = []
+    selected_closures: dict[str, frozenset[str]] = {}
+    cause_to_selected: dict[str, set[str]] = {}
+    inherited_to_selected: dict[str, set[str]] = {}
     selected_total: int = len(selected_unique_ids)
     unique_id: str
     for index, unique_id in enumerate(selected_unique_ids, start=1):
         if on_progress is not None:
             on_progress(f"Diffing dbt identity for {unique_id} ({index}/{selected_total})...")
-        node: DbtIdentityDiffNode = _build_diff_node(
+        current_hash: str | None = current_hashes.get(unique_id)
+        ref_hash: str | None = ref_hashes.get(unique_id)
+        if current_hash == ref_hash and current_hash is not None:
+            selected_nodes.append(
+                DbtIdentitySelectedDiff(
+                    unique_id=unique_id,
+                    name=_display_name(unique_id=unique_id, manifest=current_manifest),
+                    verdict=DbtIdentityDiffVerdict.WOULD_REUSE,
+                    current_version_hash=current_hash,
+                    ref_version_hash=ref_hash,
+                )
+            )
+            selected_closures[unique_id] = frozenset()
+            continue
+        closure: frozenset[str] = _changed_closure(
             unique_id=unique_id,
-            current_manifest=current_manifest,
-            ref_manifest=ref_manifest,
             current_graph=current_graph,
             ref_graph=ref_graph,
             current_hashes=current_hashes,
             ref_hashes=ref_hashes,
-            depth=depth,
-            full_diff=full_diff,
-            on_progress=on_progress,
-            visited=frozenset(),
         )
-        selected_nodes.append(node)
-        _collect_causes(node=node, causes=causes_by_unique_id)
+        selected_closures[unique_id] = closure
+        selected_causes: list[str] = []
+        selected_inherited: list[str] = []
+        changed_id: str
+        for changed_id in sorted(
+            closure, key=lambda node_id: _display_name(unique_id=node_id, manifest=current_manifest)
+        ):
+            local_diff: DbtIdentityLocalDiff | None = _cached_local_diff(
+                unique_id=changed_id,
+                current_manifest=current_manifest,
+                ref_manifest=ref_manifest,
+                current_graph=current_graph,
+                ref_graph=ref_graph,
+                cache=local_diff_cache,
+                max_diff_lines=max_diff_lines,
+                max_diff_bytes=max_diff_bytes,
+                on_progress=on_progress,
+            )
+            if local_diff is None:
+                selected_inherited.append(changed_id)
+                inherited_to_selected.setdefault(changed_id, set()).add(unique_id)
+                continue
+            selected_causes.append(changed_id)
+            cause_to_selected.setdefault(changed_id, set()).add(unique_id)
+        selected_nodes.append(
+            DbtIdentitySelectedDiff(
+                unique_id=unique_id,
+                name=_display_name(unique_id=unique_id, manifest=current_manifest),
+                verdict=DbtIdentityDiffVerdict.REBUILD,
+                current_version_hash=current_hash,
+                ref_version_hash=ref_hash,
+                causes=tuple(selected_causes),
+                inherited_only=tuple(selected_inherited),
+            )
+        )
+    causes: list[DbtIdentityCause] = []
+    cause_id: str
+    for cause_id in sorted(
+        cause_to_selected,
+        key=lambda node_id: _display_name(unique_id=node_id, manifest=current_manifest),
+    ):
+        local_diff = local_diff_cache[cause_id]
+        if local_diff is None:
+            continue
+        causes.append(
+            DbtIdentityCause(
+                unique_id=cause_id,
+                name=_display_name(unique_id=cause_id, manifest=current_manifest),
+                current_version_hash=current_hashes.get(cause_id),
+                ref_version_hash=ref_hashes.get(cause_id),
+                local_diff=local_diff,
+                affects_selected=tuple(sorted(cause_to_selected[cause_id])),
+            )
+        )
+    inherited_only: list[DbtIdentityInheritedOnly] = []
+    inherited_id: str
+    for inherited_id in sorted(
+        inherited_to_selected,
+        key=lambda node_id: _display_name(unique_id=node_id, manifest=current_manifest),
+    ):
+        inherited_only.append(
+            DbtIdentityInheritedOnly(
+                unique_id=inherited_id,
+                name=_display_name(unique_id=inherited_id, manifest=current_manifest),
+                affects_selected=tuple(sorted(inherited_to_selected[inherited_id])),
+            )
+        )
+    paths: tuple[DbtIdentityCausePath, ...] = ()
+    if show_paths:
+        paths = _cause_paths(
+            selected_unique_ids=selected_unique_ids,
+            cause_unique_ids=tuple(cause_to_selected),
+            selected_closures=selected_closures,
+            current_graph=current_graph,
+            ref_graph=ref_graph,
+            current_hashes=current_hashes,
+            ref_hashes=ref_hashes,
+        )
     return DbtIdentityDiffResult(
         selected=tuple(selected_nodes),
-        causes=tuple(causes_by_unique_id.values()),
+        causes=tuple(causes),
+        inherited_only=tuple(inherited_only),
+        paths=paths,
         against=against,
         warnings=(*current_manifest.seed_identity_warnings, *ref_manifest.seed_identity_warnings),
     )
 
 
 def render_dbt_identity_diff_result(
-    *, result: DbtIdentityDiffResult, quiet: bool, use_color: bool
+    *,
+    result: DbtIdentityDiffResult,
+    quiet: bool,
+    show_inherited: bool,
+    show_paths: bool,
+    use_color: bool,
 ) -> str:
     """Render a human-readable identity diff."""
 
@@ -93,20 +189,33 @@ def render_dbt_identity_diff_result(
     lines: list[str] = [
         style.dbt_section("dbt identity diff") + f"  {style.muted('vs ' + result.against)}"
     ]
-    lines.append("")
-    node: DbtIdentityDiffNode
-    for node in result.selected:
-        _append_node(lines=lines, node=node, style=style, quiet=quiet, indent="")
-        lines.append("")
+    name_column_width: int = _result_name_column_width(result=result)
+    _append_selected_section(
+        lines=lines,
+        result=result,
+        style=style,
+        name_column_width=name_column_width,
+    )
     if result.causes:
-        cause_labels: str = ", ".join(
-            f"{cause.name} ({_reason_label(cause.local_diff.reasons)})"
-            for cause in result.causes
-            if cause.local_diff is not None
+        _append_causes_section(
+            lines=lines,
+            result=result,
+            style=style,
+            quiet=quiet,
+            name_column_width=name_column_width,
         )
-        lines.append(style.warning_strong(f"=> {len(result.causes)} cause(s): ") + cause_labels)
     else:
-        lines.append(style.success("=> no identity differences in selected models"))
+        lines.append("")
+        lines.append(style.success("No identity differences in selected models."))
+    if show_paths and result.paths:
+        _append_paths_section(lines=lines, result=result, style=style)
+    _append_inherited_section(
+        lines=lines,
+        result=result,
+        style=style,
+        show_inherited=show_inherited,
+        name_column_width=name_column_width,
+    )
     if result.warnings:
         lines.append("")
         lines.append(style.warning_strong(f"Warnings ({len(result.warnings)})"))
@@ -119,132 +228,15 @@ def render_dbt_identity_diff_result(
 def format_dbt_identity_diff_json(result: DbtIdentityDiffResult) -> str:
     """Render identity diff as stable JSON."""
 
-    recursion_limit: int = sys.getrecursionlimit()
-    required_recursion_limit: int = (_max_node_depth(nodes=result.selected) * 10) + 1_000
-    if required_recursion_limit > recursion_limit:
-        sys.setrecursionlimit(required_recursion_limit)
     payload: dict[str, object] = {
         "against": result.against,
-        "selected": [_node_json(node) for node in result.selected],
-        "causes": [node.unique_id for node in result.causes],
+        "selected": [_selected_json(selected) for selected in result.selected],
+        "causes": [_cause_json(cause) for cause in result.causes],
+        "inherited_only": [_inherited_json(inherited) for inherited in result.inherited_only],
+        "paths": [_path_json(path) for path in result.paths],
         "warnings": list(result.warnings),
     }
     return json.dumps(payload, indent=2, sort_keys=True)
-
-
-def _build_diff_node(
-    *,
-    unique_id: str,
-    current_manifest: DbtManifestIndex,
-    ref_manifest: DbtManifestIndex,
-    current_graph: Mapping[str, tuple[str, ...]],
-    ref_graph: Mapping[str, tuple[str, ...]],
-    current_hashes: Mapping[str, str | None],
-    ref_hashes: Mapping[str, str | None],
-    depth: int | None,
-    full_diff: bool,
-    on_progress: Callable[[str], None] | None,
-    visited: frozenset[str],
-) -> DbtIdentityDiffNode:
-    root_key: tuple[str, int | None] = (unique_id, depth)
-    node_cache: dict[tuple[str, int | None], DbtIdentityDiffNode] = {}
-    child_keys_by_node: dict[tuple[str, int | None], tuple[tuple[str, int | None], ...]] = {}
-    local_diff_cache: dict[str, DbtIdentityLocalDiff | None] = {}
-    stack: list[tuple[str, int | None, frozenset[str], bool]] = [(unique_id, depth, visited, False)]
-    while stack:
-        current_unique_id: str
-        current_depth: int | None
-        current_visited: frozenset[str]
-        expanded: bool
-        current_unique_id, current_depth, current_visited, expanded = stack.pop()
-        current_key: tuple[str, int | None] = (current_unique_id, current_depth)
-        if current_key in node_cache:
-            continue
-        current_hash: str | None = current_hashes.get(current_unique_id)
-        ref_hash: str | None = ref_hashes.get(current_unique_id)
-        name: str = _display_name(
-            unique_id=current_unique_id,
-            manifest=current_manifest,
-        ) or _display_name(
-            unique_id=current_unique_id,
-            manifest=ref_manifest,
-        )
-        if current_hash == ref_hash and current_hash is not None:
-            node_cache[current_key] = DbtIdentityDiffNode(
-                unique_id=current_unique_id,
-                name=name,
-                verdict=DbtIdentityDiffVerdict.WOULD_REUSE,
-                current_version_hash=current_hash,
-                ref_version_hash=ref_hash,
-            )
-            continue
-        child_depth: int | None = None if current_depth is None else current_depth - 1
-        if not expanded:
-            upstream_ids: tuple[str, ...] = ()
-            if current_unique_id not in current_visited and (
-                current_depth is None or current_depth > 0
-            ):
-                upstream_ids = _dedupe_sorted(
-                    (
-                        *current_graph.get(current_unique_id, ()),
-                        *ref_graph.get(current_unique_id, ()),
-                    )
-                )
-            child_keys: tuple[tuple[str, int | None], ...] = tuple(
-                (upstream_id, child_depth)
-                for upstream_id in upstream_ids
-                if current_hashes.get(upstream_id) != ref_hashes.get(upstream_id)
-            )
-            child_keys_by_node[current_key] = child_keys
-            stack.append((current_unique_id, current_depth, current_visited, True))
-            upstream_id: str
-            for upstream_id, _ in reversed(child_keys):
-                stack.append(
-                    (
-                        upstream_id,
-                        child_depth,
-                        frozenset((*current_visited, current_unique_id)),
-                        False,
-                    )
-                )
-            continue
-        if current_unique_id not in local_diff_cache:
-            local_diff_cache[current_unique_id] = _local_diff(
-                unique_id=current_unique_id,
-                current_manifest=current_manifest,
-                ref_manifest=ref_manifest,
-                current_graph=current_graph,
-                ref_graph=ref_graph,
-                full_diff=full_diff,
-                on_progress=on_progress,
-            )
-        local_diff: DbtIdentityLocalDiff | None = local_diff_cache[current_unique_id]
-        children: tuple[DbtIdentityDiffNode, ...] = tuple(
-            node_cache[child_key] for child_key in child_keys_by_node.get(current_key, ())
-        )
-        verdict: DbtIdentityDiffVerdict = (
-            DbtIdentityDiffVerdict.CAUSE
-            if local_diff is not None
-            and local_diff.reasons != (DbtIdentityDiffReason.UPSTREAM_ONLY,)
-            else DbtIdentityDiffVerdict.UPSTREAM_ONLY
-            if children
-            else DbtIdentityDiffVerdict.REBUILD
-        )
-        if local_diff is None and children:
-            local_diff = DbtIdentityLocalDiff(
-                unique_id=current_unique_id,
-                reasons=(DbtIdentityDiffReason.UPSTREAM_ONLY,),
-            )
-        node_cache[current_key] = DbtIdentityDiffNode(
-            unique_id=current_unique_id,
-            name=name,
-            verdict=verdict,
-            current_version_hash=current_hash,
-            ref_version_hash=ref_hash,
-            local_diff=local_diff,
-            children=children,
-        )
-    return node_cache[root_key]
 
 
 def _local_diff(
@@ -254,7 +246,8 @@ def _local_diff(
     ref_manifest: DbtManifestIndex,
     current_graph: Mapping[str, tuple[str, ...]],
     ref_graph: Mapping[str, tuple[str, ...]],
-    full_diff: bool,
+    max_diff_lines: int,
+    max_diff_bytes: int,
     on_progress: Callable[[str], None] | None,
 ) -> DbtIdentityLocalDiff | None:
     current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
@@ -279,7 +272,8 @@ def _local_diff(
             previous=ref_sql,
             current=current_sql,
             label=_display_name(unique_id=unique_id, manifest=current_manifest),
-            full_diff=full_diff,
+            max_diff_lines=max_diff_lines,
+            max_diff_bytes=max_diff_bytes,
             on_progress=on_progress,
         )
     elif _compiled_sql(ref_model) != _compiled_sql(current_model):
@@ -288,7 +282,8 @@ def _local_diff(
             previous=_compiled_sql(ref_model),
             current=_compiled_sql(current_model),
             label=_display_name(unique_id=unique_id, manifest=current_manifest),
-            full_diff=full_diff,
+            max_diff_lines=max_diff_lines,
+            max_diff_bytes=max_diff_bytes,
             on_progress=on_progress,
         )
     config_diff: tuple[str, ...] = _mapping_diff(
@@ -320,6 +315,140 @@ def _local_diff(
         upstream_added=upstream_added,
         upstream_removed=upstream_removed,
     )
+
+
+def _cached_local_diff(
+    *,
+    unique_id: str,
+    current_manifest: DbtManifestIndex,
+    ref_manifest: DbtManifestIndex,
+    current_graph: Mapping[str, tuple[str, ...]],
+    ref_graph: Mapping[str, tuple[str, ...]],
+    cache: dict[str, DbtIdentityLocalDiff | None],
+    max_diff_lines: int,
+    max_diff_bytes: int,
+    on_progress: Callable[[str], None] | None,
+) -> DbtIdentityLocalDiff | None:
+    if unique_id not in cache:
+        cache[unique_id] = _local_diff(
+            unique_id=unique_id,
+            current_manifest=current_manifest,
+            ref_manifest=ref_manifest,
+            current_graph=current_graph,
+            ref_graph=ref_graph,
+            max_diff_lines=max_diff_lines,
+            max_diff_bytes=max_diff_bytes,
+            on_progress=on_progress,
+        )
+    return cache[unique_id]
+
+
+def _changed_closure(
+    *,
+    unique_id: str,
+    current_graph: Mapping[str, tuple[str, ...]],
+    ref_graph: Mapping[str, tuple[str, ...]],
+    current_hashes: Mapping[str, str | None],
+    ref_hashes: Mapping[str, str | None],
+) -> frozenset[str]:
+    changed: set[str] = set()
+    stack: list[str] = [unique_id]
+    while stack:
+        current_id: str = stack.pop()
+        if current_id in changed:
+            continue
+        if (
+            current_hashes.get(current_id) == ref_hashes.get(current_id)
+            and current_hashes.get(current_id) is not None
+        ):
+            continue
+        changed.add(current_id)
+        upstream_id: str
+        for upstream_id in _upstream_union(
+            unique_id=current_id,
+            current_graph=current_graph,
+            ref_graph=ref_graph,
+        ):
+            if current_hashes.get(upstream_id) != ref_hashes.get(upstream_id):
+                stack.append(upstream_id)
+    return frozenset(changed)
+
+
+def _cause_paths(
+    *,
+    selected_unique_ids: Sequence[str],
+    cause_unique_ids: tuple[str, ...],
+    selected_closures: Mapping[str, frozenset[str]],
+    current_graph: Mapping[str, tuple[str, ...]],
+    ref_graph: Mapping[str, tuple[str, ...]],
+    current_hashes: Mapping[str, str | None],
+    ref_hashes: Mapping[str, str | None],
+) -> tuple[DbtIdentityCausePath, ...]:
+    cause_set: frozenset[str] = frozenset(cause_unique_ids)
+    paths: list[DbtIdentityCausePath] = []
+    selected_id: str
+    for selected_id in selected_unique_ids:
+        selected_causes: tuple[str, ...] = tuple(
+            sorted(selected_closures.get(selected_id, frozenset()) & cause_set)
+        )
+        cause_id: str
+        for cause_id in selected_causes:
+            path: tuple[str, ...] | None = _representative_path(
+                selected_unique_id=selected_id,
+                cause_unique_id=cause_id,
+                current_graph=current_graph,
+                ref_graph=ref_graph,
+                current_hashes=current_hashes,
+                ref_hashes=ref_hashes,
+            )
+            if path is None:
+                continue
+            paths.append(
+                DbtIdentityCausePath(
+                    selected_unique_id=selected_id,
+                    cause_unique_id=cause_id,
+                    path=path,
+                )
+            )
+    return tuple(paths)
+
+
+def _representative_path(
+    *,
+    selected_unique_id: str,
+    cause_unique_id: str,
+    current_graph: Mapping[str, tuple[str, ...]],
+    ref_graph: Mapping[str, tuple[str, ...]],
+    current_hashes: Mapping[str, str | None],
+    ref_hashes: Mapping[str, str | None],
+) -> tuple[str, ...] | None:
+    queue: deque[tuple[str, tuple[str, ...]]] = deque([(selected_unique_id, (selected_unique_id,))])
+    seen: set[str] = set()
+    while queue:
+        unique_id, path = queue.popleft()
+        if unique_id == cause_unique_id:
+            return path
+        if unique_id in seen:
+            continue
+        seen.add(unique_id)
+        upstream_id: str
+        for upstream_id in _upstream_union(
+            unique_id=unique_id,
+            current_graph=current_graph,
+            ref_graph=ref_graph,
+        ):
+            if current_hashes.get(upstream_id) != ref_hashes.get(upstream_id):
+                queue.append((upstream_id, (*path, upstream_id)))
+    return None
+
+
+def _upstream_union(
+    *,
+    unique_id: str,
+    current_graph: Mapping[str, tuple[str, ...]],
+    ref_graph: Mapping[str, tuple[str, ...]],
+) -> tuple[str, ...]:
+    return _dedupe_sorted((*current_graph.get(unique_id, ()), *ref_graph.get(unique_id, ())))
 
 
 def _version_hashes(
@@ -372,24 +501,14 @@ def _safe_sql_diff(
     previous: str,
     current: str,
     label: str,
-    full_diff: bool,
+    max_diff_lines: int,
+    max_diff_bytes: int,
     on_progress: Callable[[str], None] | None,
 ) -> tuple[str, ...]:
     previous_lines: tuple[str, ...] = tuple(previous.splitlines())
     current_lines: tuple[str, ...] = tuple(current.splitlines())
     previous_size: int = len(previous.encode("utf-8"))
     current_size: int = len(current.encode("utf-8"))
-    if full_diff:
-        if on_progress is not None:
-            on_progress(
-                _format_sql_diff_progress(
-                    label=label,
-                    previous_size=previous_size,
-                    current_size=current_size,
-                )
-            )
-        return tuple(format_query_diff(previous, current))
-
     prefix_count: int = _common_prefix_count(
         previous_lines=previous_lines,
         current_lines=current_lines,
@@ -411,7 +530,7 @@ def _safe_sql_diff(
     )
     middle_chars: int = sum(len(line) + 1 for line in (*previous_middle, *current_middle))
     middle_lines: int = len(previous_middle) + len(current_middle)
-    if middle_chars > _MAX_SAFE_SQL_DIFF_CHARS or middle_lines > _MAX_SAFE_SQL_DIFF_LINES:
+    if middle_chars > max_diff_bytes or middle_lines > max_diff_lines:
         return (
             _format_suppressed_sql_diff(
                 previous_size=previous_size,
@@ -420,6 +539,8 @@ def _safe_sql_diff(
                 current_lines=len(current_lines),
                 middle_chars=middle_chars,
                 middle_lines=middle_lines,
+                max_diff_bytes=max_diff_bytes,
+                max_diff_lines=max_diff_lines,
             ),
         )
     if on_progress is not None:
@@ -485,6 +606,8 @@ def _format_suppressed_sql_diff(
     current_lines: int,
     middle_chars: int,
     middle_lines: int,
+    max_diff_bytes: int,
+    max_diff_lines: int,
 ) -> str:
     return (
         "SQL differs "
@@ -492,7 +615,8 @@ def _format_suppressed_sql_diff(
         f"{previous_lines} -> {current_lines} lines); "
         "full diff suppressed because the changed region is too large "
         f"({_format_bytes(middle_chars)}, {middle_lines} lines). "
-        "Use --full-diff to force it."
+        "Raise --max-diff-bytes or --max-diff-lines to show more. "
+        f"Current limits: {_format_bytes(max_diff_bytes)}, {max_diff_lines} lines."
     )
 
 
@@ -512,31 +636,124 @@ def _own_hash(*, unique_id: str, manifest: DbtManifestIndex) -> str | None:
     return model.node_checksum or hashlib.sha256(model.query_sql.encode("utf-8")).hexdigest()
 
 
-def _append_node(
-    *, lines: list[str], node: DbtIdentityDiffNode, style: CliStyle, quiet: bool, indent: str
+def _append_selected_section(
+    *,
+    lines: list[str],
+    result: DbtIdentityDiffResult,
+    style: CliStyle,
+    name_column_width: int,
 ) -> None:
-    stack: list[tuple[DbtIdentityDiffNode, str]] = [(node, indent)]
-    while stack:
-        current_node: DbtIdentityDiffNode
-        current_indent: str
-        current_node, current_indent = stack.pop()
-        verdict: str = _styled_verdict(current_node.verdict, style=style)
-        hashes: str = _hash_detail(node=current_node, style=style)
-        label: str = f"{current_indent}{style.dbt_object_name(current_node.name):<34}"
-        lines.append(f"{label} {verdict} {hashes}".rstrip())
-        if current_node.local_diff is not None:
-            reasons: str = _styled_reasons(current_node.local_diff.reasons, style=style)
-            lines.append(f"{current_indent}  {style.muted('reason:')} {reasons}")
-            if not quiet:
-                _append_local_diff(
-                    lines=lines,
-                    diff=current_node.local_diff,
-                    style=style,
-                    indent=current_indent + "  ",
-                )
-        child: DbtIdentityDiffNode
-        for child in reversed(current_node.children):
-            stack.append((child, current_indent + "  └─ "))
+    lines.append("")
+    lines.append(style.plan_section(f"Selected ({len(result.selected)})"))
+    cause_by_id: dict[str, DbtIdentityCause] = {cause.unique_id: cause for cause in result.causes}
+    selected: DbtIdentitySelectedDiff
+    for selected in result.selected:
+        lines.append(
+            _format_name_value_line(
+                selected.name,
+                _styled_verdict(selected.verdict, style=style),
+                style=style,
+                name_column_width=name_column_width,
+            )
+        )
+        if selected.verdict == DbtIdentityDiffVerdict.WOULD_REUSE:
+            lines.append(f"    {style.muted('identity:')} equal")
+            continue
+        if selected.causes:
+            cause_labels: str = ", ".join(
+                _selected_cause_label(cause_by_id[cause_id], style=style)
+                for cause_id in selected.causes
+                if cause_id in cause_by_id
+            )
+            lines.append(f"    cause: {cause_labels}")
+        else:
+            lines.append(f"    cause: {style.muted('none found')}")
+        lines.append(f"    inherited-only: {len(selected.inherited_only)} node(s)")
+
+
+def _append_causes_section(
+    *,
+    lines: list[str],
+    result: DbtIdentityDiffResult,
+    style: CliStyle,
+    quiet: bool,
+    name_column_width: int,
+) -> None:
+    lines.append("")
+    lines.append(style.plan_section(f"Causes ({len(result.causes)})"))
+    cause: DbtIdentityCause
+    for cause in result.causes:
+        lines.append(
+            _format_name_value_line(
+                cause.name,
+                _styled_reasons(cause.local_diff.reasons, style=style),
+                style=style,
+                name_column_width=name_column_width,
+            )
+        )
+        affects: str = ", ".join(
+            _display_id_name(unique_id) for unique_id in cause.affects_selected
+        )
+        lines.append(f"    affects: {affects}")
+        if not quiet:
+            _append_local_diff(lines=lines, diff=cause.local_diff, style=style, indent="    ")
+
+
+def _append_paths_section(
+    *, lines: list[str], result: DbtIdentityDiffResult, style: CliStyle
+) -> None:
+    lines.append("")
+    lines.append(style.plan_section(f"Cause paths ({len(result.paths)})"))
+    path: DbtIdentityCausePath
+    for path in result.paths:
+        lines.append(f"  {' <- '.join(_display_id_name(unique_id) for unique_id in path.path)}")
+
+
+def _append_inherited_section(
+    *,
+    lines: list[str],
+    result: DbtIdentityDiffResult,
+    style: CliStyle,
+    show_inherited: bool,
+    name_column_width: int,
+) -> None:
+    if not result.inherited_only:
+        return
+    lines.append("")
+    lines.append(style.plan_section(f"Inherited only ({len(result.inherited_only)})"))
+    if not show_inherited:
+        lines.append("  distinct node(s) differ only through upstream identity.")
+        lines.append(f"  {style.muted('Use --show-inherited to list them.')}")
+        return
+    inherited: DbtIdentityInheritedOnly
+    for inherited in result.inherited_only:
+        lines.append(
+            _format_name_value_line(
+                inherited.name,
+                style.muted("upstream only"),
+                style=style,
+                name_column_width=name_column_width,
+            )
+        )
+        affects: str = ", ".join(
+            _display_id_name(unique_id) for unique_id in inherited.affects_selected
+        )
+        lines.append(f"    affects: {affects}")
+
+
+def _format_name_value_line(
+    plain_name: str,
+    value: str,
+    *,
+    style: CliStyle,
+    name_column_width: int,
+) -> str:
+    return format_aligned_name_value(
+        plain_name=plain_name,
+        styled_name=style.dbt_object_name(plain_name),
+        value=value,
+        name_column_width=name_column_width,
+    )
 
 
 def _append_local_diff(
@@ -572,49 +789,55 @@ def _styled_verdict(verdict: DbtIdentityDiffVerdict, *, style: CliStyle) -> str:
 
 def _styled_reasons(reasons: tuple[DbtIdentityDiffReason, ...], *, style: CliStyle) -> str:
     if reasons == (DbtIdentityDiffReason.UPSTREAM_ONLY,):
-        return style.warning("UPSTREAM only") + " " + style.muted("(own content same)")
-    return ", ".join(
-        style.warning_strong(reason.value.upper().replace("_", " ")) for reason in reasons
-    )
+        return style.warning("upstream only") + " " + style.muted("(own content same)")
+    return ", ".join(style.warning(reason.value.replace("_", " ")) for reason in reasons)
 
 
-def _hash_detail(*, node: DbtIdentityDiffNode, style: CliStyle) -> str:
-    if node.current_version_hash is None or node.ref_version_hash is None:
-        return style.muted("(missing identity)")
-    if node.current_version_hash == node.ref_version_hash:
-        return style.muted("(identity equal)")
-    return style.muted("(identity differs)")
+def _selected_cause_label(cause: DbtIdentityCause, *, style: CliStyle) -> str:
+    return f"{style.dbt_object_name(cause.name)} ({_reason_label(cause.local_diff.reasons)})"
 
 
 def _reason_label(reasons: tuple[DbtIdentityDiffReason, ...]) -> str:
     return "+".join(reason.value for reason in reasons)
 
 
-def _node_json(node: DbtIdentityDiffNode) -> dict[str, object]:
-    payload_by_node_id: dict[int, dict[str, object]] = {}
-    stack: list[tuple[DbtIdentityDiffNode, bool]] = [(node, False)]
-    while stack:
-        current_node: DbtIdentityDiffNode
-        expanded: bool
-        current_node, expanded = stack.pop()
-        if not expanded:
-            stack.append((current_node, True))
-            child: DbtIdentityDiffNode
-            for child in reversed(current_node.children):
-                stack.append((child, False))
-            continue
-        payload_by_node_id[id(current_node)] = {
-            "unique_id": current_node.unique_id,
-            "name": current_node.name,
-            "verdict": current_node.verdict.value,
-            "current_version_hash": current_node.current_version_hash,
-            "ref_version_hash": current_node.ref_version_hash,
-            "local_diff": None
-            if current_node.local_diff is None
-            else _local_diff_json(current_node.local_diff),
-            "children": [payload_by_node_id[id(child)] for child in current_node.children],
-        }
-    return payload_by_node_id[id(node)]
+def _selected_json(selected: DbtIdentitySelectedDiff) -> dict[str, object]:
+    return {
+        "unique_id": selected.unique_id,
+        "name": selected.name,
+        "verdict": selected.verdict.value,
+        "current_version_hash": selected.current_version_hash,
+        "ref_version_hash": selected.ref_version_hash,
+        "causes": list(selected.causes),
+        "inherited_only": list(selected.inherited_only),
+    }
+
+
+def _cause_json(cause: DbtIdentityCause) -> dict[str, object]:
+    return {
+        "unique_id": cause.unique_id,
+        "name": cause.name,
+        "current_version_hash": cause.current_version_hash,
+        "ref_version_hash": cause.ref_version_hash,
+        "affects_selected": list(cause.affects_selected),
+        "local_diff": _local_diff_json(cause.local_diff),
+    }
+
+
+def _inherited_json(inherited: DbtIdentityInheritedOnly) -> dict[str, object]:
+    return {
+        "unique_id": inherited.unique_id,
+        "name": inherited.name,
+        "affects_selected": list(inherited.affects_selected),
+    }
+
+
+def _path_json(path: DbtIdentityCausePath) -> dict[str, object]:
+    return {
+        "selected_unique_id": path.selected_unique_id,
+        "cause_unique_id": path.cause_unique_id,
+        "path": list(path.path),
+    }
 
 
 def _local_diff_json(diff: DbtIdentityLocalDiff) -> dict[str, object]:
@@ -629,29 +852,15 @@ def _local_diff_json(diff: DbtIdentityLocalDiff) -> dict[str, object]:
     }
 
 
-def _max_node_depth(*, nodes: tuple[DbtIdentityDiffNode, ...]) -> int:
-    max_depth: int = 0
-    stack: list[tuple[DbtIdentityDiffNode, int]] = [(node, 1) for node in nodes]
-    while stack:
-        node: DbtIdentityDiffNode
-        depth: int
-        node, depth = stack.pop()
-        max_depth = max(max_depth, depth)
-        child: DbtIdentityDiffNode
-        for child in node.children:
-            stack.append((child, depth + 1))
-    return max_depth
+def _result_name_column_width(*, result: DbtIdentityDiffResult) -> int:
+    names: list[str] = [selected.name for selected in result.selected]
+    names.extend(cause.name for cause in result.causes)
+    names.extend(inherited.name for inherited in result.inherited_only)
+    return resolve_name_column_width(tuple(names), min_width=28)
 
 
-def _collect_causes(*, node: DbtIdentityDiffNode, causes: dict[str, DbtIdentityDiffNode]) -> None:
-    stack: list[DbtIdentityDiffNode] = [node]
-    while stack:
-        current_node: DbtIdentityDiffNode = stack.pop()
-        if current_node.verdict == DbtIdentityDiffVerdict.CAUSE:
-            causes.setdefault(current_node.unique_id, current_node)
-        child: DbtIdentityDiffNode
-        for child in reversed(current_node.children):
-            stack.append(child)
+def _display_id_name(unique_id: str) -> str:
+    return unique_id.rsplit(".", maxsplit=1)[-1]
 
 
 def _display_name(*, unique_id: str, manifest: DbtManifestIndex) -> str:

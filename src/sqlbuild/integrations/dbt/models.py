@@ -73,9 +73,11 @@ class DbtIdentityDiffArgs:
     exclude: tuple[str, ...]
     against: str | None
     quiet: bool
-    depth: int | None
     json_output: bool
-    full_diff: bool
+    show_inherited: bool
+    show_paths: bool
+    max_diff_lines: int
+    max_diff_bytes: int
 
 
 @dataclass(frozen=True)
@@ -210,20 +212,46 @@ class DbtIdentityLocalDiff:
 
 
 @dataclass(frozen=True)
-class DbtIdentityDiffNode:
+class DbtIdentitySelectedDiff:
     unique_id: str
     name: str
     verdict: DbtIdentityDiffVerdict
     current_version_hash: str | None
     ref_version_hash: str | None
-    local_diff: DbtIdentityLocalDiff | None = None
-    children: tuple[DbtIdentityDiffNode, ...] = field(default_factory=tuple)
+    causes: tuple[str, ...] = field(default_factory=tuple)
+    inherited_only: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtIdentityCause:
+    unique_id: str
+    name: str
+    current_version_hash: str | None
+    ref_version_hash: str | None
+    local_diff: DbtIdentityLocalDiff
+    affects_selected: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtIdentityInheritedOnly:
+    unique_id: str
+    name: str
+    affects_selected: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtIdentityCausePath:
+    selected_unique_id: str
+    cause_unique_id: str
+    path: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class DbtIdentityDiffResult:
-    selected: tuple[DbtIdentityDiffNode, ...]
-    causes: tuple[DbtIdentityDiffNode, ...]
+    selected: tuple[DbtIdentitySelectedDiff, ...]
+    causes: tuple[DbtIdentityCause, ...]
+    inherited_only: tuple[DbtIdentityInheritedOnly, ...]
+    paths: tuple[DbtIdentityCausePath, ...]
     against: str
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
