@@ -1856,6 +1856,49 @@ class FakeReusePlanAdapter(BaseAdapter):
         )
 
 
+class CountingModelPlanningAdapter(DuckDbAdapter):
+    """DuckDB adapter that records relation existence planning calls."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.list_relation_calls: list[
+            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
+        ] = []
+        self.relation_exists_calls: list[tuple[str | None, str | None, str]] = []
+
+    def list_relations(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        self.list_relation_calls.append((database, schemas, names))
+        return super().list_relations(
+            connection,
+            database=database,
+            schemas=schemas,
+            names=names,
+        )
+
+    def relation_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        self.relation_exists_calls.append((database, schema, name))
+        return super().relation_exists(
+            connection,
+            database=database,
+            schema=schema,
+            name=name,
+        )
+
+
 def _lineage_column_id(column: QualifiedLineageColumn) -> str:
     resource_name: str = column.resource_name
     column_name: str = column.column_name
