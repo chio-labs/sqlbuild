@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.40.1](https://github.com/chio-labs/sqlbuild/compare/v0.40.0...v0.40.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** batch model relation planning checks ([ffa4b90](https://github.com/chio-labs/sqlbuild/commit/ffa4b906f94660566b1c54b033031f8dab231c6a))
+* **dbt:** batch model relation planning checks ([3d88523](https://github.com/chio-labs/sqlbuild/commit/3d885238efe7f0e71ae5bc60b94a812f823b5f7e))
+
 ## [0.40.0](https://github.com/chio-labs/sqlbuild/compare/v0.39.3...v0.40.0) (2026-06-24)
 
 
