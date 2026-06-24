@@ -53,6 +53,8 @@ class LoadProjectConfigTestCase:
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_dbt_reuse_from_git_ref: str | None = None
     expected_dbt_reuse_from_generate_schema_name_override: str | None = None
+    expected_dbt_reuse_from_refresh: bool = True
+    expected_dbt_reuse_from_git_timeout_seconds: int = 30
     expected_auto_load_sources: bool = True
     expected_virtual_environments: bool = False
     expected_force: bool = False
