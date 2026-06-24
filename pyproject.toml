@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sqlbuild"
-version = "0.38.5"
+version = "0.38.6"
 description = "Typed, test-first SQL pipelines with local E2E testing"
 readme = "README.md"
 requires-python = ">=3.12"
