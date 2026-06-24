@@ -308,6 +308,14 @@ class DbtIdentityDiffTestCase:
 
 
 @dataclass(frozen=True)
+class DbtIdentityDiffProgressTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_progress_fragments: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtDefinitionFingerprintTestCase:
     description: str
     current_raw_code: str
