@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.2](https://github.com/chio-labs/sqlbuild/compare/v0.39.1...v0.39.2) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** render identity diff as set output ([da80307](https://github.com/chio-labs/sqlbuild/commit/da803079186cf3298a78ebd966b33b35b892f376))
+* **dbt:** render identity diff as set output ([227d905](https://github.com/chio-labs/sqlbuild/commit/227d90584868d456696924c7a68b72e82a86d2fe))
+
 ## [0.39.1](https://github.com/chio-labs/sqlbuild/compare/v0.39.0...v0.39.1) (2026-06-24)
 
 
