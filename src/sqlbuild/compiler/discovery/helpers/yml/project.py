@@ -722,7 +722,9 @@ def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromCon
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"git_ref", "generate_schema_name_override"}),
+        allowed_keys=frozenset(
+            {"git_ref", "generate_schema_name_override", "refresh", "git_timeout_seconds"}
+        ),
         label="dbt.reuse_from",
         file_path=file_path,
     )
@@ -739,9 +741,18 @@ def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromCon
         value=generate_schema_name_override,
         file_path=file_path,
     )
+    git_timeout_seconds: int = _optional_int(
+        mapping=mapping,
+        key="git_timeout_seconds",
+        default=30,
+    )
+    if git_timeout_seconds <= 0:
+        raise ProjectConfigError(f"{file_path} dbt.reuse_from.git_timeout_seconds must be > 0")
     return DbtReuseFromConfig(
         git_ref=git_ref,
         generate_schema_name_override=generate_schema_name_override,
+        refresh=_optional_bool(mapping=mapping, key="refresh", default=True),
+        git_timeout_seconds=git_timeout_seconds,
     )
 
 

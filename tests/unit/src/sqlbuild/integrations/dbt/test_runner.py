@@ -8,6 +8,7 @@ from sqlbuild.integrations.dbt.helpers.cli.runner import (
     DbtRunner,
     build_dbt_compile_argv,
     build_dbt_debug_argv,
+    build_dbt_deps_argv,
     build_dbt_ls_argv,
     parse_dbt_ls_json_lines,
 )
@@ -115,6 +116,40 @@ def test_given_dbt_options_when_building_compile_argv_then_returns_expected_comm
     options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
 
     result: tuple[str, ...] = build_dbt_compile_argv(dbt_executable="dbt", options=options)
+
+    assert result == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtArgvTestCase(
+            description="builds deps argv with project profile target and vars only",
+            select=(),
+            exclude=(),
+            resource_types=(),
+            expected_argv=(
+                "dbt",
+                "deps",
+                "--project-dir",
+                "/repo/dbt",
+                "--profiles-dir",
+                "/repo/profiles",
+                "--target",
+                "prod",
+                "--vars",
+                '{"run_date":"2026-01-01"}',
+            ),
+        )
+    ],
+    ids=["builds deps argv with project profile target and vars only"],
+)
+def test_given_dbt_options_when_building_deps_argv_then_returns_expected_command(
+    test_case: DbtArgvTestCase,
+) -> None:
+    options: DbtCliOptions = build_dbt_cli_options(PROJECT_ROOT)
+
+    result: tuple[str, ...] = build_dbt_deps_argv(dbt_executable="dbt", options=options)
 
     assert result == test_case.expected_argv
 
