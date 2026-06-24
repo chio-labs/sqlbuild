@@ -90,6 +90,29 @@ class DbtRunnerCommandTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseGitTimeoutTestCase:
+    description: str
+    timeout_seconds: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtReuseGitRefreshTestCase:
+    description: str
+    git_ref: str
+    refresh: bool
+    expected_archive_ref: str
+    expected_run_calls: int
+
+
+@dataclass(frozen=True)
+class DbtReuseCompileDepsTestCase:
+    description: str
+    expected_commands: tuple[str, ...]
+    expected_manifest_contents: str
+
+
+@dataclass(frozen=True)
 class DbtModeGuardTestCase:
     description: str
     virtual_environments: bool

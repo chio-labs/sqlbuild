@@ -30,6 +30,21 @@ def build_dbt_compile_argv(
     return argv
 
 
+def build_dbt_deps_argv(*, dbt_executable: str, options: DbtCliOptions) -> tuple[str, ...]:
+    """Build argv for dbt deps."""
+
+    argv: tuple[str, ...] = (dbt_executable, "deps")
+    if options.project_dir is not None:
+        argv = (*argv, "--project-dir", str(options.project_dir))
+    if options.profiles_dir is not None:
+        argv = (*argv, "--profiles-dir", str(options.profiles_dir))
+    if options.target is not None:
+        argv = (*argv, "--target", options.target)
+    if options.vars is not None:
+        argv = (*argv, "--vars", options.vars)
+    return argv
+
+
 def build_dbt_debug_argv(
     *, dbt_executable: str, options: DbtCliOptions, args: Sequence[str] = ()
 ) -> tuple[str, ...]:
@@ -120,6 +135,15 @@ class DbtRunner:
 
         argv: tuple[str, ...] = build_dbt_compile_argv(
             dbt_executable=self.dbt_executable, options=options, full_refresh=full_refresh
+        )
+        return self._invoke(argv=argv, cwd=options.project_dir)
+
+    def deps(self, *, options: DbtCliOptions) -> DbtCommandResult:
+        """Run dbt deps."""
+
+        argv: tuple[str, ...] = build_dbt_deps_argv(
+            dbt_executable=self.dbt_executable,
+            options=options,
         )
         return self._invoke(argv=argv, cwd=options.project_dir)
 

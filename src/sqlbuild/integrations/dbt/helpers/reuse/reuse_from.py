@@ -60,14 +60,22 @@ def compile_reuse_from_manifest(
         archive_ref: str = _refresh_git_ref_for_archive(
             git_root=git_root,
             git_ref=reuse_from.git_ref,
+            refresh=reuse_from.refresh,
+            timeout_seconds=reuse_from.git_timeout_seconds,
         )
         _raise_if_missing_git_ref(
             git_root=git_root,
             git_ref=archive_ref,
             configured_ref=reuse_from.git_ref,
             project_file=sqlbuild_project_dir / "sqlbuild_project.toml",
+            timeout_seconds=reuse_from.git_timeout_seconds,
         )
-        _extract_git_ref(git_root=git_root, git_ref=archive_ref, destination=checkout_dir)
+        _extract_git_ref(
+            git_root=git_root,
+            git_ref=archive_ref,
+            destination=checkout_dir,
+            timeout_seconds=reuse_from.git_timeout_seconds,
+        )
 
         temp_dbt_project_dir: Path = checkout_dir / dbt_relative_dir
         _inject_generate_schema_name_override(
@@ -86,6 +94,13 @@ def compile_reuse_from_manifest(
             state=dbt_options.state,
             defer=dbt_options.defer,
         )
+        if _has_dbt_dependency_file(dbt_project_dir=temp_dbt_project_dir):
+            deps_command: DbtCommandResult = runner.deps(options=compile_options)
+            if deps_command.returncode != 0:
+                raise DbtInteropRuntimeError(
+                    "dbt reuse_from deps failed",
+                    help=deps_command.stderr or deps_command.stdout or None,
+                )
         command: DbtCommandResult = runner.compile(options=compile_options)
         if command.returncode != 0:
             raise DbtInteropRuntimeError(
@@ -118,6 +133,12 @@ def _git_root(*, path: Path) -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
+def _has_dbt_dependency_file(*, dbt_project_dir: Path) -> bool:
+    return (dbt_project_dir / "packages.yml").is_file() or (
+        dbt_project_dir / "dependencies.yml"
+    ).is_file()
+
+
 def _relative_to_git_root(*, path: Path, git_root: Path, label: str) -> Path:
     resolved_path: Path = path.resolve()
     try:
@@ -148,7 +169,11 @@ def _raise_if_current_branch(*, git_root: Path, git_ref: str) -> None:
         )
 
 
-def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
+def _refresh_git_ref_for_archive(
+    *, git_root: Path, git_ref: str, refresh: bool, timeout_seconds: int
+) -> str:
+    if not refresh:
+        return git_ref
     tracking_ref: tuple[str, str, str] | None = _remote_tracking_ref(
         git_root=git_root,
         git_ref=git_ref,
@@ -158,7 +183,12 @@ def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
     remote, branch, remote_ref = tracking_ref
 
     result: subprocess.CompletedProcess[str] = _run_git_text(
-        "-C", str(git_root), "fetch", remote, branch
+        "-C",
+        str(git_root),
+        "fetch",
+        remote,
+        branch,
+        timeout_seconds=timeout_seconds,
     )
     if result.returncode != 0:
         raise DbtReuseUnavailableError(
@@ -170,10 +200,21 @@ def _refresh_git_ref_for_archive(*, git_root: Path, git_ref: str) -> str:
 
 
 def _raise_if_missing_git_ref(
-    *, git_root: Path, git_ref: str, configured_ref: str, project_file: Path
+    *,
+    git_root: Path,
+    git_ref: str,
+    configured_ref: str,
+    project_file: Path,
+    timeout_seconds: int,
 ) -> None:
     result: subprocess.CompletedProcess[str] = _run_git_text(
-        "-C", str(git_root), "rev-parse", "--verify", "--quiet", f"{git_ref}^{{commit}}"
+        "-C",
+        str(git_root),
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"{git_ref}^{{commit}}",
+        timeout_seconds=timeout_seconds,
     )
     if result.returncode == 0:
         return
@@ -232,9 +273,11 @@ def _remote_tracking_ref(*, git_root: Path, git_ref: str) -> tuple[str, str, str
     return remote, branch, f"refs/remotes/{remote}/{branch}"
 
 
-def _extract_git_ref(*, git_root: Path, git_ref: str, destination: Path) -> None:
+def _extract_git_ref(
+    *, git_root: Path, git_ref: str, destination: Path, timeout_seconds: int
+) -> None:
     result: subprocess.CompletedProcess[bytes] = _run_git_bytes(
-        "-C", str(git_root), "archive", git_ref
+        "-C", str(git_root), "archive", git_ref, timeout_seconds=timeout_seconds
     )
     if result.returncode != 0:
         stderr: str = result.stderr.decode(errors="replace")
@@ -247,14 +290,24 @@ def _extract_git_ref(*, git_root: Path, git_ref: str, destination: Path) -> None
         archive.extractall(path=destination, filter="data")
 
 
-def _run_git_text(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_git_text(*args: str, timeout_seconds: int = 30) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             ("git", *args),
             capture_output=True,
             check=False,
             text=True,
+            timeout=timeout_seconds,
         )
+    except subprocess.TimeoutExpired as error:
+        raise DbtReuseUnavailableError(
+            f"dbt reuse_from git command timed out after {timeout_seconds}s",
+            reason=DbtReuseUnavailableReason.REMOTE_REFRESH_FAILED,
+            help=(
+                "Check network/SSH access or set [dbt.reuse_from].refresh = false "
+                "to use the local ref."
+            ),
+        ) from error
     except FileNotFoundError as error:
         raise DbtInteropConfigError(
             "dbt reuse_from requires git to be installed and available on PATH",
@@ -262,13 +315,23 @@ def _run_git_text(*args: str) -> subprocess.CompletedProcess[str]:
         ) from error
 
 
-def _run_git_bytes(*args: str) -> subprocess.CompletedProcess[bytes]:
+def _run_git_bytes(*args: str, timeout_seconds: int = 30) -> subprocess.CompletedProcess[bytes]:
     try:
         return subprocess.run(
             ("git", *args),
             capture_output=True,
             check=False,
+            timeout=timeout_seconds,
         )
+    except subprocess.TimeoutExpired as error:
+        raise DbtReuseUnavailableError(
+            f"dbt reuse_from git command timed out after {timeout_seconds}s",
+            reason=DbtReuseUnavailableReason.REMOTE_REFRESH_FAILED,
+            help=(
+                "Check network/SSH access or set [dbt.reuse_from].refresh = false "
+                "to use the local ref."
+            ),
+        ) from error
     except FileNotFoundError as error:
         raise DbtInteropConfigError(
             "dbt reuse_from requires git to be installed and available on PATH",
