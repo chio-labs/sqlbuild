@@ -78,6 +78,7 @@ class DbtIdentityDiffArgs:
     show_paths: bool
     max_diff_lines: int
     max_diff_bytes: int
+    strict_reuse: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -254,6 +255,7 @@ class DbtIdentityDiffResult:
     paths: tuple[DbtIdentityCausePath, ...]
     against: str
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    strict: bool = False
 
 
 @dataclass(frozen=True)
@@ -402,6 +404,8 @@ class DbtReusePlanEntry:
     dbt_plan_reason: DbtModelPlanReason | None = None
     skip_reason: DbtReuseCandidateSkipReason | None = None
     cursor_column: str | None = None
+    trusted_input: bool = False
+    current_project_affected: bool = False
 
 
 @dataclass(frozen=True)

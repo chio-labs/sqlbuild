@@ -40,6 +40,7 @@ def build_dbt_identity_diff_result(
     selected_unique_ids: Sequence[str],
     against: str,
     show_paths: bool = False,
+    strict: bool = False,
     max_diff_lines: int = 2_000,
     max_diff_bytes: int = 200_000,
     on_progress: Callable[[str], None] | None = None,
@@ -68,6 +69,43 @@ def build_dbt_identity_diff_result(
             on_progress(f"Diffing dbt identity for {unique_id} ({index}/{selected_total})...")
         current_hash: str | None = current_hashes.get(unique_id)
         ref_hash: str | None = ref_hashes.get(unique_id)
+        if not strict:
+            local_diff: DbtIdentityLocalDiff | None = _cached_local_diff(
+                unique_id=unique_id,
+                current_manifest=current_manifest,
+                ref_manifest=ref_manifest,
+                current_graph=current_graph,
+                ref_graph=ref_graph,
+                cache=local_diff_cache,
+                max_diff_lines=max_diff_lines,
+                max_diff_bytes=max_diff_bytes,
+                on_progress=on_progress,
+            )
+            if local_diff is None:
+                selected_nodes.append(
+                    DbtIdentitySelectedDiff(
+                        unique_id=unique_id,
+                        name=_display_name(unique_id=unique_id, manifest=current_manifest),
+                        verdict=DbtIdentityDiffVerdict.WOULD_REUSE,
+                        current_version_hash=current_hash,
+                        ref_version_hash=ref_hash,
+                    )
+                )
+                selected_closures[unique_id] = frozenset()
+                continue
+            selected_nodes.append(
+                DbtIdentitySelectedDiff(
+                    unique_id=unique_id,
+                    name=_display_name(unique_id=unique_id, manifest=current_manifest),
+                    verdict=DbtIdentityDiffVerdict.REBUILD,
+                    current_version_hash=current_hash,
+                    ref_version_hash=ref_hash,
+                    causes=(unique_id,),
+                )
+            )
+            selected_closures[unique_id] = frozenset({unique_id})
+            cause_to_selected.setdefault(unique_id, set()).add(unique_id)
+            continue
         if current_hash == ref_hash and current_hash is not None:
             selected_nodes.append(
                 DbtIdentitySelectedDiff(
@@ -172,6 +210,7 @@ def build_dbt_identity_diff_result(
         paths=paths,
         against=against,
         warnings=(*current_manifest.seed_identity_warnings, *ref_manifest.seed_identity_warnings),
+        strict=strict,
     )
 
 
@@ -186,8 +225,10 @@ def render_dbt_identity_diff_result(
     """Render a human-readable identity diff."""
 
     style: CliStyle = CliStyle(use_color=use_color)
+    mode_label: str = "strict reuse" if result.strict else "default reuse"
     lines: list[str] = [
-        style.dbt_section("dbt identity diff") + f"  {style.muted('vs ' + result.against)}"
+        style.dbt_section("dbt identity diff")
+        + f"  {style.muted('vs ' + result.against + ' (' + mode_label + ')')}"
     ]
     name_column_width: int = _result_name_column_width(result=result)
     _append_selected_section(
@@ -230,6 +271,7 @@ def format_dbt_identity_diff_json(result: DbtIdentityDiffResult) -> str:
 
     payload: dict[str, object] = {
         "against": result.against,
+        "strict": result.strict,
         "selected": [_selected_json(selected) for selected in result.selected],
         "causes": [_cause_json(cause) for cause in result.causes],
         "inherited_only": [_inherited_json(inherited) for inherited in result.inherited_only],
@@ -647,7 +689,10 @@ def _append_selected_section(
             )
         )
         if selected.verdict == DbtIdentityDiffVerdict.WOULD_REUSE:
-            lines.append(f"    {style.muted('identity:')} equal")
+            if selected.current_version_hash == selected.ref_version_hash:
+                lines.append(f"    {style.muted('identity:')} equal")
+            else:
+                lines.append(f"    {style.muted('active reuse:')} no direct identity change")
             continue
         if selected.causes:
             cause_labels: str = ", ".join(

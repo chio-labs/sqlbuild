@@ -31,7 +31,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
+    build_dependency_baseline_entry,
     build_discovered_provider_usage,
+    build_existing_destination_input_entry,
     build_function_entry,
     build_model_entry,
     build_plan_output,
@@ -44,6 +46,49 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
 )
 
 TEST_CASES: list[FormatPlanTestCase] = [
+    FormatPlanTestCase(
+        description="direct reuse inputs use destination and reuse origin terminology",
+        plan_output=build_plan_output(
+            dependency_baseline_entries=(
+                build_dependency_baseline_entry(name="stg_orders"),
+                build_dependency_baseline_entry(
+                    name="stg_payments",
+                    trusted_input=True,
+                    current_project_affected=True,
+                ),
+            )
+        ),
+        expected_fragments=(
+            "Reused inputs (1)",
+            "stg_orders",
+            "cheap clone from reuse origin target",
+            "Trusted inputs (1)",
+            "stg_payments",
+            "trusted despite current-project change",
+        ),
+        unexpected_fragments=("Dependency baseline", "baseline reuse"),
+    ),
+    FormatPlanTestCase(
+        description="existing destination inputs show current and stale statuses",
+        plan_output=build_plan_output(
+            existing_destination_input_entries=(
+                build_existing_destination_input_entry(name="stg_orders"),
+                build_existing_destination_input_entry(
+                    name="stg_payments",
+                    status="stale",
+                    current_project_affected=True,
+                ),
+            )
+        ),
+        expected_fragments=(
+            "Existing destination inputs (2)",
+            "stg_orders",
+            "current in destination target",
+            "stg_payments",
+            "stale in destination target, affected by current-project change",
+        ),
+        unexpected_fragments=("may be stale",),
+    ),
     FormatPlanTestCase(
         description="changes-only pruned models are visible as current skips",
         plan_output=build_plan_output(
@@ -165,9 +210,9 @@ TEST_CASES: list[FormatPlanTestCase] = [
         ),
         expected_fragments=(
             "orders",
-            "table (hard-copy reuse from prod)",
+            "table (hard-copy reuse from reuse origin target prod)",
             "customer_snapshot",
-            "snapshot (timestamp) (cheap baseline reuse from prod)",
+            "snapshot (timestamp) (cheap seeded reuse from reuse origin target prod)",
         ),
         unexpected_fragments=("expected_hash", "version_hash"),
     ),

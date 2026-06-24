@@ -155,7 +155,9 @@ def build_dbt_native_dependency_baseline_entries(
                     destination_target_name=destination_target_name,
                 ),
                 fingerprint_version_hash=None,
-                resource_label=entry.materialization or "dbt",
+                resource_label=_dbt_resource_label(entry=entry),
+                trusted_input=entry.trusted_input,
+                current_project_affected=entry.current_project_affected,
             )
         )
     return tuple(entries)
@@ -168,6 +170,10 @@ def _relation_parts(*, relation_name: str) -> tuple[str | None, str | None, str]
     if len(parts) == 2:
         return None, parts[0], parts[1]
     return None, None, parts[0]
+
+
+def _dbt_resource_label(*, entry: DbtReusePlanEntry) -> str:
+    return entry.materialization or "dbt"
 
 
 def _unquote_relation_part(*, part: str) -> str:
