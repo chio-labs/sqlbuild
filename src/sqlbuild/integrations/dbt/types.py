@@ -54,7 +54,6 @@ class DbtIdentityDiffReason(StrEnum):
     CONFIG = "config"
     SCHEMA = "schema"
     UPSTREAM_SET = "upstream_set"
-    COMPILED_ONLY = "compiled_only"
     MISSING_IN_REF = "missing_in_ref"
     MISSING_IN_CURRENT = "missing_in_current"
     UPSTREAM_ONLY = "upstream_only"

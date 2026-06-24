@@ -276,16 +276,6 @@ def _local_diff(
             max_diff_bytes=max_diff_bytes,
             on_progress=on_progress,
         )
-    elif _compiled_sql(ref_model) != _compiled_sql(current_model):
-        reasons.append(DbtIdentityDiffReason.COMPILED_ONLY)
-        sql_diff = _safe_sql_diff(
-            previous=_compiled_sql(ref_model),
-            current=_compiled_sql(current_model),
-            label=_display_name(unique_id=unique_id, manifest=current_manifest),
-            max_diff_lines=max_diff_lines,
-            max_diff_bytes=max_diff_bytes,
-            on_progress=on_progress,
-        )
     config_diff: tuple[str, ...] = _mapping_diff(
         previous=_identity_config(ref_model),
         current=_identity_config(current_model),
@@ -877,14 +867,6 @@ def _authored_sql(model: DbtManifestModel) -> str:
     return (
         _payload_str(model.payload, "raw_code")
         or _payload_str(model.payload, "raw_sql")
-        or model.query_sql
-    )
-
-
-def _compiled_sql(model: DbtManifestModel) -> str:
-    return (
-        _payload_str(model.payload, "compiled_code")
-        or _payload_str(model.payload, "compiled_sql")
         or model.query_sql
     )
 
