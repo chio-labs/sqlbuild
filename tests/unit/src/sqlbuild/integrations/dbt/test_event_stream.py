@@ -326,6 +326,20 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
         expected_unique_ids=("model.analytics.bias__stg_hkjc",),
         expected_output_fragments=("Running dbt model bias__stg_hkjc...",),
     ),
+    DbtEventStreamTestCase(
+        description="renders log start line progress before final result",
+        stdout_lines=(
+            '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
+            '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
+            '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n',
+            '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
+            '"node_info":{"node_name":"bias__stg_hkjc","resource_type":"model",'
+            '"node_status":"success","unique_id":"model.analytics.bias__stg_hkjc"}},'
+            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+        ),
+        expected_unique_ids=("model.analytics.bias__stg_hkjc",),
+        expected_output_fragments=("Running dbt model bias__stg_hkjc...",),
+    ),
 ]
 
 
