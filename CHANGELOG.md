@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.3](https://github.com/chio-labs/sqlbuild/compare/v0.38.2...v0.38.3) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** bound reuse git refresh ([bd40a8c](https://github.com/chio-labs/sqlbuild/commit/bd40a8c6abef5c08e6940391ba146ffc5543d490))
+* **dbt:** bound reuse git refresh ([0bbf200](https://github.com/chio-labs/sqlbuild/commit/0bbf2006c70f6248f05f43d2a62d3d3832838539))
+
 ## [0.38.2](https://github.com/chio-labs/sqlbuild/compare/v0.38.1...v0.38.2) (2026-06-23)
 
 
