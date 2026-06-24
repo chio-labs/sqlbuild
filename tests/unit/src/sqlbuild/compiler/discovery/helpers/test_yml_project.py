@@ -318,6 +318,8 @@ adapter = "duckdb"
 [dbt.reuse_from]
 git_ref = "prod"
 generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+refresh = false
+git_timeout_seconds = 12
 """.strip(),
         expected_error_fragment="generate_schema_name_override file not found",
     ),
@@ -844,6 +846,8 @@ enabled = true
 [dbt.reuse_from]
 git_ref = "prod"
 generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+refresh = false
+git_timeout_seconds = 12
 """.strip(),
         expected_name="demo",
         expected_adapter="duckdb",
@@ -913,6 +917,8 @@ generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
         expected_dbt_reuse_from_generate_schema_name_override=(
             "dbt/macros/prod_generate_schema_name.sql"
         ),
+        expected_dbt_reuse_from_refresh=False,
+        expected_dbt_reuse_from_git_timeout_seconds=12,
     ),
 ]
 
@@ -994,6 +1000,11 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert (
         config.dbt.reuse_from.generate_schema_name_override
         == test_case.expected_dbt_reuse_from_generate_schema_name_override
+    )
+    assert config.dbt.reuse_from.refresh is test_case.expected_dbt_reuse_from_refresh
+    assert (
+        config.dbt.reuse_from.git_timeout_seconds
+        == test_case.expected_dbt_reuse_from_git_timeout_seconds
     )
 
 

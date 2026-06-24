@@ -162,6 +162,8 @@ class DbtReuseFromConfig:
 
     git_ref: str | None = None
     generate_schema_name_override: str | None = None
+    refresh: bool = True
+    git_timeout_seconds: int = 30
 
 
 @dataclass(frozen=True)

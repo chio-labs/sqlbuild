@@ -177,6 +177,10 @@ def plan_dbt_interop_from_project(
         dbt_executable=dbt_executable,
         sqlbuild_executable=sqlbuild_executable,
     )
+    _report_progress(
+        on_progress,
+        f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
+    )
     dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
