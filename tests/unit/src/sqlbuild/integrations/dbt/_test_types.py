@@ -304,6 +304,7 @@ class DbtIdentityDiffTestCase:
     selected_unique_ids: tuple[str, ...]
     expected_output_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
