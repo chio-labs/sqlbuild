@@ -238,6 +238,17 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
+class DbtNodeStart:
+    """dbt node start event parsed from JSON logs."""
+
+    unique_id: str
+    resource_type: str
+    node_name: str
+    index: int | None = None
+    total: int | None = None
+
+
+@dataclass(frozen=True)
 class DbtReuseFromCompileResult:
     """Manifest produced by compiling a dbt project at a reuse git ref."""
 
