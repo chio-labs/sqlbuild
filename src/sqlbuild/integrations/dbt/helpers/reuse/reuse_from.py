@@ -98,6 +98,7 @@ def compile_reuse_from_manifest(
                     argv=("sqlbuild", "cache", "dbt-reuse-manifest"),
                     returncode=0,
                 ),
+                cache_hit=True,
             )
         _extract_git_ref(
             git_root=git_root,

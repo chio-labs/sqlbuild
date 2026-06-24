@@ -71,6 +71,16 @@ REUSE_PLAN_OUTPUT_TEST_CASES: tuple[DbtReusePlanOutputTestCase, ...] = (
         expected_complete_reuse_unique_ids=("model.analytics.orders",),
         expected_seeded_reuse_unique_ids=("model.analytics.events",),
     ),
+    DbtReusePlanOutputTestCase(
+        description="reports cached reuse manifest",
+        configure_reuse_from=True,
+        include_model_plan=True,
+        expected_is_none=False,
+        expected_complete_reuse_unique_ids=("model.analytics.orders",),
+        expected_seeded_reuse_unique_ids=("model.analytics.events",),
+        cache_hit=True,
+        expected_progress_fragments=("Loaded cached dbt reuse manifest.",),
+    ),
 )
 
 REUSE_ORIGIN_RELATION_TEST_CASES: tuple[DbtReuseOriginRelationTestCase, ...] = (
@@ -164,6 +174,7 @@ def test_given_reuse_from_pipeline_inputs_when_building_reuse_plan_then_returns_
                 build_manifest_data(nodes=build_reuse_plan_reuse_manifest_nodes())
             ),
             command=DbtCommandResult(argv=("dbt", "compile"), returncode=0),
+            cache_hit=test_case.cache_hit,
         )
 
     monkeypatch.setattr(
@@ -171,6 +182,8 @@ def test_given_reuse_from_pipeline_inputs_when_building_reuse_plan_then_returns_
         "compile_reuse_from_manifest",
         fake_compile_reuse_from_manifest,
     )
+
+    progress_messages: list[str] = []
 
     result: DbtReusePlanningResult | None = build_dbt_reuse_plan_output(
         project_dir=tmp_path,
@@ -213,6 +226,7 @@ def test_given_reuse_from_pipeline_inputs_when_building_reuse_plan_then_returns_
         plan=plan,
         dbt_options=DbtCliOptions(project_dir=tmp_path / "dbt"),
         runner=DbtRunner(),
+        on_progress=progress_messages.append,
     )
 
     assert_reuse_plan_output_matches(
@@ -221,6 +235,8 @@ def test_given_reuse_from_pipeline_inputs_when_building_reuse_plan_then_returns_
         expected_complete_reuse_unique_ids=test_case.expected_complete_reuse_unique_ids,
         expected_seeded_reuse_unique_ids=test_case.expected_seeded_reuse_unique_ids,
     )
+    for fragment in test_case.expected_progress_fragments:
+        assert fragment in progress_messages
 
 
 @pytest.mark.parametrize(

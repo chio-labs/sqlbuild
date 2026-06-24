@@ -232,7 +232,10 @@ def build_dbt_model_plan_output(
         on_connection_complete(1, time.monotonic() - start)
     try:
         planning_start: float = time.monotonic()
-        _report_progress(on_progress, "Inspecting dbt model state...")
+        _report_progress(
+            on_progress,
+            "Inspecting dbt model state: checking warehouse relations and fingerprints...",
+        )
         result: DbtModelPlanningResult = build_dbt_model_planning_result(
             manifest=manifest,
             candidate_unique_ids=candidate_unique_ids,
