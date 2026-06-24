@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.40.0](https://github.com/chio-labs/sqlbuild/compare/v0.39.3...v0.40.0) (2026-06-24)
+
+
+### Features
+
+* align reuse policy across native and dbt ([6ef4b8d](https://github.com/chio-labs/sqlbuild/commit/6ef4b8dd08ddc241cde1aaaaa455ff22c977e655))
+* align reuse policy across native and dbt ([d50f9f8](https://github.com/chio-labs/sqlbuild/commit/d50f9f868b7102ff15144b7d896197348f81eb56))
+
 ## [0.39.3](https://github.com/chio-labs/sqlbuild/compare/v0.39.2...v0.39.3) (2026-06-24)
 
 
