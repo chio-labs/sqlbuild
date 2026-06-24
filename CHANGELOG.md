@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.5](https://github.com/chio-labs/sqlbuild/compare/v0.38.4...v0.38.5) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** improve state and execution progress ([24f1e90](https://github.com/chio-labs/sqlbuild/commit/24f1e90743d2b88faf5d20e2f4ca3d766941f3da))
+* **dbt:** improve state and execution progress ([f7a9227](https://github.com/chio-labs/sqlbuild/commit/f7a92279a89fdba31e2ccb5ace57a78b76012068))
+
 ## [0.38.4](https://github.com/chio-labs/sqlbuild/compare/v0.38.3...v0.38.4) (2026-06-24)
 
 
