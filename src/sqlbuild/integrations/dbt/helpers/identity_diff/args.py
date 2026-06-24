@@ -15,8 +15,10 @@ def parse_dbt_identity_diff_args(*, args: tuple[str, ...]) -> DbtIdentityDiffArg
     parser.add_argument("--exclude", action="append", default=[])
     parser.add_argument("--against", default=None)
     parser.add_argument("--quiet", action="store_true", default=False)
-    parser.add_argument("--depth", type=int, default=None)
-    parser.add_argument("--full-diff", action="store_true", default=False)
+    parser.add_argument("--show-inherited", action="store_true", default=False)
+    parser.add_argument("--paths", dest="show_paths", action="store_true", default=False)
+    parser.add_argument("--max-diff-lines", type=int, default=2000)
+    parser.add_argument("--max-diff-bytes", type=int, default=200_000)
     parser.add_argument("--json", dest="json_output", action="store_true", default=False)
     parsed: argparse.Namespace = parser.parse_args(args)
     return DbtIdentityDiffArgs(
@@ -24,7 +26,9 @@ def parse_dbt_identity_diff_args(*, args: tuple[str, ...]) -> DbtIdentityDiffArg
         exclude=tuple(parsed.exclude),
         against=parsed.against,
         quiet=parsed.quiet,
-        depth=parsed.depth,
         json_output=parsed.json_output,
-        full_diff=parsed.full_diff,
+        show_inherited=parsed.show_inherited,
+        show_paths=parsed.show_paths,
+        max_diff_lines=parsed.max_diff_lines,
+        max_diff_bytes=parsed.max_diff_bytes,
     )

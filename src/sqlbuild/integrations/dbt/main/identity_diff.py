@@ -153,8 +153,9 @@ def build_dbt_identity_diff_output(
             ref_manifest=ref_manifest,
             selected_unique_ids=selected_unique_ids,
             against=against,
-            depth=identity_args.depth,
-            full_diff=identity_args.full_diff,
+            show_paths=identity_args.show_paths,
+            max_diff_lines=identity_args.max_diff_lines,
+            max_diff_bytes=identity_args.max_diff_bytes,
             on_progress=on_progress,
         ),
     )
@@ -172,6 +173,8 @@ def build_dbt_identity_diff_output(
         operation=lambda: render_dbt_identity_diff_result(
             result=result,
             quiet=identity_args.quiet,
+            show_inherited=identity_args.show_inherited,
+            show_paths=identity_args.show_paths,
             use_color=use_color,
         ),
     )
