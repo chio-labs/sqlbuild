@@ -54,6 +54,8 @@ def run_plan(
     cli_vars: dict[str, object] | None = None,
     include_stale_upstreams: bool = False,
     force: bool = False,
+    strict_reuse: bool | None = None,
+    trust_reuse_inputs: bool | None = None,
 ) -> int:
     """Execute the plan command."""
 
@@ -154,6 +156,8 @@ def run_plan(
             on_progress=planning_progress.on_progress,
             external_sql_reference_resolver=external_sql_reference_resolver,
             resolve_python_run_selectors=include_python,
+            strict_reuse=strict_reuse,
+            trust_reuse_inputs=trust_reuse_inputs,
         )
 
     plan_output: PlanOutput = pipeline_result.plan_output

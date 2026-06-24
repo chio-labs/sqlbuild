@@ -112,10 +112,12 @@ class RunDespiteUnchangedMode(StrEnum):
 
 class StandardReuseDecisionKind(StrEnum):
     REUSE_ELIGIBLE = "reuse_eligible"
+    TRUSTED_REUSE_ELIGIBLE = "trusted_reuse_eligible"
     CURRENT = "current"
     REUSE_ORIGIN_FINGERPRINT_MISSING = "reuse_origin_fingerprint_missing"
     REUSE_ORIGIN_RELATION_MISSING = "reuse_origin_relation_missing"
     REUSE_ORIGIN_VERSION_MISMATCH = "reuse_origin_version_mismatch"
+    CURRENT_PROJECT_CHANGE = "current_project_change"
     REUSE_FROM_SOURCE_FRESHNESS_STALE = "reuse_from_source_freshness_stale"
     INELIGIBLE_MATERIALIZATION = "ineligible_materialization"
 

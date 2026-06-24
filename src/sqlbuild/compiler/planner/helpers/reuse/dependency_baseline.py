@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     DependencyBaselinePlanEntry,
+    ExistingDestinationInputPlanEntry,
     ModelPlanEntry,
     PlannerScope,
+    StandardReuseDecisionResults,
+    StandardReuseModelDecision,
 )
 
 
@@ -43,17 +47,76 @@ def build_dependency_baseline_entries(
     *,
     entries: tuple[ModelPlanEntry, ...],
     candidate_keys: frozenset[CompiledObjectKey],
+    standard_reuse_decisions: StandardReuseDecisionResults | None = None,
 ) -> tuple[DependencyBaselinePlanEntry, ...]:
     """Build generic baseline entries from reusable model plan entries."""
 
-    return tuple(
-        DependencyBaselinePlanEntry(
-            name=entry.name,
-            destination=entry.destination,
-            relation_reuse=entry.relation_reuse,
-            fingerprint_version_hash=entry.fingerprint_version_hash,
-            resource_label=entry.materialization_type.value,
+    baseline_entries: list[DependencyBaselinePlanEntry] = []
+    for entry in entries:
+        if entry.key not in candidate_keys or entry.relation_reuse is None:
+            continue
+        reuse_decision: StandardReuseModelDecision | None = (
+            standard_reuse_decisions.models.get(entry.name)
+            if standard_reuse_decisions is not None
+            else None
         )
-        for entry in entries
-        if entry.key in candidate_keys and entry.relation_reuse is not None
-    )
+        baseline_entries.append(
+            DependencyBaselinePlanEntry(
+                name=entry.name,
+                destination=entry.destination,
+                relation_reuse=entry.relation_reuse,
+                fingerprint_version_hash=entry.fingerprint_version_hash,
+                resource_label=entry.materialization_type.value,
+                trusted_input=(
+                    reuse_decision.trusted_input if reuse_decision is not None else False
+                ),
+                current_project_affected=(
+                    reuse_decision.current_project_affected if reuse_decision is not None else False
+                ),
+            )
+        )
+    return tuple(baseline_entries)
+
+
+def build_existing_destination_input_entries(
+    *,
+    scope: PlannerScope,
+    candidate_keys: frozenset[CompiledObjectKey],
+    reusable_keys: frozenset[CompiledObjectKey],
+    existing_relation_names: frozenset[str],
+    expected_version_hashes: dict[str, str],
+    destination_fingerprints: dict[str, Fingerprint],
+    current_project_affected_model_names: frozenset[str],
+) -> tuple[ExistingDestinationInputPlanEntry, ...]:
+    """Return non-reused direct inputs that already exist in the destination target."""
+
+    entries: list[ExistingDestinationInputPlanEntry] = []
+    key: CompiledObjectKey
+    for key in sorted(candidate_keys - reusable_keys, key=lambda item: item.name):
+        if key.name not in existing_relation_names:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        if model is None:
+            continue
+        expected_version_hash: str | None = expected_version_hashes.get(key.name)
+        destination_version_hash: str | None = (
+            destination_fingerprints[key.name].version_hash
+            if key.name in destination_fingerprints
+            else None
+        )
+        entries.append(
+            ExistingDestinationInputPlanEntry(
+                name=key.name,
+                destination=model.destination,
+                status=(
+                    "current"
+                    if expected_version_hash is not None
+                    and destination_version_hash == expected_version_hash
+                    else "stale"
+                ),
+                expected_version_hash=expected_version_hash,
+                destination_version_hash=destination_version_hash,
+                current_project_affected=key.name in current_project_affected_model_names,
+            )
+        )
+    return tuple(entries)

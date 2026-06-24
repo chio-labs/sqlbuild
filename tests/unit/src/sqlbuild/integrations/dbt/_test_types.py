@@ -305,6 +305,7 @@ class DbtIdentityDiffTestCase:
     expected_output_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...] = ()
+    strict: bool = False
 
 
 @dataclass(frozen=True)
