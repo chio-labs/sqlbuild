@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.0](https://github.com/chio-labs/sqlbuild/compare/v0.38.6...v0.39.0) (2026-06-24)
+
+
+### Features
+
+* **dbt:** add identity diff command ([1d7627e](https://github.com/chio-labs/sqlbuild/commit/1d7627e70561081ec0c58691184dde3b5a731397))
+* **dbt:** add identity diff command ([900c155](https://github.com/chio-labs/sqlbuild/commit/900c1555d14364bb1b9b9464bd9bdb099bb0d5ce))
+
 ## [0.38.6](https://github.com/chio-labs/sqlbuild/compare/v0.38.5...v0.38.6) (2026-06-24)
 
 
