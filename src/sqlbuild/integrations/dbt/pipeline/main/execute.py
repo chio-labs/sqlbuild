@@ -634,8 +634,9 @@ def execute_dbt_interop_from_project(
         finally:
             adapter.close(duckdb_connection)
     warning: str
+    style: CliStyle = CliStyle(use_color=use_color)
     for warning in dbt_fingerprint_warnings:
-        output_stream.write(f"Warning: {warning}\n")
+        output_stream.write(style.warning(f"Warning: {warning}") + "\n")
     if dbt_fingerprint_warnings:
         output_stream.flush()
     dbt_outcome: DbtExecutionOutcome = build_dbt_execution_outcome(

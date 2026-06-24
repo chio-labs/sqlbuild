@@ -58,6 +58,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             description="prints dbt execution selection status for non tty streams",
             expected_total=2,
             expected_output_fragment="Resolving dbt execution selection...",
+            expected_completion_fragment="Resolved dbt execution selection.",
         )
     ],
     ids=["prints dbt execution selection status for non tty streams"],
@@ -87,7 +88,9 @@ def test_given_non_tty_stream_when_resolving_dbt_execution_total_then_prints_sta
     )
 
     assert total == test_case.expected_total
-    assert test_case.expected_output_fragment in stream.getvalue()
+    output: str = stream.getvalue()
+    assert test_case.expected_output_fragment in output
+    assert test_case.expected_completion_fragment in output
 
 
 @pytest.mark.parametrize(
