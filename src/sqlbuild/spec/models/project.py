@@ -53,6 +53,8 @@ class TargetConfig:
     schema: str | None = None
     defer_sources_to: str | None = None
     reuse_from: str | None = None
+    reuse_strict: bool = False
+    trust_reuse_inputs: bool = False
     force: bool | None = None
     reuse_hard_copy: bool = False
     clone: ClonePolicy = field(default_factory=ClonePolicy)
@@ -69,6 +71,8 @@ class LocalTargetConfig:
     schema: str | None = None
     defer_sources_to: str | None = None
     reuse_from: str | None = None
+    reuse_strict: bool | None = None
+    trust_reuse_inputs: bool | None = None
     force: bool | None = None
     reuse_hard_copy: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)

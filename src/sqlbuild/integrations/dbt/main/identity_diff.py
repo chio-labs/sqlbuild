@@ -21,6 +21,9 @@ from sqlbuild.integrations.dbt.helpers.identity_diff.core import (
     format_dbt_identity_diff_json,
     render_dbt_identity_diff_result,
 )
+from sqlbuild.integrations.dbt.helpers.identity_diff.options import (
+    resolve_identity_diff_strict_reuse,
+)
 from sqlbuild.integrations.dbt.helpers.manifest.core import (
     build_dbt_manifest_index,
     load_dbt_manifest_index,
@@ -154,6 +157,11 @@ def build_dbt_identity_diff_output(
             selected_unique_ids=selected_unique_ids,
             against=against,
             show_paths=identity_args.show_paths,
+            strict=resolve_identity_diff_strict_reuse(
+                discovered_inputs=discovered_inputs,
+                dbt_options=dbt_options,
+                override=identity_args.strict_reuse,
+            ),
             max_diff_lines=identity_args.max_diff_lines,
             max_diff_bytes=identity_args.max_diff_bytes,
             on_progress=on_progress,

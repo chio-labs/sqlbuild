@@ -441,10 +441,10 @@ def test_given_dbt_reuse_plan_when_building_plan_then_preserves_reuse_plan(
             expected_dbt_skipped=True,
             expected_sqlbuild_skipped=True,
             expected_human_fragments=(
-                "Reuse plan",
-                "reuse: 1",
+                "Reuse",
+                "cloned selected: 1",
                 "baseline reuse: 1",
-                "Reuse (1)",
+                "Cloned selected (1)",
                 "Baseline reuse (1)",
                 "model.analytics.orders",
                 "model.analytics.events",

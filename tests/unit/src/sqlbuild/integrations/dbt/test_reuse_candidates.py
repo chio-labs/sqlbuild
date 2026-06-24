@@ -333,11 +333,11 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         expected_reason=DbtReusePlanReason.DESTINATION_MISSING,
     ),
     DbtReusePlanningTestCase(
-        description="plans table checksum changed as complete reuse",
+        description="plans table checksum changed as rebuild",
         candidate_materialization="table",
         dbt_plan_action=DbtModelPlanAction.RUN,
         dbt_plan_reason=DbtModelPlanReason.CHECKSUM_CHANGED,
-        expected_action=DbtReusePlanAction.COMPLETE_REUSE,
+        expected_action=DbtReusePlanAction.REBUILD,
         expected_reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
     ),
     DbtReusePlanningTestCase(
@@ -357,11 +357,11 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         expected_reason=DbtReusePlanReason.DESTINATION_MISSING,
     ),
     DbtReusePlanningTestCase(
-        description="plans snapshot checksum changed as seeded reuse",
+        description="plans snapshot checksum changed as rebuild",
         candidate_materialization="snapshot",
         dbt_plan_action=DbtModelPlanAction.RUN,
         dbt_plan_reason=DbtModelPlanReason.CHECKSUM_CHANGED,
-        expected_action=DbtReusePlanAction.SEEDED_REUSE,
+        expected_action=DbtReusePlanAction.REBUILD,
         expected_reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
     ),
     DbtReusePlanningTestCase(
@@ -389,12 +389,12 @@ REUSE_PLANNING_TEST_CASES: tuple[DbtReusePlanningTestCase, ...] = (
         expected_reason=DbtReusePlanReason.SOURCE_FRESHNESS_BLOCK,
     ),
     DbtReusePlanningTestCase(
-        description="rebuilds when current definition differs from origin",
+        description="reuses when only reuse origin definition differs",
         candidate_materialization="table",
         dbt_plan_action=DbtModelPlanAction.RUN,
         dbt_plan_reason=DbtModelPlanReason.FIRST_RUN,
-        expected_action=DbtReusePlanAction.REBUILD,
-        expected_reason=DbtReusePlanReason.DEFINITION_CHANGED,
+        expected_action=DbtReusePlanAction.COMPLETE_REUSE,
+        expected_reason=DbtReusePlanReason.FINGERPRINT_MISSING,
         current_raw_sql="select 111 as amount from prod.raw",
         origin_raw_sql="select 900 as amount from prod.raw",
     ),
@@ -701,6 +701,146 @@ def test_given_dbt_reuse_candidate_and_model_plan_when_planning_then_returns_exp
 @pytest.mark.parametrize(
     "test_case",
     [
+        DbtReusePlanningTestCase(
+            description="strict reuse rebuilds when reuse origin definition differs",
+            candidate_materialization="table",
+            dbt_plan_action=DbtModelPlanAction.RUN,
+            dbt_plan_reason=DbtModelPlanReason.FIRST_RUN,
+            expected_action=DbtReusePlanAction.REBUILD,
+            expected_reason=DbtReusePlanReason.DEFINITION_CHANGED,
+            current_raw_sql="select 111 as amount from prod.raw",
+            origin_raw_sql="select 900 as amount from prod.raw",
+        )
+    ],
+    ids=["strict reuse rebuilds when reuse origin definition differs"],
+)
+def test_given_strict_dbt_reuse_when_origin_definition_differs_then_model_rebuilds(
+    test_case: DbtReusePlanningTestCase,
+) -> None:
+    unique_id: str = "model.analytics.orders"
+    candidate_resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
+        current_manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name="orders",
+                        relation_name="dev.orders",
+                        raw_code=test_case.current_raw_sql,
+                        materialized=test_case.candidate_materialization,
+                    ),
+                )
+            )
+        ),
+        reuse_manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name="orders",
+                        relation_name="prod.orders",
+                        raw_code=test_case.origin_raw_sql,
+                        materialized=test_case.candidate_materialization,
+                    ),
+                )
+            )
+        ),
+        scoped_unique_ids=(unique_id,),
+    )
+
+    result: DbtReusePlanningResult = build_dbt_reuse_planning_result(
+        candidate_resolution=candidate_resolution,
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                build_dbt_model_plan_entry(
+                    unique_id=unique_id,
+                    action=test_case.dbt_plan_action,
+                    reason=test_case.dbt_plan_reason,
+                ),
+            )
+        ),
+        strict=True,
+    )
+
+    assert tuple(entry.action for entry in result.entries) == (test_case.expected_action,)
+    assert tuple(entry.reason for entry in result.entries) == (test_case.expected_reason,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReusePlanningTestCase(
+            description="trusted input reuses current project affected dbt input",
+            candidate_materialization="table",
+            dbt_plan_action=DbtModelPlanAction.RUN,
+            dbt_plan_reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+            expected_action=DbtReusePlanAction.COMPLETE_REUSE,
+            expected_reason=DbtReusePlanReason.FINGERPRINT_CHANGED,
+        )
+    ],
+    ids=["trusted input reuses current project affected dbt input"],
+)
+def test_given_trusted_dbt_input_when_current_project_affected_then_input_is_reused(
+    test_case: DbtReusePlanningTestCase,
+) -> None:
+    unique_id: str = "model.analytics.orders"
+    candidate_resolution: DbtReuseCandidateResolution = resolve_dbt_reuse_candidates(
+        current_manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name="orders",
+                        relation_name="dev.orders",
+                        materialized=test_case.candidate_materialization,
+                    ),
+                )
+            )
+        ),
+        reuse_manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id=unique_id,
+                        package_name="analytics",
+                        name="orders",
+                        relation_name="prod.orders",
+                        materialized=test_case.candidate_materialization,
+                    ),
+                )
+            )
+        ),
+        scoped_unique_ids=(unique_id,),
+    )
+
+    result: DbtReusePlanningResult = build_dbt_reuse_planning_result(
+        candidate_resolution=candidate_resolution,
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                build_dbt_model_plan_entry(
+                    unique_id=unique_id,
+                    action=test_case.dbt_plan_action,
+                    reason=test_case.dbt_plan_reason,
+                ),
+            )
+        ),
+        trust_reuse_inputs=True,
+        current_project_affected_unique_ids=frozenset({unique_id}),
+        trusted_input_unique_ids=frozenset({unique_id}),
+    )
+
+    assert tuple(entry.action for entry in result.entries) == (test_case.expected_action,)
+    assert tuple(entry.reason for entry in result.entries) == (test_case.expected_reason,)
+    assert result.entries[0].trusted_input is True
+    assert result.entries[0].current_project_affected is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DbtNativeDependencyBaselineConversionTestCase(
             description="converts dbt reuse entry to native dependency baseline entry",
             expected_name="model.analytics.fact_orders",
@@ -724,6 +864,8 @@ def test_given_dbt_dependency_baseline_plan_when_converting_then_returns_native_
                 materialization=test_case.expected_resource_label,
                 destination_relation_name=test_case.expected_destination_relation,
                 origin_relation_name=test_case.expected_origin_relation,
+                trusted_input=True,
+                current_project_affected=True,
             ),
         )
     )
@@ -741,6 +883,8 @@ def test_given_dbt_dependency_baseline_plan_when_converting_then_returns_native_
     assert entry.resource_label == test_case.expected_resource_label
     assert entry.relation_reuse.hard_copy == test_case.expected_hard_copy
     assert entry.fingerprint_version_hash is None
+    assert entry.trusted_input is True
+    assert entry.current_project_affected is True
 
 
 @pytest.mark.parametrize(

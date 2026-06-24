@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from typing import cast
 
+from sqlbuild.compiler.planner.main.reuse_policy import decide_reuse_for_node
+from sqlbuild.compiler.planner.models import ReusePolicyNodeFacts
+from sqlbuild.compiler.planner.types import StandardReuseDecisionKind
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_INCREMENTAL_STRATEGY_KEY,
@@ -209,6 +212,10 @@ def build_dbt_reuse_planning_result(
     *,
     candidate_resolution: DbtReuseCandidateResolution,
     dbt_model_plan: DbtModelPlanningResult,
+    strict: bool = False,
+    trust_reuse_inputs: bool = False,
+    current_project_affected_unique_ids: frozenset[str] = frozenset(),
+    trusted_input_unique_ids: frozenset[str] = frozenset(),
 ) -> DbtReusePlanningResult:
     """Classify scoped dbt reuse candidates using existing dbt model planning state."""
 
@@ -222,6 +229,12 @@ def build_dbt_reuse_planning_result(
             _plan_reuse_candidate(
                 candidate=candidate,
                 dbt_plan_entry=plan_entries_by_unique_id.get(candidate.unique_id),
+                strict=strict,
+                trust_reuse_inputs=trust_reuse_inputs,
+                current_project_affected=(
+                    candidate.unique_id in current_project_affected_unique_ids
+                ),
+                trusted_input=candidate.unique_id in trusted_input_unique_ids,
             )
         )
     skipped: DbtReuseCandidateSkip
@@ -285,7 +298,13 @@ def _dbt_reuse_scope_unique_ids(*, plan: DbtInteropPlan) -> tuple[str, ...]:
 
 
 def _plan_reuse_candidate(
-    *, candidate: DbtReuseCandidate, dbt_plan_entry: DbtModelPlanEntry | None
+    *,
+    candidate: DbtReuseCandidate,
+    dbt_plan_entry: DbtModelPlanEntry | None,
+    strict: bool,
+    trust_reuse_inputs: bool,
+    current_project_affected: bool,
+    trusted_input: bool,
 ) -> DbtReusePlanEntry:
     if not candidate.origin_relation_exists:
         return DbtReusePlanEntry(
@@ -313,6 +332,8 @@ def _plan_reuse_candidate(
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.BLOCKED,
             reason=DbtReusePlanReason.SOURCE_FRESHNESS_BLOCK,
+            current_project_affected=current_project_affected,
+            trusted_input=trusted_input,
         )
     if dbt_plan_entry.action == DbtModelPlanAction.CURRENT:
         if _reuse_resume_metadata_invalid(candidate=candidate, dbt_plan_entry=dbt_plan_entry):
@@ -325,12 +346,16 @@ def _plan_reuse_candidate(
                     else DbtReusePlanAction.SEEDED_REUSE
                 ),
                 reason=DbtReusePlanReason.REUSE_METADATA_INVALID,
+                current_project_affected=current_project_affected,
+                trusted_input=trusted_input,
             )
         return _candidate_entry(
             candidate=candidate,
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.CURRENT,
             reason=DbtReusePlanReason.DESTINATION_CURRENT,
+            current_project_affected=current_project_affected,
+            trusted_input=trusted_input,
         )
     if dbt_plan_entry.reason == DbtModelPlanReason.FULL_REFRESH:
         return _candidate_entry(
@@ -338,13 +363,48 @@ def _plan_reuse_candidate(
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.REBUILD,
             reason=DbtReusePlanReason.FULL_REFRESH,
+            current_project_affected=current_project_affected,
+            trusted_input=trusted_input,
         )
-    if candidate.definition_changed_from_origin:
+    effective_current_project_affected: bool = (
+        current_project_affected
+        or dbt_plan_entry.reason
+        in {
+            DbtModelPlanReason.CHECKSUM_CHANGED,
+            DbtModelPlanReason.UPSTREAM_CHANGED,
+            DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
+        }
+    )
+    decision: str = decide_reuse_for_node(
+        ReusePolicyNodeFacts(
+            expected_identity_present=dbt_plan_entry.expected_version_hash is not None,
+            destination_identity_current=dbt_plan_entry.action == DbtModelPlanAction.CURRENT,
+            destination_relation_exists=dbt_plan_entry.reason
+            != DbtModelPlanReason.RELATION_MISSING,
+            reuse_origin_identity_present=bool(candidate.origin_definition_fingerprint),
+            reuse_origin_relation_exists=candidate.origin_relation_exists,
+            reuse_origin_matches_expected=not candidate.definition_changed_from_origin,
+            reuse_eligible_materialization=True,
+            strict=strict,
+            trust_reuse_inputs=trust_reuse_inputs,
+            current_project_affected=effective_current_project_affected,
+            trusted_input=trusted_input,
+            source_freshness_stale=(
+                dbt_plan_entry.reason == DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED
+            ),
+        )
+    )
+    if decision not in {
+        StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
+        StandardReuseDecisionKind.TRUSTED_REUSE_ELIGIBLE.value,
+    }:
         return _candidate_entry(
             candidate=candidate,
             dbt_plan_entry=dbt_plan_entry,
             action=DbtReusePlanAction.REBUILD,
-            reason=DbtReusePlanReason.DEFINITION_CHANGED,
+            reason=_reason_from_policy_decision(decision=decision),
+            current_project_affected=effective_current_project_affected,
+            trusted_input=trusted_input,
         )
     reuse_action: DbtReusePlanAction = (
         DbtReusePlanAction.COMPLETE_REUSE
@@ -356,6 +416,8 @@ def _plan_reuse_candidate(
         dbt_plan_entry=dbt_plan_entry,
         action=reuse_action,
         reason=_reason_from_dbt_plan_reason(reason=dbt_plan_entry.reason),
+        current_project_affected=effective_current_project_affected,
+        trusted_input=(decision == StandardReuseDecisionKind.TRUSTED_REUSE_ELIGIBLE.value),
     )
 
 
@@ -365,6 +427,8 @@ def _candidate_entry(
     dbt_plan_entry: DbtModelPlanEntry,
     action: DbtReusePlanAction,
     reason: DbtReusePlanReason,
+    trusted_input: bool = False,
+    current_project_affected: bool = False,
 ) -> DbtReusePlanEntry:
     return DbtReusePlanEntry(
         unique_id=candidate.unique_id,
@@ -376,7 +440,21 @@ def _candidate_entry(
         dbt_plan_action=dbt_plan_entry.action,
         dbt_plan_reason=dbt_plan_entry.reason,
         cursor_column=candidate.cursor_column,
+        trusted_input=trusted_input,
+        current_project_affected=current_project_affected,
     )
+
+
+def _reason_from_policy_decision(*, decision: str) -> DbtReusePlanReason:
+    if decision == StandardReuseDecisionKind.REUSE_ORIGIN_RELATION_MISSING.value:
+        return DbtReusePlanReason.ORIGIN_RELATION_MISSING
+    if decision == StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value:
+        return DbtReusePlanReason.DEFINITION_CHANGED
+    if decision == StandardReuseDecisionKind.CURRENT_PROJECT_CHANGE.value:
+        return DbtReusePlanReason.FINGERPRINT_CHANGED
+    if decision == StandardReuseDecisionKind.REUSE_FROM_SOURCE_FRESHNESS_STALE.value:
+        return DbtReusePlanReason.FINGERPRINT_CHANGED
+    return DbtReusePlanReason.FINGERPRINT_CHANGED
 
 
 def _reuse_resume_metadata_invalid(

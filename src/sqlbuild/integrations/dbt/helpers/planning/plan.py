@@ -263,12 +263,12 @@ def _format_dbt_reuse_plan(
     if not has_actionable_reuse_output and not _is_verbose(display_options):
         return
     lines.append("")
-    lines.append(f"  {style.plan_section('Reuse plan')}")
+    lines.append(f"  {style.plan_section('Reuse')}")
     lines.append(
         "    "
         + ", ".join(
             (
-                f"reuse: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
+                f"cloned selected: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
                 f"baseline reuse: {counts[DbtReusePlanAction.SEEDED_REUSE]}",
                 f"current: {counts[DbtReusePlanAction.CURRENT]}",
                 f"rebuild: {counts[DbtReusePlanAction.REBUILD]}",
@@ -358,16 +358,45 @@ def _format_dbt_dependency_baseline_plan(
     )
     if not entries:
         return
+    reused_entries: tuple[DbtReusePlanEntry, ...] = tuple(
+        entry for entry in entries if not entry.trusted_input
+    )
+    trusted_entries: tuple[DbtReusePlanEntry, ...] = tuple(
+        entry for entry in entries if entry.trusted_input
+    )
+    _format_dbt_input_reuse_entries(
+        lines,
+        section_label="Reused inputs",
+        entries=reused_entries,
+        display_options=display_options,
+    )
+    _format_dbt_input_reuse_entries(
+        lines,
+        section_label="Trusted inputs",
+        entries=trusted_entries,
+        display_options=display_options,
+    )
+
+
+def _format_dbt_input_reuse_entries(
+    lines: list[str],
+    *,
+    section_label: str,
+    entries: tuple[DbtReusePlanEntry, ...],
+    display_options: DisplayOptions,
+) -> None:
+    if not entries:
+        return
     style: CliStyle = CliStyle(use_color=True)
     counts: Counter[DbtReusePlanAction] = Counter(entry.action for entry in entries)
     lines.append("")
-    lines.append(f"  {style.plan_section('Dependency baseline')}")
+    lines.append(f"  {style.plan_section(f'{section_label} ({len(entries)})')}")
     lines.append(
         "    "
         + ", ".join(
             (
-                f"reuse: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
-                f"baseline: {counts[DbtReusePlanAction.SEEDED_REUSE]}",
+                f"complete: {counts[DbtReusePlanAction.COMPLETE_REUSE]}",
+                f"seeded: {counts[DbtReusePlanAction.SEEDED_REUSE]}",
             )
         )
     )
@@ -658,7 +687,7 @@ def _dbt_model_plan_reason_section_label(reason: DbtModelPlanReason) -> str:
 
 def _dbt_reuse_plan_action_label(action: DbtReusePlanAction) -> str:
     if action == DbtReusePlanAction.COMPLETE_REUSE:
-        return "Reuse"
+        return "Cloned selected"
     if action == DbtReusePlanAction.SEEDED_REUSE:
         return "Baseline reuse"
     return action.value.replace("_", " ").title()

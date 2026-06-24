@@ -26,6 +26,7 @@ from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
     add_dbt_config_args,
     add_execution_args,
     add_execution_json_output_arg,
+    add_reuse_args,
     add_scenario_snapshot_safety_args,
     add_select_args,
     add_vars_args,
@@ -130,6 +131,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
     plan_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
     add_cursor_override_args(plan_parser)
+    add_reuse_args(plan_parser)
     add_select_args(plan_parser)
     add_vars_args(plan_parser)
     add_dbt_config_args(plan_parser)
@@ -159,6 +161,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
     build_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
     add_execution_args(build_parser)
+    add_reuse_args(build_parser)
     add_select_args(build_parser)
     add_vars_args(build_parser)
     add_dbt_config_args(build_parser)
@@ -703,6 +706,8 @@ def _main_with_dependencies(
                 args.vars,
                 args.include_stale_upstreams,
                 args.force,
+                args.strict_reuse,
+                args.trust_reuse_inputs,
             )
         if args.command == CliCommand.DBT:
             if args.dbt_command == "init":
@@ -775,6 +780,8 @@ def _main_with_dependencies(
                 args.run_audits,
                 args.json,
                 args.json_output,
+                args.strict_reuse,
+                args.trust_reuse_inputs,
             )
         if args.command == CliCommand.FRESHNESS:
             return handlers.run_freshness(

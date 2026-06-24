@@ -40,15 +40,20 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     ExternalBlockedPlanOutputTestCase,
     HookFunctionPlanOutputTestCase,
     StandardDependencyBaselinePlanOutputTestCase,
+    StandardExistingDestinationInputTestCase,
+    StandardReuseCurrentProjectInputTestCase,
     StandardReuseFromSourceDeferralConflictTestCase,
     StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,
+    StandardReuseOriginDriftTestCase,
     StandardSelectionAwareStalenessTestCase,
     StandardSourceFreshnessPlanOutputTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
+    build_standard_project_for_schema,
     build_standard_pruning_project,
     write_standard_model_state,
+    write_standard_model_state_for_schema,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
@@ -77,6 +82,25 @@ SOURCE_DEFERRAL_CONFLICT_TEST_CASES: list[StandardReuseFromSourceDeferralConflic
         defer_sources_to="prod_sources",
         target_defer_sources_to=None,
         expected_error_fragment="source deferral is active",
+    ),
+]
+
+REUSE_CURRENT_PROJECT_INPUT_TEST_CASES: list[StandardReuseCurrentProjectInputTestCase] = [
+    StandardReuseCurrentProjectInputTestCase(
+        description="default reuse does not clone current-project affected input",
+        trust_reuse_inputs=False,
+        expected_dependency_baseline_names=(),
+        expected_trusted_input_names=(),
+        expected_current_project_affected_names=("a", "b"),
+        expected_existing_destination_inputs={"b": "stale"},
+    ),
+    StandardReuseCurrentProjectInputTestCase(
+        description="trusted reuse clones current-project affected input",
+        trust_reuse_inputs=True,
+        expected_dependency_baseline_names=("b",),
+        expected_trusted_input_names=("b",),
+        expected_current_project_affected_names=("a", "b"),
+        expected_existing_destination_inputs={},
     ),
 ]
 
@@ -802,6 +826,310 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
         downstream_entry.fingerprint_version_hash
         == version_identities.model_version_hashes["downstream"]
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    REUSE_CURRENT_PROJECT_INPUT_TEST_CASES,
+    ids=[case.description for case in REUSE_CURRENT_PROJECT_INPUT_TEST_CASES],
+)
+def test_given_current_project_upstream_change_when_selecting_leaf_then_input_reuse_respects_trust(
+    test_case: StandardReuseCurrentProjectInputTestCase,
+) -> None:
+    previous_project: CompiledProject = build_standard_project_for_schema(
+        {
+            "d": "select 1 as id",
+            "b": "select id from __ref('d')",
+            "a": "select id from __ref('b')",
+        },
+        schema="dev_schema",
+    )
+    current_project: CompiledProject = build_standard_project_for_schema(
+        {
+            "d": "select 2 as id",
+            "b": "select id from __ref('d')",
+            "a": "select id from __ref('b')",
+        },
+        schema="dev_schema",
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=previous_project,
+            schema="dev_schema",
+        )
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=previous_project,
+            schema="prod_schema",
+        )
+
+        plan_output: PlanOutput = build_execution_plan(
+            project=current_project,
+            adapter=adapter,
+            connection=connection,
+            select=("a",),
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(
+                        schema="dev_schema",
+                        reuse_from="prod",
+                        trust_reuse_inputs=test_case.trust_reuse_inputs,
+                    ),
+                    "prod": TargetConfig(schema="prod_schema"),
+                },
+            ),
+            local_config=LocalConfig(),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert tuple(entry.name for entry in plan_output.dependency_baseline_entries) == (
+        test_case.expected_dependency_baseline_names
+    )
+    assert (
+        tuple(
+            entry.name for entry in plan_output.dependency_baseline_entries if entry.trusted_input
+        )
+        == test_case.expected_trusted_input_names
+    )
+    decisions_metadata: object = plan_output.metadata.get("standard_reuse_decisions")
+    assert isinstance(decisions_metadata, dict)
+    decision_models_metadata: object = cast(dict[str, object], decisions_metadata)["models"]
+    assert isinstance(decision_models_metadata, dict)
+    assert (
+        tuple(
+            sorted(
+                model_name
+                for model_name, model_metadata in decision_models_metadata.items()
+                if isinstance(model_metadata, dict)
+                and cast(dict[str, object], model_metadata).get("current_project_affected")
+            )
+        )
+        == test_case.expected_current_project_affected_names
+    )
+    assert {
+        entry.name: entry.status for entry in plan_output.existing_destination_input_entries
+    } == (test_case.expected_existing_destination_inputs)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardReuseOriginDriftTestCase(
+            description="default reuse clones direct input affected only by reuse origin drift",
+            strict_reuse=False,
+            expected_dependency_baseline_names=("b",),
+        )
+    ],
+    ids=["default reuse clones direct input affected only by reuse origin drift"],
+)
+def test_given_reuse_origin_upstream_drift_when_default_then_clones_direct_input(
+    test_case: StandardReuseOriginDriftTestCase,
+) -> None:
+    destination_project: CompiledProject = build_standard_project_for_schema(
+        {"d": "select 1 as id", "b": "select id from __ref('d')", "a": "select id from __ref('b')"},
+        schema="dev_schema",
+    )
+    current_project: CompiledProject = build_standard_project_for_schema(
+        {
+            "d": "select 1 as id",
+            "b": "select id from __ref('d')",
+            "a": "select id + 1 as id from __ref('b')",
+        },
+        schema="dev_schema",
+    )
+    reuse_origin_project: CompiledProject = build_standard_project_for_schema(
+        {"d": "select 2 as id", "b": "select id from __ref('d')", "a": "select id from __ref('b')"},
+        schema="prod_schema",
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=destination_project,
+            schema="dev_schema",
+            create_relations=False,
+        )
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=reuse_origin_project,
+            schema="prod_schema",
+        )
+        plan_output: PlanOutput = build_execution_plan(
+            project=current_project,
+            adapter=adapter,
+            connection=connection,
+            select=("a",),
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
+                    "prod": TargetConfig(schema="prod_schema"),
+                },
+            ),
+            local_config=LocalConfig(),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert tuple(entry.name for entry in plan_output.dependency_baseline_entries) == (
+        test_case.expected_dependency_baseline_names
+    )
+    assert plan_output.existing_destination_input_entries == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardReuseOriginDriftTestCase(
+            description="strict reuse blocks missing direct input affected by reuse origin drift",
+            strict_reuse=True,
+            expected_dependency_baseline_names=(),
+            expected_error_fragment="missing upstream dependencies (b)",
+        )
+    ],
+    ids=["strict reuse blocks missing direct input affected by reuse origin drift"],
+)
+def test_given_reuse_origin_upstream_drift_when_strict_then_missing_input_blocks(
+    test_case: StandardReuseOriginDriftTestCase,
+) -> None:
+    destination_project: CompiledProject = build_standard_project_for_schema(
+        {"d": "select 1 as id", "b": "select id from __ref('d')", "a": "select id from __ref('b')"},
+        schema="dev_schema",
+    )
+    current_project: CompiledProject = build_standard_project_for_schema(
+        {
+            "d": "select 1 as id",
+            "b": "select id from __ref('d')",
+            "a": "select id + 1 as id from __ref('b')",
+        },
+        schema="dev_schema",
+    )
+    reuse_origin_project: CompiledProject = build_standard_project_for_schema(
+        {"d": "select 2 as id", "b": "select id from __ref('d')", "a": "select id from __ref('b')"},
+        schema="prod_schema",
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=destination_project,
+            schema="dev_schema",
+            create_relations=False,
+        )
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=reuse_origin_project,
+            schema="prod_schema",
+        )
+        with pytest.raises(PlannerInputError) as exc_info:
+            build_execution_plan(
+                project=current_project,
+                adapter=adapter,
+                connection=connection,
+                select=("a",),
+                project_config=ProjectConfig(
+                    name="demo",
+                    adapter="duckdb",
+                    targets={
+                        "dev": TargetConfig(
+                            schema="dev_schema",
+                            reuse_from="prod",
+                            reuse_strict=test_case.strict_reuse,
+                        ),
+                        "prod": TargetConfig(schema="prod_schema"),
+                    },
+                ),
+                local_config=LocalConfig(),
+            )
+    finally:
+        adapter.close(connection)
+
+    assert test_case.expected_error_fragment is not None
+    assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardExistingDestinationInputTestCase(
+            description="current destination input is reported when reuse origin input is missing",
+            expected_existing_destination_inputs={"b": "current"},
+        )
+    ],
+    ids=["current destination input is reported when reuse origin input is missing"],
+)
+def test_given_origin_input_missing_when_destination_input_current_then_reports_existing(
+    test_case: StandardExistingDestinationInputTestCase,
+) -> None:
+    destination_project: CompiledProject = build_standard_project_for_schema(
+        {
+            "d": "select 1 as id",
+            "b": "select id from __ref('d')",
+            "a": "select id from __ref('b')",
+        },
+        schema="dev_schema",
+    )
+    current_project: CompiledProject = build_standard_project_for_schema(
+        {
+            "d": "select 1 as id",
+            "b": "select id from __ref('d')",
+            "a": "select id + 1 as id from __ref('b')",
+        },
+        schema="dev_schema",
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    try:
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=destination_project,
+            schema="dev_schema",
+        )
+        write_standard_model_state_for_schema(
+            adapter=adapter,
+            connection=connection,
+            project=destination_project,
+            schema="prod_schema",
+            create_relations=False,
+        )
+        plan_output: PlanOutput = build_execution_plan(
+            project=current_project,
+            adapter=adapter,
+            connection=connection,
+            select=("a",),
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
+                    "prod": TargetConfig(schema="prod_schema"),
+                },
+            ),
+            local_config=LocalConfig(),
+        )
+    finally:
+        adapter.close(connection)
+
+    assert plan_output.dependency_baseline_entries == ()
+    assert {
+        entry.name: entry.status for entry in plan_output.existing_destination_input_entries
+    } == test_case.expected_existing_destination_inputs
 
 
 @pytest.mark.parametrize(

@@ -90,6 +90,12 @@ _MODELS_DIR_PREFIX: str = "models/"
 _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
     (IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE)
 )
+_REUSABLE_DECISION_KINDS: frozenset[str] = frozenset(
+    {
+        StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
+        StandardReuseDecisionKind.TRUSTED_REUSE_ELIGIBLE.value,
+    }
+)
 
 
 def build_planner_relations_context(
@@ -345,7 +351,7 @@ def _can_use_relation_reuse(
 ) -> bool:
     if reuse_decision is None:
         return False
-    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+    if reuse_decision.decision not in _REUSABLE_DECISION_KINDS:
         return False
     return entry.materialization_type == MaterializationType.TABLE
 
@@ -373,7 +379,7 @@ def _can_use_seeded_relation_reuse(
 ) -> bool:
     if reuse_decision is None:
         return False
-    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+    if reuse_decision.decision not in _REUSABLE_DECISION_KINDS:
         return False
     return entry.materialization_type in {
         MaterializationType.INCREMENTAL,
@@ -389,7 +395,7 @@ def _can_use_custom_relation_reuse(
 ) -> bool:
     if reuse_decision is None:
         return False
-    if reuse_decision.decision != StandardReuseDecisionKind.REUSE_ELIGIBLE.value:
+    if reuse_decision.decision not in _REUSABLE_DECISION_KINDS:
         return False
     return (
         entry.materialization_type == MaterializationType.CUSTOM

@@ -56,6 +56,8 @@ class CliNamespace:
     skip_locked: bool = False
     include_stale_upstreams: bool = False
     force: bool = False
+    strict_reuse: bool | None = None
+    trust_reuse_inputs: bool | None = None
     include_python: bool = True
     load_sources: bool | None = None
     reload: bool = False
@@ -166,6 +168,8 @@ class CliEntrypointHandlers:
             dict[str, object],
             bool,
             bool,
+            bool | None,
+            bool | None,
         ],
         int,
     ]
@@ -222,6 +226,8 @@ class CliEntrypointHandlers:
             bool,
             bool,
             Path | None,
+            bool | None,
+            bool | None,
         ],
         int,
     ]
