@@ -56,11 +56,13 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtExecutionOutcomeTestCase,
     DbtExecutionTotalRenderTestCase,
     DbtFingerprintWriteTestCase,
+    DbtModelPlanningRelationPrefetchTestCase,
     DbtModelPlanningTestCase,
     DbtModelSourceBlockingTestCase,
     DbtRunResultsFallbackRenderTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    CountingModelPlanningAdapter,
     MappingDbtInvoker,
     RecordingDbtInvoker,
     build_compiled_project_with_models,
@@ -164,6 +166,111 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
     assert len(result.entries) == 1
     assert result.entries[0].action == test_case.expected_action
     assert result.entries[0].reason == test_case.expected_reason
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtModelPlanningRelationPrefetchTestCase(
+            description="prefetches dbt model relation existence in one bulk call",
+            expected_list_relation_call_count=1,
+            expected_relation_exists_call_count=0,
+            expected_reasons_by_unique_id={
+                "model.analytics.base_orders": DbtModelPlanReason.NO_CHANGE,
+                "model.analytics.stg_orders": DbtModelPlanReason.RELATION_MISSING,
+                "model.analytics.fact_orders": DbtModelPlanReason.NO_CHANGE,
+            },
+        )
+    ],
+    ids=["prefetches dbt model relation existence in one bulk call"],
+)
+def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existence_once(
+    test_case: DbtModelPlanningRelationPrefetchTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: CountingModelPlanningAdapter = CountingModelPlanningAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_model_prefetch.duckdb")})
+    project: CompiledProject = replace(
+        build_compiled_project_with_models({}),
+        effective_target_schema="main",
+        effective_target_database=None,
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.base_orders",
+                    package_name="analytics",
+                    name="base_orders",
+                    schema="main",
+                    alias="base_orders",
+                    checksum="same_hash",
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.stg_orders",
+                    package_name="analytics",
+                    name="stg_orders",
+                    schema="main",
+                    alias="stg_orders",
+                    checksum="same_hash",
+                    depends_on_nodes=("model.analytics.base_orders",),
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    schema="main",
+                    alias="fact_orders",
+                    checksum="same_hash",
+                    depends_on_nodes=("model.analytics.stg_orders",),
+                ),
+            )
+        )
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    try:
+        adapter.execute(connection, "CREATE TABLE main.base_orders AS SELECT 1 AS id")
+        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        for unique_id in test_case.expected_reasons_by_unique_id:
+            write_dbt_test_fingerprint(
+                adapter=adapter,
+                connection=connection,
+                unique_id=unique_id,
+                version_hash="same_hash",
+            )
+        adapter.list_relation_calls.clear()
+        adapter.relation_exists_calls.clear()
+
+        result: DbtModelPlanningResult = build_dbt_model_planning_result(
+            manifest=manifest,
+            candidate_unique_ids=("model.analytics.fact_orders",),
+            project=project,
+            graph=graph,
+            adapter=adapter,
+            connection=connection,
+        )
+    finally:
+        adapter.close(connection)
+
+    entries_by_unique_id: dict[str, DbtModelPlanEntry] = {
+        entry.unique_id: entry for entry in result.entries
+    }
+    assert {
+        unique_id: entries_by_unique_id[unique_id].reason
+        for unique_id in test_case.expected_reasons_by_unique_id
+    } == test_case.expected_reasons_by_unique_id
+    assert len(adapter.list_relation_calls) == test_case.expected_list_relation_call_count
+    database, schemas, names = adapter.list_relation_calls[0]
+    assert database is None
+    assert schemas == ("main",)
+    assert frozenset(names or ()) == frozenset({"base_orders", "stg_orders", "fact_orders"})
+    model_relation_names: frozenset[str] = frozenset({"base_orders", "stg_orders", "fact_orders"})
+    assert (
+        len(
+            tuple(call for call in adapter.relation_exists_calls if call[2] in model_relation_names)
+        )
+        == test_case.expected_relation_exists_call_count
+    )
 
 
 @pytest.mark.parametrize(
