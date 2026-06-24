@@ -46,6 +46,25 @@ class DbtInteropCommand(StrEnum):
     LINEAGE = "lineage"
     DIFF = "diff"
     CLONE = "clone"
+    IDENTITY_DIFF = "identity-diff"
+
+
+class DbtIdentityDiffReason(StrEnum):
+    QUERY = "query"
+    CONFIG = "config"
+    SCHEMA = "schema"
+    UPSTREAM_SET = "upstream_set"
+    COMPILED_ONLY = "compiled_only"
+    MISSING_IN_REF = "missing_in_ref"
+    MISSING_IN_CURRENT = "missing_in_current"
+    UPSTREAM_ONLY = "upstream_only"
+
+
+class DbtIdentityDiffVerdict(StrEnum):
+    WOULD_REUSE = "would_reuse"
+    REBUILD = "rebuild"
+    CAUSE = "cause"
+    UPSTREAM_ONLY = "upstream_only"
 
 
 class DbtLineageDirection(StrEnum):
