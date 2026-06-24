@@ -362,6 +362,7 @@ class DbtExecutionSelectionStatusTestCase:
     description: str
     expected_total: int
     expected_output_fragment: str
+    expected_completion_fragment: str
 
 
 @dataclass(frozen=True)
