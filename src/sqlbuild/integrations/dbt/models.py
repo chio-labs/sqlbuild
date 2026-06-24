@@ -75,6 +75,7 @@ class DbtIdentityDiffArgs:
     quiet: bool
     depth: int | None
     json_output: bool
+    full_diff: bool
 
 
 @dataclass(frozen=True)

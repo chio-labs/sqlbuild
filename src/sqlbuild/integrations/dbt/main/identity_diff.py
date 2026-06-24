@@ -117,6 +117,8 @@ def build_dbt_identity_diff_output(
         selected_unique_ids=selected_unique_ids,
         against=against,
         depth=identity_args.depth,
+        full_diff=identity_args.full_diff,
+        on_progress=on_progress,
     )
     if identity_args.json_output:
         return format_dbt_identity_diff_json(result)
@@ -162,6 +164,7 @@ def _parse_identity_diff_args(*, args: tuple[str, ...]) -> DbtIdentityDiffArgs:
     parser.add_argument("--against", default=None)
     parser.add_argument("--quiet", action="store_true", default=False)
     parser.add_argument("--depth", type=int, default=None)
+    parser.add_argument("--full-diff", action="store_true", default=False)
     parser.add_argument("--json", dest="json_output", action="store_true", default=False)
     parsed: argparse.Namespace = parser.parse_args(args)
     return DbtIdentityDiffArgs(
@@ -171,4 +174,5 @@ def _parse_identity_diff_args(*, args: tuple[str, ...]) -> DbtIdentityDiffArgs:
         quiet=parsed.quiet,
         depth=parsed.depth,
         json_output=parsed.json_output,
+        full_diff=parsed.full_diff,
     )
