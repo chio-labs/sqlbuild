@@ -320,6 +320,7 @@ def execute_dbt_interop_from_project(
     dependency_baseline_ids: tuple[str, ...] = dependency_baseline_unique_ids(
         project=project,
         manifest=manifest,
+        graph=graph,
         plan=plan,
     )
     dependency_baseline_model_plan: DbtModelPlanningResult | None = None

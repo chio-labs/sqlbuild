@@ -22,6 +22,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
 )
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
+    AssembleCompiledProjectEffectiveTargetTestCase,
     AssembleCompiledProjectTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile.helpers.helpers import (
@@ -443,6 +444,60 @@ SELECT 1
     ),
 ]
 
+ASSEMBLE_COMPILED_PROJECT_EFFECTIVE_TARGET_TEST_CASES: tuple[
+    AssembleCompiledProjectEffectiveTargetTestCase, ...
+] = (
+    AssembleCompiledProjectEffectiveTargetTestCase(
+        description="falls back effective target location to connection location",
+        project_toml="""
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[targets.dev.connection]
+database = "connection_db"
+schema = "connection_schema"
+""".strip()
+        + "\n",
+        expected_effective_target_database=None,
+        expected_effective_target_schema="connection_schema",
+    ),
+    AssembleCompiledProjectEffectiveTargetTestCase(
+        description="falls back non duckdb target database to connection database",
+        project_toml="""
+name = "demo"
+adapter = "postgres"
+default_target = "dev"
+
+[targets.dev.connection]
+database = "connection_db"
+schema = "connection_schema"
+""".strip()
+        + "\n",
+        expected_effective_target_database="connection_db",
+        expected_effective_target_schema="connection_schema",
+    ),
+    AssembleCompiledProjectEffectiveTargetTestCase(
+        description="prefers target location over connection fallback",
+        project_toml="""
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[targets.dev]
+database = "target_db"
+schema = "target_schema"
+
+[targets.dev.connection]
+database = "connection_db"
+schema = "connection_schema"
+""".strip()
+        + "\n",
+        expected_effective_target_database="target_db",
+        expected_effective_target_schema="target_schema",
+    ),
+)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -512,3 +567,26 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         tuple(compiled_sql_test_expected_model_names(t) for t in compiled.sql_tests)
         == test_case.expected_test_expected_model_names
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    ASSEMBLE_COMPILED_PROJECT_EFFECTIVE_TARGET_TEST_CASES,
+    ids=[case.description for case in ASSEMBLE_COMPILED_PROJECT_EFFECTIVE_TARGET_TEST_CASES],
+)
+def test_given_connection_location_when_assembling_project_then_sets_effective_target_location(
+    test_case: AssembleCompiledProjectEffectiveTargetTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files() | {"sqlbuild_project.toml": test_case.project_toml},
+    )
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered, run_id="test_run_id")
+
+    compiled: CompiledProject = assemble_compiled_project(compile_inputs)
+
+    assert compiled.effective_target_database == test_case.expected_effective_target_database
+    assert compiled.effective_target_schema == test_case.expected_effective_target_schema

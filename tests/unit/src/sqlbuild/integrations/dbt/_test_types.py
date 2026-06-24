@@ -187,6 +187,7 @@ class DbtEventStreamTestCase:
     description: str
     stdout_lines: tuple[str, ...]
     expected_unique_ids: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -289,6 +290,13 @@ class DbtReuseScopeFromPlanTestCase:
 
 
 @dataclass(frozen=True)
+class DbtDependencyBaselineScopeTestCase:
+    description: str
+    dbt_selected_unique_ids: tuple[str, ...]
+    expected_baseline_unique_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtDefinitionFingerprintTestCase:
     description: str
     current_raw_code: str
@@ -345,6 +353,15 @@ class DbtReusePlanOutputTestCase:
     expected_is_none: bool
     expected_complete_reuse_unique_ids: tuple[str, ...]
     expected_seeded_reuse_unique_ids: tuple[str, ...]
+    cache_hit: bool = False
+    expected_progress_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtExecutionSelectionStatusTestCase:
+    description: str
+    expected_total: int
+    expected_output_fragment: str
 
 
 @dataclass(frozen=True)

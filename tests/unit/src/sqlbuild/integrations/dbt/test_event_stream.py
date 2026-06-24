@@ -9,6 +9,7 @@ from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
     parse_dbt_json_event,
     parse_dbt_node_message,
     parse_dbt_node_result,
+    parse_dbt_node_start_message,
 )
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
@@ -311,6 +312,20 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
             "model.analytics.fact_orders",
         ),
     ),
+    DbtEventStreamTestCase(
+        description="renders node started progress before final result",
+        stdout_lines=(
+            '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
+            '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
+            '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
+            '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
+            '"node_info":{"node_name":"bias__stg_hkjc","resource_type":"model",'
+            '"node_status":"success","unique_id":"model.analytics.bias__stg_hkjc"}},'
+            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+        ),
+        expected_unique_ids=("model.analytics.bias__stg_hkjc",),
+        expected_output_fragments=("Running dbt model bias__stg_hkjc...",),
+    ),
 ]
 
 
@@ -350,5 +365,39 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     assert returncode == 0
     assert tuple(result.unique_id for result in results) == test_case.expected_unique_ids
     assert tuple(result.unique_id for result in captured_results) == test_case.expected_unique_ids
-    rendered_rows: int = stream.getvalue().count("   model")
+    output: str = stream.getvalue()
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+    rendered_rows: int = output.count("   model")
     assert rendered_rows == len(test_case.expected_unique_ids)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtEventParseTestCase(
+            description="parses node started event into progress message",
+            event={
+                "data": {
+                    "node_info": {
+                        "node_name": "base_orders",
+                        "resource_type": "model",
+                        "unique_id": "model.demo.base_orders",
+                    }
+                },
+                "info": {"level": "info", "name": "NodeStarted", "msg": "START"},
+            },
+            expected_unique_id="model.demo.base_orders",
+            expected_resource_type="model",
+            expected_node_name="base_orders",
+            expected_status="Running dbt model base_orders...",
+        )
+    ],
+    ids=["parses node started event into progress message"],
+)
+def test_given_node_started_event_when_parsing_then_returns_progress_message(
+    test_case: DbtEventParseTestCase,
+) -> None:
+    message: str | None = parse_dbt_node_start_message(event=test_case.event)
+
+    assert message == test_case.expected_status

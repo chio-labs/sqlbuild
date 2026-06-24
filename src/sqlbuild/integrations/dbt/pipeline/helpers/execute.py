@@ -146,8 +146,6 @@ def _dbt_execution_expected_total(
 def _start_dbt_execution_selection_status(
     *, stream: TextIO, use_color: bool
 ) -> TransientStatusReporter | None:
-    if not stream.isatty():
-        return None
     status: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=use_color)
     status.start("Resolving dbt execution selection...")
     return status
