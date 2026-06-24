@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.39.1](https://github.com/chio-labs/sqlbuild/compare/v0.39.0...v0.39.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** bound identity diff rendering ([d9ff0af](https://github.com/chio-labs/sqlbuild/commit/d9ff0afd88d27331fbdd309b467481023c188bf4))
+* **dbt:** bound identity diff rendering ([3064094](https://github.com/chio-labs/sqlbuild/commit/306409418dda424fcc4bd011b176430348b75370))
+* **dbt:** render node starts as running rows ([06a56a0](https://github.com/chio-labs/sqlbuild/commit/06a56a0a5b4f465246a140922bbdaae36c9f80f9))
+* **dbt:** render node starts as running rows ([9c52d10](https://github.com/chio-labs/sqlbuild/commit/9c52d108d015402cdb9321504f34650b876811ed))
+* **dbt:** report identity diff phases ([c3f56fc](https://github.com/chio-labs/sqlbuild/commit/c3f56fccefec6c3f1a7b1dbba70a3af410c16890))
+* **dbt:** report identity diff phases ([1eefdf8](https://github.com/chio-labs/sqlbuild/commit/1eefdf8dc39548915db01b93c33374b4608e9c4c))
+
 ## [0.39.0](https://github.com/chio-labs/sqlbuild/compare/v0.38.6...v0.39.0) (2026-06-24)
 
 
