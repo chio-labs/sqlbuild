@@ -1243,6 +1243,31 @@ def build_manifest_model_node(
     return node
 
 
+def build_identity_diff_manifest_model_node(
+    unique_id: str,
+    *,
+    checksum: str,
+    raw_code: str | None = None,
+    materialized: str = "view",
+    depends_on_nodes: tuple[str, ...] = (),
+    columns: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build a dbt manifest model node for identity-diff tests."""
+
+    node: dict[str, object] = build_manifest_model_node(
+        unique_id=unique_id,
+        package_name="analytics",
+        name=unique_id.rsplit(".", maxsplit=1)[-1],
+        checksum=checksum,
+        raw_code=raw_code,
+        materialized=materialized,
+        depends_on_nodes=depends_on_nodes,
+    )
+    if columns is not None:
+        node["columns"] = columns
+    return node
+
+
 def build_manifest_macro_node(
     *, unique_id: str, macro_sql: str, depends_on_macro_ids: tuple[str, ...] = ()
 ) -> dict[str, object]:
