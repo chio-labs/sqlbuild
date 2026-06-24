@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -19,6 +20,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtReusePlanEntry,
     DbtReusePlanningResult,
 )
+from sqlbuild.integrations.dbt.pipeline.helpers import execute as execute_helpers
 from sqlbuild.integrations.dbt.pipeline.helpers.reuse_output import (
     format_dbt_reuse_execution_output,
 )
@@ -38,6 +40,7 @@ from sqlbuild.spec.models.project import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
+    DbtExecutionSelectionStatusTestCase,
     DbtExecutionSpacingTestCase,
     DbtReuseExecutionOrderingTestCase,
     DbtReuseExecutionOutputTestCase,
@@ -46,6 +49,45 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CompileOnlyDbtRunner,
     emit_connection_progress,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionSelectionStatusTestCase(
+            description="prints dbt execution selection status for non tty streams",
+            expected_total=2,
+            expected_output_fragment="Resolving dbt execution selection...",
+        )
+    ],
+    ids=["prints dbt execution selection status for non tty streams"],
+)
+def test_given_non_tty_stream_when_resolving_dbt_execution_total_then_prints_status(
+    test_case: DbtExecutionSelectionStatusTestCase,
+) -> None:
+    class StubRunner:
+        def invoke(self, **kwargs: object) -> object:
+            del kwargs
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    '{"unique_id":"model.analytics.orders","resource_type":"model"}\n'
+                    '{"unique_id":"model.analytics.customers","resource_type":"model"}\n'
+                ),
+            )
+
+    stream: StringIO = StringIO()
+
+    total: int | None = execute_helpers._dbt_execution_expected_total(
+        runner=cast(DbtRunner, StubRunner()),
+        options=DbtCliOptions(project_dir=Path("/dbt_project")),
+        argv=("dbt", "build", "--select", "orders"),
+        stream=stream,
+        use_color=False,
+    )
+
+    assert total == test_case.expected_total
+    assert test_case.expected_output_fragment in stream.getvalue()
 
 
 @pytest.mark.parametrize(

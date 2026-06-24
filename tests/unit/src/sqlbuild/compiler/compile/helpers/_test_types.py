@@ -168,6 +168,14 @@ class AssembleCompiledProjectTestCase:
 
 
 @dataclass(frozen=True)
+class AssembleCompiledProjectEffectiveTargetTestCase:
+    description: str
+    project_toml: str
+    expected_effective_target_database: str | None
+    expected_effective_target_schema: str | None
+
+
+@dataclass(frozen=True)
 class InferColumnsTestCase:
     description: str
     query_sql: str

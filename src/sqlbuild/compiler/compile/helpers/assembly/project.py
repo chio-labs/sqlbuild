@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
+from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     infer_columns_with_sql_analysis,
@@ -111,12 +112,14 @@ def assemble_compiled_project(
         effective_target_name=inputs.effective_target_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
-        effective_target_database=inputs.effective_target.database
-        if inputs.effective_target is not None
-        else None,
-        effective_target_schema=inputs.effective_target.schema
-        if inputs.effective_target is not None
-        else None,
+        effective_target_database=(
+            (inputs.effective_target.database if inputs.effective_target is not None else None)
+            or _connection_database_fallback(inputs=inputs)
+        ),
+        effective_target_schema=(
+            (inputs.effective_target.schema if inputs.effective_target is not None else None)
+            or _str_or_none(inputs.effective_connection.get("schema"))
+        ),
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
             project_config=inputs.project_config,
@@ -169,6 +172,20 @@ def assemble_compiled_project(
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )
+
+
+def _str_or_none(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _connection_database_fallback(*, inputs: CompileProjectInputs) -> str | None:
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=inputs.project_config,
+        local_config=inputs.local_config,
+    )
+    if adapter_name == BuiltinAdapter.DUCKDB:
+        return None
+    return _str_or_none(inputs.effective_connection.get("database"))
 
 
 def _assemble_compiled_model(

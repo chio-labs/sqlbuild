@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
+    DbtCombinedGraph,
+    DbtCombinedGraphKey,
     DbtInteropPlan,
     DbtReusePlanEntry,
     DbtReusePlanningResult,
@@ -14,13 +18,21 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     find_direct_dbt_dependency_unique_ids,
 )
-from sqlbuild.integrations.dbt.types import DbtReusePlanAction
+from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
+    DbtReusePlanAction,
+)
 
 
 def dependency_baseline_unique_ids(
-    *, project: CompiledProject, manifest: DbtManifestIndex, plan: DbtInteropPlan
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    plan: DbtInteropPlan,
 ) -> tuple[str, ...]:
-    """Return direct dbt dependencies not explicitly selected as dbt work."""
+    """Return dbt dependencies not explicitly selected as dbt work."""
 
     explicit_unique_ids: frozenset[str] = frozenset(
         (
@@ -33,15 +45,70 @@ def dependency_baseline_unique_ids(
             ),
         )
     )
-    return tuple(
+    return _dedupe_preserving_order(
         unique_id
-        for unique_id in find_direct_dbt_dependency_unique_ids(
-            project=project,
-            manifest=manifest,
-            selected_model_names=plan.selection.sqlbuild_model_names,
+        for unique_id in (
+            *_upstream_dbt_model_unique_ids(graph=graph, explicit_unique_ids=explicit_unique_ids),
+            *find_direct_dbt_dependency_unique_ids(
+                project=project,
+                manifest=manifest,
+                selected_model_names=plan.selection.sqlbuild_model_names,
+            ),
         )
-        if unique_id not in explicit_unique_ids
+        if unique_id not in explicit_unique_ids and unique_id in manifest.models_by_unique_id
     )
+
+
+def _upstream_dbt_model_unique_ids(
+    *, graph: DbtCombinedGraph, explicit_unique_ids: frozenset[str]
+) -> tuple[str, ...]:
+    upstream_unique_ids: list[str] = []
+    unique_id: str
+    for unique_id in sorted(explicit_unique_ids):
+        upstream_unique_ids.extend(
+            key.name
+            for key in _expand_upstream_dbt_keys(
+                key=DbtCombinedGraphKey(
+                    owner=DbtCombinedGraphOwner.DBT,
+                    resource_type=DbtCombinedGraphResourceType.MODEL,
+                    name=unique_id,
+                ),
+                graph=graph,
+            )
+            if key.name != unique_id
+        )
+    return _dedupe_preserving_order(upstream_unique_ids)
+
+
+def _expand_upstream_dbt_keys(
+    *, key: DbtCombinedGraphKey, graph: DbtCombinedGraph
+) -> tuple[DbtCombinedGraphKey, ...]:
+    upstream_deps: object = getattr(graph, "upstream_deps", None)
+    if not isinstance(upstream_deps, dict):
+        return ()
+    visited: set[DbtCombinedGraphKey] = set()
+    pending: list[DbtCombinedGraphKey] = [key]
+    while pending:
+        current: DbtCombinedGraphKey = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        pending.extend(upstream_deps.get(current, ()))
+    return tuple(
+        sorted(
+            (
+                visited_key
+                for visited_key in visited
+                if visited_key.owner == DbtCombinedGraphOwner.DBT
+                and visited_key.resource_type == DbtCombinedGraphResourceType.MODEL
+            ),
+            key=lambda visited_key: visited_key.name,
+        )
+    )
+
+
+def _dedupe_preserving_order(values: Iterable[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
 
 
 def build_dbt_native_dependency_baseline_entries(
