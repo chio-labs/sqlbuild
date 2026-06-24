@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import shutil
 import subprocess
 import tarfile
@@ -22,6 +24,8 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
 from sqlbuild.spec.models.project import DbtReuseFromConfig
+
+_REUSE_MANIFEST_CACHE_VERSION: int = 1
 
 
 def compile_reuse_from_manifest(
@@ -70,6 +74,31 @@ def compile_reuse_from_manifest(
             project_file=sqlbuild_project_dir / "sqlbuild_project.toml",
             timeout_seconds=reuse_from.git_timeout_seconds,
         )
+        commit_sha: str = _git_commit_sha(
+            git_root=git_root,
+            git_ref=archive_ref,
+            timeout_seconds=reuse_from.git_timeout_seconds,
+        )
+        cache_key: str = _reuse_manifest_cache_key(
+            commit_sha=commit_sha,
+            dbt_relative_dir=dbt_relative_dir,
+            macro_source=macro_source,
+            dbt_options=dbt_options,
+            dbt_executable=runner.dbt_executable,
+        )
+        cached_manifest_contents: str | None = _read_reuse_manifest_cache(
+            sqlbuild_project_dir=sqlbuild_project_dir,
+            cache_key=cache_key,
+        )
+        if cached_manifest_contents is not None:
+            return DbtReuseFromCompileResult(
+                git_ref=reuse_from.git_ref,
+                manifest_contents=cached_manifest_contents,
+                command=DbtCommandResult(
+                    argv=("sqlbuild", "cache", "dbt-reuse-manifest"),
+                    returncode=0,
+                ),
+            )
         _extract_git_ref(
             git_root=git_root,
             git_ref=archive_ref,
@@ -113,9 +142,15 @@ def compile_reuse_from_manifest(
                 "dbt reuse_from compile did not produce manifest.json",
                 help=f"Expected manifest at {manifest_path}.",
             )
+        manifest_contents: str = manifest_path.read_text(encoding="utf-8")
+        _write_reuse_manifest_cache(
+            sqlbuild_project_dir=sqlbuild_project_dir,
+            cache_key=cache_key,
+            manifest_contents=manifest_contents,
+        )
         return DbtReuseFromCompileResult(
             git_ref=reuse_from.git_ref,
-            manifest_contents=manifest_path.read_text(encoding="utf-8"),
+            manifest_contents=manifest_contents,
             command=command,
         )
 
@@ -137,6 +172,87 @@ def _has_dbt_dependency_file(*, dbt_project_dir: Path) -> bool:
     return (dbt_project_dir / "packages.yml").is_file() or (
         dbt_project_dir / "dependencies.yml"
     ).is_file()
+
+
+def _git_commit_sha(*, git_root: Path, git_ref: str, timeout_seconds: int) -> str:
+    result: subprocess.CompletedProcess[str] = _run_git_text(
+        "-C",
+        str(git_root),
+        "rev-parse",
+        f"{git_ref}^{{commit}}",
+        timeout_seconds=timeout_seconds,
+    )
+    if result.returncode != 0:
+        raise DbtReuseUnavailableError(
+            f"dbt reuse_from git_ref '{git_ref}' could not be resolved to a commit",
+            reason=DbtReuseUnavailableReason.GIT_REF_MISSING,
+            help=result.stderr or result.stdout or None,
+        )
+    return result.stdout.strip()
+
+
+def _reuse_manifest_cache_key(
+    *,
+    commit_sha: str,
+    dbt_relative_dir: Path,
+    macro_source: Path,
+    dbt_options: DbtCliOptions,
+    dbt_executable: str,
+) -> str:
+    payload: dict[str, object] = {
+        "version": _REUSE_MANIFEST_CACHE_VERSION,
+        "commit_sha": commit_sha,
+        "dbt_executable": dbt_executable,
+        "dbt_relative_dir": dbt_relative_dir.as_posix(),
+        "macro_sha256": hashlib.sha256(macro_source.read_bytes()).hexdigest(),
+        "profiles_dir": None if dbt_options.profiles_dir is None else str(dbt_options.profiles_dir),
+        "target": dbt_options.target,
+        "vars": dbt_options.vars,
+        "state": None if dbt_options.state is None else str(dbt_options.state),
+        "defer": dbt_options.defer,
+    }
+    raw_key: str = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
+def _reuse_manifest_cache_file(*, sqlbuild_project_dir: Path, cache_key: str) -> Path:
+    return (
+        sqlbuild_project_dir / "target" / "sqlbuild" / "cache" / "dbt_reuse" / f"{cache_key}.json"
+    )
+
+
+def _read_reuse_manifest_cache(*, sqlbuild_project_dir: Path, cache_key: str) -> str | None:
+    cache_file: Path = _reuse_manifest_cache_file(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        cache_key=cache_key,
+    )
+    if not cache_file.is_file():
+        return None
+    try:
+        payload: object = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("version") != _REUSE_MANIFEST_CACHE_VERSION:
+        return None
+    manifest_contents: object | None = payload.get("manifest_contents")
+    return manifest_contents if isinstance(manifest_contents, str) else None
+
+
+def _write_reuse_manifest_cache(
+    *, sqlbuild_project_dir: Path, cache_key: str, manifest_contents: str
+) -> None:
+    cache_file: Path = _reuse_manifest_cache_file(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        cache_key=cache_key,
+    )
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, object] = {
+        "version": _REUSE_MANIFEST_CACHE_VERSION,
+        "manifest_contents": manifest_contents,
+    }
+    cache_file.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
 def _relative_to_git_root(*, path: Path, git_root: Path, label: str) -> Path:
