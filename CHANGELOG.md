@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.4](https://github.com/chio-labs/sqlbuild/compare/v0.38.3...v0.38.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** cache reuse manifests ([6562e29](https://github.com/chio-labs/sqlbuild/commit/6562e29841493ffa6476957acfc3f9812e27b5d0))
+* **dbt:** cache reuse manifests ([bbe1bc3](https://github.com/chio-labs/sqlbuild/commit/bbe1bc33b63dc91cc69175610775b8631e340a8c))
+
 ## [0.38.3](https://github.com/chio-labs/sqlbuild/compare/v0.38.2...v0.38.3) (2026-06-24)
 
 
