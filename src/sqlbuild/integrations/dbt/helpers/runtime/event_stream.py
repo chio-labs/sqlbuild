@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
+from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage, DbtNodeStart
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
@@ -37,6 +37,8 @@ _NODE_MESSAGE_EVENT_NAMES: frozenset[str] = frozenset(
 )
 
 _NODE_STARTED_EVENT_NAMES: frozenset[str] = frozenset({"LogStartLine", "NodeStarted"})
+
+_DBT_TRANSIENT_NODE_PROGRESS_ENABLED: bool = False
 
 _DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
     {
@@ -71,7 +73,9 @@ def execute_dbt_json_event_stream(
     pending_messages: dict[str, list[DbtNodeMessage]] = {}
     results: list[DbtNodeExecutionResult] = []
     recorded_unique_ids: set[str] = set()
+    started_unique_ids: set[str] = set()
     display_index: int = 0
+    start_display_index: int = 0
     status: TransientStatusReporter | None = _start_dbt_status(
         stream=stream,
         use_color=use_color,
@@ -104,13 +108,22 @@ def execute_dbt_json_event_stream(
                     if unique_id is not None:
                         pending_messages.setdefault(unique_id, []).append(message)
                     continue
-                node_start_message: str | None = parse_dbt_node_start_message(event=event)
-                if node_start_message is not None:
-                    if status is None:
-                        status = TransientStatusReporter(stream=stream, use_color=use_color)
-                        status.start(node_start_message)
+                node_start: DbtNodeStart | None = parse_dbt_node_start(event=event)
+                if node_start is not None:
+                    if node_start.unique_id in started_unique_ids:
+                        continue
+                    started_unique_ids.add(node_start.unique_id)
+                    start_display_index += 1
+                    if status is not None:
+                        status.update(format_dbt_node_start_message(start=node_start))
                     else:
-                        status.update(node_start_message)
+                        render_dbt_node_start(
+                            stream=stream,
+                            style=style,
+                            start=node_start,
+                            display_index=node_start.index or start_display_index,
+                            display_total=node_start.total or display_total,
+                        )
                     continue
                 result: DbtNodeExecutionResult | None = parse_dbt_node_result(
                     event=event,
@@ -143,6 +156,8 @@ def execute_dbt_json_event_stream(
 
 
 def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusReporter | None:
+    if not _DBT_TRANSIENT_NODE_PROGRESS_ENABLED:
+        return None
     if not stream.isatty():
         return None
     status: TransientStatusReporter = TransientStatusReporter(
@@ -153,8 +168,8 @@ def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusRepo
     return status
 
 
-def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
-    """Parse a dbt node-start event into a user-facing progress message."""
+def parse_dbt_node_start(*, event: dict[str, object]) -> DbtNodeStart | None:
+    """Parse a dbt node-start event."""
 
     info: dict[str, object] = _dict_value(event.get("info"))
     event_name: str | None = _str_value(info.get("name"))
@@ -167,7 +182,19 @@ def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
         return None
     resource_type: str = _str_value(node_info.get("resource_type")) or "node"
     node_name: str = _str_value(node_info.get("node_name")) or unique_id
-    return f"Running dbt {resource_type} {node_name}..."
+    return DbtNodeStart(
+        unique_id=unique_id,
+        resource_type=resource_type,
+        node_name=node_name,
+        index=_int_value(data.get("index")),
+        total=_int_value(data.get("total")) or _int_value(data.get("num_models")),
+    )
+
+
+def format_dbt_node_start_message(*, start: DbtNodeStart) -> str:
+    """Format a dbt node-start event for transient progress."""
+
+    return f"Running dbt {start.resource_type} {start.node_name}..."
 
 
 def parse_dbt_json_event(*, line: str) -> dict[str, object] | None:
@@ -268,14 +295,11 @@ def render_dbt_node_result(
     display_index: int | None = None,
     display_total: int | None = None,
 ) -> None:
-    ctr: str = (
-        f"{display_index}/{display_total}"
-        if display_index is not None and display_total is not None
-        else f"{result.index}/{result.total}"
-        if result.index is not None and result.total is not None
-        else str(display_index)
-        if display_index is not None
-        else "-"
+    ctr: str = _display_counter(
+        display_index=display_index,
+        display_total=display_total,
+        event_index=result.index,
+        event_total=result.total,
     )
     resource_type: str = result.resource_type[:9]
     name: str = result.node_name[:30]
@@ -296,6 +320,54 @@ def render_dbt_node_result(
         message_status: str = "warn" if message.level == "warn" else "error"
         stream.write(f"         {style.status(message_status):<9} {message.message}\n")
     stream.flush()
+
+
+def render_dbt_node_start(
+    *,
+    stream: TextIO,
+    style: CliStyle,
+    start: DbtNodeStart,
+    display_index: int | None = None,
+    display_total: int | None = None,
+) -> None:
+    """Render an append-only dbt node start row."""
+
+    ctr: str = _display_counter(
+        display_index=display_index,
+        display_total=display_total,
+        event_index=start.index,
+        event_total=start.total,
+    )
+    resource_type: str = start.resource_type[:9]
+    name: str = start.node_name[:30]
+    stream.write(
+        f"  {ctr:<5} {resource_type:<9}"
+        + format_aligned_name_value(
+            plain_name=name,
+            styled_name=style.dbt_object_name(name),
+            value=style.muted("RUNNING"),
+            name_column_width=30,
+            prefix=" ",
+        )
+        + "\n"
+    )
+    stream.flush()
+
+
+def _display_counter(
+    *,
+    display_index: int | None,
+    display_total: int | None,
+    event_index: int | None,
+    event_total: int | None,
+) -> str:
+    if display_index is not None and display_total is not None:
+        return f"{display_index}/{display_total}"
+    if event_index is not None and event_total is not None:
+        return f"{event_index}/{event_total}"
+    if display_index is not None:
+        return str(display_index)
+    return "-"
 
 
 def _display_status(status: str) -> str:
