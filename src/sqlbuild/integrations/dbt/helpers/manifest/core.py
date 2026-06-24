@@ -30,6 +30,7 @@ _DBT_DEPENDS_ON_KEY: str = "depends_on"
 _DBT_DEPENDS_ON_MACROS_KEY: str = "macros"
 _DBT_MACRO_SQL_KEY: str = "macro_sql"
 _DBT_USER_MACRO_PREFIX: str = "macro."
+_SQLBUILD_SEED_CONTENT_HASH_KEY: str = "sqlbuild_seed_content_hash"
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,28 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         seeds_by_unique_id=seeds_by_unique_id,
         seed_identity_warnings=tuple(seed_identity_warnings),
     )
+
+
+def precompute_dbt_manifest_seed_content_hashes(*, raw_data: object) -> object:
+    """Return manifest JSON data with seed content hashes embedded while files exist."""
+
+    if not isinstance(raw_data, dict):
+        return raw_data
+    manifest_data: dict[str, object] = cast(dict[str, object], raw_data)
+    raw_nodes: object | None = manifest_data.get("nodes")
+    if not isinstance(raw_nodes, dict):
+        return raw_data
+    raw_node: object
+    for raw_node in raw_nodes.values():
+        if not isinstance(raw_node, dict):
+            continue
+        node_data: dict[object, object] = cast(dict[object, object], raw_node)
+        if node_data.get("resource_type") != DbtSupportedResourceType.SEED:
+            continue
+        content_hash: str | None = _read_seed_content_hash(raw_node=node_data)
+        if content_hash is not None:
+            node_data[_SQLBUILD_SEED_CONTENT_HASH_KEY] = content_hash
+    return raw_data
 
 
 def resolve_dbt_manifest_model(
@@ -271,6 +294,12 @@ def _seed_identity_hash(
 def _seed_content_hash(
     *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
 ) -> str | None:
+    precomputed: str | None = _optional_str(raw_node.get(_SQLBUILD_SEED_CONTENT_HASH_KEY))
+    if precomputed is not None:
+        return precomputed
+    content_hash: str | None = _read_seed_content_hash(raw_node=raw_node)
+    if content_hash is not None:
+        return content_hash
     root_path: str | None = _optional_str(raw_node.get("root_path"))
     relative_path: str | None = _optional_str(raw_node.get("original_file_path"))
     if root_path is None or relative_path is None:
@@ -281,12 +310,24 @@ def _seed_content_hash(
         return None
     seed_file: Path = Path(root_path) / relative_path
     try:
-        text: str = seed_file.read_text(encoding="utf-8-sig")
+        seed_file.read_text(encoding="utf-8-sig")
     except (OSError, ValueError) as exc:
         warnings.append(
             f"seed '{unique_id}': could not read seed file ({exc}); independent content "
             "change detection is inactive (relying on dbt checksum only)"
         )
+    return None
+
+
+def _read_seed_content_hash(*, raw_node: dict[object, object]) -> str | None:
+    root_path: str | None = _optional_str(raw_node.get("root_path"))
+    relative_path: str | None = _optional_str(raw_node.get("original_file_path"))
+    if root_path is None or relative_path is None:
+        return None
+    seed_file: Path = Path(root_path) / relative_path
+    try:
+        text: str = seed_file.read_text(encoding="utf-8-sig")
+    except (OSError, ValueError):
         return None
     normalized: str = text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
