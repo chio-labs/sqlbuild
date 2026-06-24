@@ -188,6 +188,9 @@ class DbtEventStreamTestCase:
     stdout_lines: tuple[str, ...]
     expected_unique_ids: tuple[str, ...]
     expected_output_fragments: tuple[str, ...] = ()
+    expected_absent_fragments: tuple[str, ...] = ()
+    stream_is_tty: bool = False
+    no_progress: bool = False
 
 
 @dataclass(frozen=True)
