@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.3](https://github.com/chio-labs/sqlbuild/compare/v0.39.2...v0.39.3) (2026-06-24)
+
+
+### Bug Fixes
+
+* **dbt:** align identity diff with reuse identity ([d9bee2c](https://github.com/chio-labs/sqlbuild/commit/d9bee2c88556ae3b9b7f308e6803edac18f8f760))
+* **dbt:** align identity diff with reuse identity ([dbf00f7](https://github.com/chio-labs/sqlbuild/commit/dbf00f7e510966f3aeea3b9882215422e78770b8))
+
 ## [0.39.2](https://github.com/chio-labs/sqlbuild/compare/v0.39.1...v0.39.2) (2026-06-24)
 
 
