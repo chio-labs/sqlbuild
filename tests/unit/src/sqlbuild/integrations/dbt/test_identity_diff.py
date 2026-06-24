@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_identity_diff_manifest_model_node,
     build_manifest_data,
+    build_manifest_model_node,
 )
 
 IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
@@ -46,6 +47,33 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
         selected_unique_ids=("model.analytics.orders",),
         expected_output_fragments=("Selected (1)", "WOULD-REUSE", "No identity differences"),
         expected_json_fragments=('"verdict": "would_reuse"',),
+    ),
+    DbtIdentityDiffTestCase(
+        description="ignores compiled sql schema rendering when raw identity is unchanged",
+        current_nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.orders",
+                package_name="analytics",
+                name="orders",
+                checksum="same",
+                raw_code="select * from {{ ref('base') }}",
+                compiled_code="select * from RACING.DEV_KEVINL.base",
+            ),
+        ),
+        ref_nodes=(
+            build_manifest_model_node(
+                unique_id="model.analytics.orders",
+                package_name="analytics",
+                name="orders",
+                checksum="same",
+                raw_code="select * from {{ ref('base') }}",
+                compiled_code="select * from RACING.staging.base",
+            ),
+        ),
+        selected_unique_ids=("model.analytics.orders",),
+        expected_output_fragments=("WOULD-REUSE", "No identity differences"),
+        expected_json_fragments=('"causes": []',),
+        expected_absent_fragments=("compiled", "RACING.DEV_KEVINL", "RACING.staging"),
     ),
     DbtIdentityDiffTestCase(
         description="reports direct sql cause",

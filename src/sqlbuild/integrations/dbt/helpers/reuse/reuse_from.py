@@ -17,6 +17,9 @@ from sqlbuild.integrations.dbt.exceptions import (
     DbtReuseUnavailableError,
 )
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.manifest.core import (
+    precompute_dbt_manifest_seed_content_hashes,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
@@ -25,7 +28,7 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
 from sqlbuild.spec.models.project import DbtReuseFromConfig
 
-_REUSE_MANIFEST_CACHE_VERSION: int = 1
+_REUSE_MANIFEST_CACHE_VERSION: int = 2
 
 
 def compile_reuse_from_manifest(
@@ -143,7 +146,9 @@ def compile_reuse_from_manifest(
                 "dbt reuse_from compile did not produce manifest.json",
                 help=f"Expected manifest at {manifest_path}.",
             )
-        manifest_contents: str = manifest_path.read_text(encoding="utf-8")
+        manifest_contents: str = _manifest_contents_with_seed_content_hashes(
+            manifest_path=manifest_path
+        )
         _write_reuse_manifest_cache(
             sqlbuild_project_dir=sqlbuild_project_dir,
             cache_key=cache_key,
@@ -154,6 +159,12 @@ def compile_reuse_from_manifest(
             manifest_contents=manifest_contents,
             command=command,
         )
+
+
+def _manifest_contents_with_seed_content_hashes(*, manifest_path: Path) -> str:
+    raw_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    enriched: object = precompute_dbt_manifest_seed_content_hashes(raw_data=raw_data)
+    return json.dumps(enriched, sort_keys=True)
 
 
 def _git_root(*, path: Path) -> Path:
