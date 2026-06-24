@@ -36,7 +36,7 @@ _NODE_MESSAGE_EVENT_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_NODE_STARTED_EVENT_NAMES: frozenset[str] = frozenset({"NodeStarted"})
+_NODE_STARTED_EVENT_NAMES: frozenset[str] = frozenset({"LogStartLine", "NodeStarted"})
 
 _DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
     {

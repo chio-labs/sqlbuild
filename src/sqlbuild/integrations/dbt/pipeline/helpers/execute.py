@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -133,11 +134,12 @@ def _dbt_execution_expected_total(
         stream=stream,
         use_color=use_color,
     )
+    start: float = time.monotonic()
     try:
         result: DbtCommandResult = runner.invoke(argv=ls_argv, cwd=options.project_dir)
     finally:
         if status is not None:
-            status.close()
+            status.complete(f"Resolved dbt execution selection. ({time.monotonic() - start:.2f}s)")
     if result.returncode != 0:
         return None
     return len(parse_dbt_ls_json_lines(stdout=result.stdout))
