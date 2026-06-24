@@ -113,6 +113,14 @@ class DbtReuseCompileDepsTestCase:
 
 
 @dataclass(frozen=True)
+class DbtReuseManifestCacheTestCase:
+    description: str
+    expected_first_commands: tuple[str, ...]
+    expected_second_commands: tuple[str, ...]
+    expected_manifest_contents: str
+
+
+@dataclass(frozen=True)
 class DbtModeGuardTestCase:
     description: str
     virtual_environments: bool

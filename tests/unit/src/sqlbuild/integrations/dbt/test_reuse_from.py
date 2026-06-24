@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtReuseCompileDepsTestCase,
     DbtReuseGitRefreshTestCase,
     DbtReuseGitTimeoutTestCase,
+    DbtReuseManifestCacheTestCase,
 )
 
 
@@ -135,6 +136,7 @@ def test_given_reuse_checkout_with_packages_when_compiling_then_runs_deps_before
         reuse_from_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
     )
     monkeypatch.setattr(reuse_from_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
+    monkeypatch.setattr(reuse_from_module, "_git_commit_sha", lambda **kwargs: "abc123")
     monkeypatch.setattr(reuse_from_module, "_extract_git_ref", extract_git_ref)
 
     result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
@@ -149,3 +151,90 @@ def test_given_reuse_checkout_with_packages_when_compiling_then_runs_deps_before
 
     assert tuple(command_names) == test_case.expected_commands
     assert result.manifest_contents == test_case.expected_manifest_contents
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtReuseManifestCacheTestCase(
+            description="uses cached manifest on second compile for same reuse inputs",
+            expected_first_commands=("deps", "compile"),
+            expected_second_commands=(),
+            expected_manifest_contents='{"metadata": {}}',
+        )
+    ],
+    ids=["uses cached manifest on second compile for same reuse inputs"],
+)
+def test_given_cached_reuse_manifest_when_compiling_same_inputs_then_skips_deps_and_compile(
+    test_case: DbtReuseManifestCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sqlbuild_project_dir: Path = tmp_path / "sqlbuild_project"
+    macro_source: Path = sqlbuild_project_dir / "dbt" / "macros" / "generate_schema_name.sql"
+    macro_source.parent.mkdir(parents=True)
+    macro_source.write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) %}{% endmacro %}",
+        encoding="utf-8",
+    )
+    dbt_project_dir: Path = tmp_path / "repo" / "dbt_project"
+    dbt_project_dir.mkdir(parents=True)
+    command_names: list[str] = []
+
+    def extract_git_ref(
+        *, git_root: Path, git_ref: str, destination: Path, timeout_seconds: int
+    ) -> None:
+        del git_root, git_ref, timeout_seconds
+        temp_project_dir: Path = destination / "dbt_project"
+        temp_project_dir.mkdir()
+        (temp_project_dir / "packages.yml").write_text("packages: []\n", encoding="utf-8")
+        target_path: Path = destination.parent / "target"
+        target_path.mkdir()
+        (target_path / "manifest.json").write_text(
+            test_case.expected_manifest_contents,
+            encoding="utf-8",
+        )
+
+    def invoke(argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
+        del cwd
+        command_names.append(argv[1])
+        return DbtCommandResult(argv=argv, returncode=0)
+
+    monkeypatch.setattr(reuse_from_module, "_git_root", lambda *, path: tmp_path / "repo")
+    monkeypatch.setattr(reuse_from_module, "_raise_if_current_branch", lambda **kwargs: None)
+    monkeypatch.setattr(
+        reuse_from_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
+    )
+    monkeypatch.setattr(
+        reuse_from_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
+    )
+    monkeypatch.setattr(reuse_from_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
+    monkeypatch.setattr(reuse_from_module, "_git_commit_sha", lambda **kwargs: "abc123")
+    monkeypatch.setattr(reuse_from_module, "_extract_git_ref", extract_git_ref)
+    reuse_from: DbtReuseFromConfig = DbtReuseFromConfig(
+        git_ref="master",
+        generate_schema_name_override="dbt/macros/generate_schema_name.sql",
+    )
+    dbt_options: DbtCliOptions = DbtCliOptions(project_dir=dbt_project_dir)
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoke)
+
+    first_result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        dbt_options=dbt_options,
+        reuse_from=reuse_from,
+        runner=runner,
+    )
+    first_commands: tuple[str, ...] = tuple(command_names)
+    command_names.clear()
+    second_result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
+        sqlbuild_project_dir=sqlbuild_project_dir,
+        dbt_options=dbt_options,
+        reuse_from=reuse_from,
+        runner=runner,
+    )
+
+    assert first_commands == test_case.expected_first_commands
+    assert tuple(command_names) == test_case.expected_second_commands
+    assert first_result.manifest_contents == test_case.expected_manifest_contents
+    assert second_result.manifest_contents == test_case.expected_manifest_contents
+    assert (sqlbuild_project_dir / "target" / "sqlbuild" / "cache" / "dbt_reuse").is_dir()

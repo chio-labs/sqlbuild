@@ -211,6 +211,7 @@ def plan_dbt_interop_from_project(
         on_connection_error=(
             None if connection_progress is None else connection_progress.on_connection_error
         ),
+        on_progress=on_progress,
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
@@ -240,6 +241,7 @@ def plan_dbt_interop_from_project(
             dbt_options=dbt_options,
             runner=runner,
             warnings=reuse_warnings,
+            on_progress=on_progress,
         )
         if reuse_warnings:
             plan = replace(plan, warnings=(*plan.warnings, *reuse_warnings))
@@ -279,6 +281,7 @@ def plan_dbt_interop_from_project(
             on_connection_error=(
                 None if connection_progress is None else connection_progress.on_connection_error
             ),
+            on_progress=on_progress,
         )
     dbt_dependency_baseline_plan: DbtReusePlanningResult | None = (
         build_dbt_dependency_baseline_plan_output(
@@ -291,6 +294,7 @@ def plan_dbt_interop_from_project(
             scoped_unique_ids=dependency_baseline_ids,
             dbt_options=dbt_options,
             runner=runner,
+            on_progress=on_progress,
         )
     )
     if dbt_dependency_baseline_plan is not None:
