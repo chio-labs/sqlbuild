@@ -45,6 +45,30 @@ class StandardDependencyBaselinePlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class StandardReuseCurrentProjectInputTestCase:
+    description: str
+    trust_reuse_inputs: bool
+    expected_dependency_baseline_names: tuple[str, ...]
+    expected_trusted_input_names: tuple[str, ...]
+    expected_current_project_affected_names: tuple[str, ...]
+    expected_existing_destination_inputs: dict[str, str]
+
+
+@dataclass(frozen=True)
+class StandardReuseOriginDriftTestCase:
+    description: str
+    strict_reuse: bool
+    expected_dependency_baseline_names: tuple[str, ...]
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class StandardExistingDestinationInputTestCase:
+    description: str
+    expected_existing_destination_inputs: dict[str, str]
+
+
+@dataclass(frozen=True)
 class StandardReuseFullRefreshBypassTestCase:
     description: str
     expected_reuse_from_target_metadata_present: bool

@@ -70,6 +70,16 @@ def resolve_target_config(
             if local_target.reuse_from is not None
             else project_target.reuse_from
         ),
+        reuse_strict=(
+            local_target.reuse_strict
+            if local_target.reuse_strict is not None
+            else project_target.reuse_strict
+        ),
+        trust_reuse_inputs=(
+            local_target.trust_reuse_inputs
+            if local_target.trust_reuse_inputs is not None
+            else project_target.trust_reuse_inputs
+        ),
         force=local_target.force if local_target.force is not None else project_target.force,
         reuse_hard_copy=(
             local_target.reuse_hard_copy

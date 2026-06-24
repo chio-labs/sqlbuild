@@ -50,6 +50,14 @@ class ExecutionJsonRelationReuseTestCase:
 
 
 @dataclass(frozen=True)
+class ExecutionJsonReuseSummaryTestCase:
+    description: str
+    expected_reused_input_name: str
+    expected_trusted_input_name: str
+    expected_existing_input_name: str
+
+
+@dataclass(frozen=True)
 class ExecutionJsonSeedReasonTestCase:
     description: str
     expected_asset_name: str

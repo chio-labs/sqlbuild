@@ -31,8 +31,13 @@ from sqlbuild.integrations.dbt.models import (
     DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
+from sqlbuild.integrations.dbt.types import (
+    DbtModelPlanAction,
+    DbtModelPlanReason,
+    DbtReuseUnavailableReason,
+)
 from sqlbuild.spec.models.project import DbtReuseFromConfig
+from sqlbuild.spec.models.targets import resolve_target_config
 
 
 def build_dbt_reuse_plan_output(
@@ -44,6 +49,7 @@ def build_dbt_reuse_plan_output(
     adapter_name: str,
     dbt_model_plan: DbtModelPlanningResult | None,
     plan: DbtInteropPlan,
+    target_name: str | None,
     dbt_options: DbtCliOptions,
     runner: DbtRunner,
     warnings: list[str] | None = None,
@@ -99,6 +105,17 @@ def build_dbt_reuse_plan_output(
             existing_origin_relation_keys=existing_origin_relation_keys,
         ),
         dbt_model_plan=dbt_model_plan,
+        strict=_dbt_reuse_strict(
+            discovered_inputs=discovered_inputs,
+            target_name=target_name,
+        ),
+        trust_reuse_inputs=_dbt_trust_reuse_inputs(
+            discovered_inputs=discovered_inputs,
+            target_name=target_name,
+        ),
+        current_project_affected_unique_ids=_current_project_affected_unique_ids(
+            dbt_model_plan=dbt_model_plan,
+        ),
     )
 
 
@@ -183,6 +200,7 @@ def build_dbt_dependency_baseline_plan_output(
     adapter_name: str,
     dbt_model_plan: DbtModelPlanningResult | None,
     scoped_unique_ids: tuple[str, ...],
+    target_name: str | None,
     dbt_options: DbtCliOptions,
     runner: DbtRunner,
     warnings: list[str] | None = None,
@@ -238,6 +256,18 @@ def build_dbt_dependency_baseline_plan_output(
             existing_origin_relation_keys=existing_origin_relation_keys,
         ),
         dbt_model_plan=dbt_model_plan,
+        strict=_dbt_reuse_strict(
+            discovered_inputs=discovered_inputs,
+            target_name=target_name,
+        ),
+        trust_reuse_inputs=_dbt_trust_reuse_inputs(
+            discovered_inputs=discovered_inputs,
+            target_name=target_name,
+        ),
+        current_project_affected_unique_ids=_current_project_affected_unique_ids(
+            dbt_model_plan=dbt_model_plan,
+        ),
+        trusted_input_unique_ids=frozenset(scoped_unique_ids),
     )
 
 
@@ -275,3 +305,43 @@ def _reuse_unavailable_message(*, error: DbtReuseUnavailableError, git_ref: str 
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _dbt_reuse_strict(
+    *, discovered_inputs: DiscoveredProjectInputs, target_name: str | None
+) -> bool:
+    if target_name is None:
+        return False
+    return resolve_target_config(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        target_name=target_name,
+    ).reuse_strict
+
+
+def _dbt_trust_reuse_inputs(
+    *, discovered_inputs: DiscoveredProjectInputs, target_name: str | None
+) -> bool:
+    if target_name is None:
+        return False
+    return resolve_target_config(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        target_name=target_name,
+    ).trust_reuse_inputs
+
+
+def _current_project_affected_unique_ids(
+    *, dbt_model_plan: DbtModelPlanningResult
+) -> frozenset[str]:
+    return frozenset(
+        entry.unique_id
+        for entry in dbt_model_plan.entries
+        if entry.action == DbtModelPlanAction.RUN
+        and entry.reason
+        in {
+            DbtModelPlanReason.CHECKSUM_CHANGED,
+            DbtModelPlanReason.UPSTREAM_CHANGED,
+            DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
+        }
+    )

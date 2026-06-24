@@ -69,7 +69,7 @@ REUSE_PLAN_OUTPUT_TEST_CASES: tuple[DbtReusePlanOutputTestCase, ...] = (
         include_model_plan=True,
         expected_is_none=False,
         expected_complete_reuse_unique_ids=("model.analytics.orders",),
-        expected_seeded_reuse_unique_ids=("model.analytics.events",),
+        expected_seeded_reuse_unique_ids=(),
     ),
     DbtReusePlanOutputTestCase(
         description="reports cached reuse manifest",
@@ -77,7 +77,7 @@ REUSE_PLAN_OUTPUT_TEST_CASES: tuple[DbtReusePlanOutputTestCase, ...] = (
         include_model_plan=True,
         expected_is_none=False,
         expected_complete_reuse_unique_ids=("model.analytics.orders",),
-        expected_seeded_reuse_unique_ids=("model.analytics.events",),
+        expected_seeded_reuse_unique_ids=(),
         cache_hit=True,
         expected_progress_fragments=("Loaded cached dbt reuse manifest.",),
     ),
@@ -224,6 +224,7 @@ def test_given_reuse_from_pipeline_inputs_when_building_reuse_plan_then_returns_
         adapter_name="duckdb",
         dbt_model_plan=dbt_model_plan,
         plan=plan,
+        target_name=None,
         dbt_options=DbtCliOptions(project_dir=tmp_path / "dbt"),
         runner=DbtRunner(),
         on_progress=progress_messages.append,
@@ -321,6 +322,7 @@ def test_given_origin_relation_keys_when_building_reuse_plan_then_marks_missing_
         adapter_name="duckdb",
         dbt_model_plan=dbt_model_plan,
         plan=plan,
+        target_name=None,
         dbt_options=DbtCliOptions(project_dir=tmp_path / "dbt"),
         runner=DbtRunner(),
     )
@@ -411,6 +413,7 @@ def test_given_missing_origin_relation_when_building_dependency_baseline_then_re
             "model.analytics.customers",
             "model.analytics.payments",
         ),
+        target_name=None,
         dbt_options=DbtCliOptions(project_dir=tmp_path / "dbt"),
         runner=DbtRunner(),
     )
