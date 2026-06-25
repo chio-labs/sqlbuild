@@ -216,7 +216,7 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
     "test_case",
     [
         DbtChangeAwarePlaygroundLifecycleTestCase(
-            description="dbt playground builds the dbt graph without any reuse pre-phase",
+            description="dbt playground second build prunes unchanged models (change-aware)",
             project_name="dbt_change_aware_playground",
             expected_first_build_fragments=(
                 "dbt build",
@@ -224,17 +224,19 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
                 "model     fct_orders",
             ),
             expected_second_build_fragments=(
-                "dbt build",
-                "model     stg_orders",
+                "all planned dbt models are current",
+                "no change",
+                "Skipping dbt: no dbt work selected.",
             ),
             expected_second_build_absent_fragments=(
                 "OK     reuse",
                 "Reuse plan",
                 "dbt reuse  pre-phase",
+                "dbt fingerprint write failed",
             ),
         )
     ],
-    ids=["dbt playground builds the dbt graph without any reuse pre-phase"],
+    ids=["dbt playground second build prunes unchanged models (change-aware)"],
 )
 def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
     test_case: DbtChangeAwarePlaygroundLifecycleTestCase,

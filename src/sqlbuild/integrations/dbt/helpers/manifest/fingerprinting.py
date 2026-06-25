@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -91,6 +92,12 @@ def try_write_dbt_node_fingerprint(
                 separators=(",", ":"),
             ),
             ts=datetime.now(tz=UTC),
+        )
+        adapter.ensure_schema(
+            connection,
+            database=fingerprint_database,
+            schema=fingerprint_schema,
+            statement_recorder=StatementRecorder(),
         )
         execute_fn: Any = adapter.execute
         write_fingerprint(
