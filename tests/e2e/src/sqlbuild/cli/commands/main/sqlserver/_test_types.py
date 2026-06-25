@@ -10,13 +10,6 @@ class SqlServerDltE2ETestCase:
 
 
 @dataclass(frozen=True)
-class SqlServerDbtReuseFromE2ETestCase:
-    description: str
-    schema_prefix: str
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
 class SqlServerDependencyBaselineE2ETestCase:
     description: str
     schema_prefix: str

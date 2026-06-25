@@ -88,6 +88,6 @@ def _example_name(template: PlaygroundTemplate) -> str:
         PlaygroundTemplate.VIRTUAL: "virtual environments waffle shop",
         PlaygroundTemplate.LOADER_WAFFLE_SHOP: "loader-focused waffle shop",
         PlaygroundTemplate.PYTHON_NODES: "Python nodes demo",
-        PlaygroundTemplate.DBT: "dbt reuse demo",
+        PlaygroundTemplate.DBT: "dbt change-aware build, clone, and diff demo",
     }
     return labels.get(template, "waffle shop")

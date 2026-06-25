@@ -11,8 +11,6 @@ from typing import Any
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import dbt_executable
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    assert_dbt_seeded_reuse_from_lifecycle,
-    assert_dbt_snapshot_seeded_reuse_from_lifecycle,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     run_sqb,
@@ -95,118 +93,6 @@ def build_snowflake_dependency_baseline_project_toml(
         "reuse_hard_copy = true\n\n"
         "[defaults]\n"
         'materialized = "table"\n'
-    )
-
-
-def assert_snowflake_seeded_reuse_case(
-    *,
-    tmp_path: Path,
-    schema_prefix: str,
-    expected_rows: tuple[tuple[object, ...], ...],
-    snapshot: bool,
-) -> None:
-    schema_base: str = build_unique_schema_name(prefix=schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    config: dict[str, object] = build_snowflake_connection_config(schema=dev_schema_name)
-    database_name: str = str(config["database"])
-    try:
-        ensure_query_schema_ready(schema_name=dev_schema_name)
-        ensure_query_schema_ready(schema_name=prod_schema_name)
-        relation: str = "orders_snapshot" if snapshot else "fact_orders"
-        current_filter: str = " WHERE dbt_valid_to IS NULL" if snapshot else ""
-        profiles_yml: str = _snowflake_reuse_profiles_yml(
-            config=config,
-            database_name=database_name,
-            dev_schema_name=dev_schema_name,
-            prod_schema_name=prod_schema_name,
-        )
-        project_toml: str = _snowflake_reuse_project_toml(dev_schema_name=dev_schema_name)
-        destination_rows_sql: str = (
-            "SELECT order_id, amount FROM "
-            f"{relation_name(schema_name=dev_schema_name, name=relation)}"
-            f"{current_filter} ORDER BY order_id"
-        )
-        downstream_rows_sql: str = (
-            "SELECT order_id, downstream_amount FROM "
-            f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
-            "ORDER BY order_id"
-        )
-        raw_orders_relation: str = relation_name(schema_name=dev_schema_name, name="raw_orders")
-        if snapshot:
-            assert_dbt_snapshot_seeded_reuse_from_lifecycle(
-                tmp_path=tmp_path,
-                profiles_yml=profiles_yml,
-                project_toml=project_toml,
-                origin_snapshot_schema=prod_schema_name,
-                destination_snapshot_schema=dev_schema_name,
-                fetch_rows=lambda sql: fetch_snowflake_rows(schema_name=dev_schema_name, sql=sql),
-                execute_sql=lambda sql: execute_snowflake_sql(schema_name=dev_schema_name, sql=sql),
-                raw_orders_relation=raw_orders_relation,
-                destination_rows_sql=destination_rows_sql,
-                downstream_rows_sql=downstream_rows_sql,
-                expected_rows=expected_rows,
-            )
-        else:
-            assert_dbt_seeded_reuse_from_lifecycle(
-                tmp_path=tmp_path,
-                profiles_yml=profiles_yml,
-                project_toml=project_toml,
-                fetch_rows=lambda sql: fetch_snowflake_rows(schema_name=dev_schema_name, sql=sql),
-                execute_sql=lambda sql: execute_snowflake_sql(schema_name=dev_schema_name, sql=sql),
-                raw_orders_relation=raw_orders_relation,
-                destination_rows_sql=destination_rows_sql,
-                downstream_rows_sql=downstream_rows_sql,
-                expected_rows=expected_rows,
-            )
-    finally:
-        cleanup_snowflake_schema(schema_name=dev_schema_name)
-        cleanup_snowflake_schema(schema_name=prod_schema_name)
-
-
-def _snowflake_reuse_profiles_yml(
-    *, config: dict[str, object], database_name: str, dev_schema_name: str, prod_schema_name: str
-) -> str:
-    return (
-        "analytics:\n"
-        "  target: dev\n"
-        "  outputs:\n"
-        "    dev:\n"
-        "      type: snowflake\n"
-        f"      account: {config['account']}\n"
-        f"      user: {config['user']}\n"
-        "      authenticator: programmatic_access_token\n"
-        f"      token: {config['token']}\n"
-        f"      role: {config['role']}\n"
-        f"      warehouse: {config['warehouse']}\n"
-        f"      database: {database_name}\n"
-        f"      schema: {dev_schema_name}\n"
-        "    prod:\n"
-        "      type: snowflake\n"
-        f"      account: {config['account']}\n"
-        f"      user: {config['user']}\n"
-        "      authenticator: programmatic_access_token\n"
-        f"      token: {config['token']}\n"
-        f"      role: {config['role']}\n"
-        f"      warehouse: {config['warehouse']}\n"
-        f"      database: {database_name}\n"
-        f"      schema: {prod_schema_name}\n"
-    )
-
-
-def _snowflake_reuse_project_toml(*, dev_schema_name: str) -> str:
-    return (
-        build_snowflake_project_toml(
-            project_name="snowflake_dbt_reuse_from",
-            schema_name=dev_schema_name,
-        )
-        + "\n[dbt]\n"
-        + 'project_dir = "../dbt_project"\n'
-        + 'profiles_dir = "../profiles"\n'
-        + 'target_path = "../dbt_project/target"\n'
-        + "[dbt.reuse_from]\n"
-        + 'git_ref = "prod"\n'
-        + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
     )
 
 

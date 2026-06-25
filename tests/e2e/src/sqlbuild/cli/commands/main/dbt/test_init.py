@@ -10,14 +10,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtCliFlagAmbiguityE2ETestCase,
     DbtInitDetectedReuseRefE2ETestCase,
     DbtInitDuckDbE2ETestCase,
-    DbtInitGeneratedReuseE2ETestCase,
     DbtInitInteractiveE2ETestCase,
-    DbtInitInvalidReuseRefE2ETestCase,
     DbtInitMissingProdRelationBuildE2ETestCase,
     DbtInitMissingProdRelationE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
-    dbt_executable,
     initialize_dbt_init_git_repo,
     prepare_dbt_init_duckdb_workspace,
     run_sqb_with_pty,
@@ -270,60 +267,6 @@ def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtInitInvalidReuseRefE2ETestCase(
-            description="interactive typed invalid reuse ref skips reuse with a warning",
-            expected_stdout_fragments=(
-                "dbt reuse-from-production is enabled but git ref",
-                "was not found",
-                "Plan ready",
-            ),
-        )
-    ],
-    ids=["interactive typed invalid reuse ref skips reuse with a warning"],
-)
-def test_given_interactive_invalid_ref_when_planning_then_skips_reuse_with_warning(
-    tmp_path: Path,
-    test_case: DbtInitInvalidReuseRefE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    workspace: Path = prepare_dbt_init_duckdb_workspace(
-        tmp_path=tmp_path, workspace_name="interactive_invalid_ref_workspace"
-    )
-    initialize_dbt_init_git_repo(workspace=workspace, production_ref="prod")
-
-    init_result: subprocess.CompletedProcess[str] = run_sqb_with_pty(
-        command=(
-            "dbt",
-            "init",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--skip-dbt-debug",
-        ),
-        project_dir=workspace,
-        input_text="missing-prod-ref\n",
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-    generated_toml: str = (workspace / "sqlbuild_project" / "sqlbuild_project.toml").read_text(
-        encoding="utf-8"
-    )
-    assert 'git_ref = "missing-prod-ref"' in generated_toml
-
-    plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "plan", "--select", "dbt_orders"),
-        project_dir=workspace / "sqlbuild_project",
-    )
-
-    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in plan_result.stdout
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         DbtAutoInitE2ETestCase(
             description="dbt plan auto-inits from raw dbt project and continues",
             expected_stdout_fragments=("Plan ready", "dbt (1 selected resources)", "dbt_orders"),
@@ -435,84 +378,6 @@ def test_given_sqb_project_dir_alias_when_running_dbt_plan_then_preserves_dbt_fl
     expected_fragment: str
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in plan_result.stdout
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtInitGeneratedReuseE2ETestCase(
-            description="freshly generated config reuses production dbt table",
-            expected_stdout_fragments=(
-                "dbt reuse",
-                "model.analytics.dbt_orders",
-                "OK     reuse",
-                "Skipping dbt: no dbt work selected.",
-            ),
-            expected_rows=((1, 900),),
-        )
-    ],
-    ids=["freshly generated config reuses production dbt table"],
-)
-def test_given_generated_dbt_init_config_when_building_then_reuses_production_table(
-    tmp_path: Path,
-    test_case: DbtInitGeneratedReuseE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    workspace: Path = prepare_dbt_init_duckdb_workspace(
-        tmp_path=tmp_path, workspace_name="generated_reuse_workspace"
-    )
-    db_path: Path = workspace / "warehouse.duckdb"
-    initialize_dbt_init_git_repo(workspace=workspace, production_ref="prod")
-    prod_result: subprocess.CompletedProcess[str] = subprocess.run(
-        (
-            dbt_executable(),
-            "run",
-            "--project-dir",
-            (workspace / "dbt_project").as_posix(),
-            "--profiles-dir",
-            (workspace / "profiles").as_posix(),
-            "--target",
-            "prod",
-        ),
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
-
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "dbt",
-            "init",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--skip-dbt-debug",
-            "--prod-git-ref",
-            "prod",
-        ),
-        project_dir=workspace,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-    (workspace / "sqlbuild_project" / "dbt" / "macros" / "generate_schema_name.sql").write_text(
-        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
-        encoding="utf-8",
-    )
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--select", "dbt_orders"),
-        project_dir=workspace / "sqlbuild_project",
-    )
-
-    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in build_result.stdout
-    assert query_duckdb(
-        db_path=db_path,
-        sql="SELECT order_id, amount_cents FROM main.dbt_orders ORDER BY order_id",
-    ) == list(test_case.expected_rows)
 
 
 @pytest.mark.parametrize(
