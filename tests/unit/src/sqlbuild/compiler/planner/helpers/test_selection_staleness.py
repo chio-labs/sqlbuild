@@ -393,3 +393,80 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_warning_fragments:
         assert unexpected_fragment not in warning_text
+
+
+def _reuse_satisfied_warning_scope() -> tuple[PlannerScope, PlannerScope]:
+    leaf_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="leaf"
+    )
+    dep_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="dep"
+    )
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        leaf_key: (dep_key,),
+        dep_key: (),
+    }
+    all_keys: dict[str, CompiledObjectKey] = {"leaf": leaf_key, "dep": dep_key}
+    original_scope: PlannerScope = PlannerScope(
+        upstream_deps=upstream_deps,
+        downstream_deps={},
+        all_keys=all_keys,
+        models_by_name={},
+        selected_keys=frozenset({leaf_key}),
+        execution_order=(dep_key, leaf_key),
+    )
+    execution_scope: PlannerScope = PlannerScope(
+        upstream_deps=upstream_deps,
+        downstream_deps={},
+        all_keys=all_keys,
+        models_by_name={},
+        selected_keys=frozenset({leaf_key}),
+        execution_order=(dep_key, leaf_key),
+    )
+    return original_scope, execution_scope
+
+
+def _changed_dep_warnings(
+    *, reuse_satisfied_model_names: frozenset[str]
+) -> tuple[PlanWarning, ...]:
+    original_scope, execution_scope = _reuse_satisfied_warning_scope()
+    return build_stale_out_of_selection_warnings(
+        original_scope=original_scope,
+        execution_scope=execution_scope,
+        changes=PlannerChangeResults(
+            models={
+                "dep": ChangeDetectionResult(
+                    model_name="dep",
+                    change_kind=ChangeKind.QUERY_CHANGED,
+                )
+            },
+            functions={},
+        ),
+        snapshot=WarehouseSnapshot(fingerprints=WarehouseFingerprints()),
+        version_identities=StandardModelVersionIdentities(
+            function_local_hashes={},
+            seed_version_hashes={},
+            seed_metadata_jsons={},
+            model_metadata_jsons={},
+            model_local_hashes={},
+            model_version_hashes={},
+        ),
+        source_freshness=StandardSourceFreshnessPlanningResult(),
+        reuse_satisfied_model_names=reuse_satisfied_model_names,
+    )
+
+
+def test_given_changed_upstream_not_reuse_satisfied_when_classifying_then_warns() -> None:
+    warnings: tuple[PlanWarning, ...] = _changed_dep_warnings(
+        reuse_satisfied_model_names=frozenset()
+    )
+
+    assert any("leaf" in warning.message and "is stale" in warning.message for warning in warnings)
+
+
+def test_given_changed_upstream_reuse_satisfied_when_classifying_then_no_warning() -> None:
+    warnings: tuple[PlanWarning, ...] = _changed_dep_warnings(
+        reuse_satisfied_model_names=frozenset({"dep"})
+    )
+
+    assert warnings == ()

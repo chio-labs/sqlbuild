@@ -14,6 +14,8 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     CursorBounds,
+    DependencyBaselinePlanEntry,
+    ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
@@ -126,6 +128,8 @@ def build_relation_reuse_plan(
 def build_plan_output(
     *,
     model_entries: tuple[ModelPlanEntry, ...] = (),
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
+    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (),
     seed_entries: tuple[SeedPlanEntry, ...] = (),
     function_entries: tuple[FunctionPlanEntry, ...] = (),
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = (),
@@ -141,6 +145,8 @@ def build_plan_output(
     return PlanOutput(
         execution_order=tuple(e.key for e in (*function_entries, *model_entries, *seed_entries)),
         model_entries=model_entries,
+        dependency_baseline_entries=dependency_baseline_entries,
+        existing_destination_input_entries=existing_destination_input_entries,
         seed_entries=seed_entries,
         function_entries=function_entries,
         source_load_entries=source_load_entries,
@@ -148,6 +154,38 @@ def build_plan_output(
         warnings=warnings,
         provider_usages=provider_usages,
         metadata={} if metadata is None else metadata,
+    )
+
+
+def build_dependency_baseline_entry(
+    *,
+    name: str = "upstream_orders",
+    relation_reuse: RelationReusePlan | None = None,
+) -> DependencyBaselinePlanEntry:
+    return DependencyBaselinePlanEntry(
+        name=name,
+        destination=CompiledRelationLocation(
+            database=None, schema="main", name=name, qualified_name=f"main.{name}"
+        ),
+        relation_reuse=relation_reuse
+        or build_relation_reuse_plan(origin_name=name, hard_copy=False),
+        fingerprint_version_hash="expected_hash",
+    )
+
+
+def build_existing_destination_input_entry(
+    *,
+    name: str = "upstream_orders",
+    status: str = "current",
+) -> ExistingDestinationInputPlanEntry:
+    return ExistingDestinationInputPlanEntry(
+        name=name,
+        destination=CompiledRelationLocation(
+            database=None, schema="main", name=name, qualified_name=f"main.{name}"
+        ),
+        status=status,
+        expected_version_hash="expected_hash",
+        destination_version_hash=("expected_hash" if status == "current" else "old_hash"),
     )
 
 

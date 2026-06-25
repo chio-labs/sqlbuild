@@ -678,6 +678,13 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_source_freshness_max_query(
+        self, *, column: str, source_relation: str, source_is_subquery: bool, where_sql: str
+    ) -> str:
+        """Render a max-column source freshness query over a source table factor."""
+        ...
+
+    @abstractmethod
     def render_source_expression_cast_subquery(
         self, *, source_relation: str, projections: tuple[str, ...]
     ) -> str:

@@ -8,7 +8,12 @@ from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    DependencyBaselinePlanEntry,
+    ExistingDestinationInputPlanEntry,
+    ModelPlanEntry,
+    PlanOutput,
+)
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
@@ -108,6 +113,7 @@ def format_build_execution_json(
             "python_check_warn_count": python_check_warn_count,
             "python_check_fail_count": python_check_fail_count,
         },
+        reuse=_format_reuse_summary(plan),
     )
 
 
@@ -150,6 +156,7 @@ def format_run_execution_json(
             "skipped_count": result.skipped_count + python_skipped_count,
             "warning_count": result.warning_count,
         },
+        reuse=_format_reuse_summary(plan),
     )
 
 
@@ -287,6 +294,7 @@ def _format_execution_json(
     checks: tuple[dict[str, object], ...],
     summary: dict[str, object],
     scenarios: tuple[dict[str, object], ...] = (),
+    reuse: dict[str, object] | None = None,
 ) -> str:
     payload: dict[str, object] = {
         "version": _JSON_VERSION,
@@ -296,6 +304,8 @@ def _format_execution_json(
         "assets": assets,
         "checks": checks,
     }
+    if reuse is not None:
+        payload["reuse"] = reuse
     if scenarios:
         payload["scenarios"] = scenarios
     return json.dumps(payload, indent=2) + "\n"
@@ -346,6 +356,55 @@ def _format_relation_reuse(entry: ModelPlanEntry | None) -> dict[str, object] | 
         "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
         "origin_relation": entry.relation_reuse.origin.qualified_name,
         "hard_copy": entry.relation_reuse.hard_copy,
+    }
+
+
+def _format_reuse_summary(plan: PlanOutput) -> dict[str, object]:
+    return {
+        "cloned_selected": tuple(
+            _format_cloned_selected_entry(entry)
+            for entry in plan.model_entries
+            if entry.relation_reuse is not None
+        ),
+        "reused_inputs": tuple(
+            _format_dependency_input_entry(entry)
+            for entry in plan.dependency_baseline_entries
+        ),
+        "existing_destination_inputs": tuple(
+            _format_existing_destination_input_entry(entry)
+            for entry in plan.existing_destination_input_entries
+        ),
+    }
+
+
+def _format_cloned_selected_entry(entry: ModelPlanEntry) -> dict[str, object]:
+    return {
+        "name": entry.name,
+        "materialization_type": entry.materialization_type.value,
+        "relation_reuse": _format_relation_reuse(entry),
+    }
+
+
+def _format_dependency_input_entry(entry: DependencyBaselinePlanEntry) -> dict[str, object]:
+    return {
+        "name": entry.name,
+        "resource_label": entry.resource_label,
+        "destination": entry.destination.qualified_name,
+        "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
+        "origin_relation": entry.relation_reuse.origin.qualified_name,
+        "hard_copy": entry.relation_reuse.hard_copy,
+    }
+
+
+def _format_existing_destination_input_entry(
+    entry: ExistingDestinationInputPlanEntry,
+) -> dict[str, object]:
+    return {
+        "name": entry.name,
+        "destination": entry.destination.qualified_name,
+        "status": entry.status,
+        "expected_version_hash": entry.expected_version_hash,
+        "destination_version_hash": entry.destination_version_hash,
     }
 
 

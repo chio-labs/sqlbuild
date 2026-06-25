@@ -9,7 +9,6 @@ import pytest
 from sqlbuild.adapter.shared.models import TableFreshnessMetadata, TableFreshnessRequest
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -30,7 +29,6 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessLagToleranceTestCase,
     StandardSourceFreshnessManagedSkipTestCase,
     StandardSourceFreshnessMultiSchemaTestCase,
-    StandardSourceFreshnessPlanningErrorTestCase,
     StandardSourceFreshnessPlanningTestCase,
     StandardSourceFreshnessUnknownTestCase,
 )
@@ -430,32 +428,18 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
     assert result.observed_records == ()
 
 
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        StandardSourceFreshnessPlanningErrorTestCase(
-            description="explicit column freshness error propagates clearly",
-            expected_error_fragment="column freshness requires a physical table source",
-        )
-    ],
-    ids=["explicit column freshness error propagates clearly"],
-)
-def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear_error(
-    test_case: StandardSourceFreshnessPlanningErrorTestCase,
-) -> None:
+def test_given_column_freshness_expression_when_planning_then_observes_subquery() -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        with pytest.raises(
-            SourceFreshnessObservationError, match=test_case.expected_error_fragment
-        ):
+        result: StandardSourceFreshnessPlanningResult = (
             build_standard_source_freshness_planning_result(
                 adapter=adapter,
                 connection=connection,
                 sources=(
                     SourceEntry(
-                        name="raw.orders",
-                        expression="SELECT 1 AS id",
+                        name="raw_orders",
+                        expression="SELECT 1 AS id, 7 AS batch_id",
                         freshness=SourceFreshnessConfig(
                             strategy=SourceFreshnessStrategy.COLUMN,
                             value_kind=SourceFreshnessValueKind.INTEGER,
@@ -469,8 +453,13 @@ def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
             )
+        )
     finally:
         adapter.close(connection)
+
+    assert result.unknown_source_names == ()
+    assert len(result.observed_records) == 1
+    assert result.observed_records[0].data_version == "7"
 
 
 @pytest.mark.parametrize(

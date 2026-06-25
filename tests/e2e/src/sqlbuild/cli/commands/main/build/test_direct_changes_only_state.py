@@ -582,7 +582,7 @@ def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_s
 
     assert dev_result.returncode == 0, dev_result.stdout + dev_result.stderr
     assert "seed      order_amounts" in dev_result.stdout
-    assert "hard-copy reuse from prod" not in dev_result.stdout
+    assert "reuse origin target" not in dev_result.stdout
     assert query_duckdb(
         db_path=db_path, sql="SELECT amount_cents FROM prod.fact_orders ORDER BY order_id"
     ) == list(test_case.expected_customer_rows)
@@ -937,7 +937,7 @@ def test_given_custom_reuse_from_target_when_building_dev_then_prepare_version_s
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "merge_by_id (custom) (hard-copy baseline reuse from prod)" in dev_result.stdout
+    assert "merge_by_id (custom) (hard-copy seeded reuse from reuse origin target prod)" in dev_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql=(
@@ -1007,7 +1007,7 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
         command=("--no-color", "plan"), project_dir=project_dir
     )
     assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
-    assert "hard-copy reuse from prod" in plan_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in plan_result.stdout
     assert "prod_staging" not in plan_result.stdout
     assert "prod_marts" not in plan_result.stdout
 
@@ -1040,7 +1040,7 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "hard-copy reuse from prod" in dev_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in dev_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_dollars FROM dev.fact_orders",
@@ -1128,7 +1128,7 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
     assert scoped_result.returncode == 0, scoped_result.stdout + scoped_result.stderr
     assert "Plan ready (1 selected)" in scoped_result.stdout
     assert "stg_orders" in scoped_result.stdout
-    assert "hard-copy reuse from prod" in scoped_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in scoped_result.stdout
     assert "Remaining stale" in scoped_result.stdout
     assert "int_orders" in scoped_result.stdout
     assert "fact_orders" in scoped_result.stdout
@@ -1152,7 +1152,7 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
         later_result.stdout + later_result.stderr
     )
     assert "Plan ready (2 selected)" in later_result.stdout
-    assert "hard-copy reuse from prod" in later_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in later_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_dollars FROM dev.fact_orders",
@@ -1208,7 +1208,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
         expanded_result.stdout + expanded_result.stderr
     )
     assert "Plan ready (3 selected)" in expanded_result.stdout
-    assert "hard-copy reuse from prod" in expanded_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in expanded_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_dollars FROM dev.fact_orders",
@@ -1224,7 +1224,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
     )
     assert "Plan ready (3 selected)" in tag_result.stdout
     assert "fact_orders" in tag_result.stdout
-    assert "hard-copy reuse from prod" in tag_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in tag_result.stdout
     assert table_exists(db_path=db_path, schema="dev", table_name="fact_orders")
     assert table_exists(db_path=db_path, schema="dev", table_name="stg_orders")
 
@@ -1238,7 +1238,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
     )
     assert "Plan ready (3 selected)" in path_result.stdout
     assert "fact_orders" in path_result.stdout
-    assert "hard-copy reuse from prod" in path_result.stdout
+    assert "hard-copy reuse from reuse origin target prod" in path_result.stdout
     assert table_exists(db_path=db_path, schema="dev", table_name="fact_orders")
     assert table_exists(db_path=db_path, schema="dev", table_name="stg_orders")
 
@@ -1279,7 +1279,7 @@ def test_given_reuse_from_when_full_refreshing_then_builds_without_reuse(
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "reuse from prod" not in dev_result.stdout
+    assert "reuse origin target" not in dev_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_dollars FROM dev.fact_orders",
@@ -1349,7 +1349,7 @@ def test_given_function_change_with_reuse_from_when_building_dev_then_builds_exp
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "reuse from prod" not in dev_result.stdout
+    assert "reuse origin target" not in dev_result.stdout
     assert query_duckdb(db_path=db_path, sql="SELECT score FROM dev.orders") == [(102,)]
 
 
@@ -1434,7 +1434,7 @@ def test_given_source_freshness_change_with_reuse_from_when_building_dev_then_bu
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "reuse from prod" not in dev_result.stdout
+    assert "reuse origin target" not in dev_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_cents FROM dev.orders",
@@ -1486,7 +1486,7 @@ def test_given_prod_version_mismatch_with_reuse_from_when_building_dev_then_buil
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "reuse from prod" not in dev_result.stdout
+    assert "reuse origin target" not in dev_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_cents FROM dev.orders",
@@ -1534,7 +1534,7 @@ def test_given_prod_relation_missing_with_reuse_from_when_building_dev_then_buil
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "reuse from prod" not in dev_result.stdout
+    assert "reuse origin target" not in dev_result.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT order_id, amount_cents FROM dev.orders",

@@ -166,6 +166,8 @@ class CliEntrypointHandlers:
             dict[str, object],
             bool,
             bool,
+            bool | None,
+            bool | None,
         ],
         int,
     ]
@@ -222,6 +224,8 @@ class CliEntrypointHandlers:
             bool,
             bool,
             Path | None,
+            bool | None,
+            bool | None,
         ],
         int,
     ]
