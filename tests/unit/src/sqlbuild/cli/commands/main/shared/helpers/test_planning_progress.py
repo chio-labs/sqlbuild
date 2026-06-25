@@ -51,6 +51,21 @@ PLANNING_PROGRESS_TEST_CASES: list[PlanningProgressTestCase] = [
         ),
         expected_output=("Applying clone plan...\nApplied clone plan. (0.10s)\nsqb clone\n"),
     ),
+    PlanningProgressTestCase(
+        description="persists dbt post-build state phases on their own lines",
+        messages=(
+            "Finalizing dbt run...",
+            "Finalized dbt run.",
+            "Recording dbt fingerprints...",
+            "Recorded dbt fingerprints. (0.10s)",
+        ),
+        expected_output=(
+            "Finalizing dbt run...\n"
+            "Finalized dbt run.\n"
+            "Recording dbt fingerprints...\n"
+            "Recorded dbt fingerprints. (0.10s)\n"
+        ),
+    ),
 ]
 PLANNING_COMPLETION_MESSAGE_TEST_CASES: list[PlanningCompletionMessageTestCase] = [
     PlanningCompletionMessageTestCase(
@@ -67,6 +82,21 @@ PLANNING_COMPLETION_MESSAGE_TEST_CASES: list[PlanningCompletionMessageTestCase] 
         description="treats applied clone plan as completion",
         message="Applied clone plan. (0.10s)",
         expected_is_completion=True,
+    ),
+    PlanningCompletionMessageTestCase(
+        description="treats recorded dbt fingerprints as completion",
+        message="Recorded dbt fingerprints. (0.10s)",
+        expected_is_completion=True,
+    ),
+    PlanningCompletionMessageTestCase(
+        description="treats finalized dbt run as completion",
+        message="Finalized dbt run.",
+        expected_is_completion=True,
+    ),
+    PlanningCompletionMessageTestCase(
+        description="keeps recording dbt fingerprints as active status",
+        message="Recording dbt fingerprints...",
+        expected_is_completion=False,
     ),
 ]
 
