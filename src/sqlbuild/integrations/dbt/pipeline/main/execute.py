@@ -449,6 +449,8 @@ def execute_dbt_interop_from_project(
             adapter.close(dbt_state_connection)
 
     if buffered_dbt_results and project.settings.query_change_tracking:
+        fingerprint_start: float = time.monotonic()
+        _report_progress(on_progress, "Recording dbt fingerprints...")
         duckdb_connection: object = adapter.connect(connection_config)
         try:
             dbt_result: DbtNodeExecutionResult
@@ -470,6 +472,10 @@ def execute_dbt_interop_from_project(
                 )
         finally:
             adapter.close(duckdb_connection)
+        _report_progress(
+            on_progress,
+            f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
+        )
     warning: str
     style: CliStyle = CliStyle(use_color=use_color)
     for warning in dbt_fingerprint_warnings:
@@ -498,6 +504,7 @@ def execute_dbt_interop_from_project(
                 adapter=adapter,
                 connection_config=connection_config,
                 project=project,
+                on_progress=on_progress,
             )
         return exit_code
     output_stream.write("\n")
@@ -562,6 +569,7 @@ def execute_dbt_interop_from_project(
                 adapter=adapter,
                 connection_config=connection_config,
                 project=project,
+                on_progress=on_progress,
             )
         return exit_code
     if not plan_has_executable_work(plan_output):
@@ -581,6 +589,7 @@ def execute_dbt_interop_from_project(
                 adapter=adapter,
                 connection_config=connection_config,
                 project=project,
+                on_progress=on_progress,
             )
         return exit_code
 
@@ -608,6 +617,7 @@ def execute_dbt_interop_from_project(
         adapter=adapter,
         connection_config=connection_config,
         project=project,
+        on_progress=on_progress,
     )
     return max(
         dbt_execution.returncode,
