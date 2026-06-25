@@ -137,9 +137,9 @@ SNOWFLAKE_DBT_CLONE_E2E_TEST_CASES: tuple[SnowflakeDbtCloneE2ETestCase, ...] = (
             command=("--no-color", "build", "--select", "downstream"),
             expected_stdout_fragments=(
                 "Plan ready (1 selected)",
-                "Dependency baseline (1)",
+                "Reused inputs (1)",
                 "upstream",
-                "baseline reuse",
+                "from reuse origin target",
                 "downstream",
                 "Completed successfully.",
             ),
