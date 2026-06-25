@@ -76,6 +76,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_merged_dbt_execution_argv,
     dbt_blocked_exit_code,
     execute_dbt_commands,
+    render_dbt_execution_summary_footer,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.missing_relations import (
     find_and_report_missing_dbt_relation_blocks,
@@ -482,6 +483,13 @@ def execute_dbt_interop_from_project(
     for warning in dbt_fingerprint_warnings:
         output_stream.write(style.warning(f"Warning: {warning}") + "\n")
     if dbt_fingerprint_warnings:
+        output_stream.flush()
+    dbt_summary_footer: str | None = render_dbt_execution_summary_footer(
+        node_results=dbt_execution.node_results,
+        use_color=use_color,
+    )
+    if dbt_summary_footer is not None:
+        output_stream.write("\n" + dbt_summary_footer + "\n")
         output_stream.flush()
     dbt_outcome: DbtExecutionOutcome = build_dbt_execution_outcome(
         plan=plan,
