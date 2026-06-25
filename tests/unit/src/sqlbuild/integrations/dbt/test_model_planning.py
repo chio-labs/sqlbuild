@@ -394,7 +394,8 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
                     reason=DbtModelPlanReason.CHECKSUM_CHANGED,
                     relation_name="main.run_me",
                 ),
-            )
+            ),
+            changed_seed_unique_ids=("seed.analytics.country_codes",),
         ),
     )
 
@@ -402,6 +403,66 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
         command=DbtInteropCommand.BUILD,
         options=DbtCliOptions(),
         routed_args=("--select", "tag:daily", "--exclude", "tag:slow", "--full-refresh"),
+        plan=plan,
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
+            description="unchanged seed is excluded from execution argv when a model runs",
+            expected_argv=(
+                "dbt",
+                "build",
+                "--select",
+                "run_me",
+            ),
+        )
+    ],
+    ids=["unchanged seed is excluded from execution argv when a model runs"],
+)
+def test_given_unchanged_seed_when_building_execution_argv_then_excludes_seed(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(
+            DbtLsNode(unique_id="model.analytics.run_me", resource_type="model"),
+            DbtLsNode(
+                unique_id="seed.analytics.country_codes",
+                resource_type="seed",
+                name="country_codes",
+            ),
+        ),
+        dbt_selected_unique_ids=(
+            "model.analytics.run_me",
+            "seed.analytics.country_codes",
+        ),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.run_me",
+                    package_name="analytics",
+                    name="run_me",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.run_me",
+                ),
+            ),
+            changed_seed_unique_ids=(),
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=DbtCliOptions(),
+        routed_args=("--select", "run_me"),
         plan=plan,
     )
 
@@ -485,7 +546,8 @@ def test_given_dbt_model_plan_with_fqn_when_building_execution_argv_then_selects
                     relation_name="stripe.orders",
                     fqn=("stripe", "orders"),
                 ),
-            )
+            ),
+            changed_seed_unique_ids=("seed.analytics.orders_seed",),
         ),
     )
 

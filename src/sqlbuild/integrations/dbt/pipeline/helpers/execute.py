@@ -442,7 +442,9 @@ def build_dbt_non_model_run_unique_ids(
         )
         if not plan.dbt_model_plan.run_selector_terms:
             return tuple(sorted(changed_seed_unique_ids))
-        return tuple(sorted(frozenset((*seed_unique_ids, *test_unique_ids, *unit_test_unique_ids))))
+        return tuple(
+            sorted(frozenset((*changed_seed_unique_ids, *test_unique_ids, *unit_test_unique_ids)))
+        )
     return ()
 
 
@@ -511,8 +513,6 @@ def build_dbt_pruned_seed_unique_ids(
     """Return selected dbt seeds pruned from dbt build due to no producer work."""
 
     if command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
-        return ()
-    if plan.dbt_model_plan.run_selector_terms:
         return ()
     changed: frozenset[str] = frozenset(plan.dbt_model_plan.changed_seed_unique_ids)
     return tuple(

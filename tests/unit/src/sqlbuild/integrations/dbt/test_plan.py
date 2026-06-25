@@ -575,7 +575,7 @@ def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_wo
                 "Seeds (1)",
                 "Tests (1)",
                 "Non-model dbt work",
-                "Seeds (1, always run)",
+                "Seeds (1, changed)",
                 "analytics.country_codes",
                 "Tests (1)",
                 "analytics.not_null_orders",
