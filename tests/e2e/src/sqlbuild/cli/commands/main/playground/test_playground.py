@@ -8,12 +8,11 @@ import pytest
 from sqlbuild.cli.commands.main.playground import run_playground
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import skip_unless_dbt_is_runnable
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
-    DbtReuseCascadePlaygroundTestCase,
-    DbtReusePlaygroundLifecycleTestCase,
+    DbtChangeAwarePlaygroundLifecycleTestCase,
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
 
 
 @pytest.mark.parametrize(
@@ -216,50 +215,34 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReusePlaygroundLifecycleTestCase(
-            description="dbt reuse playground prebuilds prod and reuses on first dev build",
-            project_name="dbt_reuse_playground",
-            expected_prod_schemas=("intermediate", "marts", "raw", "staging"),
+        DbtChangeAwarePlaygroundLifecycleTestCase(
+            description="dbt playground builds the dbt graph without any reuse pre-phase",
+            project_name="dbt_change_aware_playground",
             expected_first_build_fragments=(
-                "reuse: 8",
-                "rebuild: 2",
-                "OK     reuse",
-                "model     agg_daily_revenue",
-                "model     dim_customers",
-            ),
-            expected_first_build_absent_fragments=(
-                "Schema with name",
-                "syntax error",
-                "agg_daily_revenue                          OK     reuse",
-                "dim_customers                              OK     reuse",
+                "dbt build",
+                "model     stg_orders",
+                "model     fct_orders",
             ),
             expected_second_build_fragments=(
-                "current: 10",
-                "Skipping dbt: no dbt work selected.",
+                "dbt build",
+                "model     stg_orders",
             ),
-            expected_second_build_absent_fragments=("OK     reuse",),
+            expected_second_build_absent_fragments=(
+                "OK     reuse",
+                "Reuse plan",
+                "dbt reuse  pre-phase",
+            ),
         )
     ],
-    ids=["dbt reuse playground prebuilds prod and reuses on first dev build"],
+    ids=["dbt playground builds the dbt graph without any reuse pre-phase"],
 )
-def test_given_dbt_reuse_playground_when_init_and_build_then_reuses_prod(
-    test_case: DbtReusePlaygroundLifecycleTestCase,
+def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
+    test_case: DbtChangeAwarePlaygroundLifecycleTestCase,
     tmp_path: Path,
 ) -> None:
     skip_unless_dbt_is_runnable()
     assert run_playground(tmp_path, test_case.project_name, template="dbt") == 0
     workspace: Path = tmp_path / test_case.project_name
-    db_path: Path = workspace / "warehouse.duckdb"
-
-    prod_schemas: list[tuple[object, ...]] = query_duckdb(
-        db_path=db_path,
-        sql=(
-            "SELECT DISTINCT table_schema FROM information_schema.tables "
-            "WHERE table_schema IN ('staging', 'intermediate', 'marts', 'raw') "
-            "ORDER BY table_schema"
-        ),
-    )
-    assert tuple(row[0] for row in prod_schemas) == test_case.expected_prod_schemas
 
     init_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("dbt", "init", "--project-dir", "dbt_project", "--profiles-dir", "profiles"),
@@ -277,8 +260,6 @@ def test_given_dbt_reuse_playground_when_init_and_build_then_reuses_prod(
     fragment: str
     for fragment in test_case.expected_first_build_fragments:
         assert fragment in first_output
-    for fragment in test_case.expected_first_build_absent_fragments:
-        assert fragment not in first_output
 
     second_build: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "dbt", "build"),
@@ -290,85 +271,3 @@ def test_given_dbt_reuse_playground_when_init_and_build_then_reuses_prod(
         assert fragment in second_output
     for fragment in test_case.expected_second_build_absent_fragments:
         assert fragment not in second_output
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtReuseCascadePlaygroundTestCase(
-            description="upstream change cascades so unchanged downstream models rebuild",
-            project_name="dbt_reuse_cascade_playground",
-            expected_build_fragments=("reuse: 2", "rebuild: 8"),
-            expected_reuse_only_models=(
-                "model.jaffle_analytics.stg_customers",
-                "model.jaffle_analytics.stg_payments",
-            ),
-            expected_rebuilt_models=(
-                "model.jaffle_analytics.fct_orders",
-                "model.jaffle_analytics.fct_payments",
-                "model.jaffle_analytics.int_order_payments",
-                "model.jaffle_analytics.stg_order_statuses",
-            ),
-        )
-    ],
-    ids=["upstream change cascades so unchanged downstream models rebuild"],
-)
-def test_given_upstream_edit_when_building_then_downstream_rebuilds_not_reuses(
-    test_case: DbtReuseCascadePlaygroundTestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    assert run_playground(tmp_path, test_case.project_name, template="dbt") == 0
-    workspace: Path = tmp_path / test_case.project_name
-    models_dir: Path = workspace / "dbt_project" / "models"
-
-    # Revert the default marts edits so only the upstream staging change drives the cascade.
-    for relative_path in (
-        "marts/agg_daily_revenue.sql",
-        "marts/dim_customers.sql",
-    ):
-        subprocess.run(
-            ("git", "checkout", "main", "--", f"dbt_project/models/{relative_path}"),
-            cwd=workspace,
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-    (models_dir / "staging" / "stg_orders.sql").write_text(
-        "with source as (\n"
-        "    select * from {{ ref('raw_orders') }}\n"
-        ")\n\n"
-        "select\n"
-        "    order_id,\n"
-        "    customer_id,\n"
-        "    cast(order_date as date) as order_date,\n"
-        "    upper(status) as status\n"
-        "from source\n",
-        encoding="utf-8",
-    )
-
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "init", "--project-dir", "dbt_project", "--profiles-dir", "profiles"),
-        project_dir=workspace,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build"),
-        project_dir=workspace / "sqlbuild_project",
-    )
-    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
-    output: str = build_result.stdout + build_result.stderr
-    reuse_line_models: frozenset[str] = frozenset(
-        line.split()[0] for line in output.splitlines() if "OK     reuse" in line and line.split()
-    )
-    fragment: str
-    for fragment in test_case.expected_build_fragments:
-        assert fragment in output
-    reuse_model: str
-    for reuse_model in test_case.expected_reuse_only_models:
-        assert reuse_model in reuse_line_models
-    rebuilt_model: str
-    for rebuilt_model in test_case.expected_rebuilt_models:
-        assert rebuilt_model not in reuse_line_models

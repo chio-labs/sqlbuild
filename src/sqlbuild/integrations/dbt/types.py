@@ -134,62 +134,6 @@ class DbtModelOutcomeState(StrEnum):
     BLOCKING = "blocking"
 
 
-class DbtReuseCandidateSkipReason(StrEnum):
-    """Reason a scoped dbt node is not a physical reuse candidate."""
-
-    CURRENT_MANIFEST_MISSING = "current_manifest_missing"
-    REUSE_MANIFEST_MISSING = "reuse_manifest_missing"
-    VIEW = "view"
-    EPHEMERAL = "ephemeral"
-    UNSUPPORTED_MATERIALIZATION = "unsupported_materialization"
-
-
-class DbtReusePlanAction(StrEnum):
-    """Planned dbt reuse_from action for one scoped dbt node."""
-
-    CURRENT = "current"
-    COMPLETE_REUSE = "complete_reuse"
-    SEEDED_REUSE = "seeded_reuse"
-    REBUILD = "rebuild"
-    BLOCKED = "blocked"
-    SKIPPED = "skipped"
-
-
-class DbtReusePlanReason(StrEnum):
-    """Reason for one dbt reuse_from plan action."""
-
-    DESTINATION_CURRENT = "destination_current"
-    DESTINATION_MISSING = "destination_missing"
-    FINGERPRINT_MISSING = "fingerprint_missing"
-    FINGERPRINT_CHANGED = "fingerprint_changed"
-    FULL_REFRESH = "full_refresh"
-    SOURCE_FRESHNESS_BLOCK = "source_freshness_block"
-    NON_PHYSICAL_RESOURCE = "non_physical_resource"
-    MANIFEST_NODE_MISSING = "manifest_node_missing"
-    REUSE_METADATA_INVALID = "reuse_metadata_invalid"
-    ORIGIN_RELATION_MISSING = "origin_relation_missing"
-    DEFINITION_CHANGED = "definition_changed"
-
-
-class DbtReuseExecutionMode(StrEnum):
-    """dbt fingerprint execution mode values written by reuse_from."""
-
-    REUSE = "reuse"
-
-
-class DbtReuseMode(StrEnum):
-    """dbt reuse_from physical reuse modes."""
-
-    COMPLETE = "complete"
-    SEEDED = "seeded"
-
-
-class DbtReuseMetadataStatus(StrEnum):
-    """dbt reuse_from fingerprint metadata status values."""
-
-    SUCCESS = "success"
-
-
 class DbtReuseUnavailableReason(StrEnum):
     """Why reuse_from could not run, to drive clear user-facing messaging."""
 

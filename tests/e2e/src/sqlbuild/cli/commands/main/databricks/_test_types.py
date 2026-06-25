@@ -10,13 +10,6 @@ class DatabricksDltE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DatabricksDbtReuseFromE2ETestCase:
-    description: str
-    schema_prefix: str
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
 class DatabricksDependencyBaselineE2ETestCase:
     description: str
     schema_prefix: str
