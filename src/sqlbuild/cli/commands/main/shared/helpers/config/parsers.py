@@ -95,47 +95,6 @@ def add_execution_json_output_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json-output", type=Path, default=None)
 
 
-def add_reuse_args(parser: argparse.ArgumentParser) -> None:
-    """Add standard reuse behavior override flags."""
-
-    strict_group: argparse._MutuallyExclusiveGroup = parser.add_mutually_exclusive_group()
-    strict_group.add_argument(
-        "--strict-reuse",
-        dest="strict_reuse",
-        action="store_true",
-        help=(
-            "Require exact identity matches before reusing relations from the reuse origin target."
-        ),
-    )
-    strict_group.add_argument(
-        "--no-strict-reuse",
-        dest="strict_reuse",
-        action="store_false",
-        help=(
-            "Allow default reuse: ignore reuse-origin-target drift while still respecting "
-            "current-project changes."
-        ),
-    )
-    parser.set_defaults(strict_reuse=None)
-    trust_group: argparse._MutuallyExclusiveGroup = parser.add_mutually_exclusive_group()
-    trust_group.add_argument(
-        "--trust-reuse-inputs",
-        dest="trust_reuse_inputs",
-        action="store_true",
-        help=(
-            "Clone direct input relations from the reuse origin target even when identity does "
-            "not match. Useful for fast dev hydration; may mask upstream current-project changes."
-        ),
-    )
-    trust_group.add_argument(
-        "--no-trust-reuse-inputs",
-        dest="trust_reuse_inputs",
-        action="store_false",
-        help="Do not clone direct inputs that could mask current-project changes.",
-    )
-    parser.set_defaults(trust_reuse_inputs=None)
-
-
 def add_select_args(parser: argparse.ArgumentParser) -> None:
     """Add --select and --exclude flags for scope selection."""
 

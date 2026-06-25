@@ -929,7 +929,7 @@ def test_given_current_dbt_models_when_seed_and_test_selected_then_prunes_non_mo
             ),
             expected_stdout_fragments=(
                 "Non-model dbt work",
-                "Seeds (1, always run)",
+                "Seeds (1, changed)",
                 "country_codes",
                 "Tests (1)",
                 "not_null_fact_orders_order_id",

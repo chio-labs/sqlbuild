@@ -52,12 +52,6 @@ class SharedSourceFreshnessColumnSqlTestCase:
 
 
 @dataclass(frozen=True)
-class SharedSourceFreshnessObservationErrorTestCase:
-    description: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class SharedSourceFreshnessHashTestCase:
     description: str
     source_name: str
@@ -146,6 +140,16 @@ class StandardSourceFreshnessPropagationTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessPlanningErrorTestCase:
+class SharedSourceFreshnessExpressionSubqueryTestCase:
     description: str
-    expected_error_fragment: str
+    expression: str
+    column: str
+    expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class StandardSourceFreshnessExpressionTestCase:
+    description: str
+    expression: str
+    column: str
+    expected_data_version: str

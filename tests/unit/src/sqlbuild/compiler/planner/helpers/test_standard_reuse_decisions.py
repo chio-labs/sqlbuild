@@ -39,12 +39,12 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
                     StandardReuseDecisionKind.REUSE_ORIGIN_FINGERPRINT_MISSING.value
                 ),
                 "missing_relation": StandardReuseDecisionKind.REUSE_ORIGIN_RELATION_MISSING.value,
-                "version_mismatch": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
+                "version_mismatch": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
                 "ineligible_view": StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value,
                 "incremental_candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
                 "snapshot_candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
                 "ineligible_custom": StandardReuseDecisionKind.INELIGIBLE_MATERIALIZATION.value,
-                "missing_expected": StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
+                "missing_expected": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
                 "current_reuse_from_missing": StandardReuseDecisionKind.CURRENT.value,
             },
         )
@@ -131,15 +131,15 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
     "test_case",
     [
         StandardReuseDecisionTestCase(
-            description="strict reuse blocks reuse origin version mismatch",
+            description="reuse origin version mismatch blocks reuse",
             expected_decisions={
                 "version_mismatch": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
             },
         )
     ],
-    ids=["strict reuse blocks reuse origin version mismatch"],
+    ids=["reuse origin version mismatch blocks reuse"],
 )
-def test_given_strict_reuse_when_origin_version_differs_then_model_is_not_reused(
+def test_given_origin_version_differs_when_deciding_then_model_is_not_reused(
     test_case: StandardReuseDecisionTestCase,
 ) -> None:
     decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
@@ -157,82 +157,11 @@ def test_given_strict_reuse_when_origin_version_differs_then_model_is_not_reused
                 ),
             },
         ),
-        strict=True,
     )
 
     assert {
         model_name: decision.decision for model_name, decision in decisions.models.items()
     } == test_case.expected_decisions
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        StandardReuseDecisionTestCase(
-            description="current project affected model is not safely reused",
-            expected_decisions={
-                "candidate": StandardReuseDecisionKind.CURRENT_PROJECT_CHANGE.value,
-            },
-        )
-    ],
-    ids=["current project affected model is not safely reused"],
-)
-def test_given_current_project_affected_model_when_default_reuse_then_model_is_not_reused(
-    test_case: StandardReuseDecisionTestCase,
-) -> None:
-    decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
-        scope=build_standard_reuse_decision_scope(selected_model_names=frozenset({"candidate"})),
-        expected_version_hashes={"candidate": "expected"},
-        built_fingerprints={},
-        reuse_from_snapshot=StandardReuseFromTargetSnapshot(
-            reuse_from_target_name="prod",
-            model_snapshots={
-                "candidate": build_standard_reuse_origin_snapshot(model_name="candidate"),
-            },
-        ),
-        current_project_affected_model_names=frozenset({"candidate"}),
-    )
-
-    assert {
-        model_name: decision.decision for model_name, decision in decisions.models.items()
-    } == test_case.expected_decisions
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        StandardReuseDecisionTestCase(
-            description="trusted input can be reused despite current project affected status",
-            expected_decisions={
-                "candidate": StandardReuseDecisionKind.TRUSTED_REUSE_ELIGIBLE.value,
-            },
-        )
-    ],
-    ids=["trusted input can be reused despite current project affected status"],
-)
-def test_given_trusted_input_when_current_project_affected_then_input_is_reused(
-    test_case: StandardReuseDecisionTestCase,
-) -> None:
-    decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
-        scope=build_standard_reuse_decision_scope(selected_model_names=frozenset({"candidate"})),
-        expected_version_hashes={"candidate": "expected"},
-        built_fingerprints={},
-        reuse_from_snapshot=StandardReuseFromTargetSnapshot(
-            reuse_from_target_name="prod",
-            model_snapshots={
-                "candidate": build_standard_reuse_origin_snapshot(model_name="candidate"),
-            },
-        ),
-        trust_reuse_inputs=True,
-        current_project_affected_model_names=frozenset({"candidate"}),
-        trusted_input_model_names=frozenset({"candidate"}),
-    )
-
-    assert {
-        model_name: decision.decision for model_name, decision in decisions.models.items()
-    } == test_case.expected_decisions
-    assert decisions.models["candidate"].trusted_input is True
-    assert decisions.models["candidate"].current_project_affected is True
 
 
 @pytest.mark.parametrize(

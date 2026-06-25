@@ -762,3 +762,10 @@ class RunDespiteUnchangedPlanningTestCase:
     expected_root_model_names: frozenset[str]
     expected_stale_model_names: frozenset[str]
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ReuseSatisfiedStalenessTestCase:
+    description: str
+    reuse_satisfied_model_names: frozenset[str]
+    expected_warns: bool

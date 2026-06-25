@@ -10,13 +10,6 @@ class BigQueryDltE2ETestCase:
 
 
 @dataclass(frozen=True)
-class BigQueryDbtReuseFromE2ETestCase:
-    description: str
-    schema_prefix: str
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
 class BigQueryDependencyBaselineE2ETestCase:
     description: str
     schema_prefix: str

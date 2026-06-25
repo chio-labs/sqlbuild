@@ -51,22 +51,16 @@ TEST_CASES: list[FormatPlanTestCase] = [
         plan_output=build_plan_output(
             dependency_baseline_entries=(
                 build_dependency_baseline_entry(name="stg_orders"),
-                build_dependency_baseline_entry(
-                    name="stg_payments",
-                    trusted_input=True,
-                    current_project_affected=True,
-                ),
+                build_dependency_baseline_entry(name="stg_payments"),
             )
         ),
         expected_fragments=(
-            "Reused inputs (1)",
+            "Reused inputs (2)",
             "stg_orders",
             "cheap clone from reuse origin target",
-            "Trusted inputs (1)",
             "stg_payments",
-            "trusted despite current-project change",
         ),
-        unexpected_fragments=("Dependency baseline", "baseline reuse"),
+        unexpected_fragments=("Dependency baseline", "baseline reuse", "Trusted inputs"),
     ),
     FormatPlanTestCase(
         description="existing destination inputs show current and stale statuses",
@@ -76,7 +70,6 @@ TEST_CASES: list[FormatPlanTestCase] = [
                 build_existing_destination_input_entry(
                     name="stg_payments",
                     status="stale",
-                    current_project_affected=True,
                 ),
             )
         ),
@@ -85,7 +78,7 @@ TEST_CASES: list[FormatPlanTestCase] = [
             "stg_orders",
             "current in destination target",
             "stg_payments",
-            "stale in destination target, affected by current-project change",
+            "stale in destination target",
         ),
         unexpected_fragments=("may be stale",),
     ),

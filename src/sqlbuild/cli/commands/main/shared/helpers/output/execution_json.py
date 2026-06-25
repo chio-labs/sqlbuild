@@ -367,14 +367,7 @@ def _format_reuse_summary(plan: PlanOutput) -> dict[str, object]:
             if entry.relation_reuse is not None
         ),
         "reused_inputs": tuple(
-            _format_dependency_input_entry(entry)
-            for entry in plan.dependency_baseline_entries
-            if not entry.trusted_input
-        ),
-        "trusted_inputs": tuple(
-            _format_dependency_input_entry(entry)
-            for entry in plan.dependency_baseline_entries
-            if entry.trusted_input
+            _format_dependency_input_entry(entry) for entry in plan.dependency_baseline_entries
         ),
         "existing_destination_inputs": tuple(
             _format_existing_destination_input_entry(entry)
@@ -399,8 +392,6 @@ def _format_dependency_input_entry(entry: DependencyBaselinePlanEntry) -> dict[s
         "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
         "origin_relation": entry.relation_reuse.origin.qualified_name,
         "hard_copy": entry.relation_reuse.hard_copy,
-        "trusted_input": entry.trusted_input,
-        "current_project_affected": entry.current_project_affected,
     }
 
 
@@ -413,7 +404,6 @@ def _format_existing_destination_input_entry(
         "status": entry.status,
         "expected_version_hash": entry.expected_version_hash,
         "destination_version_hash": entry.destination_version_hash,
-        "current_project_affected": entry.current_project_affected,
     }
 
 

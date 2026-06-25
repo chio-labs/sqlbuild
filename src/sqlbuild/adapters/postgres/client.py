@@ -1621,6 +1621,17 @@ class PostgresAdapter(BaseAdapter):
             return f"({stripped_expression})"
         return stripped_expression
 
+    def render_source_freshness_max_query(
+        self, *, column: str, source_relation: str, source_is_subquery: bool, where_sql: str
+    ) -> str:
+        relation: str = (
+            f"{source_relation} AS __source_freshness" if source_is_subquery else source_relation
+        )
+        return (
+            f"SELECT MAX({self.render_identifier(column)}) AS data_version "
+            f"FROM {relation}{where_sql}"
+        )
+
     def render_source_expression_cast_subquery(
         self, *, source_relation: str, projections: tuple[str, ...]
     ) -> str:

@@ -9,8 +9,6 @@ from typing import Any
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     WAFFLE_SHOP_DIR,
-    assert_dbt_seeded_reuse_from_lifecycle,
-    assert_dbt_snapshot_seeded_reuse_from_lifecycle,
     prepare_source_loader_strategies,
     stringify_warehouse_rows,
 )
@@ -78,114 +76,6 @@ def build_bigquery_dependency_baseline_project_toml(
         "reuse_hard_copy = true\n\n"
         "[defaults]\n"
         'materialized = "table"\n'
-    )
-
-
-def assert_bigquery_seeded_reuse_case(
-    *,
-    tmp_path: Path,
-    schema_prefix: str,
-    expected_rows: tuple[tuple[object, ...], ...],
-    snapshot: bool,
-) -> None:
-    dataset_base: str = build_unique_dataset_name(prefix=schema_prefix)
-    dev_dataset_name: str = f"{dataset_base}_dev"
-    prod_dataset_name: str = f"{dataset_base}_prod"
-    config: dict[str, object] = build_bigquery_connection_config(schema=dev_dataset_name)
-    project_id: str = str(config["project"])
-    try:
-        ensure_bigquery_dataset_ready(dataset_name=dev_dataset_name)
-        ensure_bigquery_dataset_ready(dataset_name=prod_dataset_name)
-        relation: str = "orders_snapshot" if snapshot else "fact_orders"
-        current_filter: str = " WHERE dbt_valid_to IS NULL" if snapshot else ""
-        profiles_yml: str = _bigquery_reuse_profiles_yml(
-            config=config,
-            project_id=project_id,
-            dev_dataset_name=dev_dataset_name,
-            prod_dataset_name=prod_dataset_name,
-        )
-        project_toml: str = _bigquery_reuse_project_toml(dev_dataset_name=dev_dataset_name)
-        destination_rows_sql: str = (
-            "SELECT order_id, amount FROM "
-            f"{relation_name(dataset_name=dev_dataset_name, name=relation)}"
-            f"{current_filter} ORDER BY order_id"
-        )
-        downstream_rows_sql: str = (
-            "SELECT order_id, downstream_amount FROM "
-            f"{relation_name(dataset_name=dev_dataset_name, name='downstream_orders')} "
-            "ORDER BY order_id"
-        )
-        raw_orders_relation: str = relation_name(dataset_name=dev_dataset_name, name="raw_orders")
-        if snapshot:
-            assert_dbt_snapshot_seeded_reuse_from_lifecycle(
-                tmp_path=tmp_path,
-                profiles_yml=profiles_yml,
-                project_toml=project_toml,
-                origin_snapshot_schema=prod_dataset_name,
-                destination_snapshot_schema=dev_dataset_name,
-                fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dev_dataset_name, sql=sql),
-                execute_sql=lambda sql: execute_bigquery_sql(
-                    dataset_name=dev_dataset_name, sql=sql
-                ),
-                raw_orders_relation=raw_orders_relation,
-                destination_rows_sql=destination_rows_sql,
-                downstream_rows_sql=downstream_rows_sql,
-                expected_rows=expected_rows,
-            )
-        else:
-            assert_dbt_seeded_reuse_from_lifecycle(
-                tmp_path=tmp_path,
-                profiles_yml=profiles_yml,
-                project_toml=project_toml,
-                fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dev_dataset_name, sql=sql),
-                execute_sql=lambda sql: execute_bigquery_sql(
-                    dataset_name=dev_dataset_name, sql=sql
-                ),
-                raw_orders_relation=raw_orders_relation,
-                destination_rows_sql=destination_rows_sql,
-                downstream_rows_sql=downstream_rows_sql,
-                expected_rows=expected_rows,
-            )
-    finally:
-        cleanup_bigquery_dataset(dataset_name=dev_dataset_name)
-        cleanup_bigquery_dataset(dataset_name=prod_dataset_name)
-
-
-def _bigquery_reuse_profiles_yml(
-    *, config: dict[str, object], project_id: str, dev_dataset_name: str, prod_dataset_name: str
-) -> str:
-    return (
-        "analytics:\n"
-        "  target: dev\n"
-        "  outputs:\n"
-        "    dev:\n"
-        "      type: bigquery\n"
-        "      method: oauth\n"
-        f"      project: {project_id}\n"
-        f"      dataset: {dev_dataset_name}\n"
-        f"      location: {config['location']}\n"
-        "    prod:\n"
-        "      type: bigquery\n"
-        "      method: oauth\n"
-        f"      project: {project_id}\n"
-        f"      dataset: {prod_dataset_name}\n"
-        f"      location: {config['location']}\n"
-    )
-
-
-def _bigquery_reuse_project_toml(*, dev_dataset_name: str) -> str:
-    return (
-        build_bigquery_project_toml(
-            project_name="bigquery_dbt_reuse_from",
-            dataset_name=dev_dataset_name,
-        )
-        + "\n[dbt]\n"
-        + 'project_dir = "../dbt_project"\n'
-        + 'profiles_dir = "../profiles"\n'
-        + 'target_path = "../dbt_project/target"\n'
-        + "[dbt.reuse_from]\n"
-        + 'git_ref = "prod"\n'
-        + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
     )
 
 

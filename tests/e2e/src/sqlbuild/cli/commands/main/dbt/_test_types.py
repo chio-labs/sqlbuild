@@ -89,53 +89,6 @@ class DbtExistingRelationGuardE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DbtReuseFromE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_destination_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_rerun_destination_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    expected_metadata_json: str
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_relations: tuple[tuple[str, str], ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-    expected_rerun_absent_stdout_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtSeededReuseFromE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_destination_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_rerun_absent_stdout_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtDependencyBaselineReuseFromE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_destination_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_dbt_fingerprint_rows: tuple[tuple[object, ...], ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtDependencyBaselinePlanJsonE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_selected_models: tuple[str, ...]
-    expected_seeded_reuse_unique_ids: tuple[str, ...]
-    expected_entry_action: str
-    expected_entry_reason: str
-    expected_entry_materialization: str
-
-
-@dataclass(frozen=True)
 class DbtLineageE2ETestCase:
     description: str
     command: tuple[str, ...]
@@ -170,37 +123,6 @@ class DbtLineageErrorE2ETestCase:
     command: tuple[str, ...]
     expected_stderr_fragments: tuple[str, ...]
     setup: Callable[[Path], None] | None = None
-
-
-@dataclass(frozen=True)
-class DbtMultiNodeCompleteReuseFromE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    missing_origin_sql: str
-    expected_downstream_rows: tuple[tuple[str, int], ...]
-    expected_fingerprint_rows: tuple[tuple[str], ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtMultiNodeSeededReuseFromE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    missing_origin_sql: str
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-    expected_downstream_rows: tuple[tuple[str, int, int], ...]
-
-
-@dataclass(frozen=True)
-class DbtSnapshotSeededReuseFromE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_destination_rows: tuple[tuple[int, int], ...]
-    expected_downstream_rows: tuple[tuple[int, int], ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_rerun_absent_stdout_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -319,13 +241,6 @@ class DbtDiffSelectionE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DbtInitGeneratedReuseE2ETestCase:
-    description: str
-    expected_stdout_fragments: tuple[str, ...]
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
 class DbtInitMissingProdRelationE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
@@ -338,12 +253,6 @@ class DbtInitMissingProdRelationBuildE2ETestCase:
     expected_stdout_fragments: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class DbtInitInvalidReuseRefE2ETestCase:
-    description: str
-    expected_stdout_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -491,11 +400,3 @@ class DbtFullRefreshScopeTestCase:
     expected_command_select_fragments: tuple[str, ...]
     unexpected_command_select_fragments: tuple[str, ...]
     expected_full_refresh_count: int
-
-
-@dataclass(frozen=True)
-class DbtReuseSkipE2ETestCase:
-    description: str
-    expected_returncode: int
-    expected_stdout_fragments: tuple[str, ...]
-    expected_stderr_fragments: tuple[str, ...]

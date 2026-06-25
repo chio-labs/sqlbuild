@@ -1410,25 +1410,25 @@ def test_given_scoped_run_despite_unchanged_when_planning_then_reports_remaining
     "test_case",
     [
         DirectPlanE2ETestCase(
-            description="standard changes-only plan surfaces explicit source freshness errors",
+            description="standard changes-only plan observes column freshness on expression source",
             expected_fragments=(
-                "column freshness requires a physical table source",
+                "Plan ready",
                 "raw_orders",
             ),
         )
     ],
-    ids=["standard changes-only plan surfaces explicit source freshness errors"],
+    ids=["standard changes-only plan observes column freshness on expression source"],
 )
-def test_given_invalid_explicit_source_freshness_when_planning_changes_only_then_errors(
+def test_given_column_freshness_expression_when_planning_changes_only_then_observes(
     test_case: DirectPlanE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="direct_changes_only_source_freshness_plan_error",
+        project_name="direct_changes_only_source_freshness_expression",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "direct_changes_only_source_freshness_plan_error"\n'
+                'name = "direct_changes_only_source_freshness_expression"\n'
                 'adapter = "duckdb"\n\n'
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
@@ -1453,7 +1453,7 @@ def test_given_invalid_explicit_source_freshness_when_planning_changes_only_then
         project_dir=project_dir,
     )
 
-    assert plan_result.returncode != 0, plan_result.stdout + plan_result.stderr
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
     output: str = plan_result.stdout + plan_result.stderr
     fragment: str
     for fragment in test_case.expected_fragments:

@@ -1,4 +1,4 @@
-"""Scaffold steps for the dbt reuse playground template."""
+"""Scaffold steps for the dbt playground template (change-aware builds, clone, diff)."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ _DEV_MODEL_EDITS: tuple[tuple[str, str], ...] = (
 )
 
 
-def scaffold_dbt_reuse_playground(*, target_dir: Path) -> None:
+def scaffold_dbt_playground(*, target_dir: Path) -> None:
     """Initialize git, build the prod schema, and create a dev branch with edits."""
 
     _require_executable(name="git")
@@ -60,7 +60,7 @@ def scaffold_dbt_reuse_playground(*, target_dir: Path) -> None:
     _run_git(args=("config", "user.email", "playground@sqlbuild.invalid"), cwd=target_dir)
     _run_git(args=("config", "user.name", "SQLBuild Playground"), cwd=target_dir)
     _run_git(args=("add", "."), cwd=target_dir)
-    _run_git(args=("commit", "-m", "dbt reuse playground baseline"), cwd=target_dir)
+    _run_git(args=("commit", "-m", "dbt playground baseline"), cwd=target_dir)
     _build_prod(dbt_project_dir=dbt_project_dir, profiles_dir=profiles_dir)
     _run_git(args=("checkout", "-b", "dev"), cwd=target_dir)
     _apply_dev_edits(dbt_project_dir=dbt_project_dir)
@@ -99,7 +99,7 @@ def _require_executable(*, name: str) -> None:
     if shutil.which(name) is not None:
         return
     raise CliUserError(
-        f"the dbt reuse playground requires '{name}' on PATH",
+        f"the dbt playground requires '{name}' on PATH",
         code="C704",
         help=f"install {name} and re-run sqb playground --template dbt",
     )
@@ -115,7 +115,7 @@ def _run_git(*, args: tuple[str, ...], cwd: Path) -> None:
     )
     if result.returncode != 0:
         raise CliUserError(
-            f"dbt reuse playground git step failed: git {' '.join(args)}",
+            f"dbt playground git step failed: git {' '.join(args)}",
             code="C705",
             help=(result.stderr or result.stdout).strip() or None,
         )
@@ -142,7 +142,7 @@ def _run_dbt(
     )
     if result.returncode != 0:
         raise CliUserError(
-            f"dbt reuse playground prod build failed: dbt {' '.join(args)}",
+            f"dbt playground prod build failed: dbt {' '.join(args)}",
             code="C706",
             help=(result.stderr or result.stdout).strip() or None,
         )

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.main.helpers.playground.dbt_scaffold import (
-    scaffold_dbt_reuse_playground,
+    scaffold_dbt_playground,
 )
 from sqlbuild.cli.commands.main.helpers.playground.types import PlaygroundTemplate
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
@@ -613,7 +613,7 @@ def _write_dbt_reuse_template_files(*, target_dir: Path) -> None:
             help="reinstall SQLBuild or report a packaging issue",
         )
     _copy_tree(source=template_root, target=target_dir)
-    scaffold_dbt_reuse_playground(target_dir=target_dir)
+    scaffold_dbt_playground(target_dir=target_dir)
 
 
 def _copy_tree(*, source: Traversable, target: Path) -> None:

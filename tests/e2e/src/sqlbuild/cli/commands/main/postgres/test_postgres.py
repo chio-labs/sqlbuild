@@ -12,7 +12,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresBuildE2ETestCase,
     PostgresDbtProfileE2ETestCase,
-    PostgresDbtReuseFromE2ETestCase,
     PostgresDbtSeedChangeE2ETestCase,
     PostgresDependencyBaselineE2ETestCase,
     PostgresIntermediateDagStrategyE2ETestCase,
@@ -29,7 +28,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     append_postgres_dbt_seed_change_order,
     assert_current_postgres_snapshot_rows_from_case,
-    assert_postgres_seeded_reuse_case,
     assert_postgres_snapshot_apply_rows,
     assert_postgres_snapshot_matrix_rows,
     build_postgres_dependency_baseline_project_toml,
@@ -53,7 +51,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     add_dbt_profile_downstream_model,
-    assert_dbt_complete_reuse_from_lifecycle,
     assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
@@ -79,9 +76,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             command=("--no-color", "build", "--select", "downstream"),
             expected_stdout_fragments=(
                 "Plan ready (1 selected)",
-                "Dependency baseline (1)",
+                "Reused inputs (1)",
                 "upstream",
-                "baseline reuse",
+                "from reuse origin target",
                 "downstream",
                 "Completed successfully.",
             ),
@@ -289,140 +286,6 @@ def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_
         )
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresDbtReuseFromE2ETestCase(
-            description="dbt reuse_from reuses a complete table on postgres",
-            schema_prefix="sqlbuild_dbt_reuse",
-            expected_rows=((1, 900),),
-        )
-    ],
-    ids=["dbt reuse_from reuses a complete table on postgres"],
-)
-def test_given_postgres_dbt_reuse_from_when_plain_build_then_reuses_prod_table(
-    tmp_path: Path,
-    test_case: PostgresDbtReuseFromE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    env: dict[str, str] = postgres_dbt_env(password=str(postgres_e2e_config["password"]))
-    try:
-        ensure_postgres_schema_ready(schema_name=dev_schema_name, config=postgres_e2e_config)
-        ensure_postgres_schema_ready(schema_name=prod_schema_name, config=postgres_e2e_config)
-        assert_dbt_complete_reuse_from_lifecycle(
-            tmp_path=tmp_path,
-            profiles_yml=(
-                "analytics:\n"
-                "  target: dev\n"
-                "  outputs:\n"
-                "    dev:\n"
-                "      type: postgres\n"
-                f"      host: {postgres_e2e_config['host']}\n"
-                f"      port: {postgres_e2e_config['port']}\n"
-                f"      dbname: {postgres_e2e_config['dbname']}\n"
-                f"      user: {postgres_e2e_config['user']}\n"
-                "      pass: \"{{ env_var('DBT_POSTGRES_PASSWORD') }}\"\n"
-                f"      schema: {dev_schema_name}\n"
-                "    prod:\n"
-                "      type: postgres\n"
-                f"      host: {postgres_e2e_config['host']}\n"
-                f"      port: {postgres_e2e_config['port']}\n"
-                f"      dbname: {postgres_e2e_config['dbname']}\n"
-                f"      user: {postgres_e2e_config['user']}\n"
-                "      pass: \"{{ env_var('DBT_POSTGRES_PASSWORD') }}\"\n"
-                f"      schema: {prod_schema_name}\n"
-            ),
-            project_toml=(
-                build_postgres_project_toml(
-                    project_name="postgres_dbt_reuse_from",
-                    schema_name=dev_schema_name,
-                    config=postgres_e2e_config,
-                )
-                + "\n[dbt]\n"
-                + 'project_dir = "../dbt_project"\n'
-                + 'profiles_dir = "../profiles"\n'
-                + 'target_path = "../dbt_project/target"\n'
-                + "[dbt.reuse_from]\n"
-                + 'git_ref = "prod"\n'
-                + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
-            ),
-            fetch_rows=lambda sql: fetch_postgres_rows(config=postgres_e2e_config, sql=sql),
-            destination_rows_sql=(
-                "SELECT order_id, amount FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='fact_orders')} "
-                "ORDER BY order_id"
-            ),
-            downstream_rows_sql=(
-                "SELECT order_id, downstream_amount FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
-                "ORDER BY order_id"
-            ),
-            expected_rows=test_case.expected_rows,
-            env=env,
-        )
-    finally:
-        cleanup_postgres_schema(schema_name=dev_schema_name, config=postgres_e2e_config)
-        cleanup_postgres_schema(schema_name=prod_schema_name, config=postgres_e2e_config)
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresDbtReuseFromE2ETestCase(
-            description="dbt seeded reuse_from catches up an incremental model on postgres",
-            schema_prefix="sqlbuild_dbt_seeded_reuse",
-            expected_rows=((1, 900), (2, 901)),
-        )
-    ],
-    ids=["dbt seeded reuse_from catches up an incremental model on postgres"],
-)
-def test_given_postgres_dbt_seeded_reuse_from_when_plain_build_then_catches_up_incremental(
-    tmp_path: Path,
-    test_case: PostgresDbtReuseFromE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    assert_postgres_seeded_reuse_case(
-        tmp_path=tmp_path,
-        schema_prefix=test_case.schema_prefix,
-        expected_rows=test_case.expected_rows,
-        postgres_e2e_config=postgres_e2e_config,
-        snapshot=False,
-    )
-    assert test_case.expected_rows == ((1, 900), (2, 901))
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresDbtReuseFromE2ETestCase(
-            description="dbt snapshot seeded reuse_from catches up on postgres",
-            schema_prefix="sqlbuild_dbt_snapshot_reuse",
-            expected_rows=((1, 900), (2, 901)),
-        )
-    ],
-    ids=["dbt snapshot seeded reuse_from catches up on postgres"],
-)
-def test_given_postgres_dbt_snapshot_seeded_reuse_from_when_plain_build_then_catches_up_snapshot(
-    tmp_path: Path,
-    test_case: PostgresDbtReuseFromE2ETestCase,
-    postgres_e2e_config: dict[str, object],
-) -> None:
-    assert_postgres_seeded_reuse_case(
-        tmp_path=tmp_path,
-        schema_prefix=test_case.schema_prefix,
-        expected_rows=test_case.expected_rows,
-        postgres_e2e_config=postgres_e2e_config,
-        snapshot=True,
-    )
-    assert test_case.expected_rows == ((1, 900), (2, 901))
 
 
 @pytest.mark.parametrize(

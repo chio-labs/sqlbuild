@@ -371,25 +371,10 @@ def _format_dependency_baseline_entries(
 ) -> None:
     if not entries:
         return
-    trusted_entries: tuple[DependencyBaselinePlanEntry, ...] = tuple(
-        entry for entry in entries if entry.trusted_input
-    )
-    reused_entries: tuple[DependencyBaselinePlanEntry, ...] = tuple(
-        entry for entry in entries if not entry.trusted_input
-    )
-
     _format_reuse_input_entries(
         lines,
-        reused_entries,
+        entries,
         label="Reused inputs",
-        name_column_width=name_column_width,
-        display_options=display_options,
-        section_header_style=section_header_style,
-    )
-    _format_reuse_input_entries(
-        lines,
-        trusted_entries,
-        label="Trusted inputs",
         name_column_width=name_column_width,
         display_options=display_options,
         section_header_style=section_header_style,
@@ -433,12 +418,7 @@ def _format_reuse_input_entries(
 
 def _reuse_input_detail(entry: DependencyBaselinePlanEntry) -> str:
     copy_kind: str = "hard-copy" if entry.relation_reuse.hard_copy else "cheap clone"
-    detail: str = f"{entry.resource_label}  {copy_kind} from reuse origin target"
-    if entry.trusted_input and entry.current_project_affected:
-        return f"{detail}, trusted despite current-project change"
-    if entry.trusted_input:
-        return f"{detail}, trusted despite identity mismatch"
-    return detail
+    return f"{entry.resource_label}  {copy_kind} from reuse origin target"
 
 
 def _format_existing_destination_input_entries(
@@ -476,10 +456,7 @@ def _format_existing_destination_input_entries(
 
 
 def _existing_destination_input_detail(entry: ExistingDestinationInputPlanEntry) -> str:
-    detail: str = f"{entry.status} in destination target"
-    if entry.current_project_affected:
-        return f"{detail}, affected by current-project change"
-    return detail
+    return f"{entry.status} in destination target"
 
 
 def _plan_ready_header(

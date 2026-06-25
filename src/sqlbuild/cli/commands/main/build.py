@@ -112,8 +112,6 @@ def run_build(
     run_audits: bool = True,
     json_output: bool = False,
     json_output_path: Path | None = None,
-    strict_reuse: bool | None = None,
-    trust_reuse_inputs: bool | None = None,
 ) -> int:
     """Execute the build command."""
 
@@ -223,8 +221,6 @@ def run_build(
                 discovered_inputs=discovered_inputs,
             ),
             resolve_python_run_selectors=include_python or should_load_sources,
-            strict_reuse=strict_reuse,
-            trust_reuse_inputs=trust_reuse_inputs,
         )
 
         plan_output: PlanOutput = pipeline_result.plan_output

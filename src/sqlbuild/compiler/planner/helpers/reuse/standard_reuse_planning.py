@@ -46,10 +46,6 @@ def build_standard_reuse_planning_result(
     cursor_snapshots: dict[str, ModelCursorSnapshot],
     full_refresh: bool,
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
-    strict: bool = False,
-    trust_reuse_inputs: bool = False,
-    current_project_affected_model_names: frozenset[str] = frozenset(),
-    trusted_input_model_names: frozenset[str] = frozenset(),
 ) -> StandardReusePlanningResult | None:
     """Build snapshot, freshness, and decisions for standard target reuse."""
 
@@ -87,10 +83,6 @@ def build_standard_reuse_planning_result(
             cursor_snapshots=cursor_snapshots,
             reuse_from_source_freshness=source_freshness,
             custom_prepare_version_materializations=custom_prepare_version_materializations,
-            strict=strict,
-            trust_reuse_inputs=trust_reuse_inputs,
-            current_project_affected_model_names=current_project_affected_model_names,
-            trusted_input_model_names=trusted_input_model_names,
         ),
     )
 
@@ -133,9 +125,6 @@ def serialize_standard_reuse_metadata(
                         decision.reuse_origin_built_version_present
                     ),
                     "reuse_origin_matches_expected": decision.reuse_origin_matches_expected,
-                    "strict": decision.strict,
-                    "trusted_input": decision.trusted_input,
-                    "current_project_affected": decision.current_project_affected,
                     "reuse_origin_fingerprint_database": (
                         decision.reuse_origin_fingerprint_database
                     ),
@@ -146,8 +135,6 @@ def serialize_standard_reuse_metadata(
                 }
                 for model_name, decision in sorted(result.decisions.models.items())
             },
-            "strict": result.decisions.strict,
-            "trust_reuse_inputs": result.decisions.trust_reuse_inputs,
         },
     }
 
@@ -168,14 +155,7 @@ def serialize_standard_reuse_plan_metadata(
                 if entry.relation_reuse is not None
             ),
             "reused_inputs": tuple(
-                _serialize_dependency_input_entry(entry)
-                for entry in dependency_baseline_entries
-                if not entry.trusted_input
-            ),
-            "trusted_inputs": tuple(
-                _serialize_dependency_input_entry(entry)
-                for entry in dependency_baseline_entries
-                if entry.trusted_input
+                _serialize_dependency_input_entry(entry) for entry in dependency_baseline_entries
             ),
             "existing_destination_inputs": tuple(
                 _serialize_existing_destination_input_entry(entry)
@@ -203,8 +183,6 @@ def _serialize_dependency_input_entry(entry: DependencyBaselinePlanEntry) -> dic
         "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
         "origin_relation": entry.relation_reuse.origin.qualified_name,
         "hard_copy": entry.relation_reuse.hard_copy,
-        "trusted_input": entry.trusted_input,
-        "current_project_affected": entry.current_project_affected,
     }
 
 
@@ -215,5 +193,4 @@ def _serialize_existing_destination_input_entry(
         "name": entry.name,
         "destination": entry.destination.qualified_name,
         "status": entry.status,
-        "current_project_affected": entry.current_project_affected,
     }

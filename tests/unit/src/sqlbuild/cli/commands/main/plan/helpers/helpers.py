@@ -161,8 +161,6 @@ def build_dependency_baseline_entry(
     *,
     name: str = "upstream_orders",
     relation_reuse: RelationReusePlan | None = None,
-    trusted_input: bool = False,
-    current_project_affected: bool = False,
 ) -> DependencyBaselinePlanEntry:
     return DependencyBaselinePlanEntry(
         name=name,
@@ -172,8 +170,6 @@ def build_dependency_baseline_entry(
         relation_reuse=relation_reuse
         or build_relation_reuse_plan(origin_name=name, hard_copy=False),
         fingerprint_version_hash="expected_hash",
-        trusted_input=trusted_input,
-        current_project_affected=current_project_affected,
     )
 
 
@@ -181,7 +177,6 @@ def build_existing_destination_input_entry(
     *,
     name: str = "upstream_orders",
     status: str = "current",
-    current_project_affected: bool = False,
 ) -> ExistingDestinationInputPlanEntry:
     return ExistingDestinationInputPlanEntry(
         name=name,
@@ -191,7 +186,6 @@ def build_existing_destination_input_entry(
         status=status,
         expected_version_hash="expected_hash",
         destination_version_hash=("expected_hash" if status == "current" else "old_hash"),
-        current_project_affected=current_project_affected,
     )
 
 

@@ -9,7 +9,6 @@ import pytest
 from sqlbuild.adapter.shared.models import TableFreshnessMetadata, TableFreshnessRequest
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -27,10 +26,10 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessAdapterDefaultTestCase,
     StandardSourceFreshnessAgePolicyTestCase,
     StandardSourceFreshnessDuplicateSchemaTestCase,
+    StandardSourceFreshnessExpressionTestCase,
     StandardSourceFreshnessLagToleranceTestCase,
     StandardSourceFreshnessManagedSkipTestCase,
     StandardSourceFreshnessMultiSchemaTestCase,
-    StandardSourceFreshnessPlanningErrorTestCase,
     StandardSourceFreshnessPlanningTestCase,
     StandardSourceFreshnessUnknownTestCase,
 )
@@ -433,33 +432,33 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardSourceFreshnessPlanningErrorTestCase(
-            description="explicit column freshness error propagates clearly",
-            expected_error_fragment="column freshness requires a physical table source",
+        StandardSourceFreshnessExpressionTestCase(
+            description="column freshness observes an expression source via subquery",
+            expression="SELECT 1 AS id, 7 AS batch_id",
+            column="batch_id",
+            expected_data_version="7",
         )
     ],
-    ids=["explicit column freshness error propagates clearly"],
+    ids=["column freshness observes an expression source via subquery"],
 )
-def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear_error(
-    test_case: StandardSourceFreshnessPlanningErrorTestCase,
+def test_given_column_freshness_expression_when_planning_then_observes_subquery(
+    test_case: StandardSourceFreshnessExpressionTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        with pytest.raises(
-            SourceFreshnessObservationError, match=test_case.expected_error_fragment
-        ):
+        result: StandardSourceFreshnessPlanningResult = (
             build_standard_source_freshness_planning_result(
                 adapter=adapter,
                 connection=connection,
                 sources=(
                     SourceEntry(
-                        name="raw.orders",
-                        expression="SELECT 1 AS id",
+                        name="raw_orders",
+                        expression=test_case.expression,
                         freshness=SourceFreshnessConfig(
                             strategy=SourceFreshnessStrategy.COLUMN,
                             value_kind=SourceFreshnessValueKind.INTEGER,
-                            column="batch_id",
+                            column=test_case.column,
                         ),
                     ),
                 ),
@@ -469,8 +468,13 @@ def test_given_invalid_explicit_source_freshness_when_planning_then_raises_clear
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
             )
+        )
     finally:
         adapter.close(connection)
+
+    assert result.unknown_source_names == ()
+    assert len(result.observed_records) == 1
+    assert result.observed_records[0].data_version == test_case.expected_data_version
 
 
 @pytest.mark.parametrize(

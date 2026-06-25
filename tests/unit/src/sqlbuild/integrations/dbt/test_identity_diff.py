@@ -124,7 +124,6 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
         selected_unique_ids=("model.analytics.fact_orders",),
         expected_output_fragments=("Inherited only (1)", "stg_orders", "query"),
         expected_json_fragments=('"inherited_only"', '"query"'),
-        strict=True,
     ),
     DbtIdentityDiffTestCase(
         description="reports config and schema causes",
@@ -183,7 +182,6 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
         selected_unique_ids=("model.analytics.joined",),
         expected_output_fragments=("Causes (2)", "left", "right"),
         expected_json_fragments=('"model.analytics.left"', '"model.analytics.right"'),
-        strict=True,
     ),
     DbtIdentityDiffTestCase(
         description="reports upstream set change",
@@ -273,7 +271,6 @@ IDENTITY_DIFF_TEST_CASES: tuple[DbtIdentityDiffTestCase, ...] = (
         selected_unique_ids=("model.analytics.selected",),
         expected_output_fragments=("Inherited only (4)", "root", "-select 1 as id"),
         expected_json_fragments=('"model.analytics.root"', '"query"'),
-        strict=True,
     ),
 )
 
@@ -298,7 +295,6 @@ def test_given_current_and_ref_manifests_when_building_identity_diff_then_report
         ref_manifest=ref_manifest,
         selected_unique_ids=test_case.selected_unique_ids,
         against="main",
-        strict=test_case.strict,
     )
     rendered: str = render_dbt_identity_diff_result(
         result=result,
@@ -310,81 +306,6 @@ def test_given_current_and_ref_manifests_when_building_identity_diff_then_report
     rendered_json: str = format_dbt_identity_diff_json(result)
     json.loads(rendered_json)
 
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in rendered
-    for fragment in test_case.expected_json_fragments:
-        assert fragment in rendered_json
-    for fragment in test_case.expected_absent_fragments:
-        assert fragment not in rendered
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtIdentityDiffTestCase(
-            description="default identity diff treats upstream-only ref drift as reusable",
-            current_nodes=(
-                build_identity_diff_manifest_model_node(
-                    "model.analytics.stg_orders",
-                    checksum="new",
-                    raw_code="select 2 as order_id",
-                ),
-                build_identity_diff_manifest_model_node(
-                    "model.analytics.fact_orders",
-                    checksum="fact",
-                    raw_code="select * from stg_orders",
-                    depends_on_nodes=("model.analytics.stg_orders",),
-                ),
-            ),
-            ref_nodes=(
-                build_identity_diff_manifest_model_node(
-                    "model.analytics.stg_orders",
-                    checksum="old",
-                    raw_code="select 1 as order_id",
-                ),
-                build_identity_diff_manifest_model_node(
-                    "model.analytics.fact_orders",
-                    checksum="fact",
-                    raw_code="select * from stg_orders",
-                    depends_on_nodes=("model.analytics.stg_orders",),
-                ),
-            ),
-            selected_unique_ids=("model.analytics.fact_orders",),
-            expected_output_fragments=("active reuse: no direct identity change",),
-            expected_json_fragments=('"verdict": "would_reuse"',),
-            expected_absent_fragments=("Inherited only",),
-        )
-    ],
-    ids=["default identity diff treats upstream-only ref drift as reusable"],
-)
-def test_given_default_identity_diff_when_only_upstream_differs_then_selected_would_reuse(
-    test_case: DbtIdentityDiffTestCase,
-) -> None:
-    current_manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=build_manifest_data(nodes=test_case.current_nodes)
-    )
-    ref_manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=build_manifest_data(nodes=test_case.ref_nodes)
-    )
-
-    result: DbtIdentityDiffResult = build_dbt_identity_diff_result(
-        current_manifest=current_manifest,
-        ref_manifest=ref_manifest,
-        selected_unique_ids=test_case.selected_unique_ids,
-        against="main",
-    )
-    rendered: str = render_dbt_identity_diff_result(
-        result=result,
-        quiet=False,
-        show_inherited=False,
-        show_paths=False,
-        use_color=False,
-    )
-
-    assert result.selected[0].verdict.value == "would_reuse"
-    assert result.causes == ()
-    assert result.inherited_only == ()
-    rendered_json: str = format_dbt_identity_diff_json(result)
     for fragment in test_case.expected_output_fragments:
         assert fragment in rendered
     for fragment in test_case.expected_json_fragments:
@@ -581,7 +502,6 @@ def test_given_shared_upstream_when_building_identity_diff_then_diffs_cause_once
         ref_manifest=ref_manifest,
         selected_unique_ids=test_case.selected_unique_ids,
         against="main",
-        strict=True,
     )
     rendered: str = render_dbt_identity_diff_result(
         result=result,
@@ -667,7 +587,6 @@ def test_given_pass_through_chain_when_requested_then_lists_inherited_and_one_ca
         selected_unique_ids=test_case.selected_unique_ids,
         against="main",
         show_paths=True,
-        strict=True,
     )
     rendered: str = render_dbt_identity_diff_result(
         result=result,

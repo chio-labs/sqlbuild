@@ -93,7 +93,6 @@ _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
 _REUSABLE_DECISION_KINDS: frozenset[str] = frozenset(
     {
         StandardReuseDecisionKind.REUSE_ELIGIBLE.value,
-        StandardReuseDecisionKind.TRUSTED_REUSE_ELIGIBLE.value,
     }
 )
 

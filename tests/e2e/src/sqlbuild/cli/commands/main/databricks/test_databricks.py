@@ -10,7 +10,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksCliTestCase,
     DatabricksCloneE2ETestCase,
     DatabricksDbtProfileE2ETestCase,
-    DatabricksDbtReuseFromE2ETestCase,
     DatabricksDependencyBaselineE2ETestCase,
     DatabricksDiffE2ETestCase,
     DatabricksErrorE2ETestCase,
@@ -28,7 +27,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     assert_current_databricks_snapshot_rows,
-    assert_databricks_seeded_reuse_case,
     assert_databricks_snapshot_apply_rows,
     assert_databricks_snapshot_matrix_rows,
     build_databricks_dependency_baseline_project_toml,
@@ -58,7 +56,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     maybe_corrupt_scenario_snapshot_dialect,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    assert_dbt_complete_reuse_from_lifecycle,
     assert_dbt_profile_lifecycle,
     assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
@@ -88,9 +85,9 @@ from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
             command=("--no-color", "build", "--select", "downstream"),
             expected_stdout_fragments=(
                 "Plan ready (1 selected)",
-                "Dependency baseline (1)",
+                "Reused inputs (1)",
                 "upstream",
-                "baseline reuse",
+                "from reuse origin target",
                 "downstream",
                 "Completed successfully.",
             ),
@@ -196,132 +193,6 @@ def test_given_databricks_dbt_profile_when_running_dbt_init_then_builds_profile_
         )
     finally:
         cleanup_databricks_schema(schema_name=schema_name)
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DatabricksDbtReuseFromE2ETestCase(
-            description="dbt reuse_from reuses a complete table on Databricks",
-            schema_prefix="sqlbuild_dbt_reuse",
-            expected_rows=((1, 900),),
-        )
-    ],
-    ids=["dbt reuse_from reuses a complete table on Databricks"],
-)
-def test_given_databricks_dbt_reuse_from_when_plain_build_then_reuses_prod_table(
-    tmp_path: Path,
-    test_case: DatabricksDbtReuseFromE2ETestCase,
-) -> None:
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    config: dict[str, object] = build_databricks_connection_config(schema=dev_schema_name)
-    catalog_name: str = str(config["catalog"])
-    try:
-        ensure_databricks_schema_ready(schema_name=dev_schema_name)
-        ensure_databricks_schema_ready(schema_name=prod_schema_name)
-        assert_dbt_complete_reuse_from_lifecycle(
-            tmp_path=tmp_path,
-            profiles_yml=(
-                "analytics:\n"
-                "  target: dev\n"
-                "  outputs:\n"
-                "    dev:\n"
-                "      type: databricks\n"
-                f"      host: {config['server_hostname']}\n"
-                f"      http_path: {config['http_path']}\n"
-                f"      token: {config['token']}\n"
-                f"      catalog: {catalog_name}\n"
-                f"      schema: {dev_schema_name}\n"
-                "    prod:\n"
-                "      type: databricks\n"
-                f"      host: {config['server_hostname']}\n"
-                f"      http_path: {config['http_path']}\n"
-                f"      token: {config['token']}\n"
-                f"      catalog: {catalog_name}\n"
-                f"      schema: {prod_schema_name}\n"
-            ),
-            project_toml=(
-                build_databricks_project_toml(
-                    project_name="databricks_dbt_reuse_from",
-                    schema_name=dev_schema_name,
-                )
-                + "\n[dbt]\n"
-                + 'project_dir = "../dbt_project"\n'
-                + 'profiles_dir = "../profiles"\n'
-                + 'target_path = "../dbt_project/target"\n'
-                + "[dbt.reuse_from]\n"
-                + 'git_ref = "prod"\n'
-                + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
-            ),
-            fetch_rows=lambda sql: fetch_databricks_rows(schema_name=dev_schema_name, sql=sql),
-            destination_rows_sql=(
-                "SELECT order_id, amount FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='fact_orders')} "
-                "ORDER BY order_id"
-            ),
-            downstream_rows_sql=(
-                "SELECT order_id, downstream_amount FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='downstream_orders')} "
-                "ORDER BY order_id"
-            ),
-            expected_rows=test_case.expected_rows,
-        )
-    finally:
-        cleanup_databricks_schema(schema_name=dev_schema_name)
-        cleanup_databricks_schema(schema_name=prod_schema_name)
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DatabricksDbtReuseFromE2ETestCase(
-            description="dbt seeded reuse_from catches up an incremental model on Databricks",
-            schema_prefix="sqlbuild_dbt_seeded_reuse",
-            expected_rows=((1, 900), (2, 901)),
-        )
-    ],
-    ids=["dbt seeded reuse_from catches up an incremental model on Databricks"],
-)
-def test_given_databricks_dbt_seeded_reuse_from_when_plain_build_then_catches_up_incremental(
-    tmp_path: Path,
-    test_case: DatabricksDbtReuseFromE2ETestCase,
-) -> None:
-    assert_databricks_seeded_reuse_case(
-        tmp_path=tmp_path,
-        schema_prefix=test_case.schema_prefix,
-        expected_rows=test_case.expected_rows,
-        snapshot=False,
-    )
-    assert test_case.expected_rows == ((1, 900), (2, 901))
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DatabricksDbtReuseFromE2ETestCase(
-            description="dbt snapshot seeded reuse_from catches up on Databricks",
-            schema_prefix="sqlbuild_dbt_snapshot_reuse",
-            expected_rows=((1, 900), (2, 901)),
-        )
-    ],
-    ids=["dbt snapshot seeded reuse_from catches up on Databricks"],
-)
-def test_given_databricks_dbt_snapshot_seeded_reuse_from_when_plain_build_then_catches_up_snapshot(
-    tmp_path: Path,
-    test_case: DatabricksDbtReuseFromE2ETestCase,
-) -> None:
-    assert_databricks_seeded_reuse_case(
-        tmp_path=tmp_path,
-        schema_prefix=test_case.schema_prefix,
-        expected_rows=test_case.expected_rows,
-        snapshot=True,
-    )
-    assert test_case.expected_rows == ((1, 900), (2, 901))
 
 
 @pytest.mark.parametrize(

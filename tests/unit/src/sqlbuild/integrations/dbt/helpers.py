@@ -62,8 +62,7 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
 from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
 from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -71,13 +70,9 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtCommandResult,
-    DbtInteropPlan,
-    DbtInteropSelectionResult,
     DbtLineageGraph,
     DbtLsNode,
     DbtModelPlanEntry,
-    DbtReusePlanEntry,
-    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
     DbtDiffOptions,
@@ -86,12 +81,9 @@ from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
-    DbtInteropCommand,
     DbtLineageDirection,
     DbtModelPlanAction,
     DbtModelPlanReason,
-    DbtReusePlanAction,
-    DbtReusePlanReason,
 )
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
@@ -126,299 +118,6 @@ def build_dbt_cli_options(project_root: Path) -> DbtCliOptions:
         vars='{"run_date":"2026-01-01"}',
         state=project_root / "state",
         defer=True,
-    )
-
-
-def build_dbt_interop_plan_for_reuse_scope(
-    *,
-    dbt_selected_unique_ids: tuple[str, ...],
-    dbt_required_unique_ids: tuple[str, ...] = (),
-    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None,
-) -> DbtInteropPlan:
-    """Build a minimal interop plan for reuse scope tests."""
-
-    return DbtInteropPlan(
-        command=DbtInteropCommand.BUILD,
-        dbt_command_argv=("dbt", "build"),
-        dbt_selected_nodes=(),
-        dbt_selected_unique_ids=dbt_selected_unique_ids,
-        sqlbuild_command_argvs=(),
-        selection=DbtInteropSelectionResult(
-            dbt_required_unique_ids=dbt_required_unique_ids,
-            dbt_anchor_unique_ids_by_term=dbt_anchor_unique_ids_by_term or {},
-        ),
-    )
-
-
-def build_dbt_model_plan_entry(
-    *,
-    unique_id: str,
-    action: DbtModelPlanAction,
-    reason: DbtModelPlanReason,
-    previous_metadata_json: str | None = None,
-) -> DbtModelPlanEntry:
-    """Build a minimal dbt model plan entry for reuse planning tests."""
-
-    name: str = unique_id.rsplit(".", maxsplit=1)[-1]
-    return DbtModelPlanEntry(
-        unique_id=unique_id,
-        package_name="analytics",
-        name=name,
-        action=action,
-        reason=reason,
-        relation_name=f"dev.{name}",
-        previous_metadata_json=previous_metadata_json,
-    )
-
-
-def build_reuse_plan_current_manifest_nodes() -> tuple[dict[str, object], ...]:
-    """Build current manifest nodes for reuse plan pipeline tests."""
-
-    return (
-        build_manifest_model_node(
-            unique_id="model.analytics.orders",
-            package_name="analytics",
-            name="orders",
-            relation_name="dev.orders",
-            materialized="table",
-        ),
-        build_manifest_model_node(
-            unique_id="model.analytics.events",
-            package_name="analytics",
-            name="events",
-            relation_name="dev.events",
-            materialized="incremental",
-            incremental_strategy="microbatch",
-        ),
-    )
-
-
-def build_reuse_plan_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
-    """Build reuse manifest nodes for reuse plan pipeline tests."""
-
-    return (
-        build_manifest_model_node(
-            unique_id="model.analytics.orders",
-            package_name="analytics",
-            name="orders",
-            relation_name="prod.orders",
-            materialized="table",
-        ),
-        build_manifest_model_node(
-            unique_id="model.analytics.events",
-            package_name="analytics",
-            name="events",
-            relation_name="prod.events",
-            materialized="incremental",
-            incremental_strategy="microbatch",
-        ),
-    )
-
-
-def build_reuse_plan_origin_key_current_manifest_nodes() -> tuple[dict[str, object], ...]:
-    """Build current manifest nodes for origin relation key tests."""
-
-    return (
-        build_manifest_model_node(
-            unique_id="model.analytics.orders",
-            package_name="analytics",
-            name="orders",
-            database="warehouse",
-            schema="dev_marts",
-            alias="orders_dev",
-            materialized="table",
-        ),
-        build_manifest_model_node(
-            unique_id="model.analytics.customers",
-            package_name="analytics",
-            name="customers",
-            database="warehouse",
-            schema="dev_core",
-            alias="customers_dev",
-            materialized="table",
-        ),
-        build_manifest_model_node(
-            unique_id="model.analytics.payments",
-            package_name="analytics",
-            name="payments",
-            database="lakehouse",
-            schema="dev_marts",
-            alias="payments_dev",
-            materialized="table",
-        ),
-    )
-
-
-def build_reuse_plan_origin_key_reuse_manifest_nodes() -> tuple[dict[str, object], ...]:
-    """Build reuse manifest nodes for origin relation key tests."""
-
-    return (
-        build_manifest_model_node(
-            unique_id="model.analytics.orders",
-            package_name="analytics",
-            name="orders",
-            database="warehouse",
-            schema="prod_marts",
-            alias="orders_prod",
-            materialized="table",
-        ),
-        build_manifest_model_node(
-            unique_id="model.analytics.customers",
-            package_name="analytics",
-            name="customers",
-            database="warehouse",
-            schema="prod_core",
-            alias="customers_prod",
-            materialized="table",
-        ),
-        build_manifest_model_node(
-            unique_id="model.analytics.payments",
-            package_name="analytics",
-            name="payments",
-            database="lakehouse",
-            schema="prod_marts",
-            alias="payments_prod",
-            materialized="table",
-        ),
-    )
-
-
-def assert_reuse_plan_output_matches(
-    *,
-    result: DbtReusePlanningResult | None,
-    expected_is_none: bool,
-    expected_complete_reuse_unique_ids: tuple[str, ...],
-    expected_seeded_reuse_unique_ids: tuple[str, ...],
-) -> None:
-    """Assert reuse plan pipeline helper output matches expectations."""
-
-    assert (result is None) is expected_is_none
-    if result is None:
-        return
-    assert result.complete_reuse_unique_ids == expected_complete_reuse_unique_ids
-    assert result.seeded_reuse_unique_ids == expected_seeded_reuse_unique_ids
-
-
-def reuse_plan_rebuild_reasons(result: DbtReusePlanningResult) -> tuple[DbtReusePlanReason, ...]:
-    """Return rebuild reasons from a dbt reuse planning result."""
-
-    return tuple(
-        entry.reason for entry in result.entries if entry.action == DbtReusePlanAction.REBUILD
-    )
-
-
-def build_reuse_execute_manifest() -> DbtManifestIndex:
-    """Build a manifest for dbt complete reuse execution tests."""
-
-    model: DbtManifestModel = DbtManifestModel(
-        unique_id="model.analytics.fact_orders",
-        package_name="analytics",
-        name="fact_orders",
-        relation_name="main.fact_orders",
-        database=None,
-        schema="main",
-        alias="fact_orders",
-        node_checksum="checksum-1",
-        query_sql="select 1 as order_id, 111 as amount",
-    )
-    return DbtManifestIndex(
-        models_by_unique_id={model.unique_id: model},
-        models_by_name={model.name: (model,)},
-        models_by_package_and_name={(model.package_name, model.name): model},
-    )
-
-
-def build_reuse_execute_plan() -> DbtInteropPlan:
-    """Build a dbt interop plan with one complete reuse entry."""
-
-    return build_dbt_interop_plan(
-        command=DbtInteropCommand.BUILD,
-        dbt_command_argv=("dbt", "build"),
-        dbt_ls_nodes=(),
-        sqlbuild_command_argvs=(("sqb", "build", "--select", "downstream_orders"),),
-        selection=DbtInteropSelectionResult(sqlbuild_model_names=("downstream_orders",)),
-        dbt_reuse_plan=DbtReusePlanningResult(
-            entries=(
-                DbtReusePlanEntry(
-                    unique_id="model.analytics.fact_orders",
-                    action=DbtReusePlanAction.COMPLETE_REUSE,
-                    reason=DbtReusePlanReason.DESTINATION_MISSING,
-                    materialization="table",
-                    destination_relation_name="main.fact_orders",
-                    origin_relation_name="prod.fact_orders",
-                ),
-            )
-        ),
-    )
-
-
-def build_fresh_schema_reuse_execute_manifest() -> DbtManifestIndex:
-    """Build a manifest whose destination schema does not exist yet."""
-
-    model: DbtManifestModel = DbtManifestModel(
-        unique_id="model.analytics.fact_orders",
-        package_name="analytics",
-        name="fact_orders",
-        relation_name='"dev_marts"."fact_orders"',
-        database=None,
-        schema="dev_marts",
-        alias="fact_orders",
-        node_checksum="checksum-1",
-        query_sql="select 1 as order_id, 111 as amount",
-    )
-    return DbtManifestIndex(
-        models_by_unique_id={model.unique_id: model},
-        models_by_name={model.name: (model,)},
-        models_by_package_and_name={(model.package_name, model.name): model},
-    )
-
-
-def build_fresh_schema_reuse_execute_plan() -> DbtInteropPlan:
-    """Build a complete reuse plan whose destination uses a quoted fresh schema."""
-
-    return build_dbt_interop_plan(
-        command=DbtInteropCommand.BUILD,
-        dbt_command_argv=("dbt", "build"),
-        dbt_ls_nodes=(),
-        sqlbuild_command_argvs=(),
-        selection=DbtInteropSelectionResult(),
-        dbt_reuse_plan=DbtReusePlanningResult(
-            entries=(
-                DbtReusePlanEntry(
-                    unique_id="model.analytics.fact_orders",
-                    action=DbtReusePlanAction.COMPLETE_REUSE,
-                    reason=DbtReusePlanReason.DESTINATION_MISSING,
-                    materialization="table",
-                    destination_relation_name='"dev_marts"."fact_orders"',
-                    origin_relation_name='"marts"."fact_orders"',
-                ),
-            )
-        ),
-    )
-
-
-def build_seeded_reuse_execute_plan(*, cursor_column: str | None) -> DbtInteropPlan:
-    """Build a dbt interop plan with one seeded reuse entry."""
-
-    return build_dbt_interop_plan(
-        command=DbtInteropCommand.BUILD,
-        dbt_command_argv=("dbt", "build"),
-        dbt_ls_nodes=(),
-        sqlbuild_command_argvs=(("sqb", "build", "--select", "downstream_events"),),
-        selection=DbtInteropSelectionResult(sqlbuild_model_names=("downstream_events",)),
-        dbt_reuse_plan=DbtReusePlanningResult(
-            entries=(
-                DbtReusePlanEntry(
-                    unique_id="model.analytics.fact_orders",
-                    action=DbtReusePlanAction.SEEDED_REUSE,
-                    reason=DbtReusePlanReason.DESTINATION_MISSING,
-                    materialization="incremental",
-                    destination_relation_name="main.fact_orders",
-                    origin_relation_name="prod.fact_orders",
-                    cursor_column=cursor_column,
-                ),
-            )
-        ),
     )
 
 

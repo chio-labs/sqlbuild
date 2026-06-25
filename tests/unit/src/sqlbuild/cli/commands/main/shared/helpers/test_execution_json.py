@@ -18,8 +18,6 @@ from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
-    build_dependency_baseline_entry,
-    build_existing_destination_input_entry,
     build_model_entry,
     build_plan_output,
     build_relation_reuse_plan,
@@ -27,7 +25,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
 )
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     ExecutionJsonRelationReuseTestCase,
-    ExecutionJsonReuseSummaryTestCase,
     ExecutionJsonSeedReasonTestCase,
     ExecutionJsonTestCase,
 )
@@ -138,46 +135,6 @@ def test_given_reused_model_when_formatting_build_json_then_includes_relation_re
 
     assert assets[0]["name"] == test_case.expected_asset_name
     assert assets[0]["relation_reuse"] == test_case.expected_relation_reuse
-    assert "reuse" in payload
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ExecutionJsonReuseSummaryTestCase(
-            description="build json includes reuse summary",
-            expected_reused_input_name="stg_orders",
-            expected_trusted_input_name="stg_payments",
-            expected_existing_input_name="stg_customers",
-        )
-    ],
-    ids=["build json includes reuse summary"],
-)
-def test_given_reuse_inputs_when_formatting_build_json_then_includes_reuse_summary(
-    test_case: ExecutionJsonReuseSummaryTestCase,
-) -> None:
-    result: str = format_build_execution_json(
-        result=BuildExecutionResult(status=BuildStatus.SUCCESS),
-        plan=build_plan_output(
-            dependency_baseline_entries=(
-                build_dependency_baseline_entry(name="stg_orders"),
-                build_dependency_baseline_entry(name="stg_payments", trusted_input=True),
-            ),
-            existing_destination_input_entries=(
-                build_existing_destination_input_entry(name="stg_customers", status="stale"),
-            ),
-        ),
-    )
-    payload: dict[str, object] = json.loads(result)
-    reuse: dict[str, object] = payload["reuse"]  # type: ignore[assignment]
-
-    reused_inputs: list[dict[str, object]] = reuse["reused_inputs"]  # type: ignore[assignment]
-    trusted_inputs: list[dict[str, object]] = reuse["trusted_inputs"]  # type: ignore[assignment]
-    existing_inputs: list[dict[str, object]] = reuse["existing_destination_inputs"]  # type: ignore[assignment]
-
-    assert reused_inputs[0]["name"] == test_case.expected_reused_input_name
-    assert trusted_inputs[0]["name"] == test_case.expected_trusted_input_name
-    assert existing_inputs[0]["name"] == test_case.expected_existing_input_name
 
 
 @pytest.mark.parametrize(

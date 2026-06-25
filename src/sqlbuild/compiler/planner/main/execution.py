@@ -55,11 +55,6 @@ from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_decisions import (
 from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
     enforce_standard_reuse_from_source_deferral_conflict,
 )
-from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_options import (
-    build_current_project_affected_model_names,
-    resolve_standard_reuse_strict,
-    resolve_standard_trust_reuse_inputs,
-)
 from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_planning import (
     build_standard_reuse_planning_result,
     serialize_standard_reuse_metadata,
@@ -124,8 +119,7 @@ def build_execution_plan(
     source_deferral_enabled: bool = True,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
-    strict_reuse: bool | None = None,
-    trust_reuse_inputs: bool | None = None,
+    enable_reuse_planning: bool = True,
 ) -> PlanOutput:
     selected_scope: PlannerScope = build_planner_scope(
         project=project,
@@ -145,6 +139,8 @@ def build_execution_plan(
     )
     dependency_baseline_candidate_keys: frozenset[CompiledObjectKey] = (
         build_dependency_baseline_candidate_keys(selected_scope)
+        if enable_reuse_planning
+        else frozenset()
     )
     scope: PlannerScope = with_dependency_baseline_candidates(
         scope=selected_scope,
@@ -212,42 +208,24 @@ def build_execution_plan(
         expected_version_hashes=stale_warning_version_identities.model_version_hashes,
         expected_metadata_jsons=stale_warning_version_identities.model_metadata_jsons,
     )
-    current_project_affected_model_names: frozenset[str] = (
-        build_current_project_affected_model_names(
+    standard_reuse: StandardReusePlanningResult | None = (
+        build_standard_reuse_planning_result(
+            project=project,
+            adapter=adapter,
+            connection=connection,
             scope=scope,
-            changes=stale_warning_changes,
+            relations=relations,
+            project_config=project_config,
+            local_config=local_config,
+            expected_version_hashes=version_identities.model_version_hashes,
+            built_fingerprints=snapshot.fingerprints.models,
+            destination_relation_names=frozenset(snapshot.existing_relations),
+            cursor_snapshots=snapshot.cursor_snapshots,
+            full_refresh=full_refresh,
+            custom_prepare_version_materializations=custom_prepare_version_materializations,
         )
-    )
-    resolved_reuse_strict: bool = resolve_standard_reuse_strict(
-        project=project,
-        project_config=project_config,
-        local_config=local_config,
-        override=strict_reuse,
-    )
-    resolved_trust_reuse_inputs: bool = resolve_standard_trust_reuse_inputs(
-        project=project,
-        project_config=project_config,
-        local_config=local_config,
-        override=trust_reuse_inputs,
-    )
-    standard_reuse: StandardReusePlanningResult | None = build_standard_reuse_planning_result(
-        project=project,
-        adapter=adapter,
-        connection=connection,
-        scope=scope,
-        relations=relations,
-        project_config=project_config,
-        local_config=local_config,
-        expected_version_hashes=version_identities.model_version_hashes,
-        built_fingerprints=snapshot.fingerprints.models,
-        destination_relation_names=frozenset(snapshot.existing_relations),
-        cursor_snapshots=snapshot.cursor_snapshots,
-        full_refresh=full_refresh,
-        custom_prepare_version_materializations=custom_prepare_version_materializations,
-        strict=resolved_reuse_strict,
-        trust_reuse_inputs=resolved_trust_reuse_inputs,
-        current_project_affected_model_names=current_project_affected_model_names,
-        trusted_input_model_names=frozenset(key.name for key in dependency_baseline_candidate_keys),
+        if enable_reuse_planning
+        else None
     )
     reusable_dependency_baseline_keys: frozenset[CompiledObjectKey] = frozenset(
         key
@@ -455,9 +433,6 @@ def build_execution_plan(
         build_dependency_baseline_entries(
             entries=dependency_baseline_entry_results.entries,
             candidate_keys=reusable_dependency_baseline_keys,
-            standard_reuse_decisions=(
-                standard_reuse.decisions if standard_reuse is not None else None
-            ),
         )
     )
     existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (
@@ -468,8 +443,9 @@ def build_execution_plan(
             existing_relation_names=frozenset(snapshot.existing_relations),
             expected_version_hashes=version_identities.model_version_hashes,
             destination_fingerprints=snapshot.fingerprints.models,
-            current_project_affected_model_names=current_project_affected_model_names,
         )
+        if enable_reuse_planning
+        else ()
     )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
@@ -506,6 +482,15 @@ def build_execution_plan(
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,
     )
+    reuse_satisfied_model_names: frozenset[str] = (
+        frozenset(
+            name
+            for name, decision in standard_reuse.decisions.models.items()
+            if is_standard_reuse_decision_reusable(decision.decision)
+        )
+        if standard_reuse is not None
+        else frozenset()
+    )
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
         build_stale_out_of_selection_warnings(
             original_scope=original_scope_for_stale_warnings,
@@ -514,6 +499,7 @@ def build_execution_plan(
             snapshot=snapshot,
             version_identities=stale_warning_version_identities,
             source_freshness=source_freshness,
+            reuse_satisfied_model_names=reuse_satisfied_model_names,
         )
     )
     if stale_out_of_selection_warnings:
