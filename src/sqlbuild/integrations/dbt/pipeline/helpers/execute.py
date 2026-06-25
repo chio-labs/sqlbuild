@@ -63,6 +63,7 @@ def execute_dbt_commands(
     use_color: bool,
     skip_message: str = "Skipping dbt: no dbt work selected.",
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> DbtCommandExecutionResult:
     """Execute the merged dbt command, or skip when no dbt work exists."""
 
@@ -99,6 +100,8 @@ def execute_dbt_commands(
         display_total=expected_total,
         on_node_result=on_node_result,
     )
+    if on_progress is not None:
+        on_progress("Finalizing dbt run...")
     streamed_result_count: int = len(results)
     results = _append_missing_run_results(
         results=results,
@@ -114,6 +117,8 @@ def execute_dbt_commands(
         )
         if on_node_result is not None:
             on_node_result(result)
+    if on_progress is not None:
+        on_progress("Finalized dbt run.")
     del runner, stderr_stream
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
 

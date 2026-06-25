@@ -443,6 +443,7 @@ def execute_dbt_interop_from_project(
                 else "Skipping dbt: no dbt work selected."
             ),
             on_node_result=record_dbt_node_result,
+            on_progress=on_progress,
         )
     finally:
         if dbt_state_connection is not None:
