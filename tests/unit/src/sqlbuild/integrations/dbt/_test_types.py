@@ -329,6 +329,13 @@ class DbtExecutionTotalRenderTestCase:
 
 
 @dataclass(frozen=True)
+class DbtExecutionSummaryFooterTestCase:
+    description: str
+    node_statuses: tuple[str, ...]
+    expected_footer: str | None
+
+
+@dataclass(frozen=True)
 class DbtCombinedGraphTestCase:
     description: str
     manifest_data: dict[str, object]
