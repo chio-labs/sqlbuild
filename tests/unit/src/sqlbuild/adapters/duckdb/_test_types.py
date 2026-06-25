@@ -62,3 +62,13 @@ class DuckDbRenderSwapTestCase:
     left: str
     right: str
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuckDbRenderSourceFreshnessQueryTestCase:
+    description: str
+    column: str
+    source_relation: str
+    source_is_subquery: bool
+    where_sql: str
+    expected_sql: str

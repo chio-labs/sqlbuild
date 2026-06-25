@@ -45,6 +45,16 @@ class StandardDependencyBaselinePlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class StandardDirectInputBaselineTestCase:
+    description: str
+    models_by_name: dict[str, str]
+    origin_model_names: tuple[str, ...]
+    selected_model_name: str
+    expected_baseline_names: tuple[str, ...]
+    unexpected_baseline_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class StandardReuseFullRefreshBypassTestCase:
     description: str
     expected_reuse_from_target_metadata_present: bool

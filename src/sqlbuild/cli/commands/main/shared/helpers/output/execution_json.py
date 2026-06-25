@@ -367,8 +367,7 @@ def _format_reuse_summary(plan: PlanOutput) -> dict[str, object]:
             if entry.relation_reuse is not None
         ),
         "reused_inputs": tuple(
-            _format_dependency_input_entry(entry)
-            for entry in plan.dependency_baseline_entries
+            _format_dependency_input_entry(entry) for entry in plan.dependency_baseline_entries
         ),
         "existing_destination_inputs": tuple(
             _format_existing_destination_input_entry(entry)

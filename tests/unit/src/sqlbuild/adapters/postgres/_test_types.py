@@ -101,3 +101,13 @@ class PostgresPruneSqlTestCase:
     schema: str
     retain_versions: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresRenderSourceFreshnessQueryTestCase:
+    description: str
+    column: str
+    source_relation: str
+    source_is_subquery: bool
+    where_sql: str
+    expected_sql: str

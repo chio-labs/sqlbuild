@@ -137,3 +137,19 @@ class StandardSourceFreshnessPropagationTestCase:
     error_source_names: tuple[str, ...] = ()
     expected_blocked_model_names: frozenset[str] = frozenset()
     expected_error_source_model_names: dict[str, frozenset[str]] | None = None
+
+
+@dataclass(frozen=True)
+class SharedSourceFreshnessExpressionSubqueryTestCase:
+    description: str
+    expression: str
+    column: str
+    expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class StandardSourceFreshnessExpressionTestCase:
+    description: str
+    expression: str
+    column: str
+    expected_data_version: str

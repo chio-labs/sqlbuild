@@ -937,7 +937,10 @@ def test_given_custom_reuse_from_target_when_building_dev_then_prepare_version_s
     assert dev_result.returncode == test_case.expected_dev_build_exit_code, (
         dev_result.stdout + dev_result.stderr
     )
-    assert "merge_by_id (custom) (hard-copy seeded reuse from reuse origin target prod)" in dev_result.stdout
+    assert (
+        "merge_by_id (custom) (hard-copy seeded reuse from reuse origin target prod)"
+        in dev_result.stdout
+    )
     assert query_duckdb(
         db_path=db_path,
         sql=(

@@ -139,7 +139,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
     ],
     ids=["reuse origin version mismatch blocks reuse"],
 )
-def test_given_origin_version_differs_then_model_is_not_reused(
+def test_given_origin_version_differs_when_deciding_then_model_is_not_reused(
     test_case: StandardReuseDecisionTestCase,
 ) -> None:
     decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
