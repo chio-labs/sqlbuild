@@ -253,25 +253,6 @@ class DbtModelPlanningRelationPrefetchTestCase:
 
 
 @dataclass(frozen=True)
-class DbtIdentityDiffTestCase:
-    description: str
-    current_nodes: tuple[dict[str, object], ...]
-    ref_nodes: tuple[dict[str, object], ...]
-    selected_unique_ids: tuple[str, ...]
-    expected_output_fragments: tuple[str, ...]
-    expected_json_fragments: tuple[str, ...]
-    expected_absent_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtIdentityDiffProgressTestCase:
-    description: str
-    args: tuple[str, ...]
-    expected_progress_fragments: tuple[str, ...]
-    expected_output_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class DbtExecutionSelectionStatusTestCase:
     description: str
     expected_total: int
