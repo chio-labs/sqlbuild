@@ -119,6 +119,7 @@ def build_execution_plan(
     source_deferral_enabled: bool = True,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     custom_prepare_version_materializations: frozenset[str] = frozenset(),
+    enable_reuse_planning: bool = True,
 ) -> PlanOutput:
     selected_scope: PlannerScope = build_planner_scope(
         project=project,
@@ -138,6 +139,8 @@ def build_execution_plan(
     )
     dependency_baseline_candidate_keys: frozenset[CompiledObjectKey] = (
         build_dependency_baseline_candidate_keys(selected_scope)
+        if enable_reuse_planning
+        else frozenset()
     )
     scope: PlannerScope = with_dependency_baseline_candidates(
         scope=selected_scope,
@@ -205,20 +208,24 @@ def build_execution_plan(
         expected_version_hashes=stale_warning_version_identities.model_version_hashes,
         expected_metadata_jsons=stale_warning_version_identities.model_metadata_jsons,
     )
-    standard_reuse: StandardReusePlanningResult | None = build_standard_reuse_planning_result(
-        project=project,
-        adapter=adapter,
-        connection=connection,
-        scope=scope,
-        relations=relations,
-        project_config=project_config,
-        local_config=local_config,
-        expected_version_hashes=version_identities.model_version_hashes,
-        built_fingerprints=snapshot.fingerprints.models,
-        destination_relation_names=frozenset(snapshot.existing_relations),
-        cursor_snapshots=snapshot.cursor_snapshots,
-        full_refresh=full_refresh,
-        custom_prepare_version_materializations=custom_prepare_version_materializations,
+    standard_reuse: StandardReusePlanningResult | None = (
+        build_standard_reuse_planning_result(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            scope=scope,
+            relations=relations,
+            project_config=project_config,
+            local_config=local_config,
+            expected_version_hashes=version_identities.model_version_hashes,
+            built_fingerprints=snapshot.fingerprints.models,
+            destination_relation_names=frozenset(snapshot.existing_relations),
+            cursor_snapshots=snapshot.cursor_snapshots,
+            full_refresh=full_refresh,
+            custom_prepare_version_materializations=custom_prepare_version_materializations,
+        )
+        if enable_reuse_planning
+        else None
     )
     reusable_dependency_baseline_keys: frozenset[CompiledObjectKey] = frozenset(
         key
@@ -437,6 +444,8 @@ def build_execution_plan(
             expected_version_hashes=version_identities.model_version_hashes,
             destination_fingerprints=snapshot.fingerprints.models,
         )
+        if enable_reuse_planning
+        else ()
     )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
