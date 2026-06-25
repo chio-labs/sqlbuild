@@ -15,9 +15,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
-    DbtReuseCandidateSkipReason,
-    DbtReusePlanAction,
-    DbtReusePlanReason,
 )
 from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
 
@@ -148,26 +145,6 @@ class DbtCompileFullRefreshPipelineTestCase:
 
 
 @dataclass(frozen=True)
-class DbtReuseExecutionOutputTestCase:
-    description: str
-    reused_unique_ids: tuple[str, ...]
-    baseline_reused_unique_ids: tuple[str, ...]
-    max_entries_per_section: int | None
-    dbt_execution_will_run: bool
-    expected_fragments: tuple[str, ...]
-    expected_absent_fragments: tuple[str, ...] = ()
-    expected_color_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtReuseExecutionOrderingTestCase:
-    description: str
-    expected_ordered_fragments: tuple[str, ...]
-    expected_fragments: tuple[str, ...]
-    expected_absent_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class DbtEventParseTestCase:
     description: str
     event: dict[str, object]
@@ -188,9 +165,6 @@ class DbtEventStreamTestCase:
     stdout_lines: tuple[str, ...]
     expected_unique_ids: tuple[str, ...]
     expected_output_fragments: tuple[str, ...] = ()
-    expected_absent_fragments: tuple[str, ...] = ()
-    stream_is_tty: bool = False
-    no_progress: bool = False
 
 
 @dataclass(frozen=True)
@@ -279,35 +253,6 @@ class DbtModelPlanningRelationPrefetchTestCase:
 
 
 @dataclass(frozen=True)
-class DbtReuseCandidateResolutionTestCase:
-    description: str
-    scoped_unique_ids: tuple[str, ...]
-    current_nodes: tuple[dict[str, object], ...]
-    reuse_nodes: tuple[dict[str, object], ...]
-    expected_candidate_unique_ids: tuple[str, ...]
-    expected_candidate_materializations: tuple[str, ...]
-    expected_origin_relation_names: tuple[str, ...]
-    expected_skipped: tuple[tuple[str, DbtReuseCandidateSkipReason], ...]
-    expected_cursor_columns: tuple[str | None, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtReuseScopeFromPlanTestCase:
-    description: str
-    dbt_selected_unique_ids: tuple[str, ...]
-    dbt_required_unique_ids: tuple[str, ...]
-    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]]
-    expected_candidate_unique_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtDependencyBaselineScopeTestCase:
-    description: str
-    dbt_selected_unique_ids: tuple[str, ...]
-    expected_baseline_unique_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class DbtIdentityDiffTestCase:
     description: str
     current_nodes: tuple[dict[str, object], ...]
@@ -316,7 +261,6 @@ class DbtIdentityDiffTestCase:
     expected_output_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...] = ()
-    strict: bool = False
 
 
 @dataclass(frozen=True)
@@ -328,108 +272,11 @@ class DbtIdentityDiffProgressTestCase:
 
 
 @dataclass(frozen=True)
-class DbtDefinitionFingerprintTestCase:
-    description: str
-    current_raw_code: str
-    origin_raw_code: str
-    current_config_overrides: dict[str, object]
-    origin_config_overrides: dict[str, object]
-    current_macro_ids: tuple[str, ...]
-    origin_macro_ids: tuple[str, ...]
-    current_macro_sql_by_id: dict[str, str]
-    origin_macro_sql_by_id: dict[str, str]
-    macro_deps_by_id: dict[str, tuple[str, ...]]
-    expected_definition_changed: bool
-
-
-@dataclass(frozen=True)
-class DbtReuseCascadeTestCase:
-    description: str
-    upstream_current_raw_sql: str
-    upstream_reuse_raw_sql: str
-    downstream_current_raw_sql: str
-    downstream_reuse_raw_sql: str
-    expected_downstream_definition_changed: bool
-
-
-@dataclass(frozen=True)
-class DbtReusePlanningTestCase:
-    description: str
-    candidate_materialization: str
-    dbt_plan_action: DbtModelPlanAction
-    dbt_plan_reason: DbtModelPlanReason
-    expected_action: DbtReusePlanAction
-    expected_reason: DbtReusePlanReason
-    cursor_column: str | None = None
-    previous_cursor_column: str | None = None
-    current_raw_sql: str | None = None
-    origin_raw_sql: str | None = None
-
-
-@dataclass(frozen=True)
-class DbtNativeDependencyBaselineConversionTestCase:
-    description: str
-    expected_name: str
-    expected_destination_relation: str
-    expected_origin_relation: str
-    expected_resource_label: str
-    expected_hard_copy: bool
-
-
-@dataclass(frozen=True)
-class DbtReusePlanOutputTestCase:
-    description: str
-    configure_reuse_from: bool
-    include_model_plan: bool
-    expected_is_none: bool
-    expected_complete_reuse_unique_ids: tuple[str, ...]
-    expected_seeded_reuse_unique_ids: tuple[str, ...]
-    cache_hit: bool = False
-    expected_progress_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class DbtExecutionSelectionStatusTestCase:
     description: str
     expected_total: int
     expected_output_fragment: str
     expected_completion_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtReuseOriginRelationTestCase:
-    description: str
-    existing_relations: tuple[tuple[str | None, str | None, str], ...]
-    expected_complete_reuse_unique_ids: tuple[str, ...]
-    expected_rebuild_unique_ids: tuple[str, ...]
-    expected_rebuild_reasons: tuple[DbtReusePlanReason, ...]
-    expected_list_relation_calls: tuple[
-        tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None], ...
-    ]
-
-
-@dataclass(frozen=True)
-class DbtReuseExecuteTestCase:
-    description: str
-    create_origin_relation: bool
-    existing_destination_amount: int | None
-    expected_reused_unique_ids: tuple[str, ...]
-    expected_destination_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    expected_metadata: dict[str, object] | None = None
-    expected_error: bool = False
-    cursor_column: str | None = None
-    destination_event_time: str | None = None
-    destination_order_id: int | None = None
-
-
-@dataclass(frozen=True)
-class DbtFreshSchemaReuseExecuteTestCase:
-    description: str
-    fingerprint_schema: str
-    expected_reused_unique_ids: tuple[str, ...]
-    expected_destination_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_node_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

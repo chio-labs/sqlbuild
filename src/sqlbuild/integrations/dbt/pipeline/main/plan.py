@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
 from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
@@ -38,11 +38,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropRoutedArgs,
     DbtModelPlanningResult,
-    DbtReusePlanningResult,
-)
-from sqlbuild.integrations.dbt.pipeline.helpers.dependency_baseline import (
-    build_dbt_native_dependency_baseline_entries,
-    dependency_baseline_unique_ids,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_manifest_seed_warnings,
@@ -57,13 +52,9 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     build_sqlbuild_plan_output,
     dbt_failure_detail,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.reuse_plan import (
-    build_dbt_dependency_baseline_plan_output,
-    build_dbt_reuse_plan_output,
-)
 from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_effective_force
 
 
@@ -217,97 +208,6 @@ def plan_dbt_interop_from_project(
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
         plan = append_stale_out_of_selection_warning(plan=plan, dbt_model_plan=dbt_model_plan)
     plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
-    reuse_git_ref: str | None = _dbt_reuse_git_ref(discovered_inputs)
-    has_explicit_dbt_reuse_scope: bool = bool(
-        plan.dbt_selected_unique_ids
-        or plan.selection.dbt_required_unique_ids
-        or plan.selection.dbt_anchor_unique_ids_by_term
-    )
-    reuse_plan_start: float | None = None
-    if reuse_git_ref is not None and has_explicit_dbt_reuse_scope:
-        reuse_plan_start = time.monotonic()
-        _report_progress(on_progress, f"Planning dbt reuse from git ref '{reuse_git_ref}'...")
-    dbt_reuse_plan: DbtReusePlanningResult | None = None
-    if has_explicit_dbt_reuse_scope:
-        reuse_warnings: list[str] = []
-        dbt_reuse_plan = build_dbt_reuse_plan_output(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            current_manifest=manifest,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            dbt_model_plan=dbt_model_plan,
-            plan=plan,
-            target_name=project.effective_target_name,
-            dbt_options=dbt_options,
-            runner=runner,
-            warnings=reuse_warnings,
-            on_progress=on_progress,
-        )
-        if reuse_warnings:
-            plan = replace(plan, warnings=(*plan.warnings, *reuse_warnings))
-    if reuse_plan_start is not None:
-        _report_progress(
-            on_progress,
-            f"Planned dbt reuse from git ref '{reuse_git_ref}'. "
-            f"({time.monotonic() - reuse_plan_start:.2f}s)",
-        )
-    if dbt_reuse_plan is not None:
-        plan = replace(plan, dbt_reuse_plan=dbt_reuse_plan)
-    dependency_baseline_ids: tuple[str, ...] = dependency_baseline_unique_ids(
-        project=project,
-        manifest=manifest,
-        graph=graph,
-        plan=plan,
-    )
-    dependency_baseline_model_plan: DbtModelPlanningResult | None = None
-    if dependency_baseline_ids:
-        dependency_baseline_model_plan = build_dbt_model_plan_output(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            project=project,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            manifest=manifest,
-            graph=graph,
-            candidate_unique_ids=dependency_baseline_ids,
-            selected_unique_ids=dependency_baseline_ids,
-            full_refresh="--full-refresh" in routed.dbt_args,
-            force=effective_force,
-            on_connection_start=(
-                None if connection_progress is None else connection_progress.on_connection_start
-            ),
-            on_connection_complete=(
-                None if connection_progress is None else connection_progress.on_connection_complete
-            ),
-            on_connection_error=(
-                None if connection_progress is None else connection_progress.on_connection_error
-            ),
-            on_progress=on_progress,
-        )
-    dbt_dependency_baseline_plan: DbtReusePlanningResult | None = (
-        build_dbt_dependency_baseline_plan_output(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            current_manifest=manifest,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            dbt_model_plan=dependency_baseline_model_plan,
-            scoped_unique_ids=dependency_baseline_ids,
-            target_name=project.effective_target_name,
-            dbt_options=dbt_options,
-            runner=runner,
-            on_progress=on_progress,
-        )
-    )
-    if dbt_dependency_baseline_plan is not None:
-        plan = replace(plan, dbt_dependency_baseline_plan=dbt_dependency_baseline_plan)
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
-        build_dbt_native_dependency_baseline_entries(
-            plan=dbt_dependency_baseline_plan,
-            destination_target_name=project.effective_target_name,
-        )
-    )
     plan = replace(
         plan,
         dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
@@ -347,7 +247,7 @@ def plan_dbt_interop_from_project(
         on_connection_error=(
             None if connection_progress is None else connection_progress.on_connection_error
         ),
-        dependency_baseline_entries=dependency_baseline_entries,
+        dependency_baseline_entries=(),
     )
     if sqlbuild_plan_output is not None:
         plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
@@ -361,10 +261,3 @@ def plan_dbt_interop_from_project(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
-
-
-def _dbt_reuse_git_ref(discovered_inputs: DiscoveredProjectInputs) -> str | None:
-    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
-    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
-        return None
-    return reuse_from.git_ref

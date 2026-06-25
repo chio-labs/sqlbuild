@@ -10,13 +10,6 @@ class SnowflakeDltE2ETestCase:
 
 
 @dataclass(frozen=True)
-class SnowflakeDbtReuseFromE2ETestCase:
-    description: str
-    schema_prefix: str
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
 class SnowflakeDbtCloneE2ETestCase:
     description: str
     schema_prefix: str

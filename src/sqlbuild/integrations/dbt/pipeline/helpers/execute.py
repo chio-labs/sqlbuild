@@ -42,7 +42,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtModelOutcomeState,
     DbtModelPlanAction,
-    DbtReusePlanAction,
     DbtSupportedResourceType,
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
@@ -64,6 +63,7 @@ def execute_dbt_commands(
     use_color: bool,
     skip_message: str = "Skipping dbt: no dbt work selected.",
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> DbtCommandExecutionResult:
     """Execute the merged dbt command, or skip when no dbt work exists."""
 
@@ -100,6 +100,8 @@ def execute_dbt_commands(
         display_total=expected_total,
         on_node_result=on_node_result,
     )
+    if on_progress is not None:
+        on_progress("Finalizing dbt run...")
     streamed_result_count: int = len(results)
     results = _append_missing_run_results(
         results=results,
@@ -115,6 +117,8 @@ def execute_dbt_commands(
         )
         if on_node_result is not None:
             on_node_result(result)
+    if on_progress is not None:
+        on_progress("Finalized dbt run.")
     del runner, stderr_stream
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
 
@@ -443,7 +447,9 @@ def build_dbt_non_model_run_unique_ids(
         )
         if not plan.dbt_model_plan.run_selector_terms:
             return tuple(sorted(changed_seed_unique_ids))
-        return tuple(sorted(frozenset((*seed_unique_ids, *test_unique_ids, *unit_test_unique_ids))))
+        return tuple(
+            sorted(frozenset((*changed_seed_unique_ids, *test_unique_ids, *unit_test_unique_ids)))
+        )
     return ()
 
 
@@ -512,8 +518,6 @@ def build_dbt_pruned_seed_unique_ids(
     """Return selected dbt seeds pruned from dbt build due to no producer work."""
 
     if command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
-        return ()
-    if plan.dbt_model_plan.run_selector_terms:
         return ()
     changed: frozenset[str] = frozenset(plan.dbt_model_plan.changed_seed_unique_ids)
     return tuple(
@@ -601,20 +605,13 @@ def _planned_dbt_select_terms(
         plan=plan,
         unique_ids=non_model_unique_ids,
     )
-    reused_unique_ids: frozenset[str] = frozenset(
-        entry.unique_id
-        for entry in (plan.dbt_reuse_plan.entries if plan.dbt_reuse_plan is not None else ())
-        if entry.action == DbtReusePlanAction.COMPLETE_REUSE
-    )
     executable_model_unique_ids: frozenset[str] = frozenset(
         (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
     )
     model_terms: tuple[str, ...] = tuple(
         entry.selector_term
         for entry in plan.dbt_model_plan.entries
-        if entry.action == DbtModelPlanAction.RUN
-        and entry.unique_id in executable_model_unique_ids
-        and entry.unique_id not in reused_unique_ids
+        if entry.action == DbtModelPlanAction.RUN and entry.unique_id in executable_model_unique_ids
     )
     return tuple(sorted(frozenset((*model_terms, *non_model_terms))))
 

@@ -84,8 +84,6 @@ def _serialize_dependency_baseline_entry(
         "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
         "origin_relation": entry.relation_reuse.origin.qualified_name,
         "hard_copy": entry.relation_reuse.hard_copy,
-        "trusted_input": entry.trusted_input,
-        "current_project_affected": entry.current_project_affected,
     }
     if entry.fingerprint_version_hash is not None:
         result["fingerprint_version_hash"] = entry.fingerprint_version_hash
@@ -101,29 +99,20 @@ def _serialize_existing_destination_input_entry(
         "status": entry.status,
         "expected_version_hash": entry.expected_version_hash,
         "destination_version_hash": entry.destination_version_hash,
-        "current_project_affected": entry.current_project_affected,
     }
 
 
 def _serialize_reuse_summary(plan: PlanOutput) -> dict[str, object]:
-    reused_inputs: list[dict[str, object]] = [
-        _serialize_dependency_baseline_entry(entry)
-        for entry in plan.dependency_baseline_entries
-        if not entry.trusted_input
-    ]
-    trusted_inputs: list[dict[str, object]] = [
-        _serialize_dependency_baseline_entry(entry)
-        for entry in plan.dependency_baseline_entries
-        if entry.trusted_input
-    ]
     return {
         "cloned_selected": [
             _serialize_model_entry(entry)
             for entry in plan.model_entries
             if entry.relation_reuse is not None
         ],
-        "reused_inputs": reused_inputs,
-        "trusted_inputs": trusted_inputs,
+        "reused_inputs": [
+            _serialize_dependency_baseline_entry(entry)
+            for entry in plan.dependency_baseline_entries
+        ],
         "existing_destination_inputs": [
             _serialize_existing_destination_input_entry(entry)
             for entry in plan.existing_destination_input_entries

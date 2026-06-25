@@ -263,6 +263,7 @@ def run_virtual_plan_pipeline(
                 source_deferral_enabled=source_deferral_enabled,
                 deferred_locations=deferred_locations,
                 deferred_relations=deferred_relations,
+                enable_reuse_planning=False,
             )
         else:
             plan_output = PlanOutput(

@@ -82,8 +82,6 @@ def run_compile_pipeline(
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolve_python_run_selectors: bool = False,
-    strict_reuse: bool | None = None,
-    trust_reuse_inputs: bool | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
@@ -129,8 +127,6 @@ def run_compile_pipeline(
             on_progress=on_progress,
             external_sql_reference_resolver=external_sql_reference_resolver,
             resolve_python_run_selectors=resolve_python_run_selectors,
-            strict_reuse=strict_reuse,
-            trust_reuse_inputs=trust_reuse_inputs,
         )
     finally:
         adapter.close(connection)
@@ -156,8 +152,6 @@ def _build_result(
     on_progress: Callable[[str], None] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolve_python_run_selectors: bool = False,
-    strict_reuse: bool | None = None,
-    trust_reuse_inputs: bool | None = None,
 ) -> CompilePipelineResult:
     if on_progress is not None:
         on_progress("Compiling project...")
@@ -235,8 +229,6 @@ def _build_result(
         defer_sources_to=defer_sources_to,
         source_deferral_enabled=source_deferral_enabled,
         custom_prepare_version_materializations=frozenset(custom_prepare_version_functions.keys()),
-        strict_reuse=strict_reuse,
-        trust_reuse_inputs=trust_reuse_inputs,
     )
     loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
     manifest: dict[str, object] = build_manifest(

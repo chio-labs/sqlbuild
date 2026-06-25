@@ -6,13 +6,12 @@ import pytest
 
 from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
     execute_dbt_json_event_stream,
-    format_dbt_node_start_message,
     parse_dbt_json_event,
     parse_dbt_node_message,
     parse_dbt_node_result,
-    parse_dbt_node_start,
+    parse_dbt_node_start_message,
 )
-from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage, DbtNodeStart
+from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtEventParseTestCase,
     DbtEventStreamTestCase,
@@ -314,9 +313,9 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
         ),
     ),
     DbtEventStreamTestCase(
-        description="renders node started running row before final result",
+        description="renders node started progress before final result",
         stdout_lines=(
-            '{"data":{"index":1,"total":1,"node_info":{"node_name":"bias__stg_hkjc",'
+            '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
             '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
             '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
             '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
@@ -325,12 +324,12 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
             '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
         ),
         expected_unique_ids=("model.analytics.bias__stg_hkjc",),
-        expected_output_fragments=("1/1", "bias__stg_hkjc", "RUNNING", "OK 20.40s"),
+        expected_output_fragments=("Running dbt model bias__stg_hkjc...",),
     ),
     DbtEventStreamTestCase(
-        description="renders log start line running row before final result",
+        description="renders log start line progress before final result",
         stdout_lines=(
-            '{"data":{"index":1,"total":1,"node_info":{"node_name":"bias__stg_hkjc",'
+            '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
             '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
             '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n',
             '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
@@ -339,69 +338,7 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
             '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
         ),
         expected_unique_ids=("model.analytics.bias__stg_hkjc",),
-        expected_output_fragments=("1/1", "bias__stg_hkjc", "RUNNING", "OK 20.40s"),
-    ),
-    DbtEventStreamTestCase(
-        description="dedupes duplicate start events for one node",
-        stdout_lines=(
-            '{"data":{"index":1,"total":1,"node_info":{"node_name":"stg_orders",'
-            '"resource_type":"model","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
-            '{"data":{"index":1,"total":1,"node_info":{"node_name":"stg_orders",'
-            '"resource_type":"model","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n',
-            '{"data":{"execution_time":3.1,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"stg_orders","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.stg_orders",),
-        expected_output_fragments=("RUNNING", "OK 3.10s"),
-    ),
-    DbtEventStreamTestCase(
-        description="renders running row without dbt index total",
-        stdout_lines=(
-            '{"data":{"node_info":{"node_name":"fact_orders",'
-            '"resource_type":"model","unique_id":"model.analytics.fact_orders"}},'
-            '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
-            '{"data":{"execution_time":9.4,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"fact_orders","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.fact_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.fact_orders",),
-        expected_output_fragments=("  1     model", "fact_orders", "RUNNING", "OK 9.40s"),
-    ),
-    DbtEventStreamTestCase(
-        description="tty stream still renders append only running row",
-        stdout_lines=(
-            '{"data":{"index":1,"total":1,"node_info":{"node_name":"stg_orders",'
-            '"resource_type":"model","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
-            '{"data":{"execution_time":3.1,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"stg_orders","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.stg_orders",),
-        expected_output_fragments=("RUNNING", "OK 3.10s"),
-        expected_absent_fragments=("Running dbt model stg_orders...",),
-        stream_is_tty=True,
-    ),
-    DbtEventStreamTestCase(
-        description="no progress env still renders append only running row",
-        stdout_lines=(
-            '{"data":{"index":1,"total":1,"node_info":{"node_name":"stg_orders",'
-            '"resource_type":"model","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
-            '{"data":{"execution_time":3.1,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"stg_orders","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.stg_orders",),
-        expected_output_fragments=("RUNNING", "OK 3.10s"),
-        no_progress=True,
+        expected_output_fragments=("Running dbt model bias__stg_hkjc...",),
     ),
 ]
 
@@ -427,13 +364,8 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
         "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
-    monkeypatch.setenv("SQLBUILD_NO_PROGRESS", "1" if test_case.no_progress else "0")
 
-    class TestStream(io.StringIO):
-        def isatty(self) -> bool:
-            return test_case.stream_is_tty
-
-    stream: io.StringIO = TestStream()
+    stream: io.StringIO = io.StringIO()
     returncode: int
     returncode, results = execute_dbt_json_event_stream(
         argv=("dbt", "run"),
@@ -450,28 +382,22 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     output: str = stream.getvalue()
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
-    for fragment in test_case.expected_absent_fragments:
-        assert fragment not in output
     rendered_rows: int = output.count("   model")
-    expected_rows: int = len(test_case.expected_unique_ids) + output.count("RUNNING")
-    assert rendered_rows == expected_rows
-    assert output.count("RUNNING") <= len(test_case.expected_unique_ids)
+    assert rendered_rows == len(test_case.expected_unique_ids)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         DbtEventParseTestCase(
-            description="parses node started event into node start",
+            description="parses node started event into progress message",
             event={
                 "data": {
-                    "index": 1,
-                    "total": 2,
                     "node_info": {
                         "node_name": "base_orders",
                         "resource_type": "model",
                         "unique_id": "model.demo.base_orders",
-                    },
+                    }
                 },
                 "info": {"level": "info", "name": "NodeStarted", "msg": "START"},
             },
@@ -479,20 +405,13 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
             expected_resource_type="model",
             expected_node_name="base_orders",
             expected_status="Running dbt model base_orders...",
-            expected_total=2,
         )
     ],
-    ids=["parses node started event into node start"],
+    ids=["parses node started event into progress message"],
 )
-def test_given_node_started_event_when_parsing_then_returns_node_start(
+def test_given_node_started_event_when_parsing_then_returns_progress_message(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    start: DbtNodeStart | None = parse_dbt_node_start(event=test_case.event)
+    message: str | None = parse_dbt_node_start_message(event=test_case.event)
 
-    assert start is not None
-    assert start.unique_id == test_case.expected_unique_id
-    assert start.resource_type == test_case.expected_resource_type
-    assert start.node_name == test_case.expected_node_name
-    assert start.index == 1
-    assert start.total == test_case.expected_total
-    assert format_dbt_node_start_message(start=start) == test_case.expected_status
+    assert message == test_case.expected_status

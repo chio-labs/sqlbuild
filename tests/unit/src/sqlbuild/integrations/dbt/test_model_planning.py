@@ -35,8 +35,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtModelPlanEntry,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
-    DbtReusePlanEntry,
-    DbtReusePlanningResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_execution_outcome,
@@ -48,8 +46,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelOutcomeState,
     DbtModelPlanAction,
     DbtModelPlanReason,
-    DbtReusePlanAction,
-    DbtReusePlanReason,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtExecutionArgvPruningTestCase,
@@ -398,7 +394,8 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
                     reason=DbtModelPlanReason.CHECKSUM_CHANGED,
                     relation_name="main.run_me",
                 ),
-            )
+            ),
+            changed_seed_unique_ids=("seed.analytics.country_codes",),
         ),
     )
 
@@ -416,74 +413,56 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
-            description="prunes complete reuse but keeps seeded reuse runnable",
+            description="unchanged seed is excluded from execution argv when a model runs",
             expected_argv=(
                 "dbt",
                 "build",
                 "--select",
-                "seeded_incremental",
+                "run_me",
             ),
         )
     ],
-    ids=["prunes complete reuse but keeps seeded reuse runnable"],
+    ids=["unchanged seed is excluded from execution argv when a model runs"],
 )
-def test_given_complete_and_seeded_reuse_when_building_execution_argv_then_keeps_seeded_model(
+def test_given_unchanged_seed_when_building_execution_argv_then_excludes_seed(
     test_case: DbtExecutionArgvPruningTestCase,
 ) -> None:
     plan: DbtInteropPlan = DbtInteropPlan(
         command=DbtInteropCommand.BUILD,
         dbt_command_argv=("dbt", "build"),
         dbt_selected_nodes=(
-            DbtLsNode(unique_id="model.analytics.reused_table", resource_type="model"),
-            DbtLsNode(unique_id="model.analytics.seeded_incremental", resource_type="model"),
+            DbtLsNode(unique_id="model.analytics.run_me", resource_type="model"),
+            DbtLsNode(
+                unique_id="seed.analytics.country_codes",
+                resource_type="seed",
+                name="country_codes",
+            ),
         ),
         dbt_selected_unique_ids=(
-            "model.analytics.reused_table",
-            "model.analytics.seeded_incremental",
+            "model.analytics.run_me",
+            "seed.analytics.country_codes",
         ),
         sqlbuild_command_argvs=(),
         selection=DbtInteropSelectionResult(),
         dbt_model_plan=DbtModelPlanningResult(
             entries=(
                 DbtModelPlanEntry(
-                    unique_id="model.analytics.reused_table",
+                    unique_id="model.analytics.run_me",
                     package_name="analytics",
-                    name="reused_table",
+                    name="run_me",
                     action=DbtModelPlanAction.RUN,
-                    reason=DbtModelPlanReason.RELATION_MISSING,
-                    relation_name="main.reused_table",
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.run_me",
                 ),
-                DbtModelPlanEntry(
-                    unique_id="model.analytics.seeded_incremental",
-                    package_name="analytics",
-                    name="seeded_incremental",
-                    action=DbtModelPlanAction.RUN,
-                    reason=DbtModelPlanReason.RELATION_MISSING,
-                    relation_name="main.seeded_incremental",
-                ),
-            )
-        ),
-        dbt_reuse_plan=DbtReusePlanningResult(
-            entries=(
-                DbtReusePlanEntry(
-                    unique_id="model.analytics.reused_table",
-                    action=DbtReusePlanAction.COMPLETE_REUSE,
-                    reason=DbtReusePlanReason.DESTINATION_MISSING,
-                ),
-                DbtReusePlanEntry(
-                    unique_id="model.analytics.seeded_incremental",
-                    action=DbtReusePlanAction.SEEDED_REUSE,
-                    reason=DbtReusePlanReason.DESTINATION_MISSING,
-                    cursor_column="event_time",
-                ),
-            )
+            ),
+            changed_seed_unique_ids=(),
         ),
     )
 
     argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
         command=DbtInteropCommand.BUILD,
         options=DbtCliOptions(),
-        routed_args=("--select", "tag:daily"),
+        routed_args=("--select", "run_me"),
         plan=plan,
     )
 
@@ -567,7 +546,8 @@ def test_given_dbt_model_plan_with_fqn_when_building_execution_argv_then_selects
                     relation_name="stripe.orders",
                     fqn=("stripe", "orders"),
                 ),
-            )
+            ),
+            changed_seed_unique_ids=("seed.analytics.orders_seed",),
         ),
     )
 

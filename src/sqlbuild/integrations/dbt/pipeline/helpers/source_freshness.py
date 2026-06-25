@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
@@ -18,6 +20,7 @@ def append_dbt_source_freshness_records(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     project: CompiledProject,
+    on_progress: Callable[[str], None] | None = None,
 ) -> None:
     """Append observed dbt source freshness records to standard SQLBuild state."""
 
@@ -32,6 +35,9 @@ def append_dbt_source_freshness_records(
     )
     if not observed_records:
         return
+    freshness_start: float = time.monotonic()
+    if on_progress is not None:
+        on_progress("Recording dbt source freshness...")
     connection: Any = adapter.connect(connection_config)
     try:
         record: SourceFreshnessRecord
@@ -48,3 +54,5 @@ def append_dbt_source_freshness_records(
             )
     finally:
         adapter.close(connection)
+    if on_progress is not None:
+        on_progress(f"Recorded dbt source freshness. ({time.monotonic() - freshness_start:.2f}s)")

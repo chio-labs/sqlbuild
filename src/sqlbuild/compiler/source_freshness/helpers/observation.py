@@ -11,6 +11,7 @@ from sqlbuild.adapter.shared.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
@@ -45,9 +46,11 @@ def observe_configured_source_freshness(
                 f"source '{source.name}' has incomplete column freshness configuration"
             )
         where_sql: str = f" WHERE {config.filter}" if config.filter is not None else ""
-        sql: str = (
-            f"SELECT MAX({adapter.render_identifier(config.column)}) AS data_version "
-            f"FROM {_source_relation(source)}{where_sql}"
+        sql: str = adapter.render_source_freshness_max_query(
+            column=config.column,
+            source_relation=render_source_relation(source, adapter=adapter),
+            source_is_subquery=source.expression is not None,
+            where_sql=where_sql,
         )
         data_version: object = _query_single_data_version(
             adapter=adapter,
@@ -199,14 +202,3 @@ def _query_single_data_version(
             f"source '{source_name}' freshness data_version cannot be null"
         )
     return data_version
-
-
-def _source_relation(source: SourceEntry) -> str:
-    if source.expression is not None or source.table is None:
-        raise SourceFreshnessObservationError(
-            f"source '{source.name}' column freshness requires a physical table source"
-        )
-    parts: tuple[str, ...] = tuple(
-        part for part in (source.database, source.schema, source.table) if part is not None
-    )
-    return ".".join(parts)

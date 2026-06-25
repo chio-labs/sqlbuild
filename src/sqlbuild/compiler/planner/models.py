@@ -420,9 +420,6 @@ class StandardReuseModelDecision:
     reuse_origin_relation_exists: bool
     reuse_origin_built_version_present: bool
     reuse_origin_matches_expected: bool
-    strict: bool = False
-    trusted_input: bool = False
-    current_project_affected: bool = False
     reuse_from_source_freshness_current: bool = True
     reuse_origin_cursor_max: str | None = None
     destination_cursor_max: str | None = None
@@ -435,8 +432,6 @@ class StandardReuseDecisionResults:
     reuse_from_target_name: str
     models: dict[str, StandardReuseModelDecision]
     hard_copy: bool = False
-    strict: bool = False
-    trust_reuse_inputs: bool = False
 
 
 @dataclass(frozen=True)
@@ -450,10 +445,6 @@ class ReusePolicyNodeFacts:
     reuse_origin_relation_exists: bool
     reuse_origin_matches_expected: bool
     reuse_eligible_materialization: bool
-    strict: bool = False
-    trust_reuse_inputs: bool = False
-    current_project_affected: bool = False
-    trusted_input: bool = False
     source_freshness_stale: bool = False
     destination_current_can_reuse_origin: bool = False
 
@@ -516,8 +507,6 @@ class DependencyBaselinePlanEntry:
     relation_reuse: RelationReusePlan
     fingerprint_version_hash: str | None
     resource_label: str = "table"
-    trusted_input: bool = False
-    current_project_affected: bool = False
 
 
 @dataclass(frozen=True)
@@ -529,7 +518,6 @@ class ExistingDestinationInputPlanEntry:
     status: str
     expected_version_hash: str | None = None
     destination_version_hash: str | None = None
-    current_project_affected: bool = False
 
 
 @dataclass(frozen=True)

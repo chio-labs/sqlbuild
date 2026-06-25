@@ -26,9 +26,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonRunPhase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
-    build_dependency_baseline_entry,
     build_discovered_provider_usage,
-    build_existing_destination_input_entry,
     build_model_entry,
     build_plan_output,
     build_plan_provider_usage,
@@ -144,35 +142,6 @@ PLAN_JSON_TEST_CASES: list[JsonOutputTestCase] = [
             '"reuse_from_target": "prod"',
             '"origin_relation": "prod_marts.orders"',
             '"hard_copy": true',
-        ),
-    ),
-    JsonOutputTestCase(
-        description="plan json includes shaped reuse categories",
-        plan_output=build_plan_output(
-            model_entries=(
-                build_model_entry(
-                    name="orders",
-                    action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.FIRST_RUN,
-                    relation_reuse=build_relation_reuse_plan(origin_name="orders"),
-                ),
-            ),
-            dependency_baseline_entries=(
-                build_dependency_baseline_entry(name="stg_orders"),
-                build_dependency_baseline_entry(name="stg_payments", trusted_input=True),
-            ),
-            existing_destination_input_entries=(
-                build_existing_destination_input_entry(name="stg_customers", status="stale"),
-            ),
-        ),
-        expected_keys=("reuse", "existing_destination_inputs"),
-        expected_fragments=(
-            '"cloned_selected"',
-            '"reused_inputs"',
-            '"trusted_inputs"',
-            '"existing_destination_inputs"',
-            '"trusted_input": true',
-            '"status": "stale"',
         ),
     ),
     JsonOutputTestCase(

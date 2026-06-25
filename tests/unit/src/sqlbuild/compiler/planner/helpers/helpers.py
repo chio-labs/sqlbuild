@@ -51,20 +51,27 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.helpers.graph.core import build_downstream_deps
+from sqlbuild.compiler.planner.helpers.pruning.selection_staleness import (
+    build_stale_out_of_selection_warnings,
+)
 from sqlbuild.compiler.planner.helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
     GraphNodeKey,
+    PlannerChangeResults,
     PlannerScope,
     PlanOutput,
+    PlanWarning,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
+    StandardModelVersionIdentities,
     StandardReuseFromTargetModelSnapshot,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -1639,4 +1646,52 @@ def build_seed_identity_compiled_seed(
             name="orders",
             qualified_name="main.orders",
         ),
+    )
+
+
+def build_changed_direct_dep_stale_warnings(
+    *, reuse_satisfied_model_names: frozenset[str]
+) -> tuple[PlanWarning, ...]:
+    leaf_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="leaf"
+    )
+    dep_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="dep"
+    )
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        leaf_key: (dep_key,),
+        dep_key: (),
+    }
+    all_keys: dict[str, CompiledObjectKey] = {"leaf": leaf_key, "dep": dep_key}
+    scope: PlannerScope = PlannerScope(
+        upstream_deps=upstream_deps,
+        downstream_deps={},
+        all_keys=all_keys,
+        models_by_name={},
+        selected_keys=frozenset({leaf_key}),
+        execution_order=(dep_key, leaf_key),
+    )
+    return build_stale_out_of_selection_warnings(
+        original_scope=scope,
+        execution_scope=scope,
+        changes=PlannerChangeResults(
+            models={
+                "dep": ChangeDetectionResult(
+                    model_name="dep",
+                    change_kind=ChangeKind.QUERY_CHANGED,
+                )
+            },
+            functions={},
+        ),
+        snapshot=WarehouseSnapshot(fingerprints=WarehouseFingerprints()),
+        version_identities=StandardModelVersionIdentities(
+            function_local_hashes={},
+            seed_version_hashes={},
+            seed_metadata_jsons={},
+            model_metadata_jsons={},
+            model_local_hashes={},
+            model_version_hashes={},
+        ),
+        source_freshness=StandardSourceFreshnessPlanningResult(),
+        reuse_satisfied_model_names=reuse_satisfied_model_names,
     )

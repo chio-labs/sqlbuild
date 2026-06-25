@@ -7,14 +7,13 @@ import pytest
 
 from sqlbuild.adapter.shared.models import QueryResult, TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SharedSourceFreshnessColumnSqlTestCase,
-    SharedSourceFreshnessObservationErrorTestCase,
+    SharedSourceFreshnessExpressionSubqueryTestCase,
     SharedSourceFreshnessObservationTestCase,
 )
 
@@ -155,30 +154,35 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
 @pytest.mark.parametrize(
     "test_case",
     [
-        SharedSourceFreshnessObservationErrorTestCase(
-            description="column freshness rejects expression sources",
-            expected_error_fragment="column freshness requires a physical table source",
+        SharedSourceFreshnessExpressionSubqueryTestCase(
+            description="column freshness wraps an expression source as a subquery",
+            expression="SELECT 1 AS id, 2 AS batch_id",
+            column="batch_id",
+            expected_sql_fragment="FROM (SELECT 1 AS id, 2 AS batch_id)",
         )
     ],
-    ids=["column freshness rejects expression sources"],
+    ids=["column freshness wraps an expression source as a subquery"],
 )
-def test_given_column_freshness_expression_source_when_observing_then_raises_clear_error(
-    test_case: SharedSourceFreshnessObservationErrorTestCase,
+def test_given_column_freshness_expression_source_when_observing_then_uses_subquery(
+    test_case: SharedSourceFreshnessExpressionSubqueryTestCase,
 ) -> None:
     adapter: CapturingQueryDuckDbAdapter = CapturingQueryDuckDbAdapter()
 
-    with pytest.raises(SourceFreshnessObservationError, match=test_case.expected_error_fragment):
-        observe_configured_source_freshness(
-            adapter=adapter,
-            connection=object(),
-            source=SourceEntry(
-                name="raw.orders",
-                expression="SELECT 1 AS id",
-                freshness=SourceFreshnessConfig(
-                    strategy=SourceFreshnessStrategy.COLUMN,
-                    value_kind=SourceFreshnessValueKind.INTEGER,
-                    column="batch_id",
-                ),
+    observe_configured_source_freshness(
+        adapter=adapter,
+        connection=object(),
+        source=SourceEntry(
+            name="raw_orders",
+            expression=test_case.expression,
+            freshness=SourceFreshnessConfig(
+                strategy=SourceFreshnessStrategy.COLUMN,
+                value_kind=SourceFreshnessValueKind.INTEGER,
+                column=test_case.column,
             ),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
-        )
+        ),
+        observed_at=datetime(2026, 1, 15, 12, 5, 0),
+    )
+
+    assert adapter.captured_sql is not None
+    assert test_case.expected_sql_fragment in adapter.captured_sql
+    assert f'MAX("{test_case.column}")' in adapter.captured_sql

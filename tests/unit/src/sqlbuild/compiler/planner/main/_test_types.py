@@ -45,27 +45,13 @@ class StandardDependencyBaselinePlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class StandardReuseCurrentProjectInputTestCase:
+class StandardDirectInputBaselineTestCase:
     description: str
-    trust_reuse_inputs: bool
-    expected_dependency_baseline_names: tuple[str, ...]
-    expected_trusted_input_names: tuple[str, ...]
-    expected_current_project_affected_names: tuple[str, ...]
-    expected_existing_destination_inputs: dict[str, str]
-
-
-@dataclass(frozen=True)
-class StandardReuseOriginDriftTestCase:
-    description: str
-    strict_reuse: bool
-    expected_dependency_baseline_names: tuple[str, ...]
-    expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class StandardExistingDestinationInputTestCase:
-    description: str
-    expected_existing_destination_inputs: dict[str, str]
+    models_by_name: dict[str, str]
+    origin_model_names: tuple[str, ...]
+    selected_model_name: str
+    expected_baseline_names: tuple[str, ...]
+    unexpected_baseline_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

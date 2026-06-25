@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbRelationMaxCursorTestCase,
     DuckDbRenderCursorBoundLiteralTestCase,
     DuckDbRenderIdentifierTestCase,
+    DuckDbRenderSourceFreshnessQueryTestCase,
     DuckDbRenderSwapTestCase,
     DuckDbRenderTableFunctionTestCase,
 )
@@ -360,3 +361,32 @@ def test_given_qualified_relations_when_rendering_swap_then_keeps_staging_in_sch
     statements: tuple[str, ...] = adapter.render_swap(left=test_case.left, right=test_case.right)
 
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbRenderSourceFreshnessQueryTestCase(
+            description="subquery source renders without a derived-table alias",
+            column="event_ts",
+            source_relation="(SELECT 1 AS event_ts)",
+            source_is_subquery=True,
+            where_sql="",
+            expected_sql='SELECT MAX("event_ts") AS data_version FROM (SELECT 1 AS event_ts)',
+        )
+    ],
+    ids=["subquery source renders without a derived-table alias"],
+)
+def test_given_subquery_source_when_rendering_freshness_query_then_duckdb_omits_alias(
+    test_case: DuckDbRenderSourceFreshnessQueryTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    sql: str = adapter.render_source_freshness_max_query(
+        column=test_case.column,
+        source_relation=test_case.source_relation,
+        source_is_subquery=test_case.source_is_subquery,
+        where_sql=test_case.where_sql,
+    )
+
+    assert sql == test_case.expected_sql

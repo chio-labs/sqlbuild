@@ -120,8 +120,6 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
                             allow_reset=False,
                         ),
                         reuse_from="prod",
-                        reuse_strict=True,
-                        trust_reuse_inputs=False,
                     ),
                     "prod": TargetConfig(),
                 },
@@ -135,7 +133,6 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
                             allow_reset=True,
                         ),
                         force=False,
-                        trust_reuse_inputs=True,
                         reuse_hard_copy=True,
                     )
                 }
@@ -150,8 +147,6 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
             },
             expected_allow_reset=True,
             expected_reuse_from="prod",
-            expected_reuse_strict=True,
-            expected_trust_reuse_inputs=True,
             expected_force=False,
             expected_reuse_hard_copy=True,
         )
@@ -172,8 +167,6 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.state.connection == test_case.expected_connection
     assert target_config.state.allow_reset is test_case.expected_allow_reset
     assert target_config.reuse_from == test_case.expected_reuse_from
-    assert target_config.reuse_strict is test_case.expected_reuse_strict
-    assert target_config.trust_reuse_inputs is test_case.expected_trust_reuse_inputs
     assert target_config.force is test_case.expected_force
     assert target_config.reuse_hard_copy is test_case.expected_reuse_hard_copy
 
