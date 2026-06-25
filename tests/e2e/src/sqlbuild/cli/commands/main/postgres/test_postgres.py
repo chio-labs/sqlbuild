@@ -79,9 +79,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
             command=("--no-color", "build", "--select", "downstream"),
             expected_stdout_fragments=(
                 "Plan ready (1 selected)",
-                "Dependency baseline (1)",
+                "Reused inputs (1)",
                 "upstream",
-                "baseline reuse",
+                "from reuse origin target",
                 "downstream",
                 "Completed successfully.",
             ),
