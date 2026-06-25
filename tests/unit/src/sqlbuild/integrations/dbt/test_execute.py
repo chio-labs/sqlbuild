@@ -17,6 +17,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsNode,
+    DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers import execute as execute_helpers
 from sqlbuild.integrations.dbt.pipeline.main import execute as execute_module
@@ -34,6 +35,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSelectionStatusTestCase,
     DbtExecutionSpacingTestCase,
+    DbtExecutionSummaryFooterTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CompileOnlyDbtRunner,
@@ -329,3 +331,60 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     assert exit_code == 0
     assert tuple(runner.compile_full_refresh_values) == test_case.expected_full_refresh_values
     assert "dbt reuse" not in output_stream.getvalue()
+
+
+SUMMARY_FOOTER_TEST_CASES: list[DbtExecutionSummaryFooterTestCase] = [
+    DbtExecutionSummaryFooterTestCase(
+        description="counts mixed dbt node statuses with errors into footer",
+        node_statuses=("ok", "success", "warn", "error", "skipped"),
+        expected_footer=(
+            "Completed with errors.\nPASS=2  WARN=1  FAIL=1  SKIP=1  TOTAL=5  (0.00s)"
+        ),
+    ),
+    DbtExecutionSummaryFooterTestCase(
+        description="reports warnings status when a node warns without failing",
+        node_statuses=("ok", "warn"),
+        expected_footer=(
+            "Completed with warnings.\nPASS=1  WARN=1  FAIL=0  SKIP=0  TOTAL=2  (0.00s)"
+        ),
+    ),
+    DbtExecutionSummaryFooterTestCase(
+        description="reports success status when all nodes pass",
+        node_statuses=("ok", "success"),
+        expected_footer="Completed successfully.\nPASS=2  WARN=0  FAIL=0  SKIP=0  TOTAL=2  (0.00s)",
+    ),
+    DbtExecutionSummaryFooterTestCase(
+        description="returns no footer when there are no dbt node results",
+        node_statuses=(),
+        expected_footer=None,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SUMMARY_FOOTER_TEST_CASES,
+    ids=[case.description for case in SUMMARY_FOOTER_TEST_CASES],
+)
+def test_given_dbt_node_results_when_rendering_summary_footer_then_counts_statuses(
+    test_case: DbtExecutionSummaryFooterTestCase,
+) -> None:
+    node_results: tuple[DbtNodeExecutionResult, ...] = tuple(
+        DbtNodeExecutionResult(
+            unique_id=f"model.analytics.node_{index}",
+            resource_type="model",
+            node_name=f"node_{index}",
+            status=status,
+            index=index + 1,
+            total=len(test_case.node_statuses),
+            execution_time=0.0,
+        )
+        for index, status in enumerate(test_case.node_statuses)
+    )
+
+    footer: str | None = execute_helpers.render_dbt_execution_summary_footer(
+        node_results=node_results,
+        use_color=False,
+    )
+
+    assert footer == test_case.expected_footer

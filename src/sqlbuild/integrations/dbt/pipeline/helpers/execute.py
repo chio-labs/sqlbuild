@@ -46,10 +46,14 @@ from sqlbuild.integrations.dbt.types import (
 )
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.helpers.summary_footer import format_summary_footer
 
 _DBT_SUCCESS_STATUSES: frozenset[str] = frozenset(
     {"ok", "success", "pass", "passed", "warn", "warning"}
 )
+_DBT_WARN_STATUSES: frozenset[str] = frozenset({"warn", "warning"})
+_DBT_FAIL_STATUSES: frozenset[str] = frozenset({"error", "fail", "failed"})
+_DBT_SKIP_STATUSES: frozenset[str] = frozenset({"skip", "skipped"})
 
 
 def execute_dbt_commands(
@@ -167,6 +171,55 @@ def _dbt_ls_argv_from_execution_argv(argv: tuple[str, ...]) -> tuple[str, ...] |
             continue
         converted.append(arg)
     return tuple(converted)
+
+
+def render_dbt_execution_summary_footer(
+    *,
+    node_results: tuple[DbtNodeExecutionResult, ...],
+    use_color: bool,
+) -> str | None:
+    """Render a PASS/WARN/FAIL/SKIP/TOTAL footer for executed dbt nodes."""
+
+    if not node_results:
+        return None
+    pass_count: int = 0
+    warn_count: int = 0
+    fail_count: int = 0
+    skip_count: int = 0
+    elapsed: float = 0.0
+    node_result: DbtNodeExecutionResult
+    for node_result in node_results:
+        status: str = node_result.status.lower()
+        if node_result.execution_time is not None:
+            elapsed += node_result.execution_time
+        if status in _DBT_WARN_STATUSES:
+            warn_count += 1
+        elif status in _DBT_FAIL_STATUSES:
+            fail_count += 1
+        elif status in _DBT_SKIP_STATUSES:
+            skip_count += 1
+        elif status in _DBT_SUCCESS_STATUSES:
+            pass_count += 1
+    total_count: int = pass_count + warn_count + fail_count + skip_count
+    style: CliStyle = CliStyle(use_color=use_color)
+    if fail_count > 0:
+        status_line: str = style.error("Completed with errors.")
+    elif warn_count > 0:
+        status_line = style.warning("Completed with warnings.")
+    else:
+        status_line = style.success("Completed successfully.")
+    counts_line: str = format_summary_footer(
+        counts=(
+            ("PASS", pass_count),
+            ("WARN", warn_count),
+            ("FAIL", fail_count),
+            ("SKIP", skip_count),
+            ("TOTAL", total_count),
+        ),
+        use_color=use_color,
+        elapsed=f"{elapsed:.2f}s",
+    )
+    return f"{status_line}\n{counts_line}"
 
 
 def build_dbt_execution_outcome(
