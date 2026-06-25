@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresRenderCreateTableAsTestCase,
     PostgresRenderIdentifierTestCase,
     PostgresRenderRenameTestCase,
+    PostgresRenderSourceFreshnessQueryTestCase,
     PostgresRenderSwapTestCase,
     PostgresSchemaDiffTestCase,
 )
@@ -602,29 +603,44 @@ def test_given_equivalent_types_when_diffing_schema_then_postgres_ignores_alias_
     assert result == test_case.expected_result
 
 
-def test_given_subquery_source_when_rendering_freshness_query_then_postgres_aliases() -> None:
-    adapter: PostgresAdapter = PostgresAdapter()
-
-    sql: str = adapter.render_source_freshness_max_query(
+SOURCE_FRESHNESS_QUERY_TEST_CASES: list[PostgresRenderSourceFreshnessQueryTestCase] = [
+    PostgresRenderSourceFreshnessQueryTestCase(
+        description="subquery source is given a derived-table alias",
         column="event_ts",
         source_relation="(SELECT 1 AS event_ts)",
         source_is_subquery=True,
         where_sql="",
-    )
-
-    assert sql == (
-        'SELECT MAX("event_ts") AS data_version FROM (SELECT 1 AS event_ts) AS __source_freshness'
-    )
-
-
-def test_given_table_source_when_rendering_freshness_query_then_postgres_omits_alias() -> None:
-    adapter: PostgresAdapter = PostgresAdapter()
-
-    sql: str = adapter.render_source_freshness_max_query(
+        expected_sql=(
+            'SELECT MAX("event_ts") AS data_version '
+            "FROM (SELECT 1 AS event_ts) AS __source_freshness"
+        ),
+    ),
+    PostgresRenderSourceFreshnessQueryTestCase(
+        description="table source omits the derived-table alias",
         column="event_ts",
         source_relation="raw.orders",
         source_is_subquery=False,
         where_sql=" WHERE active",
+        expected_sql='SELECT MAX("event_ts") AS data_version FROM raw.orders WHERE active',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SOURCE_FRESHNESS_QUERY_TEST_CASES,
+    ids=[case.description for case in SOURCE_FRESHNESS_QUERY_TEST_CASES],
+)
+def test_given_source_when_rendering_freshness_query_then_postgres_aliases_subqueries(
+    test_case: PostgresRenderSourceFreshnessQueryTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    sql: str = adapter.render_source_freshness_max_query(
+        column=test_case.column,
+        source_relation=test_case.source_relation,
+        source_is_subquery=test_case.source_is_subquery,
+        where_sql=test_case.where_sql,
     )
 
-    assert sql == 'SELECT MAX("event_ts") AS data_version FROM raw.orders WHERE active'
+    assert sql == test_case.expected_sql

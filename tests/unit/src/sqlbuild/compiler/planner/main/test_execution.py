@@ -31,7 +31,6 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardScopePruning,
 )
-from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_project,
@@ -41,6 +40,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     ExternalBlockedPlanOutputTestCase,
     HookFunctionPlanOutputTestCase,
     StandardDependencyBaselinePlanOutputTestCase,
+    StandardDirectInputBaselineTestCase,
     StandardReuseFromSourceDeferralConflictTestCase,
     StandardReuseFromTargetPlanOutputTestCase,
     StandardReuseFullRefreshBypassTestCase,
@@ -49,14 +49,10 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
     build_standard_pruning_project,
+    model_definition_hash,
     write_standard_model_state,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
-
-
-def _model_definition_hash(project: CompiledProject, name: str) -> str:
-    model = next(model for model in project.models if model.name == name)
-    return compute_query_hash(model.query_sql)
 
 PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
     StandardSourceFreshnessPlanOutputTestCase(
@@ -576,7 +572,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_schema="prod_schema",
                 target_name="orders",
                 run_id="run_1",
-                definition_hash=_model_definition_hash(project, "orders"),
+                definition_hash=model_definition_hash(project, "orders"),
                 version_hash=version_identities.model_version_hashes["orders"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1",
@@ -596,7 +592,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_schema="prod_schema",
                 target_name="line_items",
                 run_id="run_1",
-                definition_hash=_model_definition_hash(project, "line_items"),
+                definition_hash=model_definition_hash(project, "line_items"),
                 version_hash=version_identities.model_version_hashes["line_items"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1",
@@ -616,7 +612,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_schema="prod_schema",
                 target_name="account_snapshot",
                 run_id="run_1",
-                definition_hash=_model_definition_hash(project, "account_snapshot"),
+                definition_hash=model_definition_hash(project, "account_snapshot"),
                 version_hash=version_identities.model_version_hashes["account_snapshot"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1 AS account_id, CURRENT_TIMESTAMP AS updated_at",
@@ -765,7 +761,7 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
                 target_schema="prod_schema",
                 target_name="upstream",
                 run_id="run_1",
-                definition_hash=_model_definition_hash(project, "upstream"),
+                definition_hash=model_definition_hash(project, "upstream"),
                 version_hash=version_identities.model_version_hashes["upstream"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1",
@@ -810,16 +806,30 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
     )
 
 
-def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_candidate() -> None:
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardDirectInputBaselineTestCase(
+            description="leaf selection baselines only its direct input, not transitive upstreams",
+            models_by_name={
+                "grandparent": "select 1 as id",
+                "parent": "select id from __ref('grandparent')",
+                "leaf": "select id from __ref('parent')",
+            },
+            origin_model_names=("grandparent", "parent"),
+            selected_model_name="leaf",
+            expected_baseline_names=("parent",),
+            unexpected_baseline_names=("grandparent",),
+        )
+    ],
+    ids=["leaf selection baselines only its direct input, not transitive upstreams"],
+)
+def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_candidate(
+    test_case: StandardDirectInputBaselineTestCase,
+) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
-    project: CompiledProject = build_compiled_project_with_models(
-        {
-            "grandparent": "select 1 as id",
-            "parent": "select id from __ref('grandparent')",
-            "leaf": "select id from __ref('parent')",
-        }
-    )
+    project: CompiledProject = build_compiled_project_with_models(test_case.models_by_name)
     project = replace(project, effective_target_name="dev")
     version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
@@ -842,7 +852,7 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
             ),
         )
         model_name: str
-        for model_name in ("grandparent", "parent"):
+        for model_name in test_case.origin_model_names:
             adapter.execute(
                 connection,
                 build_insert_sql(
@@ -854,7 +864,7 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
                     target_schema="prod_schema",
                     target_name=model_name,
                     run_id="run_1",
-                    definition_hash=_model_definition_hash(project, model_name),
+                    definition_hash=model_definition_hash(project, model_name),
                     version_hash=version_identities.model_version_hashes[model_name],
                     schema_fingerprint="schema_hash",
                     definition="SELECT 1",
@@ -872,7 +882,7 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
             project=project,
             adapter=adapter,
             connection=connection,
-            select=("leaf",),
+            select=(test_case.selected_model_name,),
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
@@ -889,8 +899,9 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
     baseline_names: tuple[str, ...] = tuple(
         entry.name for entry in plan_output.dependency_baseline_entries
     )
-    assert baseline_names == ("parent",)
-    assert "grandparent" not in baseline_names
+    assert baseline_names == test_case.expected_baseline_names
+    for unexpected_name in test_case.unexpected_baseline_names:
+        assert unexpected_name not in baseline_names
 
 
 @pytest.mark.parametrize(

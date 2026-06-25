@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def render_source_relation(entry: SourceEntry, *, adapter: BaseAdapter | None = None) -> str:
+def render_source_relation(entry: SourceEntry, *, adapter: StrictAdapter | None = None) -> str:
     """Render a source as a SQL table factor."""
 
     if entry.expression is not None:

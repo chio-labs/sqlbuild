@@ -84,3 +84,8 @@ def write_standard_model_state(
             render_framework_type=adapter.render_framework_type,
         )
     return identities
+
+
+def model_definition_hash(project: CompiledProject, name: str) -> str:
+    model: CompiledModel = next(model for model in project.models if model.name == name)
+    return compute_query_hash(model.query_sql)

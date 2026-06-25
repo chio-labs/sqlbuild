@@ -26,6 +26,7 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessAdapterDefaultTestCase,
     StandardSourceFreshnessAgePolicyTestCase,
     StandardSourceFreshnessDuplicateSchemaTestCase,
+    StandardSourceFreshnessExpressionTestCase,
     StandardSourceFreshnessLagToleranceTestCase,
     StandardSourceFreshnessManagedSkipTestCase,
     StandardSourceFreshnessMultiSchemaTestCase,
@@ -428,7 +429,21 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
     assert result.observed_records == ()
 
 
-def test_given_column_freshness_expression_when_planning_then_observes_subquery() -> None:
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardSourceFreshnessExpressionTestCase(
+            description="column freshness observes an expression source via subquery",
+            expression="SELECT 1 AS id, 7 AS batch_id",
+            column="batch_id",
+            expected_data_version="7",
+        )
+    ],
+    ids=["column freshness observes an expression source via subquery"],
+)
+def test_given_column_freshness_expression_when_planning_then_observes_subquery(
+    test_case: StandardSourceFreshnessExpressionTestCase,
+) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
@@ -439,11 +454,11 @@ def test_given_column_freshness_expression_when_planning_then_observes_subquery(
                 sources=(
                     SourceEntry(
                         name="raw_orders",
-                        expression="SELECT 1 AS id, 7 AS batch_id",
+                        expression=test_case.expression,
                         freshness=SourceFreshnessConfig(
                             strategy=SourceFreshnessStrategy.COLUMN,
                             value_kind=SourceFreshnessValueKind.INTEGER,
-                            column="batch_id",
+                            column=test_case.column,
                         ),
                     ),
                 ),
@@ -459,7 +474,7 @@ def test_given_column_freshness_expression_when_planning_then_observes_subquery(
 
     assert result.unknown_source_names == ()
     assert len(result.observed_records) == 1
-    assert result.observed_records[0].data_version == "7"
+    assert result.observed_records[0].data_version == test_case.expected_data_version
 
 
 @pytest.mark.parametrize(

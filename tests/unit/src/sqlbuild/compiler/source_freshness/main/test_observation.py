@@ -13,6 +13,7 @@ from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SharedSourceFreshnessColumnSqlTestCase,
+    SharedSourceFreshnessExpressionSubqueryTestCase,
     SharedSourceFreshnessObservationTestCase,
 )
 
@@ -150,7 +151,21 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
     assert (test_case.unexpected_sql_fragment or "__not_present__") not in adapter.captured_sql
 
 
-def test_given_column_freshness_expression_source_when_observing_then_uses_subquery() -> None:
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedSourceFreshnessExpressionSubqueryTestCase(
+            description="column freshness wraps an expression source as a subquery",
+            expression="SELECT 1 AS id, 2 AS batch_id",
+            column="batch_id",
+            expected_sql_fragment="FROM (SELECT 1 AS id, 2 AS batch_id)",
+        )
+    ],
+    ids=["column freshness wraps an expression source as a subquery"],
+)
+def test_given_column_freshness_expression_source_when_observing_then_uses_subquery(
+    test_case: SharedSourceFreshnessExpressionSubqueryTestCase,
+) -> None:
     adapter: CapturingQueryDuckDbAdapter = CapturingQueryDuckDbAdapter()
 
     observe_configured_source_freshness(
@@ -158,16 +173,16 @@ def test_given_column_freshness_expression_source_when_observing_then_uses_subqu
         connection=object(),
         source=SourceEntry(
             name="raw_orders",
-            expression="SELECT 1 AS id, 2 AS batch_id",
+            expression=test_case.expression,
             freshness=SourceFreshnessConfig(
                 strategy=SourceFreshnessStrategy.COLUMN,
                 value_kind=SourceFreshnessValueKind.INTEGER,
-                column="batch_id",
+                column=test_case.column,
             ),
         ),
         observed_at=datetime(2026, 1, 15, 12, 5, 0),
     )
 
     assert adapter.captured_sql is not None
-    assert "FROM (SELECT 1 AS id, 2 AS batch_id)" in adapter.captured_sql
-    assert 'MAX("batch_id")' in adapter.captured_sql
+    assert test_case.expected_sql_fragment in adapter.captured_sql
+    assert f'MAX("{test_case.column}")' in adapter.captured_sql

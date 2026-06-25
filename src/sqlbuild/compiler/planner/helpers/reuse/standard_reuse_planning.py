@@ -155,8 +155,7 @@ def serialize_standard_reuse_plan_metadata(
                 if entry.relation_reuse is not None
             ),
             "reused_inputs": tuple(
-                _serialize_dependency_input_entry(entry)
-                for entry in dependency_baseline_entries
+                _serialize_dependency_input_entry(entry) for entry in dependency_baseline_entries
             ),
             "existing_destination_inputs": tuple(
                 _serialize_existing_destination_input_entry(entry)
