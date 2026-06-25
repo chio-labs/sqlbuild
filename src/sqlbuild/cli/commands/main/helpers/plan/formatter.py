@@ -12,6 +12,7 @@ from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     DependencyBaselinePlanEntry,
+    ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
@@ -159,6 +160,13 @@ def format_plan(
     _format_dependency_baseline_entries(
         lines,
         plan.dependency_baseline_entries,
+        name_column_width=name_column_width,
+        display_options=resolved_display_options,
+        section_header_style=resolved_section_header_style,
+    )
+    _format_existing_destination_input_entries(
+        lines,
+        plan.existing_destination_input_entries,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
@@ -363,8 +371,29 @@ def _format_dependency_baseline_entries(
 ) -> None:
     if not entries:
         return
+    _format_reuse_input_entries(
+        lines,
+        entries,
+        label="Reused inputs",
+        name_column_width=name_column_width,
+        display_options=display_options,
+        section_header_style=section_header_style,
+    )
+
+
+def _format_reuse_input_entries(
+    lines: list[str],
+    entries: tuple[DependencyBaselinePlanEntry, ...],
+    *,
+    label: str,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    if not entries:
+        return
     lines.append("")
-    lines.append(section_header_style(f"Dependency baseline ({len(entries)})"))
+    lines.append(section_header_style(f"{label} ({len(entries)})"))
     visible: Sequence[DependencyBaselinePlanEntry] = visible_entries(
         entries, options=display_options
     )
@@ -374,7 +403,7 @@ def _format_dependency_baseline_entries(
             "  "
             + _format_name_value_line(
                 entry.name,
-                f"{entry.resource_label}  baseline reuse",
+                _reuse_input_detail(entry),
                 name_column_width=name_column_width,
             )
         )
@@ -385,6 +414,49 @@ def _format_dependency_baseline_entries(
         indent="  ",
         options=display_options,
     )
+
+
+def _reuse_input_detail(entry: DependencyBaselinePlanEntry) -> str:
+    copy_kind: str = "hard-copy" if entry.relation_reuse.hard_copy else "cheap clone"
+    return f"{entry.resource_label}  {copy_kind} from reuse origin target"
+
+
+def _format_existing_destination_input_entries(
+    lines: list[str],
+    entries: tuple[ExistingDestinationInputPlanEntry, ...],
+    *,
+    name_column_width: int,
+    display_options: DisplayOptions,
+    section_header_style: Callable[[str], str],
+) -> None:
+    if not entries:
+        return
+    lines.append("")
+    lines.append(section_header_style(f"Existing destination inputs ({len(entries)})"))
+    visible: Sequence[ExistingDestinationInputPlanEntry] = visible_entries(
+        entries, options=display_options
+    )
+    entry: ExistingDestinationInputPlanEntry
+    for entry in visible:
+        lines.append(
+            "  "
+            + _format_name_value_line(
+                entry.name,
+                _existing_destination_input_detail(entry),
+                name_column_width=name_column_width,
+            )
+        )
+    append_overflow_line(
+        lines,
+        total_count=len(entries),
+        visible_count=len(visible),
+        indent="  ",
+        options=display_options,
+    )
+
+
+def _existing_destination_input_detail(entry: ExistingDestinationInputPlanEntry) -> str:
+    return f"{entry.status} in destination target"
 
 
 def _plan_ready_header(

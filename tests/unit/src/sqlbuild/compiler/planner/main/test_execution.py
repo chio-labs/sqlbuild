@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardScopePruning,
 )
+from sqlbuild.shared.helpers.hashing import compute_query_hash
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_project,
@@ -51,6 +52,11 @@ from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
     write_standard_model_state,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
+
+
+def _model_definition_hash(project: CompiledProject, name: str) -> str:
+    model = next(model for model in project.models if model.name == name)
+    return compute_query_hash(model.query_sql)
 
 PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
     StandardSourceFreshnessPlanOutputTestCase(
@@ -570,7 +576,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_schema="prod_schema",
                 target_name="orders",
                 run_id="run_1",
-                definition_hash="definition_hash",
+                definition_hash=_model_definition_hash(project, "orders"),
                 version_hash=version_identities.model_version_hashes["orders"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1",
@@ -590,7 +596,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_schema="prod_schema",
                 target_name="line_items",
                 run_id="run_1",
-                definition_hash="definition_hash",
+                definition_hash=_model_definition_hash(project, "line_items"),
                 version_hash=version_identities.model_version_hashes["line_items"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1",
@@ -610,7 +616,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 target_schema="prod_schema",
                 target_name="account_snapshot",
                 run_id="run_1",
-                definition_hash="definition_hash",
+                definition_hash=_model_definition_hash(project, "account_snapshot"),
                 version_hash=version_identities.model_version_hashes["account_snapshot"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1 AS account_id, CURRENT_TIMESTAMP AS updated_at",
@@ -759,7 +765,7 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
                 target_schema="prod_schema",
                 target_name="upstream",
                 run_id="run_1",
-                definition_hash="definition_hash",
+                definition_hash=_model_definition_hash(project, "upstream"),
                 version_hash=version_identities.model_version_hashes["upstream"],
                 schema_fingerprint="schema_hash",
                 definition="SELECT 1",
@@ -802,6 +808,89 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
         downstream_entry.fingerprint_version_hash
         == version_identities.model_version_hashes["downstream"]
     )
+
+
+def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_candidate() -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    project: CompiledProject = build_compiled_project_with_models(
+        {
+            "grandparent": "select 1 as id",
+            "parent": "select id from __ref('grandparent')",
+            "leaf": "select id from __ref('parent')",
+        }
+    )
+    project = replace(project, effective_target_name="dev")
+    version_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
+        functions=project.functions,
+        scope=build_planner_scope(
+            project=project,
+            select=(),
+            exclude=(),
+            auto_load_sources=False,
+        ),
+    )
+    try:
+        adapter.execute(connection, "CREATE SCHEMA prod_schema")
+        adapter.execute(
+            connection,
+            build_create_table_sql(
+                database=None,
+                schema="prod_schema",
+                render_qualified_name=adapter.render_qualified_name,
+                render_framework_type=adapter.render_framework_type,
+            ),
+        )
+        model_name: str
+        for model_name in ("grandparent", "parent"):
+            adapter.execute(
+                connection,
+                build_insert_sql(
+                    database=None,
+                    schema="prod_schema",
+                    node_type="model",
+                    node_name=model_name,
+                    target_database=None,
+                    target_schema="prod_schema",
+                    target_name=model_name,
+                    run_id="run_1",
+                    definition_hash=_model_definition_hash(project, model_name),
+                    version_hash=version_identities.model_version_hashes[model_name],
+                    schema_fingerprint="schema_hash",
+                    definition="SELECT 1",
+                    metadata_json="{}",
+                    ts="2026-01-01T00:00:00+00:00",
+                    render_qualified_name=adapter.render_qualified_name,
+                ),
+            )
+            adapter.execute(
+                connection,
+                f"CREATE TABLE prod_schema.{model_name} AS SELECT 1 AS id",
+            )
+
+        plan_output: PlanOutput = build_execution_plan(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            select=("leaf",),
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(schema="dev_schema", reuse_from="prod"),
+                    "prod": TargetConfig(schema="prod_schema"),
+                },
+            ),
+            local_config=LocalConfig(),
+        )
+    finally:
+        adapter.close(connection)
+
+    baseline_names: tuple[str, ...] = tuple(
+        entry.name for entry in plan_output.dependency_baseline_entries
+    )
+    assert baseline_names == ("parent",)
+    assert "grandparent" not in baseline_names
 
 
 @pytest.mark.parametrize(

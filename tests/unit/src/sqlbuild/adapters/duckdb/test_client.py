@@ -360,3 +360,16 @@ def test_given_qualified_relations_when_rendering_swap_then_keeps_staging_in_sch
     statements: tuple[str, ...] = adapter.render_swap(left=test_case.left, right=test_case.right)
 
     assert statements == test_case.expected_statements
+
+
+def test_given_subquery_source_when_rendering_freshness_query_then_duckdb_omits_alias() -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    sql: str = adapter.render_source_freshness_max_query(
+        column="event_ts",
+        source_relation="(SELECT 1 AS event_ts)",
+        source_is_subquery=True,
+        where_sql="",
+    )
+
+    assert sql == 'SELECT MAX("event_ts") AS data_version FROM (SELECT 1 AS event_ts)'

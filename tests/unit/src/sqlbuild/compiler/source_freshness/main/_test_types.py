@@ -52,12 +52,6 @@ class SharedSourceFreshnessColumnSqlTestCase:
 
 
 @dataclass(frozen=True)
-class SharedSourceFreshnessObservationErrorTestCase:
-    description: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class SharedSourceFreshnessHashTestCase:
     description: str
     source_name: str
@@ -143,9 +137,3 @@ class StandardSourceFreshnessPropagationTestCase:
     error_source_names: tuple[str, ...] = ()
     expected_blocked_model_names: frozenset[str] = frozenset()
     expected_error_source_model_names: dict[str, frozenset[str]] | None = None
-
-
-@dataclass(frozen=True)
-class StandardSourceFreshnessPlanningErrorTestCase:
-    description: str
-    expected_error_fragment: str

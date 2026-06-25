@@ -46,7 +46,11 @@ from sqlbuild.compiler.planner.helpers.pruning.standard_scope import (
 from sqlbuild.compiler.planner.helpers.reuse.dependency_baseline import (
     build_dependency_baseline_candidate_keys,
     build_dependency_baseline_entries,
+    build_existing_destination_input_entries,
     with_dependency_baseline_candidates,
+)
+from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_decisions import (
+    is_standard_reuse_decision_reusable,
 )
 from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
     enforce_standard_reuse_from_source_deferral_conflict,
@@ -54,6 +58,7 @@ from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
 from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_planning import (
     build_standard_reuse_planning_result,
     serialize_standard_reuse_metadata,
+    serialize_standard_reuse_plan_metadata,
 )
 from sqlbuild.compiler.planner.helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.helpers.warehouse.source_freshness import (
@@ -66,6 +71,7 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     CursorOverrides,
     DependencyBaselinePlanEntry,
+    ExistingDestinationInputPlanEntry,
     MissingUpstream,
     PlannerChangeResults,
     PlannerModelEntryResults,
@@ -81,7 +87,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     ChangeKind,
-    StandardReuseDecisionKind,
     StandardScopePruning,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
@@ -210,6 +215,7 @@ def build_execution_plan(
         local_config=local_config,
         expected_version_hashes=version_identities.model_version_hashes,
         built_fingerprints=snapshot.fingerprints.models,
+        destination_relation_names=frozenset(snapshot.existing_relations),
         cursor_snapshots=snapshot.cursor_snapshots,
         full_refresh=full_refresh,
         custom_prepare_version_materializations=custom_prepare_version_materializations,
@@ -219,8 +225,7 @@ def build_execution_plan(
         for key in dependency_baseline_candidate_keys
         if standard_reuse is not None
         and standard_reuse.decisions.models.get(key.name) is not None
-        and standard_reuse.decisions.models[key.name].decision
-        == StandardReuseDecisionKind.REUSE_ELIGIBLE.value
+        and is_standard_reuse_decision_reusable(standard_reuse.decisions.models[key.name].decision)
     )
     external_seed_keys: frozenset[CompiledObjectKey] = frozenset(
         seed.key for seed in project.seeds if seed.external
@@ -423,6 +428,16 @@ def build_execution_plan(
             candidate_keys=reusable_dependency_baseline_keys,
         )
     )
+    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (
+        build_existing_destination_input_entries(
+            scope=scope,
+            candidate_keys=dependency_baseline_candidate_keys,
+            reusable_keys=reusable_dependency_baseline_keys,
+            existing_relation_names=frozenset(snapshot.existing_relations),
+            expected_version_hashes=version_identities.model_version_hashes,
+            destination_fingerprints=snapshot.fingerprints.models,
+        )
+    )
     model_entry_results: PlannerModelEntryResults = build_plan_entries(
         project=project,
         adapter=adapter,
@@ -453,9 +468,19 @@ def build_execution_plan(
         changes=changes,
         model_entry_results=model_entry_results,
         dependency_baseline_entries=dependency_baseline_entries,
+        existing_destination_input_entries=existing_destination_input_entries,
         reload_sources=reload_sources,
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,
+    )
+    reuse_satisfied_model_names: frozenset[str] = (
+        frozenset(
+            name
+            for name, decision in standard_reuse.decisions.models.items()
+            if is_standard_reuse_decision_reusable(decision.decision)
+        )
+        if standard_reuse is not None
+        else frozenset()
     )
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
         build_stale_out_of_selection_warnings(
@@ -465,6 +490,7 @@ def build_execution_plan(
             snapshot=snapshot,
             version_identities=stale_warning_version_identities,
             source_freshness=source_freshness,
+            reuse_satisfied_model_names=reuse_satisfied_model_names,
         )
     )
     if stale_out_of_selection_warnings:
@@ -510,6 +536,13 @@ def build_execution_plan(
             plan_output,
             metadata={
                 **plan_output.metadata,
+                **serialize_standard_reuse_plan_metadata(
+                    model_entries=plan_output.model_entries,
+                    dependency_baseline_entries=plan_output.dependency_baseline_entries,
+                    existing_destination_input_entries=(
+                        plan_output.existing_destination_input_entries
+                    ),
+                ),
                 **serialize_standard_reuse_metadata(standard_reuse),
             },
         )

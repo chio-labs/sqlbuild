@@ -600,3 +600,31 @@ def test_given_equivalent_types_when_diffing_schema_then_postgres_ignores_alias_
     )
 
     assert result == test_case.expected_result
+
+
+def test_given_subquery_source_when_rendering_freshness_query_then_postgres_aliases() -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    sql: str = adapter.render_source_freshness_max_query(
+        column="event_ts",
+        source_relation="(SELECT 1 AS event_ts)",
+        source_is_subquery=True,
+        where_sql="",
+    )
+
+    assert sql == (
+        'SELECT MAX("event_ts") AS data_version FROM (SELECT 1 AS event_ts) AS __source_freshness'
+    )
+
+
+def test_given_table_source_when_rendering_freshness_query_then_postgres_omits_alias() -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    sql: str = adapter.render_source_freshness_max_query(
+        column="event_ts",
+        source_relation="raw.orders",
+        source_is_subquery=False,
+        where_sql=" WHERE active",
+    )
+
+    assert sql == 'SELECT MAX("event_ts") AS data_version FROM raw.orders WHERE active'

@@ -80,6 +80,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                 version_hash="expected",
             ),
         },
+        destination_relation_names=frozenset({"current", "current_reuse_from_missing"}),
         reuse_from_snapshot=StandardReuseFromTargetSnapshot(
             reuse_from_target_name="prod",
             model_snapshots={
@@ -116,6 +117,43 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
                     model_name="current_reuse_from_missing",
                     relation_exists=False,
                     built_version_hash=None,
+                ),
+            },
+        ),
+    )
+
+    assert {
+        model_name: decision.decision for model_name, decision in decisions.models.items()
+    } == test_case.expected_decisions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandardReuseDecisionTestCase(
+            description="reuse origin version mismatch blocks reuse",
+            expected_decisions={
+                "version_mismatch": StandardReuseDecisionKind.REUSE_ORIGIN_VERSION_MISMATCH.value,
+            },
+        )
+    ],
+    ids=["reuse origin version mismatch blocks reuse"],
+)
+def test_given_origin_version_differs_then_model_is_not_reused(
+    test_case: StandardReuseDecisionTestCase,
+) -> None:
+    decisions: StandardReuseDecisionResults = build_standard_reuse_decisions(
+        scope=build_standard_reuse_decision_scope(
+            selected_model_names=frozenset({"version_mismatch"})
+        ),
+        expected_version_hashes={"version_mismatch": "expected"},
+        built_fingerprints={},
+        reuse_from_snapshot=StandardReuseFromTargetSnapshot(
+            reuse_from_target_name="prod",
+            model_snapshots={
+                "version_mismatch": build_standard_reuse_origin_snapshot(
+                    model_name="version_mismatch",
+                    built_version_hash="old",
                 ),
             },
         ),
@@ -249,6 +287,7 @@ def test_given_destination_cursor_ahead_when_planning_incremental_reuse_then_sta
                 upstream_maxes=(),
             )
         },
+        destination_relation_names=frozenset({"incremental_candidate"}),
         reuse_from_snapshot=StandardReuseFromTargetSnapshot(
             reuse_from_target_name="prod",
             model_snapshots={
