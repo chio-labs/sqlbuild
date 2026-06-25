@@ -903,9 +903,9 @@ def test_given_snapshot_seeded_reuse_from_when_snapshot_runs_then_dbt_catches_up
             expected_dbt_fingerprint_rows=(),
             expected_stdout_fragments=(
                 "dbt (0 selected resources)",
-                "Dependency baseline",
+                "Reused inputs",
                 "model.analytics.fact_orders",
-                "baseline reuse",
+                "from reuse origin target",
                 "Skipping dbt: no dbt work selected.",
                 "SQLBuild execution",
             ),
