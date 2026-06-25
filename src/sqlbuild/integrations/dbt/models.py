@@ -16,8 +16,6 @@ from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_s
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
-    DbtIdentityDiffReason,
-    DbtIdentityDiffVerdict,
     DbtInteropCommand,
     DbtInteropSkipReason,
     DbtLineageDirection,
@@ -60,21 +58,6 @@ class DbtCliConfigOverrides:
             value is not None
             for value in (self.project_dir, self.profiles_dir, self.target, self.target_path)
         )
-
-
-@dataclass(frozen=True)
-class DbtIdentityDiffArgs:
-    """Parsed arguments for dbt identity-diff."""
-
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    against: str | None
-    quiet: bool
-    json_output: bool
-    show_inherited: bool
-    show_paths: bool
-    max_diff_lines: int
-    max_diff_bytes: int
 
 
 @dataclass(frozen=True)
@@ -195,62 +178,6 @@ class DbtInitResult:
     toml: str
     warnings: tuple[str, ...] = field(default_factory=tuple)
     dry_run: bool = False
-
-
-@dataclass(frozen=True)
-class DbtIdentityLocalDiff:
-    unique_id: str
-    reasons: tuple[DbtIdentityDiffReason, ...]
-    sql_diff: tuple[str, ...] = field(default_factory=tuple)
-    config_diff: tuple[str, ...] = field(default_factory=tuple)
-    schema_diff: tuple[str, ...] = field(default_factory=tuple)
-    upstream_added: tuple[str, ...] = field(default_factory=tuple)
-    upstream_removed: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtIdentitySelectedDiff:
-    unique_id: str
-    name: str
-    verdict: DbtIdentityDiffVerdict
-    current_version_hash: str | None
-    ref_version_hash: str | None
-    causes: tuple[str, ...] = field(default_factory=tuple)
-    inherited_only: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtIdentityCause:
-    unique_id: str
-    name: str
-    current_version_hash: str | None
-    ref_version_hash: str | None
-    local_diff: DbtIdentityLocalDiff
-    affects_selected: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtIdentityInheritedOnly:
-    unique_id: str
-    name: str
-    affects_selected: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtIdentityCausePath:
-    selected_unique_id: str
-    cause_unique_id: str
-    path: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtIdentityDiffResult:
-    selected: tuple[DbtIdentitySelectedDiff, ...]
-    causes: tuple[DbtIdentityCause, ...]
-    inherited_only: tuple[DbtIdentityInheritedOnly, ...]
-    paths: tuple[DbtIdentityCausePath, ...]
-    against: str
-    warnings: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
