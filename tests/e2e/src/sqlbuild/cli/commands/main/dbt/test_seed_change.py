@@ -265,12 +265,14 @@ def test_given_config_only_seed_change_when_building_then_seed_is_detected_as_ch
             description="dropped seed relation reloads the seed and rebuilds dependents",
             select=("+fct_customer_revenue",),
             expected_stdout_fragments=(
-                "Seeds (2, always run)",
+                "Seeds (1, changed)",
                 "seed      raw_orders",
                 "model     stg_orders",
                 "model     fct_customer_revenue",
+                "Seeds pruned (1)",
+                "raw_customers",
             ),
-            unexpected_stdout_fragments=("Seeds pruned", "Skipping dbt: no dbt work selected."),
+            unexpected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],

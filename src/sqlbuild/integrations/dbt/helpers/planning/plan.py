@@ -536,7 +536,7 @@ def _format_dbt_non_model_sections(
         if seed_nodes:
             _format_dbt_non_model_resource_group(
                 lines,
-                label=f"Seeds ({len(seed_nodes)}, always run)",
+                label=f"Seeds ({len(seed_nodes)}, changed)",
                 nodes=seed_nodes,
                 display_options=display_options,
             )
@@ -563,7 +563,7 @@ def _format_dbt_non_model_sections(
         _format_dbt_pruned_non_model_group(
             lines,
             label=f"Seeds pruned ({len(pruned_seed_nodes)})",
-            note="pruned because all planned dbt models are current",
+            note="pruned because seed content is unchanged",
             nodes=pruned_seed_nodes,
             display_options=display_options,
         )
