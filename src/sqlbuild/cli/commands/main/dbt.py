@@ -9,7 +9,6 @@ from typing import TextIO
 from sqlbuild.cli.commands.main.dbt_clone import run_dbt_clone_command
 from sqlbuild.cli.commands.main.dbt_debug import run_dbt_debug_command
 from sqlbuild.cli.commands.main.dbt_diff import run_dbt_diff_command
-from sqlbuild.cli.commands.main.dbt_identity_diff import run_dbt_identity_diff_command
 from sqlbuild.cli.commands.main.dbt_lineage import run_dbt_lineage_command
 from sqlbuild.cli.commands.main.dbt_scenario import run_dbt_scenario_command
 from sqlbuild.cli.commands.main.helpers.dbt_auto_init import (
@@ -59,10 +58,6 @@ def run_dbt_command(
         )
     if command == DbtInteropCommand.CLONE:
         return run_dbt_clone_command(
-            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
-        )
-    if command == DbtInteropCommand.IDENTITY_DIFF:
-        return run_dbt_identity_diff_command(
             project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
         )
     if command == DbtInteropCommand.SCENARIO:

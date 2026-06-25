@@ -178,7 +178,6 @@ class CliEntrypointHandlers:
     run_dbt_lineage: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_diff: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_clone: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_identity_diff: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_init: Callable[
         [
             Path,
