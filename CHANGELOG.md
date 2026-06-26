@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.42.0](https://github.com/chio-labs/sqlbuild/compare/v0.41.3...v0.42.0) (2026-06-26)
+
+
+### Features
+
+* **clone:** stream per-relation progress for native and dbt clone with shared op core ([9fec3d7](https://github.com/chio-labs/sqlbuild/commit/9fec3d78796b338741e191f4afba8db57d0bf44c))
+
+
+### Bug Fixes
+
+* **planner:** collapse redundant information_schema prechecks into one relation scan ([64e3834](https://github.com/chio-labs/sqlbuild/commit/64e3834605c1b66e6f29beecf55c422363563610))
+
 ## [0.41.3](https://github.com/chio-labs/sqlbuild/compare/v0.41.2...v0.41.3) (2026-06-26)
 
 
