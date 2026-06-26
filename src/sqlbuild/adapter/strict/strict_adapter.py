@@ -283,12 +283,15 @@ class StrictAdapter(
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
     ) -> tuple[str, ...]:
         """Render SQL statements that clone or copy a relation."""
         ...
 
     @abstractmethod
-    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+    def render_durable_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> tuple[str, ...]:
         """Render SQL statements that clone/copy into a durable independent destination."""
         ...
 

@@ -91,7 +91,7 @@ SNAPSHOT_SQL_RENDERING_ADAPTER_TEST_CASES: list[SnapshotSqlRenderingAdapterTestC
         description="snowflake renders complete snapshot SQL matrix",
         adapter=SnowflakeAdapter(),
         expected_create_initial_fragments=(
-            "CREATE OR REPLACE TABLE target_table AS SELECT *",
+            "CREATE OR REPLACE TRANSIENT TABLE target_table AS SELECT *",
             "updated_at AS valid_from",
             "CAST(NULL AS TIMESTAMP) AS valid_to",
         ),
