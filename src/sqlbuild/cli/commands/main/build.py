@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.main.helpers.build_defer_clone import (
+    build_defer_clone_boundary_selectors,
+    run_defer_clone_prephase,
+)
 from sqlbuild.cli.commands.main.helpers.check import (
     check_results_failed,
     load_results_by_loader_name,
@@ -18,6 +22,7 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compi
 from sqlbuild.cli.commands.main.helpers.source_freshness import (
     append_eligible_standard_source_freshness_records,
 )
+from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.cli.commands.main.shared.helpers.config.mode import (
     enforce_no_defer_to_in_virtual_mode,
@@ -62,6 +67,7 @@ from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import (
 )
 from sqlbuild.cli.commands.main.virtual_build import run_virtual_build
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
@@ -89,7 +95,9 @@ def run_build(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
+    defer_clone_from: str | None = None,
     defer_sources_to: str | None = None,
+    selected_target: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
     no_color: bool = False,
     fail_fast: bool = False,
@@ -119,10 +127,20 @@ def run_build(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    if defer_to is not None and defer_clone_from is not None:
+        raise CliUserError("--defer-clone-from cannot be used with --defer-to", code="C408")
+    if (
+        discovered_inputs.project_config.settings.virtual_environments
+        and defer_clone_from is not None
+    ):
+        raise CliUserError(
+            "build does not support --defer-clone-from when virtual_environments = true",
+            code="C412",
+        )
     effective_force: bool = resolve_effective_force(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_target=None,
+        selected_target=selected_target,
         cli_force=force,
     )
     enforce_no_defer_to_in_virtual_mode(
@@ -141,6 +159,7 @@ def run_build(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
@@ -168,6 +187,7 @@ def run_build(
                 adapter=adapter,
                 adapter_name=adapter_name,
                 connection_config=connection_config,
+                selected_target=selected_target,
                 no_sql_validation=no_sql_validation,
                 defer_sources_to=defer_sources_to,
                 cursor_overrides=cursor_overrides,
@@ -195,12 +215,40 @@ def run_build(
                 progress_stream=progress_stream,
                 providers=provider_session.providers,
             )
+        if defer_clone_from is not None:
+            cloned_project: CompiledProject
+            boundary_selectors: tuple[str, ...]
+            cloned_project, boundary_selectors = build_defer_clone_boundary_selectors(
+                discovered_inputs=discovered_inputs,
+                adapter=adapter,
+                selected_target=selected_target,
+                no_sql_validation=no_sql_validation,
+                select=select,
+                exclude=exclude,
+                cli_vars=cli_vars,
+                project_dir=effective_project_dir,
+                auto_load_sources=should_load_sources,
+            )
+            run_defer_clone_prephase(
+                discovered_inputs=discovered_inputs,
+                adapter=adapter,
+                origin_target_name=defer_clone_from,
+                destination_target_name=cloned_project.effective_target_name,
+                no_sql_validation=no_sql_validation,
+                select=boundary_selectors,
+                cli_vars=cli_vars,
+                connection_config=connection_config,
+                project_dir=effective_project_dir,
+                on_progress=planning_progress.on_progress,
+            )
+
         progress_stream.write("\n")
         progress_stream.flush()
         pipeline_result: CompilePipelineResult = run_compile_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             no_sql_validation=no_sql_validation,
+            selected_target=selected_target,
             defer_to=defer_to,
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,

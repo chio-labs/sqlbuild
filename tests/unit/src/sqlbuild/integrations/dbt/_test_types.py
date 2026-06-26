@@ -421,6 +421,7 @@ class DbtArgRoutingTestCase:
     expected_exclude: tuple[str, ...]
     expected_dbt_args: tuple[str, ...]
     expected_sqlbuild_args: tuple[str, ...]
+    expected_defer_clone_from: bool = False
 
 
 @dataclass(frozen=True)
@@ -441,6 +442,7 @@ class DbtArgParseTestCase:
     expected_full_refresh: bool
     expected_target: str | None
     expected_dbt_passthrough: tuple[str, ...]
+    expected_defer_clone_from: bool = False
 
 
 @dataclass(frozen=True)

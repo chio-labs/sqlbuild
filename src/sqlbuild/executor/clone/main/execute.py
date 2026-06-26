@@ -5,10 +5,32 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+
+
+def _ensure_destination_schemas(
+    *,
+    destination_entries: tuple[SeedPlanEntry | ModelPlanEntry, ...],
+    adapter: BaseAdapter,
+    destination_connection: Any,
+) -> None:
+    schemas: set[tuple[str | None, str]] = set()
+    entry: SeedPlanEntry | ModelPlanEntry
+    for entry in destination_entries:
+        if entry.destination.schema is not None:
+            schemas.add((entry.destination.database, entry.destination.schema))
+    recorder: StatementRecorder = StatementRecorder()
+    for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
+        adapter.ensure_schema(
+            destination_connection,
+            database=database,
+            schema=schema,
+            statement_recorder=recorder,
+        )
 
 
 def execute_clone(
@@ -29,9 +51,18 @@ def execute_clone(
         entry.name: entry for entry in origin_seed_entries
     }
     results: list[CloneItemResult] = []
+    destination_entries: tuple[SeedPlanEntry | ModelPlanEntry, ...] = (
+        *destination_seed_entries,
+        *destination_model_entries,
+    )
+    _ensure_destination_schemas(
+        destination_entries=destination_entries,
+        adapter=adapter,
+        destination_connection=destination_connection,
+    )
 
     destination_entry: SeedPlanEntry | ModelPlanEntry
-    for destination_entry in (*destination_seed_entries, *destination_model_entries):
+    for destination_entry in destination_entries:
         origin_entry: SeedPlanEntry | ModelPlanEntry | None = origin_seeds_by_name.get(
             destination_entry.name
         )

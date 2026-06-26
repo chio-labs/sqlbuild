@@ -32,6 +32,7 @@ from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
+from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
@@ -167,6 +168,18 @@ def run_clone(
             origin_connection=origin_connection,
             destination_connection=destination_connection,
             hard_copy=hard_copy,
+        )
+        copy_clone_fingerprints(
+            result=result,
+            origin_model_entries=clone_pipeline.origin_model_entries,
+            destination_model_entries=destination_model_entries,
+            origin_seed_entries=clone_pipeline.origin_seed_entries,
+            destination_seed_entries=destination_seed_entries,
+            adapter=adapter,
+            origin_connection=origin_connection,
+            destination_connection=destination_connection,
+            run_id=clone_pipeline.destination_project.run_id,
+            query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
         )
         progress.complete(f"Cloned relations. ({time.monotonic() - clone_start:.2f}s)")
     finally:

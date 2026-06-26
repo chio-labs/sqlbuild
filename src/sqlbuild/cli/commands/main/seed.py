@@ -42,6 +42,7 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 def run_seed(
     project_dir: Path | None,
     no_color: bool = False,
+    selected_target: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     concurrency: int | None = None,
@@ -66,6 +67,7 @@ def run_seed(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
@@ -78,6 +80,7 @@ def run_seed(
                 adapter=adapter,
                 adapter_name=adapter_name,
                 connection_config=connection_config,
+                selected_target=selected_target,
                 include_python=False,
                 seed_only=True,
                 select=select,
@@ -107,6 +110,7 @@ def run_seed(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         select=select,
         exclude=exclude,
         connection_config=connection_config,

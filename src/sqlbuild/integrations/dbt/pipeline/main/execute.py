@@ -25,7 +25,10 @@ from sqlbuild.compiler.planner.models import (
     GraphNodeKey,
     PlanOutput,
 )
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.exceptions import (
+    DbtInteropArgumentError,
+    DbtInteropRuntimeError,
+)
 from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
 from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
@@ -64,6 +67,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropRoutedArgs,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
+    resolve_defer_clone_unique_ids,
+    run_dbt_defer_clone_prephase,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_manifest_seed_warnings,
@@ -319,12 +326,35 @@ def execute_dbt_interop_from_project(
             plan=plan,
         ),
     )
+    defer_clone_unique_ids: frozenset[str] = (
+        resolve_defer_clone_unique_ids(
+            graph=graph,
+            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+        )
+        if routed.defer_clone_from
+        else frozenset()
+    )
+    if routed.defer_clone_from:
+        run_dbt_defer_clone_prephase(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            dbt_options=dbt_options,
+            runner=runner,
+            adapter=adapter,
+            project=project,
+            connection_config=connection_config,
+            current_manifest=manifest,
+            unique_ids=tuple(sorted(defer_clone_unique_ids)),
+            on_progress=on_progress,
+        )
     merged_dbt_argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
         command=command,
         options=dbt_options,
         routed_args=routed.dbt_args,
         plan=plan,
         replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
+        defer_clone_unique_ids=defer_clone_unique_ids,
     )
     missing_dbt_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]] = {}
     if merged_dbt_argv is None and plan.sqlbuild_skip_reason is None:

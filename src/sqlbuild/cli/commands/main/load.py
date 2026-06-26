@@ -50,6 +50,7 @@ from sqlbuild.spec.models.source import SourceEntry
 def run_load(
     project_dir: Path | None,
     no_color: bool = False,
+    selected_target: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     reload: bool = False,
@@ -71,10 +72,12 @@ def run_load(
         exclude=exclude,
         target_config=build_effective_target_config(
             discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
         ),
     )
     target_config: TargetConfig | None = build_effective_target_config(
-        discovered_inputs=discovered_inputs
+        discovered_inputs=discovered_inputs,
+        selected_target=selected_target,
     )
     reference_sources: tuple[SourceEntry, ...] = select_load_reference_entries(
         discovered_inputs=discovered_inputs,
@@ -125,6 +128,7 @@ def run_load(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     validate_reference_source_targets(
@@ -138,6 +142,7 @@ def run_load(
     run_id: str
     target_name, effective_vars, run_id = build_effective_runtime_config(
         discovered_inputs=discovered_inputs,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     effective_cursor_overrides: CursorOverrides = cursor_overrides or CursorOverrides()

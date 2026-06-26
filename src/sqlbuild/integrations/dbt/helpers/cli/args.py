@@ -20,6 +20,7 @@ def route_dbt_interop_args(
             code="C236",
         ) from exc
     _validate_event_time_pair(parsed)
+    _validate_defer_clone_conflict(parsed)
     _validate_sqlbuild_flags_allowed(command=normalized_command, parsed=parsed)
     dbt_args: list[str] = []
     sqlbuild_args: list[str] = []
@@ -37,6 +38,7 @@ def route_dbt_interop_args(
         exclude=tuple(parsed.exclude),
         dbt_args=tuple(dbt_args),
         sqlbuild_args=tuple(sqlbuild_args),
+        defer_clone_from=parsed.defer_clone_from,
     )
 
 
@@ -118,6 +120,15 @@ def _validate_event_time_pair(parsed: DbtInteropParsedArgs) -> None:
     )
 
 
+def _validate_defer_clone_conflict(parsed: DbtInteropParsedArgs) -> None:
+    if parsed.defer_to is None or not parsed.defer_clone_from:
+        return
+    raise DbtInteropArgumentError(
+        "--defer-clone-from cannot be used with --defer-to",
+        code="C239",
+    )
+
+
 def _validate_event_time_cursor_conflict(
     *, command: DbtInteropCommand, parsed: DbtInteropParsedArgs
 ) -> None:
@@ -142,6 +153,7 @@ def _validate_sqlbuild_flags_allowed(
         ("--start-cursor-int", parsed.start_cursor_int is not None),
         ("--end-cursor-int", parsed.end_cursor_int is not None),
         ("--defer-to", parsed.defer_to is not None),
+        ("--defer-clone-from", parsed.defer_clone_from),
         ("--fail-fast", parsed.fail_fast),
         ("--force", parsed.force),
         ("--hard-copy", parsed.hard_copy),
@@ -163,6 +175,7 @@ def _allowed_sqlbuild_flags(command: DbtInteropCommand) -> frozenset[str]:
     common_execution_flags: tuple[str, ...] = (
         *cursor_flags,
         "--defer-to",
+        "--defer-clone-from",
         "--fail-fast",
         "--force",
         "--verbose",
