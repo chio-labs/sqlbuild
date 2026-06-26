@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.41.3](https://github.com/chio-labs/sqlbuild/compare/v0.41.2...v0.41.3) (2026-06-26)
+
+
+### Bug Fixes
+
+* **dbt:** resolve seed existence from the bulk relation set instead of per-seed queries ([b7aaefb](https://github.com/chio-labs/sqlbuild/commit/b7aaefb4f79c7c021c9da802e380c517b9511cf1))
+* **dbt:** resolve seed existence from the bulk relation set instead of per-seed queries ([7a8639d](https://github.com/chio-labs/sqlbuild/commit/7a8639db6570cc3f07199ef1726f13ea07591907))
+* **planner:** restructure stale-upstream warning into a capped bulleted message ([68e8d59](https://github.com/chio-labs/sqlbuild/commit/68e8d591f16789efa69ffb916b515c15dfae899a))
+* **planner:** restructure stale-upstream warning into a capped bullets ([ccdeb2d](https://github.com/chio-labs/sqlbuild/commit/ccdeb2d75d1cce3e04f51d66544ae9d76ee58af1))
+
 ## [0.41.2](https://github.com/chio-labs/sqlbuild/compare/v0.41.1...v0.41.2) (2026-06-26)
 
 
