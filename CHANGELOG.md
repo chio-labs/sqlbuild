@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.39.0](https://github.com/chio-labs/sqlbuild/compare/v0.38.0...v0.39.0) (2026-06-26)
+
+
+### Features
+
+* align reuse policy across native and dbt ([6ef4b8d](https://github.com/chio-labs/sqlbuild/commit/6ef4b8dd08ddc241cde1aaaaa455ff22c977e655))
+* align reuse policy across native and dbt ([d50f9f8](https://github.com/chio-labs/sqlbuild/commit/d50f9f868b7102ff15144b7d896197348f81eb56))
+* **build:** add --defer-clone-from and per-command --target ([237b8b9](https://github.com/chio-labs/sqlbuild/commit/237b8b9650baa43789919801a4bb9198e6b7deab))
+* **build:** add --defer-clone-from and per-command --target ([c451b02](https://github.com/chio-labs/sqlbuild/commit/c451b020aedd027f70170c89398736e47259b14f))
+* **dbt:** add identity diff command ([1d7627e](https://github.com/chio-labs/sqlbuild/commit/1d7627e70561081ec0c58691184dde3b5a731397))
+* **dbt:** add identity diff command ([900c155](https://github.com/chio-labs/sqlbuild/commit/900c1555d14364bb1b9b9464bd9bdb099bb0d5ce))
+* **dbt:** persist a Finalizing dbt run progress line after the event stream ([4b93f42](https://github.com/chio-labs/sqlbuild/commit/4b93f4207f71817f8ff071a68b4b49b687dad529))
+* **dbt:** remove dbt reuse-from-production, keep change-aware builds + clone/diff ([fd6243a](https://github.com/chio-labs/sqlbuild/commit/fd6243a390ae853e7226e39ddbec0c3eb2767a9a))
+* **dbt:** remove sqb dbt identity-diff (dead dbt reuse preview) ([ba8d19d](https://github.com/chio-labs/sqlbuild/commit/ba8d19d687c469a5298160b17c276261de7dd2f4))
+* **dbt:** remove sqb dbt identity-diff (dead dbt reuse preview) ([4eca08e](https://github.com/chio-labs/sqlbuild/commit/4eca08e6eccd1b44ed85655c31835df2ae2800e2))
+* **dbt:** render a completion status and PASS/WARN/FAIL/SKIP/TOTAL f… ([d40576b](https://github.com/chio-labs/sqlbuild/commit/d40576b7c353cf59eb36de213753e092156dea11))
+* **dbt:** render a completion status and PASS/WARN/FAIL/SKIP/TOTAL footer for dbt build ([b3a2447](https://github.com/chio-labs/sqlbuild/commit/b3a2447c1873e94bf27e7eaaef33d107383c8230))
+* **dbt:** report progress during post-build state persistence ([d2d1ba1](https://github.com/chio-labs/sqlbuild/commit/d2d1ba1141cebf8740d54044a0a991fd17c280c3))
+* **reuse:** enforce strict native reuse and render source freshness via adapter ([beca26e](https://github.com/chio-labs/sqlbuild/commit/beca26ecf6d6f371629f83e59e5ea783241d8416))
+
+
+### Bug Fixes
+
+* **dbt:** align identity diff with reuse identity ([d9bee2c](https://github.com/chio-labs/sqlbuild/commit/d9bee2c88556ae3b9b7f308e6803edac18f8f760))
+* **dbt:** align identity diff with reuse identity ([dbf00f7](https://github.com/chio-labs/sqlbuild/commit/dbf00f7e510966f3aeea3b9882215422e78770b8))
+* **dbt:** batch model relation planning checks ([19105d7](https://github.com/chio-labs/sqlbuild/commit/19105d7a6b1146a6b68015d99fad0cb599d83625))
+* **dbt:** batch model relation planning checks ([ffa4b90](https://github.com/chio-labs/sqlbuild/commit/ffa4b906f94660566b1c54b033031f8dab231c6a))
+* **dbt:** batch model relation planning checks ([3d88523](https://github.com/chio-labs/sqlbuild/commit/3d885238efe7f0e71ae5bc60b94a812f823b5f7e))
+* **dbt:** bound identity diff rendering ([d9ff0af](https://github.com/chio-labs/sqlbuild/commit/d9ff0afd88d27331fbdd309b467481023c188bf4))
+* **dbt:** bound identity diff rendering ([3064094](https://github.com/chio-labs/sqlbuild/commit/306409418dda424fcc4bd011b176430348b75370))
+* **dbt:** bound reuse git refresh ([bd40a8c](https://github.com/chio-labs/sqlbuild/commit/bd40a8c6abef5c08e6940391ba146ffc5543d490))
+* **dbt:** bound reuse git refresh ([0bbf200](https://github.com/chio-labs/sqlbuild/commit/0bbf2006c70f6248f05f43d2a62d3d3832838539))
+* **dbt:** cache reuse manifests ([6562e29](https://github.com/chio-labs/sqlbuild/commit/6562e29841493ffa6476957acfc3f9812e27b5d0))
+* **dbt:** cache reuse manifests ([bbe1bc3](https://github.com/chio-labs/sqlbuild/commit/bbe1bc33b63dc91cc69175610775b8631e340a8c))
+* **dbt:** ensure fingerprint schema exists before writing dbt fingerprints ([5fb28a8](https://github.com/chio-labs/sqlbuild/commit/5fb28a8a7029a8f82761cc085ad858b91e89b49f))
+* **dbt:** improve state and execution progress ([24f1e90](https://github.com/chio-labs/sqlbuild/commit/24f1e90743d2b88faf5d20e2f4ca3d766941f3da))
+* **dbt:** improve state and execution progress ([f7a9227](https://github.com/chio-labs/sqlbuild/commit/f7a92279a89fdba31e2ccb5ace57a78b76012068))
+* **dbt:** improve target and routing resolution ([8235bc7](https://github.com/chio-labs/sqlbuild/commit/8235bc7f0667fb48a3fee55f4f4a762cedfa7706))
+* **dbt:** improve target and routing resolution ([5b03b6c](https://github.com/chio-labs/sqlbuild/commit/5b03b6cc3ee1a0eb22b28481ff7632c3a0ef2d0e))
+* **dbt:** only run changed seeds when models build ([2f5d3a4](https://github.com/chio-labs/sqlbuild/commit/2f5d3a4de7e1ec8a36e0bd8af02d54c7dde211c3))
+* **dbt:** persist execution progress statuses ([3a521f0](https://github.com/chio-labs/sqlbuild/commit/3a521f042b62c6d285d0694aa9b443cf76dcbd92))
+* **dbt:** persist execution progress statuses ([c7cb38e](https://github.com/chio-labs/sqlbuild/commit/c7cb38e31cc9e292a75fe43b2ecd847bb531412c))
+* **dbt:** preserve snowflake auth cache ([1ab74d0](https://github.com/chio-labs/sqlbuild/commit/1ab74d07d19a9491c5d52352dcc466a795633de6))
+* **dbt:** preserve snowflake auth cache ([e95e18a](https://github.com/chio-labs/sqlbuild/commit/e95e18acfc4aafd488bb71b8b65172f15cbecf29))
+* **dbt:** render identity diff as set output ([da80307](https://github.com/chio-labs/sqlbuild/commit/da803079186cf3298a78ebd966b33b35b892f376))
+* **dbt:** render identity diff as set output ([227d905](https://github.com/chio-labs/sqlbuild/commit/227d90584868d456696924c7a68b72e82a86d2fe))
+* **dbt:** render node starts as running rows ([06a56a0](https://github.com/chio-labs/sqlbuild/commit/06a56a0a5b4f465246a140922bbdaae36c9f80f9))
+* **dbt:** render node starts as running rows ([9c52d10](https://github.com/chio-labs/sqlbuild/commit/9c52d108d015402cdb9321504f34650b876811ed))
+* **dbt:** report identity diff phases ([c3f56fc](https://github.com/chio-labs/sqlbuild/commit/c3f56fccefec6c3f1a7b1dbba70a3af410c16890))
+* **dbt:** report identity diff phases ([1eefdf8](https://github.com/chio-labs/sqlbuild/commit/1eefdf8dc39548915db01b93c33374b4608e9c4c))
+* **reuse:** satisfy type and test-convention checks for reuse rework ([7ff2829](https://github.com/chio-labs/sqlbuild/commit/7ff2829f9f0ce6c3e275817223a8435a1bf610f3))
+* **virtual:** disable reuse planning in virtual environment plans ([309a17d](https://github.com/chio-labs/sqlbuild/commit/309a17d8b5f6917979dd79a7824926bc1c6d620f))
+
 ## [0.38.0](https://github.com/chio-labs/sqlbuild/compare/v0.37.7...v0.38.0) (2026-06-23)
 
 
