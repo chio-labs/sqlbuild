@@ -135,8 +135,8 @@ def set_git_identity(*, repo_dir: Path) -> None:
     run_git_command(repo_dir=repo_dir, args=("config", "user.name", "Test User"))
 
 
-def build_local_reuse_from_git_project(*, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
-    """Create a local git repo with SQLBuild and dbt projects for reuse_from tests."""
+def build_local_production_ref_git_project(*, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """Create a local git repo with SQLBuild and dbt projects for production_ref tests."""
 
     repo_dir: Path = tmp_path / "repo"
     sqlbuild_project_dir: Path = repo_dir / "sqlbuild_project"

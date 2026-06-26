@@ -40,7 +40,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
                 'target_path = "../dbt_project/target"',
                 'source = "dbt_profile"',
                 'profile = "analytics"',
-                "[dbt.reuse_from]",
+                "[dbt.production_ref]",
                 'git_ref = "prod"',
                 'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"',
             ),
@@ -276,7 +276,7 @@ def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
                 "not your dbt project",
             ),
             expected_toml_fragments=(
-                "[dbt.reuse_from]",
+                "[dbt.production_ref]",
                 'git_ref = "main"',
                 'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"',
             ),

@@ -157,8 +157,8 @@ class ScenarioConfig:
 
 
 @dataclass(frozen=True)
-class DbtReuseFromConfig:
-    """dbt reuse_from configuration."""
+class DbtProductionRefConfig:
+    """dbt production ref configuration."""
 
     git_ref: str | None = None
     generate_schema_name_override: str | None = None
@@ -176,7 +176,7 @@ class DbtConfig:
     target_path: str | None = None
     vars: dict[str, object] = field(default_factory=dict)
     replay_on_change: str | None = None
-    reuse_from: DbtReuseFromConfig = field(default_factory=DbtReuseFromConfig)
+    production_ref: DbtProductionRefConfig = field(default_factory=DbtProductionRefConfig)
 
 
 @dataclass(frozen=True)

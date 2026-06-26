@@ -41,7 +41,7 @@ dbt (3 selected resources)
   skipped: all planned dbt models are current
 ```
 
-With reuse configured, branch builds clone unchanged tables from a production git branch instead of rebuilding them, so dbt only builds what your branch actually changed. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+Change one model and only that model, plus whatever depends on it, rebuilds. SQLBuild fingerprints your dbt models in the warehouse and prunes everything that is already current, so a second build skips the whole run. Your `--select` scope is always respected, and where it matters SQLBuild warns you about stale upstreams or downstreams left outside the selection. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 
 ## Quick start
 

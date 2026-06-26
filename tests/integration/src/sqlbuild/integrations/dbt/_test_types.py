@@ -16,7 +16,7 @@ class RealDbtRunnerTestCase:
 
 
 @dataclass(frozen=True)
-class RealDbtReuseFromCompileTestCase:
+class RealDbtProductionRefCompileTestCase:
     description: str
     git_ref: str
     override_relative_path: Path
@@ -26,7 +26,7 @@ class RealDbtReuseFromCompileTestCase:
 
 
 @dataclass(frozen=True)
-class DbtReuseFromCompileErrorTestCase:
+class DbtProductionRefCompileErrorTestCase:
     description: str
     git_ref: str
     command_returncode: int
@@ -39,7 +39,7 @@ class DbtReuseFromCompileErrorTestCase:
 
 
 @dataclass(frozen=True)
-class DbtReuseFromCompileSetupErrorTestCase:
+class DbtProductionRefCompileSetupErrorTestCase:
     description: str
     setup_kind: str
     expected_error_fragment: str

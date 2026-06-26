@@ -7,6 +7,7 @@ import json
 from collections.abc import Sequence
 
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.planner.main.graph_write_identity import build_graph_write_identity_hashes
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
 from sqlbuild.compiler.planner.types import GraphResourceKind
 from sqlbuild.integrations.dbt.helpers.graph.core import dbt_model_graph_key
@@ -70,6 +71,48 @@ def dbt_graph_identity_execution_order(*, manifest: DbtManifestIndex) -> tuple[G
 
 def dbt_graph_node_key(unique_id: str) -> GraphNodeKey:
     return GraphNodeKey(node_type=NODE_TYPE_DBT, node_name=unique_id)
+
+
+def build_dbt_write_identity_hashes(
+    *,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph | None,
+    run_unique_ids: frozenset[str],
+    expected_version_hash_by_unique_id: dict[str, str | None],
+    previous_version_hash_by_unique_id: dict[str, str] | None = None,
+) -> dict[GraphNodeKey, str]:
+    """Compose the version hashes recorded for dbt nodes written in one run.
+
+    Shared by the dbt build path and the defer-clone prephase so both persist
+    identical version hashes for the same manifest state.
+    """
+
+    previous_version_hash_by_unique_id = previous_version_hash_by_unique_id or {}
+    nodes: dict[GraphNodeKey, GraphIdentityNode] = build_dbt_graph_identity_nodes(
+        manifest=manifest,
+        graph=graph,
+    )
+    base_identity_hashes: dict[GraphNodeKey, str] = {
+        dbt_graph_node_key(unique_id): version_hash
+        for unique_id, version_hash in previous_version_hash_by_unique_id.items()
+    }
+    unique_id: str
+    version_hash: str | None
+    for unique_id, version_hash in expected_version_hash_by_unique_id.items():
+        if version_hash is not None:
+            base_identity_hashes.setdefault(dbt_graph_node_key(unique_id), version_hash)
+    seed_unique_id: str
+    seed: DbtManifestSeed
+    for seed_unique_id, seed in manifest.seeds_by_unique_id.items():
+        if seed.identity_hash is not None:
+            base_identity_hashes[dbt_graph_node_key(seed_unique_id)] = seed.identity_hash
+    return build_graph_write_identity_hashes(
+        nodes=nodes,
+        execution_order=dbt_graph_identity_execution_order(manifest=manifest),
+        selected_keys=frozenset(dbt_graph_node_key(unique_id) for unique_id in run_unique_ids),
+        base_identity_hashes=base_identity_hashes,
+        compose_identity=compose_dbt_graph_version_hash,
+    )
 
 
 def compose_dbt_graph_version_hash(

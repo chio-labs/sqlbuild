@@ -239,83 +239,95 @@ reuse_hard_copy = "yes"
         expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from omits git_ref",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.reuse_from]
-generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment="must define non-empty string 'git_ref'",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from omits schema macro override",
+        description="raises when legacy dbt reuse_from table is used",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
 [dbt.reuse_from]
 git_ref = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
 """.strip(),
-        expected_error_fragment="must define non-empty string 'generate_schema_name_override'",
+        expected_error_fragment=r"\[dbt.reuse_from\] was renamed to \[dbt.production_ref\]",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from schema macro override is absolute",
+        description="raises when dbt production_ref omits git_ref",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
-[dbt.reuse_from]
+[dbt.production_ref]
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+        expected_error_fragment="must define non-empty string 'git_ref'",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt production_ref omits schema macro override",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+""".strip(),
+        expected_error_fragment="must define non-empty string 'generate_schema_name_override'",
+    ),
+    LoadProjectConfigErrorTestCase(
+        description="raises when dbt production_ref schema macro override is absolute",
+        project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
 git_ref = "prod"
 generate_schema_name_override = "/tmp/prod_generate_schema_name.sql"
 """.strip(),
         expected_error_fragment="must be a relative path under dbt/macros/",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from schema macro override escapes project",
+        description="raises when dbt production_ref schema macro override escapes project",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
-[dbt.reuse_from]
+[dbt.production_ref]
 git_ref = "prod"
 generate_schema_name_override = "dbt/macros/../prod_generate_schema_name.sql"
 """.strip(),
         expected_error_fragment="must be a relative path under dbt/macros/",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from schema macro override is outside dbt macros",
+        description="raises when dbt production_ref schema macro override is outside dbt macros",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
-[dbt.reuse_from]
+[dbt.production_ref]
 git_ref = "prod"
 generate_schema_name_override = "macros/prod_generate_schema_name.sql"
 """.strip(),
         expected_error_fragment="must be under dbt/macros/",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from contains target field",
+        description="raises when dbt production_ref contains target field",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
-[dbt.reuse_from]
+[dbt.production_ref]
 git_ref = "prod"
 target = "prod"
 generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
 """.strip(),
-        expected_error_fragment=r"dbt.reuse_from contains unknown key\(s\): target",
+        expected_error_fragment=r"dbt.production_ref contains unknown key\(s\): target",
     ),
     LoadProjectConfigErrorTestCase(
-        description="raises when dbt reuse_from schema macro override file is missing",
+        description="raises when dbt production_ref schema macro override file is missing",
         project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
-[dbt.reuse_from]
+[dbt.production_ref]
 git_ref = "prod"
 generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
 refresh = false
@@ -843,7 +855,7 @@ country = "US"
 limit = 100
 enabled = true
 
-[dbt.reuse_from]
+[dbt.production_ref]
 git_ref = "prod"
 generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
 refresh = false
@@ -913,12 +925,12 @@ git_timeout_seconds = 12
         expected_dbt_target="prod",
         expected_dbt_target_path="target/dbt",
         expected_dbt_vars={"country": "US", "limit": 100, "enabled": True},
-        expected_dbt_reuse_from_git_ref="prod",
-        expected_dbt_reuse_from_generate_schema_name_override=(
+        expected_dbt_production_ref_git_ref="prod",
+        expected_dbt_production_ref_generate_schema_name_override=(
             "dbt/macros/prod_generate_schema_name.sql"
         ),
-        expected_dbt_reuse_from_refresh=False,
-        expected_dbt_reuse_from_git_timeout_seconds=12,
+        expected_dbt_production_ref_refresh=False,
+        expected_dbt_production_ref_git_timeout_seconds=12,
     ),
 ]
 
@@ -996,15 +1008,15 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.target_path == test_case.expected_dbt_target_path
     assert config.dbt.vars == test_case.expected_dbt_vars
-    assert config.dbt.reuse_from.git_ref == test_case.expected_dbt_reuse_from_git_ref
+    assert config.dbt.production_ref.git_ref == test_case.expected_dbt_production_ref_git_ref
     assert (
-        config.dbt.reuse_from.generate_schema_name_override
-        == test_case.expected_dbt_reuse_from_generate_schema_name_override
+        config.dbt.production_ref.generate_schema_name_override
+        == test_case.expected_dbt_production_ref_generate_schema_name_override
     )
-    assert config.dbt.reuse_from.refresh is test_case.expected_dbt_reuse_from_refresh
+    assert config.dbt.production_ref.refresh is test_case.expected_dbt_production_ref_refresh
     assert (
-        config.dbt.reuse_from.git_timeout_seconds
-        == test_case.expected_dbt_reuse_from_git_timeout_seconds
+        config.dbt.production_ref.git_timeout_seconds
+        == test_case.expected_dbt_production_ref_git_timeout_seconds
     )
 
 

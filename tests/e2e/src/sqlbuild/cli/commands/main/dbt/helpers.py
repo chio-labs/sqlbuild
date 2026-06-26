@@ -107,8 +107,8 @@ def prepare_dbt_diff_workspace(
     workspace_name: str,
     include_unique_key: bool = True,
     include_cursor_meta: bool = True,
-    include_reuse_from: bool = True,
-    reuse_git_ref: str = "prod",
+    include_production_ref: bool = True,
+    production_ref_git_ref: str = "prod",
     include_second_model: bool = False,
     include_view_model: bool = False,
 ) -> Path:
@@ -158,11 +158,11 @@ def prepare_dbt_diff_workspace(
         "      schema: prod\n",
         encoding="utf-8",
     )
-    reuse_block: str = (
-        "\n[dbt.reuse_from]\n"
-        f'git_ref = "{reuse_git_ref}"\n'
+    production_ref_block: str = (
+        "\n[dbt.production_ref]\n"
+        f'git_ref = "{production_ref_git_ref}"\n'
         'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n'
-        if include_reuse_from
+        if include_production_ref
         else ""
     )
     (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
@@ -176,7 +176,7 @@ def prepare_dbt_diff_workspace(
         'project_dir = "../dbt_project"\n'
         'profiles_dir = "../profiles"\n'
         'target_path = "../dbt_project/target"\n'
-        f"{reuse_block}\n"
+        f"{production_ref_block}\n"
         "[targets.dev.connection]\n"
         'source = "dbt_profile"\n'
         'profile = "analytics"\n'

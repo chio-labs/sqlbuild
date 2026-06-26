@@ -211,7 +211,7 @@ def _build_project_toml(
         f'profiles_dir = "{_escape(profiles_dir)}"\n'
         f'target_path = "{_escape(target_path)}"\n'
         f'target = "{_escape(target_name)}"\n\n'
-        "[dbt.reuse_from]\n"
+        "[dbt.production_ref]\n"
         f'git_ref = "{_escape(production_git_ref)}"\n'
         'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n\n'
         + "\n".join(target_lines)
