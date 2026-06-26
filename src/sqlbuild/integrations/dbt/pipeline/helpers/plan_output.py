@@ -246,7 +246,6 @@ def build_dbt_model_plan_output(
             force=force,
             adapter=adapter,
             connection=connection,
-            connection_config=connection_config,
         )
         _report_progress(
             on_progress,

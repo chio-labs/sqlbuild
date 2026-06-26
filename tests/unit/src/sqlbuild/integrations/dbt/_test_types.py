@@ -253,6 +253,15 @@ class DbtModelPlanningRelationPrefetchTestCase:
 
 
 @dataclass(frozen=True)
+class DbtSeedRelationPrefetchTestCase:
+    description: str
+    seed_names: tuple[str, ...]
+    existing_seed_names: tuple[str, ...]
+    expected_changed_seed_names: tuple[str, ...]
+    expected_seed_relation_exists_call_count: int
+
+
+@dataclass(frozen=True)
 class DbtExecutionSelectionStatusTestCase:
     description: str
     expected_total: int
@@ -729,19 +738,3 @@ class DbtSelectionStalenessWarningTestCase:
     expected_warning_count: int
     expected_warning_fragments: tuple[str, ...]
     unexpected_warning_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class ConcurrentStateReadsTestCase:
-    description: str
-    read_names: tuple[str, ...]
-    expected_results: dict[str, str]
-    expected_open_connection_count: int
-
-
-@dataclass(frozen=True)
-class ConcurrentStateReadsErrorTestCase:
-    description: str
-    failing_read_name: str
-    expected_error_message: str
-    expected_open_connection_count: int
