@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
     build_qualified_table_name,
@@ -20,7 +20,7 @@ def read_latest_fingerprints(
     *,
     connection: Any,
     execute: Any,
-    relation_exists: Callable[..., bool],
+    table_exists: bool,
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
@@ -29,21 +29,15 @@ def read_latest_fingerprints(
 ) -> FingerprintSet:
     """Read the latest fingerprint per node identity from adapter-rendered SQL.
 
-    Fingerprint table existence is checked via adapter metadata (`relation_exists`)
-    rather than by swallowing probe-query errors, so operational failures propagate
-    instead of being misread as "no fingerprint state".
+    Callers pass `table_exists` resolved from already-gathered relations so the read
+    issues no existence precheck of its own; operational failures from the read still
+    propagate instead of being misread as "no fingerprint state".
     """
 
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
-    )
-    table_exists: bool = relation_exists(
-        connection,
-        database=database,
-        schema=schema,
-        name=FINGERPRINT_TABLE_NAME,
     )
     if not table_exists:
         if require_table:

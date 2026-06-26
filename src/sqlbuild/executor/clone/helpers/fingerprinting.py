@@ -8,7 +8,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL, NODE_TYPE_SEED
+from sqlbuild.compiler.fingerprints.constants import (
+    FINGERPRINT_TABLE_NAME,
+    NODE_TYPE_MODEL,
+    NODE_TYPE_SEED,
+)
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -93,17 +97,23 @@ def _copy_entry_fingerprints(
     destination_by_name: dict[str, ModelPlanEntry | SeedPlanEntry] = {
         entry.name: entry for entry in destination_entries
     }
+    origin_fingerprint_sets: dict[tuple[str | None, str], FingerprintSet] = (
+        _read_origin_fingerprint_sets(
+            origin_entries=origin_entries,
+            adapter=adapter,
+            connection=origin_connection,
+        )
+    )
     name: str
     for name in sorted(successful_names):
         origin_entry: ModelPlanEntry | SeedPlanEntry | None = origin_by_name.get(name)
         destination_entry: ModelPlanEntry | SeedPlanEntry | None = destination_by_name.get(name)
         if origin_entry is None or destination_entry is None:
             continue
-        fingerprint: Fingerprint | None = _read_origin_fingerprint(
+        fingerprint: Fingerprint | None = _lookup_origin_fingerprint(
             node_type=node_type,
             entry=origin_entry,
-            adapter=adapter,
-            connection=origin_connection,
+            origin_fingerprint_sets=origin_fingerprint_sets,
         )
         if fingerprint is None or destination_entry.destination.schema is None:
             continue
@@ -128,23 +138,52 @@ def _copy_entry_fingerprints(
         )
 
 
-def _read_origin_fingerprint(
+def _read_origin_fingerprint_sets(
+    *,
+    origin_entries: Sequence[ModelPlanEntry | SeedPlanEntry],
+    adapter: BaseAdapter,
+    connection: Any,
+) -> dict[tuple[str | None, str], FingerprintSet]:
+    """Read each distinct origin (database, schema) fingerprint state once."""
+
+    fingerprint_sets: dict[tuple[str | None, str], FingerprintSet] = {}
+    entry: ModelPlanEntry | SeedPlanEntry
+    for entry in origin_entries:
+        schema: str | None = entry.destination.schema
+        if schema is None:
+            continue
+        cache_key: tuple[str | None, str] = (entry.destination.database, schema)
+        if cache_key in fingerprint_sets:
+            continue
+        fingerprint_sets[cache_key] = read_latest_fingerprints(
+            connection=connection,
+            execute=adapter.execute,
+            table_exists=adapter.relation_exists(
+                connection,
+                database=entry.destination.database,
+                schema=schema,
+                name=FINGERPRINT_TABLE_NAME,
+            ),
+            database=entry.destination.database,
+            schema=schema,
+            render_qualified_name=adapter.render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
+        )
+    return fingerprint_sets
+
+
+def _lookup_origin_fingerprint(
     *,
     node_type: str,
     entry: ModelPlanEntry | SeedPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
+    origin_fingerprint_sets: dict[tuple[str | None, str], FingerprintSet],
 ) -> Fingerprint | None:
     schema: str | None = entry.destination.schema
     if schema is None:
         return None
-    fingerprint_set: FingerprintSet = read_latest_fingerprints(
-        connection=connection,
-        execute=adapter.execute,
-        relation_exists=adapter.relation_exists,
-        database=entry.destination.database,
-        schema=schema,
-        render_qualified_name=adapter.render_qualified_name,
-        render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
+    fingerprint_set: FingerprintSet | None = origin_fingerprint_sets.get(
+        (entry.destination.database, schema)
     )
+    if fingerprint_set is None:
+        return None
     return (fingerprint_set.fingerprints_by_identity or {}).get((node_type, entry.name))

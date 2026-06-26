@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 from sqlbuild.spec.models.targets import resolve_target_name
@@ -26,7 +27,12 @@ def read_standard_freshness_state_for_command(
             read_latest_source_freshness(
                 connection=connection,
                 execute=adapter.execute,
-                relation_exists=adapter.relation_exists,
+                table_exists=adapter.relation_exists(
+                    connection,
+                    database=state_database,
+                    schema=state_schema,
+                    name=SOURCE_FRESHNESS_TABLE_NAME,
+                ),
                 database=state_database,
                 schema=state_schema,
                 render_qualified_name=adapter.render_qualified_name,
