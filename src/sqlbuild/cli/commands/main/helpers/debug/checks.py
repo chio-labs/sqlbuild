@@ -35,7 +35,9 @@ _SECRET_CONNECTION_KEYS: frozenset[str] = frozenset(
 )
 
 
-def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugResult:
+def build_debug_result(
+    *, project_dir: Path, check_connection: bool, selected_target: str | None = None
+) -> DebugResult:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     project_config_path: Path = _resolve_existing_path(
         project_dir=project_dir,
@@ -55,6 +57,7 @@ def build_debug_result(*, project_dir: Path, check_connection: bool) -> DebugRes
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
+        selected_target=selected_target,
     )
     runtime: list[DebugLine] = _build_runtime_lines()
     configuration: list[DebugLine] = [

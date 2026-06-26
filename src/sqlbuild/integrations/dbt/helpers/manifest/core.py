@@ -458,11 +458,32 @@ def _remove_config_call(text: str) -> str:
         inner_start: int = start + len(marker)
         call_index: int = _skip_whitespace(text, inner_start)
         if text[call_index:].startswith("config"):
-            close: int = text.find("}}", start)
-            if close == -1:
+            close: int | None = _find_config_expression_close(text, call_index)
+            if close is None:
                 return text
-            return text[:start] + text[close + 2 :]
+            return text[:start] + text[close:]
         index = start + len(marker)
+
+
+def _find_config_expression_close(text: str, config_index: int) -> int | None:
+    """Return the index past the config block's closing braces, skipping nested braces."""
+
+    paren_open: int = text.find("(", config_index)
+    if paren_open == -1:
+        return None
+    depth: int = 0
+    cursor: int = paren_open
+    while cursor < len(text):
+        char: str = text[cursor]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                close: int = text.find("}}", cursor)
+                return close + 2 if close != -1 else None
+        cursor += 1
+    return None
 
 
 def _skip_whitespace(text: str, index: int) -> int:

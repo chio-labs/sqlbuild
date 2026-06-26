@@ -23,14 +23,14 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
 CLONE_ERROR_E2E_TEST_CASES: tuple[DbtCloneE2ETestCase, ...] = (
     DbtCloneE2ETestCase(
-        description="missing reuse_from config explains how to configure clone",
+        description="missing production_ref config explains how to configure clone",
         command=("dbt", "clone", "--select", "dbt_orders"),
         expected_returncode=1,
         expected_stderr_fragments=(
-            "dbt clone requires [dbt.reuse_from] to be configured",
+            "dbt clone requires [dbt.production_ref] to be configured",
             "sqb dbt init",
         ),
-        include_reuse_from=False,
+        include_production_ref=False,
     ),
     DbtCloneE2ETestCase(
         description="empty clone selection explains how to select models",
@@ -60,7 +60,7 @@ CLONE_ERROR_E2E_TEST_CASES: tuple[DbtCloneE2ETestCase, ...] = (
             ),
             expected_stderr_fragments=(
                 "Compiling dbt project...",
-                "Compiling dbt reuse from git ref 'prod'...",
+                "Compiling dbt production ref git ref 'prod'...",
                 "Resolving dbt selection...",
                 "Applying clone plan...",
             ),
@@ -273,7 +273,7 @@ def test_given_invalid_clone_request_when_running_then_renders_clear_error(
     workspace: Path = prepare_dbt_diff_workspace(
         tmp_path=tmp_path,
         workspace_name=test_case.description.replace(" ", "_"),
-        include_reuse_from=test_case.include_reuse_from,
+        include_production_ref=test_case.include_production_ref,
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

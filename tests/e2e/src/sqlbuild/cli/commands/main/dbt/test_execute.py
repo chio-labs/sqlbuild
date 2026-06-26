@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtCloneE2ETestCase,
     DbtExecutionCliTestCase,
     DbtExecutionFailureCliTestCase,
     DbtExecutionQueryAssertion,
@@ -17,8 +18,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     break_dbt_interop_fact_orders_model,
     load_json_stdout,
+    prepare_dbt_diff_workspace,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
+    write_dbt_diff_orders_model,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
     execute_duckdb,
@@ -571,3 +574,75 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
     relation_name: str
     for relation_name in test_case.expected_absent_relations:
         assert not table_exists(db_path=db_path, table_name=relation_name), relation_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtCloneE2ETestCase(
+            description="dbt build defer-clones dbt boundary before sqlbuild downstream build",
+            command=(
+                "--no-color",
+                "dbt",
+                "build",
+                "--select",
+                "downstream_orders",
+                "--defer-clone-from",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "Compiling dbt production ref git ref 'prod'",
+                "Cloning deferred dbt boundary relations",
+                "Skipping dbt: no dbt work selected.",
+                "SQLBuild execution",
+                "downstream_orders",
+                "Completed successfully.",
+            ),
+            expected_rows=((1, 900), (2, 900)),
+            rows_sql=(
+                "SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id"
+            ),
+        )
+    ],
+    ids=["dbt build defer-clones dbt boundary before sqlbuild downstream build"],
+)
+def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clones_dbt_boundary(
+    tmp_path: Path,
+    test_case: DbtCloneE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    workspace: Path = prepare_dbt_diff_workspace(
+        tmp_path=tmp_path,
+        workspace_name="dbt_defer_clone_workspace",
+    )
+    sqlbuild_model_dir: Path = workspace / "sqlbuild_project" / "models"
+    sqlbuild_model_dir.mkdir(exist_ok=True)
+    sqlbuild_model_dir.joinpath("downstream_orders.sql").write_text(
+        "MODEL (materialized table);\n\n"
+        "SELECT order_id, amount_cents AS downstream_amount "
+        'FROM __dbt_ref("analytics", "dbt_orders")\n',
+        encoding="utf-8",
+    )
+    write_dbt_diff_orders_model(
+        workspace=workspace,
+        amount_cents=111,
+        order_ids=(1, 3),
+        include_unique_key=True,
+        include_cursor_meta=True,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=workspace / "sqlbuild_project",
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr
+    assert (
+        tuple(query_duckdb(db_path=workspace / "warehouse.duckdb", sql=test_case.rows_sql))
+        == test_case.expected_rows
+    )

@@ -1,4 +1,4 @@
-"""dbt reuse_from compile helpers."""
+"""dbt production ref compile helpers."""
 
 from __future__ import annotations
 
@@ -23,82 +23,82 @@ from sqlbuild.integrations.dbt.helpers.manifest.core import (
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
-    DbtReuseFromCompileResult,
+    DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
-from sqlbuild.spec.models.project import DbtReuseFromConfig
+from sqlbuild.spec.models.project import DbtProductionRefConfig
 
-_REUSE_MANIFEST_CACHE_VERSION: int = 2
+_PRODUCTION_REF_MANIFEST_CACHE_VERSION: int = 2
 
 
-def compile_reuse_from_manifest(
+def compile_production_ref_manifest(
     *,
     sqlbuild_project_dir: Path,
     dbt_options: DbtCliOptions,
-    reuse_from: DbtReuseFromConfig,
+    production_ref: DbtProductionRefConfig,
     runner: DbtRunner,
-) -> DbtReuseFromCompileResult:
-    """Compile the dbt project from the configured reuse git ref in isolation."""
+) -> DbtProductionRefCompileResult:
+    """Compile the dbt project from the configured production git ref in isolation."""
 
-    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
-        raise DbtInteropConfigError("dbt reuse_from is not configured")
+    if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
+        raise DbtInteropConfigError("dbt production_ref is not configured")
     if dbt_options.project_dir is None:
         raise DbtInteropConfigError("dbt project directory is not configured")
 
-    macro_source: Path = sqlbuild_project_dir / reuse_from.generate_schema_name_override
+    macro_source: Path = sqlbuild_project_dir / production_ref.generate_schema_name_override
     if not macro_source.is_file():
         raise DbtInteropConfigError(
-            "dbt reuse_from generate_schema_name_override was not found",
+            "dbt production_ref generate_schema_name_override was not found",
             help=f"Expected macro override at {macro_source}.",
         )
 
     git_root: Path = _git_root(path=sqlbuild_project_dir)
-    _raise_if_current_branch(git_root=git_root, git_ref=reuse_from.git_ref)
+    _raise_if_current_branch(git_root=git_root, git_ref=production_ref.git_ref)
     dbt_relative_dir: Path = _relative_to_git_root(
         path=dbt_options.project_dir,
         git_root=git_root,
         label="dbt project directory",
     )
 
-    with tempfile.TemporaryDirectory(prefix="sqlbuild-dbt-reuse-") as raw_temp_dir:
+    with tempfile.TemporaryDirectory(prefix="sqlbuild-dbt-production-ref-") as raw_temp_dir:
         temp_dir: Path = Path(raw_temp_dir)
         checkout_dir: Path = temp_dir / "checkout"
         checkout_dir.mkdir()
         archive_ref: str = _refresh_git_ref_for_archive(
             git_root=git_root,
-            git_ref=reuse_from.git_ref,
-            refresh=reuse_from.refresh,
-            timeout_seconds=reuse_from.git_timeout_seconds,
+            git_ref=production_ref.git_ref,
+            refresh=production_ref.refresh,
+            timeout_seconds=production_ref.git_timeout_seconds,
         )
         _raise_if_missing_git_ref(
             git_root=git_root,
             git_ref=archive_ref,
-            configured_ref=reuse_from.git_ref,
+            configured_ref=production_ref.git_ref,
             project_file=sqlbuild_project_dir / "sqlbuild_project.toml",
-            timeout_seconds=reuse_from.git_timeout_seconds,
+            timeout_seconds=production_ref.git_timeout_seconds,
         )
         commit_sha: str = _git_commit_sha(
             git_root=git_root,
             git_ref=archive_ref,
-            timeout_seconds=reuse_from.git_timeout_seconds,
+            timeout_seconds=production_ref.git_timeout_seconds,
         )
-        cache_key: str = _reuse_manifest_cache_key(
+        cache_key: str = _production_ref_manifest_cache_key(
             commit_sha=commit_sha,
             dbt_relative_dir=dbt_relative_dir,
             macro_source=macro_source,
             dbt_options=dbt_options,
             dbt_executable=runner.dbt_executable,
         )
-        cached_manifest_contents: str | None = _read_reuse_manifest_cache(
+        cached_manifest_contents: str | None = _read_production_ref_manifest_cache(
             sqlbuild_project_dir=sqlbuild_project_dir,
             cache_key=cache_key,
         )
         if cached_manifest_contents is not None:
-            return DbtReuseFromCompileResult(
-                git_ref=reuse_from.git_ref,
+            return DbtProductionRefCompileResult(
+                git_ref=production_ref.git_ref,
                 manifest_contents=cached_manifest_contents,
                 command=DbtCommandResult(
-                    argv=("sqlbuild", "cache", "dbt-reuse-manifest"),
+                    argv=("sqlbuild", "cache", "dbt-production-ref-manifest"),
                     returncode=0,
                 ),
                 cache_hit=True,
@@ -107,13 +107,13 @@ def compile_reuse_from_manifest(
             git_root=git_root,
             git_ref=archive_ref,
             destination=checkout_dir,
-            timeout_seconds=reuse_from.git_timeout_seconds,
+            timeout_seconds=production_ref.git_timeout_seconds,
         )
 
         temp_dbt_project_dir: Path = checkout_dir / dbt_relative_dir
         _inject_generate_schema_name_override(
             macro_source=macro_source,
-            override_relative_path=Path(reuse_from.generate_schema_name_override),
+            override_relative_path=Path(production_ref.generate_schema_name_override),
             temp_dbt_project_dir=temp_dbt_project_dir,
         )
 
@@ -131,31 +131,31 @@ def compile_reuse_from_manifest(
             deps_command: DbtCommandResult = runner.deps(options=compile_options)
             if deps_command.returncode != 0:
                 raise DbtInteropRuntimeError(
-                    "dbt reuse_from deps failed",
+                    "dbt production_ref deps failed",
                     help=deps_command.stderr or deps_command.stdout or None,
                 )
         command: DbtCommandResult = runner.compile(options=compile_options)
         if command.returncode != 0:
             raise DbtInteropRuntimeError(
-                "dbt reuse_from compile failed",
+                "dbt production_ref compile failed",
                 help=command.stderr or command.stdout or None,
             )
         manifest_path: Path = target_path / "manifest.json"
         if not manifest_path.is_file():
             raise DbtInteropRuntimeError(
-                "dbt reuse_from compile did not produce manifest.json",
+                "dbt production_ref compile did not produce manifest.json",
                 help=f"Expected manifest at {manifest_path}.",
             )
         manifest_contents: str = _manifest_contents_with_seed_content_hashes(
             manifest_path=manifest_path
         )
-        _write_reuse_manifest_cache(
+        _write_production_ref_manifest_cache(
             sqlbuild_project_dir=sqlbuild_project_dir,
             cache_key=cache_key,
             manifest_contents=manifest_contents,
         )
-        return DbtReuseFromCompileResult(
-            git_ref=reuse_from.git_ref,
+        return DbtProductionRefCompileResult(
+            git_ref=production_ref.git_ref,
             manifest_contents=manifest_contents,
             command=command,
         )
@@ -173,7 +173,7 @@ def _git_root(*, path: Path) -> Path:
     )
     if result.returncode != 0:
         raise DbtReuseUnavailableError(
-            "dbt reuse_from requires the SQLBuild project to be in a git repository",
+            "dbt production_ref requires the SQLBuild project to be in a git repository",
             reason=DbtReuseUnavailableReason.NO_GIT_REPOSITORY,
             help=result.stderr or result.stdout or None,
         )
@@ -196,14 +196,14 @@ def _git_commit_sha(*, git_root: Path, git_ref: str, timeout_seconds: int) -> st
     )
     if result.returncode != 0:
         raise DbtReuseUnavailableError(
-            f"dbt reuse_from git_ref '{git_ref}' could not be resolved to a commit",
+            f"dbt production_ref git_ref '{git_ref}' could not be resolved to a commit",
             reason=DbtReuseUnavailableReason.GIT_REF_MISSING,
             help=result.stderr or result.stdout or None,
         )
     return result.stdout.strip()
 
 
-def _reuse_manifest_cache_key(
+def _production_ref_manifest_cache_key(
     *,
     commit_sha: str,
     dbt_relative_dir: Path,
@@ -212,7 +212,7 @@ def _reuse_manifest_cache_key(
     dbt_executable: str,
 ) -> str:
     payload: dict[str, object] = {
-        "version": _REUSE_MANIFEST_CACHE_VERSION,
+        "version": _PRODUCTION_REF_MANIFEST_CACHE_VERSION,
         "commit_sha": commit_sha,
         "dbt_executable": dbt_executable,
         "dbt_relative_dir": dbt_relative_dir.as_posix(),
@@ -227,14 +227,21 @@ def _reuse_manifest_cache_key(
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
-def _reuse_manifest_cache_file(*, sqlbuild_project_dir: Path, cache_key: str) -> Path:
+def _production_ref_manifest_cache_file(*, sqlbuild_project_dir: Path, cache_key: str) -> Path:
     return (
-        sqlbuild_project_dir / "target" / "sqlbuild" / "cache" / "dbt_reuse" / f"{cache_key}.json"
+        sqlbuild_project_dir
+        / "target"
+        / "sqlbuild"
+        / "cache"
+        / "dbt_production_ref"
+        / f"{cache_key}.json"
     )
 
 
-def _read_reuse_manifest_cache(*, sqlbuild_project_dir: Path, cache_key: str) -> str | None:
-    cache_file: Path = _reuse_manifest_cache_file(
+def _read_production_ref_manifest_cache(
+    *, sqlbuild_project_dir: Path, cache_key: str
+) -> str | None:
+    cache_file: Path = _production_ref_manifest_cache_file(
         sqlbuild_project_dir=sqlbuild_project_dir,
         cache_key=cache_key,
     )
@@ -246,22 +253,22 @@ def _read_reuse_manifest_cache(*, sqlbuild_project_dir: Path, cache_key: str) ->
         return None
     if not isinstance(payload, dict):
         return None
-    if payload.get("version") != _REUSE_MANIFEST_CACHE_VERSION:
+    if payload.get("version") != _PRODUCTION_REF_MANIFEST_CACHE_VERSION:
         return None
     manifest_contents: object | None = payload.get("manifest_contents")
     return manifest_contents if isinstance(manifest_contents, str) else None
 
 
-def _write_reuse_manifest_cache(
+def _write_production_ref_manifest_cache(
     *, sqlbuild_project_dir: Path, cache_key: str, manifest_contents: str
 ) -> None:
-    cache_file: Path = _reuse_manifest_cache_file(
+    cache_file: Path = _production_ref_manifest_cache_file(
         sqlbuild_project_dir=sqlbuild_project_dir,
         cache_key=cache_key,
     )
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, object] = {
-        "version": _REUSE_MANIFEST_CACHE_VERSION,
+        "version": _PRODUCTION_REF_MANIFEST_CACHE_VERSION,
         "manifest_contents": manifest_contents,
     }
     cache_file.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
@@ -273,7 +280,7 @@ def _relative_to_git_root(*, path: Path, git_root: Path, label: str) -> Path:
         return resolved_path.relative_to(git_root)
     except ValueError as error:
         raise DbtReuseUnavailableError(
-            f"dbt reuse_from requires the {label} to be inside the git repository",
+            f"dbt production_ref requires the {label} to be inside the git repository",
             reason=DbtReuseUnavailableReason.PROJECT_OUTSIDE_GIT_ROOT,
             help=f"{resolved_path} is not under {git_root}.",
         ) from error
@@ -288,7 +295,7 @@ def _raise_if_current_branch(*, git_root: Path, git_ref: str) -> None:
     current_branch: str = result.stdout.strip()
     if current_branch and current_branch == git_ref:
         raise DbtReuseUnavailableError(
-            "dbt reuse_from git_ref must not be the current branch",
+            "dbt production_ref git_ref must not be the current branch",
             reason=DbtReuseUnavailableReason.GIT_REF_IS_CURRENT_BRANCH,
             help=(
                 "Choose a production-shaped branch or tag that differs from the active "
@@ -320,7 +327,7 @@ def _refresh_git_ref_for_archive(
     )
     if result.returncode != 0:
         raise DbtReuseUnavailableError(
-            "dbt reuse_from git_ref could not be refreshed from its remote",
+            "dbt production_ref git_ref could not be refreshed from its remote",
             reason=DbtReuseUnavailableReason.REMOTE_REFRESH_FAILED,
             help=result.stderr or result.stdout or None,
         )
@@ -353,12 +360,12 @@ def _raise_if_missing_git_ref(
             " Available local branches/tags include: " + ", ".join(available_refs) + "."
         )
     raise DbtReuseUnavailableError(
-        f"dbt reuse_from git_ref '{configured_ref}' does not exist in this repository",
+        f"dbt production_ref git_ref '{configured_ref}' does not exist in this repository",
         reason=DbtReuseUnavailableReason.GIT_REF_MISSING,
         help=(
             f"SQLBuild tried to archive git ref '{configured_ref}' from {git_root}. "
             "Choose the branch or tag that represents production, then update "
-            f"{project_file} [dbt.reuse_from].git_ref." + available_detail
+            f"{project_file} [dbt.production_ref].git_ref." + available_detail
         ),
     )
 
@@ -411,7 +418,7 @@ def _extract_git_ref(
         stderr: str = result.stderr.decode(errors="replace")
         stdout: str = result.stdout.decode(errors="replace")
         raise DbtInteropConfigError(
-            "dbt reuse_from git_ref could not be archived",
+            "dbt production_ref git_ref could not be archived",
             help=stderr or stdout or None,
         )
     with tarfile.open(fileobj=io.BytesIO(result.stdout), mode="r|") as archive:
@@ -429,16 +436,16 @@ def _run_git_text(*args: str, timeout_seconds: int = 30) -> subprocess.Completed
         )
     except subprocess.TimeoutExpired as error:
         raise DbtReuseUnavailableError(
-            f"dbt reuse_from git command timed out after {timeout_seconds}s",
+            f"dbt production_ref git command timed out after {timeout_seconds}s",
             reason=DbtReuseUnavailableReason.REMOTE_REFRESH_FAILED,
             help=(
-                "Check network/SSH access or set [dbt.reuse_from].refresh = false "
+                "Check network/SSH access or set [dbt.production_ref].refresh = false "
                 "to use the local ref."
             ),
         ) from error
     except FileNotFoundError as error:
         raise DbtInteropConfigError(
-            "dbt reuse_from requires git to be installed and available on PATH",
+            "dbt production_ref requires git to be installed and available on PATH",
             help=str(error),
         ) from error
 
@@ -453,16 +460,16 @@ def _run_git_bytes(*args: str, timeout_seconds: int = 30) -> subprocess.Complete
         )
     except subprocess.TimeoutExpired as error:
         raise DbtReuseUnavailableError(
-            f"dbt reuse_from git command timed out after {timeout_seconds}s",
+            f"dbt production_ref git command timed out after {timeout_seconds}s",
             reason=DbtReuseUnavailableReason.REMOTE_REFRESH_FAILED,
             help=(
-                "Check network/SSH access or set [dbt.reuse_from].refresh = false "
+                "Check network/SSH access or set [dbt.production_ref].refresh = false "
                 "to use the local ref."
             ),
         ) from error
     except FileNotFoundError as error:
         raise DbtInteropConfigError(
-            "dbt reuse_from requires git to be installed and available on PATH",
+            "dbt production_ref requires git to be installed and available on PATH",
             help=str(error),
         ) from error
 

@@ -26,7 +26,7 @@ from sqlbuild.integrations.dbt.types import (
 )
 from sqlbuild.spec.models.project import (
     DbtConfig,
-    DbtReuseFromConfig,
+    DbtProductionRefConfig,
     LocalConfig,
     ProjectConfig,
     SettingsConfig,
@@ -114,7 +114,7 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
             settings=SettingsConfig(query_change_tracking=False),
             dbt=DbtConfig(
                 project_dir="../dbt_project",
-                reuse_from=DbtReuseFromConfig(
+                production_ref=DbtProductionRefConfig(
                     git_ref="main",
                     generate_schema_name_override="dbt/macros/prod_generate_schema_name.sql",
                 ),
@@ -235,7 +235,7 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
             settings=SettingsConfig(query_change_tracking=False),
             dbt=DbtConfig(
                 project_dir="../dbt_project",
-                reuse_from=DbtReuseFromConfig(
+                production_ref=DbtProductionRefConfig(
                     git_ref="main",
                     generate_schema_name_override="dbt/macros/prod_generate_schema_name.sql",
                 ),

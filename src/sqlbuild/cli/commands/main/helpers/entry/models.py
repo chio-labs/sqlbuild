@@ -29,7 +29,9 @@ class CliNamespace:
     skip_dbt_debug: bool = False
     no_sql_validation: bool = False
     defer_to: str | None = None
+    defer_clone_from: str | None = None
     defer_sources_to: str | None = None
+    target: str | None = None
     target_range: str | None = None
     from_target: str | None = None
     to_target: str | None = None
@@ -133,6 +135,7 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             str | None,
+            str | None,
             bool,
             bool,
             str | None,
@@ -151,6 +154,7 @@ class CliEntrypointHandlers:
         [
             Path | None,
             bool,
+            str | None,
             str | None,
             str | None,
             CursorOverrides | None,
@@ -199,6 +203,8 @@ class CliEntrypointHandlers:
             bool,
             str | None,
             str | None,
+            str | None,
+            str | None,
             CursorOverrides | None,
             bool,
             bool,
@@ -229,6 +235,7 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             bool,
+            str | None,
             tuple[str, ...],
             tuple[str, ...],
             dict[str, object],
@@ -246,6 +253,7 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             bool,
+            str | None,
             tuple[str, ...],
             tuple[str, ...],
             dict[str, object],
@@ -259,6 +267,7 @@ class CliEntrypointHandlers:
             Path | None,
             bool,
             bool,
+            str | None,
             tuple[str, ...],
             tuple[str, ...],
             dict[str, object],
@@ -273,6 +282,7 @@ class CliEntrypointHandlers:
             bool,
             str | None,
             bool,
+            str | None,
             tuple[str, ...],
             tuple[str, ...],
             dict[str, object],
@@ -285,6 +295,7 @@ class CliEntrypointHandlers:
         [
             Path | None,
             bool,
+            str | None,
             tuple[str, ...],
             tuple[str, ...],
             int | None,
@@ -298,6 +309,7 @@ class CliEntrypointHandlers:
         [
             Path | None,
             bool,
+            str | None,
             tuple[str, ...],
             tuple[str, ...],
             bool,
@@ -392,8 +404,8 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
-    run_query: Callable[[Path | None, str | None, str, int | None], int]
-    run_debug: Callable[[Path | None, bool, bool, bool], int]
+    run_query: Callable[[Path | None, str | None, str | None, str, int | None], int]
+    run_debug: Callable[[Path | None, bool, bool, str | None, bool], int]
     run_lineage: Callable[
         [
             Path | None,

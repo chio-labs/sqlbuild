@@ -25,7 +25,7 @@ from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
 )
-from sqlbuild.integrations.dbt.helpers.reuse.reuse_from import compile_reuse_from_manifest
+from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -34,7 +34,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtDiffRun,
     DbtLsNode,
     DbtLsResult,
-    DbtReuseFromCompileResult,
+    DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
     execute_dbt_diff,
@@ -43,7 +43,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
-from sqlbuild.spec.models.project import DbtReuseFromConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import DbtProductionRefConfig, resolve_effective_adapter_name
 
 
 def run_dbt_diff_from_project(
@@ -57,13 +57,13 @@ def run_dbt_diff_from_project(
     options: DbtDiffOptions = parse_dbt_diff_options(args)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
-    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
-    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
+    production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
+    if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
         raise DbtInteropConfigError(
-            "dbt diff requires [dbt.reuse_from] to be configured",
+            "dbt diff requires [dbt.production_ref] to be configured",
             code="C346",
             help=(
-                "Run sqb dbt init or set [dbt.reuse_from].git_ref and "
+                "Run sqb dbt init or set [dbt.production_ref].git_ref and "
                 "generate_schema_name_override in sqlbuild_project.toml."
             ),
         )
@@ -89,21 +89,23 @@ def run_dbt_diff_from_project(
         manifest_path=resolve_dbt_manifest_path(options=dbt_options)
     )
     _report_progress(on_progress, "Loaded dbt manifest.")
-    _report_progress(on_progress, f"Compiling dbt reuse from git ref '{reuse_from.git_ref}'...")
-    reuse_start: float = time.monotonic()
-    reuse_compile: DbtReuseFromCompileResult = compile_reuse_from_manifest(
+    _report_progress(
+        on_progress, f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
+    )
+    production_ref_start: float = time.monotonic()
+    production_ref_compile: DbtProductionRefCompileResult = compile_production_ref_manifest(
         sqlbuild_project_dir=project_dir,
         dbt_options=dbt_options,
-        reuse_from=reuse_from,
+        production_ref=production_ref,
         runner=runner,
     )
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=json.loads(reuse_compile.manifest_contents)
+        raw_data=json.loads(production_ref_compile.manifest_contents)
     )
     _report_progress(
         on_progress,
-        f"Compiled dbt reuse from git ref '{reuse_from.git_ref}'. "
-        f"({time.monotonic() - reuse_start:.2f}s)",
+        f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
+        f"({time.monotonic() - production_ref_start:.2f}s)",
     )
     _report_progress(on_progress, "Resolving dbt selection...")
     selection_start: float = time.monotonic()
@@ -156,7 +158,7 @@ def run_dbt_diff_from_project(
         adapter.close(connection)
     return DbtDiffRun(
         result=result,
-        from_label=reuse_from.git_ref,
+        from_label=production_ref.git_ref,
         to_label="current",
         mode_label=mode_label(options),
         verbose=options.verbose,

@@ -300,7 +300,7 @@ def test_given_snowflake_dbt_clone_when_running_then_copies_prod_table(
                 + 'project_dir = "../dbt_project"\n'
                 + 'profiles_dir = "../profiles"\n'
                 + 'target_path = "../dbt_project/target"\n'
-                + "[dbt.reuse_from]\n"
+                + "[dbt.production_ref]\n"
                 + 'git_ref = "prod"\n'
                 + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
             ),

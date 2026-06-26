@@ -19,13 +19,14 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
-from sqlbuild.compiler.planner.main.graph_write_identity import build_graph_write_identity_hashes
 from sqlbuild.compiler.planner.models import (
-    GraphIdentityNode,
     GraphNodeKey,
     PlanOutput,
 )
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.exceptions import (
+    DbtInteropArgumentError,
+    DbtInteropRuntimeError,
+)
 from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
 from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
@@ -35,9 +36,7 @@ from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileRe
 from sqlbuild.integrations.dbt.helpers.manifest.core import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
-    build_dbt_graph_identity_nodes,
-    compose_dbt_graph_version_hash,
-    dbt_graph_identity_execution_order,
+    build_dbt_write_identity_hashes,
     dbt_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
@@ -64,6 +63,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropRoutedArgs,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
+    resolve_defer_clone_unique_ids,
+    run_dbt_defer_clone_prephase,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_manifest_seed_warnings,
@@ -279,30 +282,14 @@ def execute_dbt_interop_from_project(
         for entry in (plan.dbt_model_plan.entries if plan.dbt_model_plan is not None else ())
         if entry.previous_version_hash is not None
     }
-    dbt_graph_nodes: dict[GraphNodeKey, GraphIdentityNode] = build_dbt_graph_identity_nodes(
+    dbt_write_identity_hashes: dict[GraphNodeKey, str] = build_dbt_write_identity_hashes(
         manifest=manifest,
         graph=graph,
-    )
-    dbt_base_identity_hashes: dict[GraphNodeKey, str] = {
-        dbt_graph_node_key(unique_id): version_hash
-        for unique_id, version_hash in previous_dbt_version_hash_by_unique_id.items()
-    }
-    for unique_id, version_hash in expected_dbt_version_hash_by_unique_id.items():
-        if version_hash is not None:
-            dbt_base_identity_hashes.setdefault(dbt_graph_node_key(unique_id), version_hash)
-    for unique_id, seed_hash in dbt_seed_identity_by_unique_id.items():
-        dbt_base_identity_hashes[dbt_graph_node_key(unique_id)] = seed_hash
-    dbt_write_identity_hashes: dict[GraphNodeKey, str] = build_graph_write_identity_hashes(
-        nodes=dbt_graph_nodes,
-        execution_order=dbt_graph_identity_execution_order(manifest=manifest),
-        selected_keys=frozenset(
-            dbt_graph_node_key(unique_id)
-            for unique_id in (
-                plan.dbt_model_plan.run_unique_ids if plan.dbt_model_plan is not None else ()
-            )
+        run_unique_ids=frozenset(
+            plan.dbt_model_plan.run_unique_ids if plan.dbt_model_plan is not None else ()
         ),
-        base_identity_hashes=dbt_base_identity_hashes,
-        compose_identity=compose_dbt_graph_version_hash,
+        expected_version_hash_by_unique_id=expected_dbt_version_hash_by_unique_id,
+        previous_version_hash_by_unique_id=previous_dbt_version_hash_by_unique_id,
     )
     plan = replace(
         plan,
@@ -319,12 +306,35 @@ def execute_dbt_interop_from_project(
             plan=plan,
         ),
     )
+    defer_clone_unique_ids: frozenset[str] = (
+        resolve_defer_clone_unique_ids(
+            graph=graph,
+            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+        )
+        if routed.defer_clone_from
+        else frozenset()
+    )
+    if routed.defer_clone_from:
+        run_dbt_defer_clone_prephase(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            dbt_options=dbt_options,
+            runner=runner,
+            adapter=adapter,
+            project=project,
+            connection_config=connection_config,
+            current_manifest=manifest,
+            unique_ids=tuple(sorted(defer_clone_unique_ids)),
+            on_progress=on_progress,
+        )
     merged_dbt_argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
         command=command,
         options=dbt_options,
         routed_args=routed.dbt_args,
         plan=plan,
         replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
+        defer_clone_unique_ids=defer_clone_unique_ids,
     )
     missing_dbt_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]] = {}
     if merged_dbt_argv is None and plan.sqlbuild_skip_reason is None:

@@ -79,6 +79,7 @@ def run_virtual_plan_pipeline(
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
+    selected_target: str | None = None,
     no_sql_validation: bool = False,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
@@ -119,6 +120,7 @@ def run_virtual_plan_pipeline(
         graph: ProjectGraph = build_project_graph(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
+            selected_target=selected_target,
             no_sql_validation=no_sql_validation,
             cli_vars=cli_vars,
             external_sql_reference_resolver=external_sql_reference_resolver,
@@ -141,6 +143,7 @@ def run_virtual_plan_pipeline(
             adapter=adapter,
             source_connection=connection,
             graph=graph,
+            selected_target=selected_target,
             virtual_environment_name=virtual_environment_name,
         )
         expected_local_hashes: dict[str, str] = build_expected_local_hashes(
@@ -348,6 +351,7 @@ def _read_bound_state(
     adapter: BaseAdapter,
     source_connection: Any,
     graph: ProjectGraph,
+    selected_target: str | None,
     virtual_environment_name: str | None,
 ) -> tuple[
     dict[str, str],
@@ -371,7 +375,7 @@ def _read_bound_state(
         physical_target_name: str | None = resolve_target_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
-            selected_target=None,
+            selected_target=selected_target,
         )
         target_name: str | None = _resolve_virtual_environment_name(
             physical_target_name=physical_target_name,

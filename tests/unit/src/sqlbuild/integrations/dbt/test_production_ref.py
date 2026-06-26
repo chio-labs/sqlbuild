@@ -9,14 +9,14 @@ import pytest
 from sqlbuild.integrations.dbt.exceptions import DbtReuseUnavailableError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.reuse import reuse_from as reuse_from_module
+from sqlbuild.integrations.dbt.helpers.reuse import production_ref as production_ref_module
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
-    DbtReuseFromCompileResult,
+    DbtProductionRefCompileResult,
 )
-from sqlbuild.spec.models.project import DbtReuseFromConfig
+from sqlbuild.spec.models.project import DbtProductionRefConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtReuseCompileDepsTestCase,
     DbtReuseGitRefreshTestCase,
@@ -43,10 +43,10 @@ def test_given_git_command_timeout_when_running_git_text_then_raises_reuse_unava
     def run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(cmd=("git", "fetch"), timeout=test_case.timeout_seconds)
 
-    monkeypatch.setattr(reuse_from_module.subprocess, "run", run)
+    monkeypatch.setattr(production_ref_module.subprocess, "run", run)
 
     with pytest.raises(DbtReuseUnavailableError, match=test_case.expected_error_fragment):
-        reuse_from_module._run_git_text("fetch", timeout_seconds=test_case.timeout_seconds)
+        production_ref_module._run_git_text("fetch", timeout_seconds=test_case.timeout_seconds)
 
 
 @pytest.mark.parametrize(
@@ -72,9 +72,9 @@ def test_given_refresh_disabled_when_refreshing_git_ref_then_skips_fetch(
         run_calls.append(args)
         return subprocess.CompletedProcess(args=("git",), returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(reuse_from_module.subprocess, "run", run)
+    monkeypatch.setattr(production_ref_module.subprocess, "run", run)
 
-    archive_ref: str = reuse_from_module._refresh_git_ref_for_archive(
+    archive_ref: str = production_ref_module._refresh_git_ref_for_archive(
         git_root=Path("/repo"),
         git_ref=test_case.git_ref,
         refresh=test_case.refresh,
@@ -130,22 +130,22 @@ def test_given_reuse_checkout_with_packages_when_compiling_then_runs_deps_before
         command_names.append(argv[1])
         return DbtCommandResult(argv=argv, returncode=0)
 
-    monkeypatch.setattr(reuse_from_module, "_git_root", lambda *, path: tmp_path / "repo")
-    monkeypatch.setattr(reuse_from_module, "_raise_if_current_branch", lambda **kwargs: None)
+    monkeypatch.setattr(production_ref_module, "_git_root", lambda *, path: tmp_path / "repo")
+    monkeypatch.setattr(production_ref_module, "_raise_if_current_branch", lambda **kwargs: None)
     monkeypatch.setattr(
-        reuse_from_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
+        production_ref_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
     )
     monkeypatch.setattr(
-        reuse_from_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
+        production_ref_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
     )
-    monkeypatch.setattr(reuse_from_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
-    monkeypatch.setattr(reuse_from_module, "_git_commit_sha", lambda **kwargs: "abc123")
-    monkeypatch.setattr(reuse_from_module, "_extract_git_ref", extract_git_ref)
+    monkeypatch.setattr(production_ref_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
+    monkeypatch.setattr(production_ref_module, "_git_commit_sha", lambda **kwargs: "abc123")
+    monkeypatch.setattr(production_ref_module, "_extract_git_ref", extract_git_ref)
 
-    result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
+    result: DbtProductionRefCompileResult = production_ref_module.compile_production_ref_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(project_dir=dbt_project_dir),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref="master",
             generate_schema_name_override="dbt/macros/generate_schema_name.sql",
         ),
@@ -213,22 +213,22 @@ def test_given_reuse_manifest_with_seed_when_indexing_after_compile_then_has_no_
         command_names.append(argv[1])
         return DbtCommandResult(argv=argv, returncode=0)
 
-    monkeypatch.setattr(reuse_from_module, "_git_root", lambda *, path: tmp_path / "repo")
-    monkeypatch.setattr(reuse_from_module, "_raise_if_current_branch", lambda **kwargs: None)
+    monkeypatch.setattr(production_ref_module, "_git_root", lambda *, path: tmp_path / "repo")
+    monkeypatch.setattr(production_ref_module, "_raise_if_current_branch", lambda **kwargs: None)
     monkeypatch.setattr(
-        reuse_from_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
+        production_ref_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
     )
     monkeypatch.setattr(
-        reuse_from_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
+        production_ref_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
     )
-    monkeypatch.setattr(reuse_from_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
-    monkeypatch.setattr(reuse_from_module, "_git_commit_sha", lambda **kwargs: "abc123")
-    monkeypatch.setattr(reuse_from_module, "_extract_git_ref", extract_git_ref)
+    monkeypatch.setattr(production_ref_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
+    monkeypatch.setattr(production_ref_module, "_git_commit_sha", lambda **kwargs: "abc123")
+    monkeypatch.setattr(production_ref_module, "_extract_git_ref", extract_git_ref)
 
-    result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
+    result: DbtProductionRefCompileResult = production_ref_module.compile_production_ref_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(project_dir=dbt_project_dir),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref="master",
             generate_schema_name_override="dbt/macros/generate_schema_name.sql",
         ),
@@ -290,41 +290,45 @@ def test_given_cached_reuse_manifest_when_compiling_same_inputs_then_skips_deps_
         command_names.append(argv[1])
         return DbtCommandResult(argv=argv, returncode=0)
 
-    monkeypatch.setattr(reuse_from_module, "_git_root", lambda *, path: tmp_path / "repo")
-    monkeypatch.setattr(reuse_from_module, "_raise_if_current_branch", lambda **kwargs: None)
+    monkeypatch.setattr(production_ref_module, "_git_root", lambda *, path: tmp_path / "repo")
+    monkeypatch.setattr(production_ref_module, "_raise_if_current_branch", lambda **kwargs: None)
     monkeypatch.setattr(
-        reuse_from_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
+        production_ref_module, "_relative_to_git_root", lambda **kwargs: Path("dbt_project")
     )
     monkeypatch.setattr(
-        reuse_from_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
+        production_ref_module, "_refresh_git_ref_for_archive", lambda **kwargs: "master"
     )
-    monkeypatch.setattr(reuse_from_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
-    monkeypatch.setattr(reuse_from_module, "_git_commit_sha", lambda **kwargs: "abc123")
-    monkeypatch.setattr(reuse_from_module, "_extract_git_ref", extract_git_ref)
-    reuse_from: DbtReuseFromConfig = DbtReuseFromConfig(
+    monkeypatch.setattr(production_ref_module, "_raise_if_missing_git_ref", lambda **kwargs: None)
+    monkeypatch.setattr(production_ref_module, "_git_commit_sha", lambda **kwargs: "abc123")
+    monkeypatch.setattr(production_ref_module, "_extract_git_ref", extract_git_ref)
+    production_ref: DbtProductionRefConfig = DbtProductionRefConfig(
         git_ref="master",
         generate_schema_name_override="dbt/macros/generate_schema_name.sql",
     )
     dbt_options: DbtCliOptions = DbtCliOptions(project_dir=dbt_project_dir)
     runner: DbtRunner = DbtRunner(dbt_executable="dbt", invoker=invoke)
 
-    first_result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
-        sqlbuild_project_dir=sqlbuild_project_dir,
-        dbt_options=dbt_options,
-        reuse_from=reuse_from,
-        runner=runner,
+    first_result: DbtProductionRefCompileResult = (
+        production_ref_module.compile_production_ref_manifest(
+            sqlbuild_project_dir=sqlbuild_project_dir,
+            dbt_options=dbt_options,
+            production_ref=production_ref,
+            runner=runner,
+        )
     )
     first_commands: tuple[str, ...] = tuple(command_names)
     command_names.clear()
-    second_result: DbtReuseFromCompileResult = reuse_from_module.compile_reuse_from_manifest(
-        sqlbuild_project_dir=sqlbuild_project_dir,
-        dbt_options=dbt_options,
-        reuse_from=reuse_from,
-        runner=runner,
+    second_result: DbtProductionRefCompileResult = (
+        production_ref_module.compile_production_ref_manifest(
+            sqlbuild_project_dir=sqlbuild_project_dir,
+            dbt_options=dbt_options,
+            production_ref=production_ref,
+            runner=runner,
+        )
     )
 
     assert first_commands == test_case.expected_first_commands
     assert tuple(command_names) == test_case.expected_second_commands
     assert first_result.manifest_contents == test_case.expected_manifest_contents
     assert second_result.manifest_contents == test_case.expected_manifest_contents
-    assert (sqlbuild_project_dir / "target" / "sqlbuild" / "cache" / "dbt_reuse").is_dir()
+    assert (sqlbuild_project_dir / "target" / "sqlbuild" / "cache" / "dbt_production_ref").is_dir()

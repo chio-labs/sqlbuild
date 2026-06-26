@@ -395,12 +395,17 @@ def build_merged_dbt_execution_argv(
     routed_args: tuple[str, ...],
     plan: DbtInteropPlan,
     replay_on_change: str | None = None,
+    defer_clone_unique_ids: frozenset[str] = frozenset(),
 ) -> tuple[str, ...] | None:
     """Build the single dbt argv used for execution."""
 
     if command == DbtInteropCommand.TEST and not plan.dbt_selected_unique_ids:
         return None
-    planned_select_terms: tuple[str, ...] = _planned_dbt_select_terms(command=command, plan=plan)
+    planned_select_terms: tuple[str, ...] = _planned_dbt_select_terms(
+        command=command,
+        plan=plan,
+        defer_clone_unique_ids=defer_clone_unique_ids,
+    )
     if plan.dbt_model_plan is not None:
         if not planned_select_terms:
             return None
@@ -419,11 +424,14 @@ def build_merged_dbt_execution_argv(
             options=options,
             args=pruned_args,
         )
-    if not plan.dbt_selected_unique_ids and not plan.dbt_required_selector_terms:
+    required_selector_terms: tuple[str, ...] = (
+        () if defer_clone_unique_ids else plan.dbt_required_selector_terms
+    )
+    if not plan.dbt_selected_unique_ids and not required_selector_terms:
         return None
     merged_args: tuple[str, ...] = _merge_dbt_select_terms(
         args=_strip_resolved_dbt_options(routed_args),
-        extra_terms=plan.dbt_required_selector_terms,
+        extra_terms=required_selector_terms,
     )
     return build_dbt_command_argv(
         dbt_executable=plan.dbt_command_argv[0],
@@ -646,7 +654,10 @@ def _merge_dbt_select_terms(
 
 
 def _planned_dbt_select_terms(
-    *, command: DbtInteropCommand, plan: DbtInteropPlan
+    *,
+    command: DbtInteropCommand,
+    plan: DbtInteropPlan,
+    defer_clone_unique_ids: frozenset[str] = frozenset(),
 ) -> tuple[str, ...]:
     if plan.dbt_model_plan is None:
         return ()
@@ -658,8 +669,9 @@ def _planned_dbt_select_terms(
         plan=plan,
         unique_ids=non_model_unique_ids,
     )
-    executable_model_unique_ids: frozenset[str] = frozenset(
-        (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
+    executable_model_unique_ids: frozenset[str] = (
+        frozenset((*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids))
+        - defer_clone_unique_ids
     )
     model_terms: tuple[str, ...] = tuple(
         entry.selector_term

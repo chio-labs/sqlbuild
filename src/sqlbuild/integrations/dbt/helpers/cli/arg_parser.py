@@ -30,6 +30,7 @@ def add_dbt_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--indirect-selection", default=None)
     parser.add_argument("--defer", action="store_true", default=False)
     parser.add_argument("--defer-to", default=None)
+    parser.add_argument("--defer-clone-from", action="store_true", default=False)
     parser.add_argument("--start-cursor-ts", default=None)
     parser.add_argument("--end-cursor-ts", default=None)
     parser.add_argument("--start-cursor-int", default=None)
@@ -93,6 +94,7 @@ def parse_dbt_execution_args(
         state=namespace.state,
         indirect_selection=namespace.indirect_selection,
         defer=namespace.defer,
+        defer_clone_from=namespace.defer_clone_from,
         defer_to=namespace.defer_to,
         start_cursor_ts=namespace.start_cursor_ts,
         end_cursor_ts=namespace.end_cursor_ts,

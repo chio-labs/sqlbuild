@@ -191,8 +191,8 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
-class DbtReuseFromCompileResult:
-    """Manifest produced by compiling a dbt project at a reuse git ref."""
+class DbtProductionRefCompileResult:
+    """Manifest produced by compiling a dbt project at a production git ref."""
 
     git_ref: str
     manifest_contents: str
@@ -470,6 +470,7 @@ class DbtInteropParsedArgs:
     state: str | None = None
     indirect_selection: str | None = None
     defer: bool = False
+    defer_clone_from: bool = False
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
@@ -490,6 +491,7 @@ class DbtInteropRoutedArgs:
     exclude: tuple[str, ...] = field(default_factory=tuple)
     dbt_args: tuple[str, ...] = field(default_factory=tuple)
     sqlbuild_args: tuple[str, ...] = field(default_factory=tuple)
+    defer_clone_from: bool = False
 
 
 @dataclass(frozen=True)

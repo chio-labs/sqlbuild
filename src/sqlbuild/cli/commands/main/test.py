@@ -49,6 +49,7 @@ def run_test(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     no_color: bool = False,
+    selected_target: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
@@ -71,6 +72,7 @@ def run_test(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
@@ -98,6 +100,7 @@ def run_test(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         source_deferral_enabled=False,
         select=select,
