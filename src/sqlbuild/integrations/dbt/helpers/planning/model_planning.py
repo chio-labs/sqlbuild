@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
@@ -40,9 +40,6 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
     expand_combined_upstream,
-)
-from sqlbuild.integrations.dbt.helpers.planning.concurrent_reads import (
-    run_state_reads_in_parallel,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_graph_identity_nodes,
@@ -85,7 +82,6 @@ def build_dbt_model_planning_result(
     force: bool = False,
     adapter: BaseAdapter,
     connection: Any,
-    connection_config: dict[str, object],
 ) -> DbtModelPlanningResult:
     """Classify dbt model candidates as runnable or current from state and relations."""
 
@@ -98,36 +94,22 @@ def build_dbt_model_planning_result(
         for unique_id in expanded_candidate_unique_ids
         if (model := manifest.models_by_unique_id.get(unique_id)) is not None
     )
-    state_reads: dict[str, object] = run_state_reads_in_parallel(
+    fingerprints: dict[tuple[str, str], Fingerprint] = _read_dbt_fingerprints(
+        project=project,
         adapter=adapter,
-        connection_config=connection_config,
-        reads={
-            "fingerprints": lambda read_connection: _read_dbt_fingerprints(
-                project=project,
-                adapter=adapter,
-                connection=read_connection,
-            ),
-            "source_freshness": lambda read_connection: _source_freshness_result(
-                manifest=manifest,
-                project=project,
-                adapter=adapter,
-                connection=read_connection,
-            ),
-            "existing_relation_keys": lambda read_connection: _existing_model_relation_keys(
-                adapter=adapter,
-                connection=read_connection,
-                models=candidate_models,
-            ),
-        },
+        connection=connection,
     )
-    fingerprints: dict[tuple[str, str], Fingerprint] = cast(
-        "dict[tuple[str, str], Fingerprint]", state_reads["fingerprints"]
+    source_freshness: StandardSourceFreshnessPlanningResult = _source_freshness_result(
+        manifest=manifest,
+        project=project,
+        adapter=adapter,
+        connection=connection,
     )
-    source_freshness: StandardSourceFreshnessPlanningResult = cast(
-        "StandardSourceFreshnessPlanningResult", state_reads["source_freshness"]
-    )
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = cast(
-        "frozenset[tuple[str | None, str | None, str]]", state_reads["existing_relation_keys"]
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = _existing_relation_keys(
+        adapter=adapter,
+        connection=connection,
+        models=candidate_models,
+        seeds=tuple(manifest.seeds_by_unique_id.values()),
     )
     blocked_source_unique_ids: frozenset[str] = frozenset(
         identity.source_name
@@ -141,8 +123,7 @@ def build_dbt_model_planning_result(
         manifest=manifest,
         fingerprints=fingerprints,
         full_refresh=full_refresh,
-        adapter=adapter,
-        connection=connection,
+        existing_relation_keys=existing_relation_keys,
     )
     entries_by_unique_id: dict[str, DbtModelPlanEntry] = {}
     unique_id: str
@@ -391,8 +372,7 @@ def _changed_seed_unique_ids(
     manifest: DbtManifestIndex,
     fingerprints: dict[tuple[str, str], Fingerprint],
     full_refresh: bool,
-    adapter: BaseAdapter,
-    connection: Any,
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]],
 ) -> frozenset[str]:
     changed: set[str] = set()
     seed: DbtManifestSeed
@@ -404,12 +384,7 @@ def _changed_seed_unique_ids(
         if fingerprint is None or fingerprint.version_hash != seed.identity_hash:
             changed.add(seed.unique_id)
             continue
-        if not adapter.relation_exists(
-            connection,
-            database=seed.database,
-            schema=seed.schema,
-            name=seed.alias or seed.name,
-        ):
+        if _seed_relation_key(seed=seed) not in existing_relation_keys:
             changed.add(seed.unique_id)
     return frozenset(changed)
 
@@ -656,28 +631,34 @@ def _plan_model(
     )
 
 
-def _existing_model_relation_keys(
+def _existing_relation_keys(
     *,
     adapter: BaseAdapter,
     connection: Any,
     models: tuple[DbtManifestModel, ...],
+    seeds: tuple[DbtManifestSeed, ...],
 ) -> frozenset[tuple[str | None, str | None, str]]:
-    if not models:
+    locations: tuple[tuple[str | None, str | None, str], ...] = (
+        *((model.database, model.schema, model.alias or model.name) for model in models),
+        *((seed.database, seed.schema, seed.alias or seed.name) for seed in seeds),
+    )
+    if not locations:
         return frozenset()
-    model_keys: frozenset[tuple[str | None, str | None, str]] = frozenset(
-        _model_relation_key(model=model) for model in models
+    wanted_keys: frozenset[tuple[str | None, str | None, str]] = frozenset(
+        _relation_key(database=database, schema=schema, name=name)
+        for database, schema, name in locations
     )
     keys: set[tuple[str | None, str | None, str]] = set()
     database: str | None
-    for database in tuple(dict.fromkeys(model.database for model in models)):
-        database_models: tuple[DbtManifestModel, ...] = tuple(
-            model for model in models if model.database == database
+    for database in tuple(dict.fromkeys(location[0] for location in locations)):
+        database_locations: tuple[tuple[str | None, str | None, str], ...] = tuple(
+            location for location in locations if location[0] == database
         )
         schemas: tuple[str | None, ...] = tuple(
-            dict.fromkeys(model.schema for model in database_models)
+            dict.fromkeys(location[1] for location in database_locations)
         )
         names: tuple[str, ...] = tuple(
-            dict.fromkeys(model.alias or model.name for model in database_models)
+            dict.fromkeys(location[2] for location in database_locations)
         )
         relations: tuple[RelationInfo, ...] = adapter.list_relations(
             connection,
@@ -690,7 +671,7 @@ def _existing_model_relation_keys(
         relation: RelationInfo
         for relation in relations:
             key: tuple[str | None, str | None, str] = _relation_info_key(relation=relation)
-            if key in model_keys:
+            if key in wanted_keys:
                 keys.add(key)
     return frozenset(keys)
 
@@ -700,6 +681,14 @@ def _model_relation_key(model: DbtManifestModel) -> tuple[str | None, str | None
         database=model.database,
         schema=model.schema,
         name=model.alias or model.name,
+    )
+
+
+def _seed_relation_key(*, seed: DbtManifestSeed) -> tuple[str | None, str | None, str]:
+    return _relation_key(
+        database=seed.database,
+        schema=seed.schema,
+        name=seed.alias or seed.name,
     )
 
 

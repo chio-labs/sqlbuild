@@ -22,7 +22,7 @@ from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_dbt_model_planning_result,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestSeed
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
@@ -56,6 +56,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtModelPlanningTestCase,
     DbtModelSourceBlockingTestCase,
     DbtRunResultsFallbackRenderTestCase,
+    DbtSeedRelationPrefetchTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CountingModelPlanningAdapter,
@@ -64,6 +65,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_compiled_project_with_models,
     build_manifest_data,
     build_manifest_model_node,
+    build_manifest_seed_node,
     build_manifest_source_node,
     setup_dbt_model_planning_state,
     write_dbt_test_fingerprint,
@@ -155,7 +157,6 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
             project=project,
             adapter=adapter,
             connection=connection,
-            connection_config=connection_config,
             force=test_case.force,
         )
     finally:
@@ -247,7 +248,6 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
             graph=graph,
             adapter=adapter,
             connection=connection,
-            connection_config=connection_config,
         )
     finally:
         adapter.close(connection)
@@ -271,6 +271,98 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
         )
         == test_case.expected_relation_exists_call_count
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSeedRelationPrefetchTestCase(
+            description="seed existence resolves from the bulk relation set with no per-seed query",
+            seed_names=("countries", "regions", "currencies"),
+            existing_seed_names=("countries", "regions"),
+            expected_changed_seed_names=("currencies",),
+            expected_seed_relation_exists_call_count=0,
+        )
+    ],
+    ids=["seed existence resolves from the bulk relation set with no per-seed query"],
+)
+def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_query(
+    test_case: DbtSeedRelationPrefetchTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: CountingModelPlanningAdapter = CountingModelPlanningAdapter()
+    connection_config: dict[str, object] = {"database": str(tmp_path / "dbt_seed_prefetch.duckdb")}
+    connection: Any = adapter.connect(connection_config)
+    project: CompiledProject = replace(
+        build_compiled_project_with_models({}),
+        effective_target_schema="main",
+        effective_target_database=None,
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    schema="main",
+                    alias="fact_orders",
+                    checksum="same_hash",
+                ),
+                *(
+                    build_manifest_seed_node(
+                        unique_id=f"seed.analytics.{seed_name}",
+                        package_name="analytics",
+                        name=seed_name,
+                        schema="main",
+                        alias=seed_name,
+                        checksum=f"{seed_name}_hash",
+                    )
+                    for seed_name in test_case.seed_names
+                ),
+            )
+        )
+    )
+    seed_name: str
+    try:
+        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        for seed_name in test_case.existing_seed_names:
+            adapter.execute(connection, f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id")
+        for seed_name in test_case.seed_names:
+            seed: DbtManifestSeed = manifest.seeds_by_unique_id[f"seed.analytics.{seed_name}"]
+            assert seed.identity_hash is not None
+            write_dbt_test_fingerprint(
+                adapter=adapter,
+                connection=connection,
+                unique_id=seed.unique_id,
+                version_hash=seed.identity_hash,
+            )
+        adapter.list_relation_calls.clear()
+        adapter.relation_exists_calls.clear()
+
+        result: DbtModelPlanningResult = build_dbt_model_planning_result(
+            manifest=manifest,
+            candidate_unique_ids=("model.analytics.fact_orders",),
+            project=project,
+            adapter=adapter,
+            connection=connection,
+        )
+    finally:
+        adapter.close(connection)
+
+    seed_relation_names: frozenset[str] = frozenset(test_case.seed_names)
+    seed_existence_calls: tuple[tuple[str | None, str | None, str], ...] = tuple(
+        call for call in adapter.relation_exists_calls if call[2] in seed_relation_names
+    )
+    assert len(seed_existence_calls) == test_case.expected_seed_relation_exists_call_count
+    listed_names: frozenset[str] = frozenset(
+        name for call in adapter.list_relation_calls for name in (call[2] or ())
+    )
+    assert seed_relation_names <= listed_names
+    changed_seed_short_names: frozenset[str] = frozenset(
+        unique_id.split(".")[-1] for unique_id in result.stale_out_of_selection_seed_unique_ids
+    )
+    assert changed_seed_short_names == frozenset(test_case.expected_changed_seed_names)
 
 
 @pytest.mark.parametrize(
@@ -1278,7 +1370,6 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
             graph=graph,
             adapter=adapter,
             connection=connection,
-            connection_config=connection_config,
         )
     finally:
         adapter.close(connection)
@@ -1406,7 +1497,6 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
             graph=graph,
             adapter=adapter,
             connection=connection,
-            connection_config=connection_config,
         )
     finally:
         adapter.close(connection)
