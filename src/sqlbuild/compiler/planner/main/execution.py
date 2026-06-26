@@ -270,6 +270,7 @@ def build_execution_plan(
             connection=connection,
             scope=scope,
             relations=relations,
+            freshness_state_schemas=snapshot.source_freshness_state_schemas,
         )
     )
     original_scope_for_stale_warnings: PlannerScope = project_scope_for_stale_warnings

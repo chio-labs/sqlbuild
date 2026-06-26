@@ -42,13 +42,6 @@ class FakeSourceFreshnessWriteExecute:
         self.executed_sql.append(sql)
 
 
-def freshness_table_relation_exists(
-    connection: Any, *, database: str | None, schema: str | None, name: str
-) -> bool:
-    del connection, database, schema, name
-    return True
-
-
 class _FakeResult:
     def __init__(self, rows: list[tuple[Any, ...]]) -> None:
         self._rows: list[tuple[Any, ...]] = rows

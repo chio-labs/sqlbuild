@@ -336,7 +336,12 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -386,7 +391,12 @@ def test_given_no_table_when_reading_then_returns_empty_set(
     result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -450,7 +460,9 @@ def test_given_old_fingerprint_table_without_version_hash_when_reading_then_rais
         read_latest_fingerprints(
             connection=connection,
             execute=execute,
-            relation_exists=RELATION_EXISTS,
+            table_exists=RELATION_EXISTS(
+                connection, database=None, schema=schema, name=FINGERPRINT_TABLE_NAME
+            ),
             database=None,
             schema=schema,
             render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -543,7 +555,12 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
     result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -733,7 +750,12 @@ def test_given_fingerprint_history_when_pruning_then_keeps_latest_versions_per_n
     latest_result: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -803,7 +825,9 @@ def test_given_invalid_definition_storage_when_reading_then_raises_contextual_er
         read_latest_fingerprints(
             connection=connection,
             execute=execute,
-            relation_exists=RELATION_EXISTS,
+            table_exists=RELATION_EXISTS(
+                connection, database=None, schema=test_case.schema, name=FINGERPRINT_TABLE_NAME
+            ),
             database=None,
             schema=test_case.schema,
             render_qualified_name=RENDER_QUALIFIED_NAME,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -43,6 +44,7 @@ def execute_clone(
     origin_connection: Any,
     destination_connection: Any,
     hard_copy: bool,
+    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
 ) -> CloneExecutionResult:
     origin_models_by_name: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in origin_model_entries
@@ -61,31 +63,38 @@ def execute_clone(
         destination_connection=destination_connection,
     )
 
-    destination_entry: SeedPlanEntry | ModelPlanEntry
-    for destination_entry in destination_entries:
-        origin_entry: SeedPlanEntry | ModelPlanEntry | None = origin_seeds_by_name.get(
-            destination_entry.name
+    clonable_entries: tuple[
+        tuple[SeedPlanEntry | ModelPlanEntry, SeedPlanEntry | ModelPlanEntry], ...
+    ] = tuple(
+        (destination_entry, origin_entry)
+        for destination_entry in destination_entries
+        if (
+            origin_entry := (
+                origin_seeds_by_name.get(destination_entry.name)
+                or origin_models_by_name.get(destination_entry.name)
+            )
         )
-        if origin_entry is None:
-            origin_entry = origin_models_by_name.get(destination_entry.name)
-        if origin_entry is None:
-            continue
+        is not None
+    )
+    total: int = len(clonable_entries)
+    index: int = 0
+    destination_entry: SeedPlanEntry | ModelPlanEntry
+    origin_entry: SeedPlanEntry | ModelPlanEntry
+    for destination_entry, origin_entry in clonable_entries:
+        index += 1
         if (
             isinstance(destination_entry, ModelPlanEntry)
             and destination_entry.materialization_type == MaterializationType.VIEW
         ):
-            results.append(
-                recreate_view(
-                    destination_entry=destination_entry,
-                    origin_entry=origin_entry,
-                    adapter=adapter,
-                    origin_connection=origin_connection,
-                    destination_connection=destination_connection,
-                )
+            item_result: CloneItemResult = recreate_view(
+                destination_entry=destination_entry,
+                origin_entry=origin_entry,
+                adapter=adapter,
+                origin_connection=origin_connection,
+                destination_connection=destination_connection,
             )
-            continue
-        results.append(
-            clone_relation(
+        else:
+            item_result = clone_relation(
                 destination_entry=destination_entry,
                 origin_entry=origin_entry,
                 adapter=adapter,
@@ -93,6 +102,8 @@ def execute_clone(
                 destination_connection=destination_connection,
                 hard_copy=hard_copy,
             )
-        )
+        results.append(item_result)
+        if on_item is not None:
+            on_item(index, total, item_result)
 
     return CloneExecutionResult(item_results=tuple(results))

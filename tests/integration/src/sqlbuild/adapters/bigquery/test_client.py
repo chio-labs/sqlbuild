@@ -21,6 +21,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -972,7 +973,12 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
     fingerprint_set: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=adapter.execute,
-        relation_exists=adapter.relation_exists,
+        table_exists=adapter.relation_exists(
+            connection,
+            database=bigquery_project,
+            schema=bigquery_dataset,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=bigquery_project,
         schema=bigquery_dataset,
         render_qualified_name=adapter.render_qualified_name,

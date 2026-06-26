@@ -305,7 +305,12 @@ def test_given_source_freshness_records_when_writing_and_reading_then_returns_ex
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -342,7 +347,12 @@ def test_given_no_table_when_reading_source_freshness_then_returns_empty_set(
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -431,7 +441,12 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -589,7 +604,12 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
     latest_result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -632,7 +652,12 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -669,7 +694,12 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
         execute=execute,
-        relation_exists=RELATION_EXISTS,
+        table_exists=RELATION_EXISTS(
+            connection,
+            database=test_case.database,
+            schema=test_case.schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        ),
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,

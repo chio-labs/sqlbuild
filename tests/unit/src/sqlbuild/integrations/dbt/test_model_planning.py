@@ -10,7 +10,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
@@ -263,14 +263,11 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
     database, schemas, names = adapter.list_relation_calls[0]
     assert database is None
     assert schemas == ("main",)
-    assert frozenset(names or ()) == frozenset({"base_orders", "stg_orders", "fact_orders"})
+    scanned_names: frozenset[str] = frozenset(names or ())
     model_relation_names: frozenset[str] = frozenset({"base_orders", "stg_orders", "fact_orders"})
-    assert (
-        len(
-            tuple(call for call in adapter.relation_exists_calls if call[2] in model_relation_names)
-        )
-        == test_case.expected_relation_exists_call_count
-    )
+    assert model_relation_names <= scanned_names
+    assert frozenset({"_sqlbuild_fingerprints", "_sqlbuild_source_freshness"}) <= scanned_names
+    assert len(adapter.relation_exists_calls) == test_case.expected_relation_exists_call_count
 
 
 @pytest.mark.parametrize(
@@ -414,7 +411,12 @@ def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=adapter.execute,
-            relation_exists=adapter.relation_exists,
+            table_exists=adapter.relation_exists(
+                connection,
+                database=None,
+                schema="main",
+                name=FINGERPRINT_TABLE_NAME,
+            ),
             database=None,
             schema="main",
             render_qualified_name=adapter.render_qualified_name,

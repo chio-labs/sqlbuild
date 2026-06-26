@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
+from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
@@ -74,125 +75,52 @@ def execute_dbt_clone(
     reuse_manifest: DbtManifestIndex,
     selected_nodes: tuple[DbtLsNode, ...],
     hard_copy: bool,
+    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
 ) -> CloneExecutionResult:
     """Clone selected dbt models from reuse manifest relations into current relations."""
 
+    clonable_models: tuple[tuple[DbtManifestModel, DbtManifestModel], ...] = tuple(
+        (current_model, reuse_model)
+        for node in selected_nodes
+        if node.resource_type == DbtSupportedResourceType.MODEL
+        and (current_model := current_manifest.models_by_unique_id.get(node.unique_id)) is not None
+        and _model_materialization(model=current_model) != DBT_MATERIALIZATION_EPHEMERAL
+        and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
+    )
+    total: int = len(clonable_models)
     results: list[CloneItemResult] = []
-    node: DbtLsNode
-    for node in selected_nodes:
-        if node.resource_type != DbtSupportedResourceType.MODEL:
-            continue
-        current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(
-            node.unique_id
+    index: int = 0
+    current_model: DbtManifestModel
+    reuse_model: DbtManifestModel
+    for current_model, reuse_model in clonable_models:
+        index += 1
+        origin_exists: bool = _relation_exists(
+            adapter=adapter, connection=connection, model=reuse_model
         )
-        if current_model is None:
-            continue
-        if _model_materialization(model=current_model) == DBT_MATERIALIZATION_EPHEMERAL:
-            continue
-        reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(
-            node.unique_id
-        )
-        if reuse_model is None:
-            continue
         if _model_materialization(model=current_model) == DBT_MATERIALIZATION_VIEW:
-            results.append(
-                _recreate_dbt_view(
-                    adapter=adapter,
-                    connection=connection,
-                    current_model=current_model,
-                    reuse_model=reuse_model,
-                )
-            )
-            continue
-        results.append(
-            _clone_dbt_relation(
+            item_result: CloneItemResult = recreate_view_by_names(
+                name=current_model.name,
+                origin_relation=reuse_model.relation_name,
+                destination_relation=current_model.relation_name,
+                view_sql=_compiled_model_sql(model=current_model),
+                origin_exists=origin_exists,
                 adapter=adapter,
                 connection=connection,
-                current_model=current_model,
-                reuse_model=reuse_model,
+            )
+        else:
+            item_result = clone_relation_by_names(
+                name=current_model.name,
+                origin_relation=reuse_model.relation_name,
+                destination_relation=current_model.relation_name,
+                origin_exists=origin_exists,
+                adapter=adapter,
+                connection=connection,
                 hard_copy=hard_copy,
             )
-        )
+        results.append(item_result)
+        if on_item is not None:
+            on_item(index, total, item_result)
     return CloneExecutionResult(item_results=tuple(results))
-
-
-def _clone_dbt_relation(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    current_model: DbtManifestModel,
-    reuse_model: DbtManifestModel,
-    hard_copy: bool,
-) -> CloneItemResult:
-    if not _relation_exists(adapter=adapter, connection=connection, model=reuse_model):
-        return _missing_source_result(name=current_model.name)
-    recorder: StatementRecorder = StatementRecorder()
-    try:
-        adapter.drop(
-            connection,
-            destination=current_model.relation_name,
-            if_exists=True,
-            statement_recorder=recorder,
-        )
-        adapter.clone(
-            connection,
-            origin=reuse_model.relation_name,
-            destination=current_model.relation_name,
-            hard_copy=hard_copy,
-            statement_recorder=recorder,
-        )
-    except Exception as exc:
-        return CloneItemResult(
-            name=current_model.name,
-            action=CloneAction.FAILED,
-            status=CloneStatus.FAILED,
-            message=str(exc),
-            executed_statements=recorder.snapshot(),
-        )
-    action: CloneAction = (
-        CloneAction.COPIED
-        if hard_copy or not adapter.supports_zero_copy_clone()
-        else CloneAction.CLONED
-    )
-    return CloneItemResult(
-        name=current_model.name,
-        action=action,
-        status=CloneStatus.SUCCESS,
-        executed_statements=recorder.snapshot(),
-    )
-
-
-def _recreate_dbt_view(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    current_model: DbtManifestModel,
-    reuse_model: DbtManifestModel,
-) -> CloneItemResult:
-    if not _relation_exists(adapter=adapter, connection=connection, model=reuse_model):
-        return _missing_source_result(name=current_model.name)
-    recorder: StatementRecorder = StatementRecorder()
-    try:
-        adapter.create_view_as(
-            connection,
-            destination=current_model.relation_name,
-            sql=_compiled_model_sql(model=current_model),
-            statement_recorder=recorder,
-        )
-    except Exception as exc:
-        return CloneItemResult(
-            name=current_model.name,
-            action=CloneAction.FAILED,
-            status=CloneStatus.FAILED,
-            message=str(exc),
-            executed_statements=recorder.snapshot(),
-        )
-    return CloneItemResult(
-        name=current_model.name,
-        action=CloneAction.RECREATED_VIEW,
-        status=CloneStatus.SUCCESS,
-        executed_statements=recorder.snapshot(),
-    )
 
 
 def _consume_one_value(*, args: tuple[str, ...], index: int) -> tuple[str, int]:
@@ -271,12 +199,3 @@ def _relation_parts(*, relation_name: str) -> tuple[str | None, str | None, str]
 
 def _unquote_relation_part(*, part: str) -> str:
     return part.strip().strip('"').strip("`").removeprefix("[").removesuffix("]")
-
-
-def _missing_source_result(*, name: str) -> CloneItemResult:
-    return CloneItemResult(
-        name=name,
-        action=CloneAction.WARNING_MISSING_SOURCE,
-        status=CloneStatus.WARNING,
-        message="missing in origin environment",
-    )

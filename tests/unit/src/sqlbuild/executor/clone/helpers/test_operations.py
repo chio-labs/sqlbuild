@@ -77,6 +77,9 @@ def test_given_clone_relation_when_executing_then_records_sql_and_reports_copy_m
 
     assert result.action == test_case.expected_action
     assert result.status == test_case.expected_status
+    assert result.origin_relation == "prod.fact_orders"
+    assert result.destination_relation == "dev.fact_orders"
+    assert result.duration_seconds is not None
     assert tuple(event.kind for event in result.executed_statements) == (
         LifeCycleEventKind.SQL,
         LifeCycleEventKind.SQL,

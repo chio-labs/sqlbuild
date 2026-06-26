@@ -38,13 +38,6 @@ class FakeFingerprintWriteExecute:
         self.executed_sql.append(sql)
 
 
-def fingerprint_table_relation_exists(
-    connection: Any, *, database: str | None, schema: str | None, name: str
-) -> bool:
-    del connection, database, schema, name
-    return True
-
-
 def render_qualified_name(*, database: str | None, schema: str | None, name: str) -> str | None:
     if schema is None:
         return None

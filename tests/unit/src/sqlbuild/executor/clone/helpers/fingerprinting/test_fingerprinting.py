@@ -14,6 +14,7 @@ from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from tests.unit.src.sqlbuild.executor.clone.helpers.fingerprinting._test_types import (
     CloneFingerprintPropagationTestCase,
+    CloneFingerprintReadDedupTestCase,
 )
 from tests.unit.src.sqlbuild.executor.clone.helpers.fingerprinting.helpers import (
     CloneFingerprintAdapter,
@@ -106,3 +107,66 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
     )
     assert all(target_schema == "dev" for _, _, target_schema, _, _ in written)
     assert all(run_id == "clone-run" for *_, run_id in written)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CloneFingerprintReadDedupTestCase(
+            description="reads origin fingerprints once for many entries sharing one schema",
+            model_names=("orders", "payments", "customers"),
+            origin_schema="prod",
+            expected_read_schemas=("prod",),
+        )
+    ],
+    ids=["reads origin fingerprints once for many entries sharing one schema"],
+)
+def test_given_many_entries_one_schema_when_copying_then_reads_origin_fingerprints_once(
+    test_case: CloneFingerprintReadDedupTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read_schemas: list[str | None] = []
+
+    def read_latest(**kwargs: Any) -> FingerprintSet:
+        read_schemas.append(kwargs.get("schema"))
+        return FingerprintSet(
+            schema=str(kwargs["schema"]),
+            fingerprints={},
+            fingerprints_by_identity={
+                (NODE_TYPE_MODEL, name): build_fingerprint(NODE_TYPE_MODEL, name)
+                for name in test_case.model_names
+            },
+        )
+
+    patch_fingerprint_io(monkeypatch, read_latest=read_latest, write=lambda **_: None)
+    origin_model_entries: tuple[ModelPlanEntry, ...] = tuple(
+        build_model_entry(
+            name, schema=test_case.origin_schema, materialization=MaterializationType.TABLE
+        )
+        for name in test_case.model_names
+    )
+    destination_model_entries: tuple[ModelPlanEntry, ...] = tuple(
+        build_model_entry(name, schema="dev", materialization=MaterializationType.TABLE)
+        for name in test_case.model_names
+    )
+    result: CloneExecutionResult = CloneExecutionResult(
+        item_results=tuple(
+            CloneItemResult(name=name, action=CloneAction.CLONED, status=CloneStatus.SUCCESS)
+            for name in test_case.model_names
+        )
+    )
+
+    copy_clone_fingerprints(
+        result=result,
+        origin_model_entries=origin_model_entries,
+        destination_model_entries=destination_model_entries,
+        origin_seed_entries=(),
+        destination_seed_entries=(),
+        adapter=cast(BaseAdapter, CloneFingerprintAdapter()),
+        origin_connection=object(),
+        destination_connection=object(),
+        run_id="clone-run",
+        query_change_tracking=True,
+    )
+
+    assert tuple(read_schemas) == test_case.expected_read_schemas

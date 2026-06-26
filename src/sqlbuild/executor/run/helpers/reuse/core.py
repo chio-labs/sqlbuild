@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import RelationReusePlan
@@ -119,7 +120,12 @@ def validate_reuse_origin_fingerprint(
     fingerprint_set: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=adapter.execute,
-        relation_exists=adapter.relation_exists,
+        table_exists=adapter.relation_exists(
+            connection,
+            database=reuse_origin_fingerprint_database,
+            schema=reuse_origin_fingerprint_schema,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=reuse_origin_fingerprint_database,
         schema=reuse_origin_fingerprint_schema,
         render_qualified_name=adapter.render_qualified_name,

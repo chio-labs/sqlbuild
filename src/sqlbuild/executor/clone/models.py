@@ -14,6 +14,9 @@ class CloneItemResult:
     action: CloneAction
     status: CloneStatus
     message: str | None = None
+    origin_relation: str | None = None
+    destination_relation: str | None = None
+    duration_seconds: float | None = None
     executed_statements: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
 
 
