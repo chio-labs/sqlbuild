@@ -41,6 +41,7 @@ def run_plan(
     no_sql_validation: bool = False,
     defer_to: str | None = None,
     defer_sources_to: str | None = None,
+    selected_target: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
     json_output: bool = False,
     full_refresh: bool = False,
@@ -64,7 +65,7 @@ def run_plan(
     effective_force: bool = resolve_effective_force(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_target=None,
+        selected_target=selected_target,
         cli_force=force,
     )
     enforce_no_defer_to_in_virtual_mode(
@@ -83,6 +84,7 @@ def run_plan(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and not json_output and supports_color()
@@ -114,6 +116,7 @@ def run_plan(
             project_dir=effective_project_dir,
             discovered_inputs=discovered_inputs,
             adapter=adapter,
+            selected_target=selected_target,
             no_sql_validation=no_sql_validation,
             defer_sources_to=defer_sources_to,
             cursor_overrides=cursor_overrides,
@@ -137,6 +140,7 @@ def run_plan(
         pipeline_result = run_compile_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
+            selected_target=selected_target,
             no_sql_validation=no_sql_validation,
             defer_to=defer_to,
             defer_sources_to=defer_sources_to,

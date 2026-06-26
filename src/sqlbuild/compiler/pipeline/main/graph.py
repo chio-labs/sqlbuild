@@ -28,6 +28,7 @@ def build_project_graph(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
+    selected_target: str | None = None,
     no_sql_validation: bool = False,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
@@ -43,6 +44,7 @@ def build_project_graph(
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         skip_column_inference=skip_column_inference,
         column_lineage_mode=column_lineage_mode,

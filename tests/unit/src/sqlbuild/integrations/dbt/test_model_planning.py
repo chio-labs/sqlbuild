@@ -473,6 +473,53 @@ def test_given_unchanged_seed_when_building_execution_argv_then_excludes_seed(
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
+            description="defer cloned required model is excluded from dbt execution argv",
+            expected_argv=None,
+        )
+    ],
+    ids=["defer cloned required model is excluded from dbt execution argv"],
+)
+def test_given_defer_cloned_required_when_building_argv_then_excludes_required_model(
+    test_case: DbtExecutionArgvPruningTestCase,
+) -> None:
+    plan: DbtInteropPlan = DbtInteropPlan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_selected_nodes=(),
+        dbt_selected_unique_ids=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(
+            dbt_required_unique_ids=("model.analytics.required_upstream",),
+        ),
+        dbt_model_plan=DbtModelPlanningResult(
+            entries=(
+                DbtModelPlanEntry(
+                    unique_id="model.analytics.required_upstream",
+                    package_name="analytics",
+                    name="required_upstream",
+                    action=DbtModelPlanAction.RUN,
+                    reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+                    relation_name="main.required_upstream",
+                ),
+            ),
+        ),
+    )
+
+    argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=DbtCliOptions(),
+        routed_args=("--select", "required_upstream"),
+        plan=plan,
+        defer_clone_unique_ids=frozenset({"model.analytics.required_upstream"}),
+    )
+
+    assert argv == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionArgvPruningTestCase(
             description="pruned execution argv uses exact fqn selectors",
             expected_argv=(
                 "dbt",

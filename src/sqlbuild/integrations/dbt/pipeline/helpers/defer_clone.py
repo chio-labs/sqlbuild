@@ -1,0 +1,196 @@
+"""dbt defer-clone prephase helpers."""
+
+from __future__ import annotations
+
+import json
+import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.graph.core import sqlbuild_model_graph_key
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
+    try_write_dbt_node_fingerprint,
+)
+from sqlbuild.integrations.dbt.helpers.reuse.reuse_from import compile_reuse_from_manifest
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.models import (
+    DbtCliOptions,
+    DbtCombinedGraph,
+    DbtCombinedGraphKey,
+    DbtLsNode,
+    DbtNodeExecutionResult,
+    DbtReuseFromCompileResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
+from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
+from sqlbuild.spec.models.project import DbtReuseFromConfig
+
+
+def run_dbt_defer_clone_prephase(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    dbt_options: DbtCliOptions,
+    runner: DbtRunner,
+    adapter: BaseAdapter,
+    project: CompiledProject,
+    connection_config: dict[str, object],
+    current_manifest: DbtManifestIndex,
+    unique_ids: tuple[str, ...],
+    on_progress: Callable[[str], None] | None,
+) -> None:
+    if not unique_ids:
+        return
+    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
+    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
+        raise DbtInteropConfigError(
+            "dbt --defer-clone-from requires [dbt.reuse_from] to be configured",
+            code="C350",
+            help=(
+                "Run sqb dbt init or set [dbt.reuse_from].git_ref and "
+                "generate_schema_name_override in sqlbuild_project.toml."
+            ),
+        )
+    _report_progress(on_progress, f"Compiling dbt reuse from git ref '{reuse_from.git_ref}'...")
+    reuse_start: float = time.monotonic()
+    reuse_compile: DbtReuseFromCompileResult = compile_reuse_from_manifest(
+        sqlbuild_project_dir=project_dir,
+        dbt_options=dbt_options,
+        reuse_from=reuse_from,
+        runner=runner,
+    )
+    reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=json.loads(reuse_compile.manifest_contents)
+    )
+    _report_progress(
+        on_progress,
+        f"Compiled dbt reuse from git ref '{reuse_from.git_ref}'. "
+        f"({time.monotonic() - reuse_start:.2f}s)",
+    )
+    selected_nodes: tuple[DbtLsNode, ...] = tuple(
+        DbtLsNode(unique_id=unique_id, resource_type=DbtSupportedResourceType.MODEL)
+        for unique_id in unique_ids
+    )
+    _report_progress(on_progress, "Cloning deferred dbt boundary relations...")
+    clone_start: float = time.monotonic()
+    connection: Any = adapter.connect(connection_config)
+    try:
+        result: CloneExecutionResult = execute_dbt_clone(
+            adapter=adapter,
+            connection=connection,
+            current_manifest=current_manifest,
+            reuse_manifest=reuse_manifest,
+            selected_nodes=selected_nodes,
+            hard_copy=False,
+        )
+        _write_defer_clone_dbt_fingerprints(
+            result=result,
+            adapter=adapter,
+            connection=connection,
+            project=project,
+            current_manifest=current_manifest,
+            reuse_manifest=reuse_manifest,
+            unique_ids=unique_ids,
+            on_progress=on_progress,
+        )
+    finally:
+        adapter.close(connection)
+    if any(item.status == CloneStatus.FAILED for item in result.item_results):
+        raise DbtInteropRuntimeError("failed to clone one or more deferred dbt boundary relations")
+    _report_progress(
+        on_progress,
+        f"Cloned deferred dbt boundary relations. ({time.monotonic() - clone_start:.2f}s)",
+    )
+
+
+def resolve_defer_clone_unique_ids(
+    *,
+    graph: DbtCombinedGraph,
+    selected_sqlbuild_model_names: tuple[str, ...],
+    required_dbt_unique_ids: tuple[str, ...],
+) -> frozenset[str]:
+    """Resolve dbt nodes to clone for SQLBuild-selected boundaries."""
+
+    unique_ids: set[str] = set(required_dbt_unique_ids)
+    model_name: str
+    for model_name in selected_sqlbuild_model_names:
+        upstream_key: DbtCombinedGraphKey
+        for upstream_key in graph.upstream_deps.get(sqlbuild_model_graph_key(model_name), ()):
+            if upstream_key.owner == DbtCombinedGraphOwner.DBT:
+                unique_ids.add(upstream_key.name)
+    return frozenset(unique_ids)
+
+
+def _write_defer_clone_dbt_fingerprints(
+    *,
+    result: CloneExecutionResult,
+    adapter: BaseAdapter,
+    connection: Any,
+    project: CompiledProject,
+    current_manifest: DbtManifestIndex,
+    reuse_manifest: DbtManifestIndex,
+    unique_ids: tuple[str, ...],
+    on_progress: Callable[[str], None] | None,
+) -> None:
+    if not project.settings.query_change_tracking:
+        return
+    successful_names: frozenset[str] = frozenset(
+        item.name
+        for item in result.item_results
+        if item.status == CloneStatus.SUCCESS
+        and item.action in {CloneAction.CLONED, CloneAction.COPIED}
+    )
+    if not successful_names:
+        return
+    warnings: list[str] = []
+    unique_id: str
+    for unique_id in unique_ids:
+        current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
+        reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(unique_id)
+        if (
+            current_model is None
+            or reuse_model is None
+            or current_model.name not in successful_names
+        ):
+            continue
+        try_write_dbt_node_fingerprint(
+            result=DbtNodeExecutionResult(
+                unique_id=unique_id,
+                resource_type=DbtSupportedResourceType.MODEL,
+                node_name=current_model.name,
+                status="success",
+                index=None,
+                total=None,
+                execution_time=None,
+                materialized=None,
+                relation_name=current_model.relation_name,
+                database=current_model.database,
+                schema=current_model.schema,
+                node_checksum=reuse_model.node_checksum,
+            ),
+            adapter=adapter,
+            connection=connection,
+            run_id=project.run_id,
+            fingerprint_database=project.effective_target_database,
+            fingerprint_schema=project.effective_target_schema,
+            target_name=project.effective_target_name,
+            warnings=warnings,
+            query_sql=reuse_model.query_sql,
+            version_hash_override=reuse_model.definition_fingerprint or reuse_model.node_checksum,
+        )
+    if warnings:
+        _report_progress(on_progress, "; ".join(warnings))
+
+
+def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
+    if on_progress is not None:
+        on_progress(message)

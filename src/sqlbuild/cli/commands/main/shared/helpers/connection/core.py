@@ -88,6 +88,7 @@ def resolve_project_connection_config(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
+    selected_target: str | None = None,
     cli_vars: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Resolve the effective project connection config for CLI command execution."""
@@ -95,6 +96,7 @@ def resolve_project_connection_config(
     return resolve_connection_config(
         raw_config=build_effective_connection_config(
             discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
             cli_vars=cli_vars,
         ),
         project_dir=project_dir,

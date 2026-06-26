@@ -5,6 +5,7 @@ from pathlib import Path
 from textwrap import dedent
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    DeferCloneBuildE2ETestCase,
     DependencyBaselineBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
@@ -62,6 +63,48 @@ def prepare_dependency_baseline_project(
     if dev_setup_sql is not None:
         execute_duckdb(db_path=db_path, sql=dev_setup_sql)
     return project_dir
+
+
+def prepare_defer_clone_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    upstream_sql: str,
+    downstream_sql: str,
+) -> Path:
+    """Write a direct-mode project with clone policies for defer-clone E2Es."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                f"""
+                name = "{project_name}"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [connection]
+                database = "warehouse.duckdb"
+
+                [targets.prod]
+                schema = "prod"
+
+                [targets.prod.clone]
+                allow_as_clone_origin = true
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.clone]
+                allow_as_clone_destination = true
+                """
+            ).strip()
+            + "\n",
+            "models/upstream.sql": upstream_sql,
+            "models/downstream.sql": downstream_sql,
+        },
+    )
 
 
 def build_virtual_wide_dag_repo_files(*, model_count: int) -> dict[str, str]:
@@ -161,6 +204,59 @@ def assert_dependency_baseline_build_case(
         db_path=db_path,
         sql="SELECT id, downstream_amount FROM dev.downstream ORDER BY id",
     ) == list(test_case.expected_downstream_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_type, node_name FROM dev._sqlbuild_fingerprints "
+            "WHERE node_type = 'model' ORDER BY node_name"
+        ),
+    ) == list(test_case.expected_fingerprint_rows)
+
+
+def assert_defer_clone_build_case(*, tmp_path: Path, test_case: DeferCloneBuildE2ETestCase) -> None:
+    """Run and assert one direct-mode defer-clone E2E case."""
+
+    project_dir: Path = prepare_defer_clone_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        upstream_sql=test_case.initial_upstream_sql,
+        downstream_sql=test_case.downstream_sql,
+    )
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.prod_build_command,
+        project_dir=project_dir,
+    )
+    assert prod_result.returncode == 0, prod_result.stderr or prod_result.stdout
+    (project_dir / "models" / "upstream.sql").write_text(
+        test_case.changed_upstream_sql,
+        encoding="utf-8",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.dev_build_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_fragment not in result.stdout
+    db_path: Path = project_dir / "warehouse.duckdb"
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT id, label FROM prod.upstream ORDER BY id",
+    ) == list(test_case.expected_prod_upstream_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT id, label FROM dev.upstream ORDER BY id",
+    ) == list(test_case.expected_dev_upstream_rows)
+    assert query_duckdb(
+        db_path=db_path,
+        sql="SELECT id, label FROM dev.downstream ORDER BY id",
+    ) == list(test_case.expected_dev_downstream_rows)
     assert query_duckdb(
         db_path=db_path,
         sql=(

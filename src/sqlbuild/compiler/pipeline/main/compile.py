@@ -63,6 +63,7 @@ def run_compile_pipeline(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
+    selected_target: str | None = None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
     defer_sources_to: str | None = None,
@@ -90,6 +91,7 @@ def run_compile_pipeline(
         if connection_config is not None
         else build_effective_connection_config(
             discovered_inputs=discovered_inputs,
+            selected_target=selected_target,
             cli_vars=cli_vars,
         )
     )
@@ -111,6 +113,7 @@ def run_compile_pipeline(
         return _build_result(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
+            selected_target=selected_target,
             connection=connection,
             no_sql_validation=no_sql_validation,
             defer_to=defer_to,
@@ -136,6 +139,7 @@ def _build_result(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
+    selected_target: str | None = None,
     connection: Any,
     no_sql_validation: bool,
     defer_to: str | None = None,
@@ -159,6 +163,7 @@ def _build_result(
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,

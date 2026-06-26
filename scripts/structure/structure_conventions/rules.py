@@ -25,6 +25,8 @@ _TARGET_REUSE_PATH_MARKERS: tuple[str, ...] = (
 )
 _GLOBAL_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "source_fingerprint",
+    "source_target_name",
+    "source_connection",
     "target_cursor",
     "REUSE_RELATION",
     "reuse_relation",
@@ -38,6 +40,13 @@ _TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "target relation",
     "target_cursor",
 )
+_SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
+    "source_target_name": ("src/sqlbuild/compiler/planner/helpers/warehouse/source_deferral.py",),
+    "source_connection": (
+        "src/sqlbuild/virtual/executor/helpers/build.py",
+        "src/sqlbuild/virtual/planner/main/plan.py",
+    ),
+}
 _MAX_SOURCE_FILE_LINES: int = 2000
 _MAX_HELPER_FLAT_MODULES: int = 10
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
@@ -91,20 +100,29 @@ def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
         if check_scoped_terms:
             terms = (*terms, *_TARGET_REUSE_FORBIDDEN_TERMS)
         for term in terms:
-            if term in line:
+            if term in line and not _is_sc045_term_allowed(path_text=path_text, term=term):
                 violations.append(
                     Violation(
                         code="SC045",
                         path=file_path,
                         line=line_number,
                         message=(
-                            f"reuse code must not use ambiguous term '{term}'; "
-                            "use origin/destination/reuse_from terminology unless this is real "
-                            "SQLBuild source logic"
+                            f"clone/reuse code must not use ambiguous term '{term}'; "
+                            "use origin/destination/reuse_from terminology because 'source' "
+                            "means SQLBuild source nodes. If this is real SQLBuild source logic, "
+                            "add a narrow path exception for this term in SC045."
                         ),
                     )
                 )
     return violations
+
+
+def _is_sc045_term_allowed(*, path_text: str, term: str) -> bool:
+    marker: str
+    for marker in _SC045_ALLOWED_PATH_MARKERS_BY_TERM.get(term, ()):  # pragma: no branch
+        if marker in path_text:
+            return True
+    return False
 
 
 def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> list[Violation]:

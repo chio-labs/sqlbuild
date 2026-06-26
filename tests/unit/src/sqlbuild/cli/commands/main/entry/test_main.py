@@ -1397,6 +1397,7 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
         project_dir: Path | None,
         no_sql_validation: bool,
         no_color: bool,
+        selected_target: str | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         cli_vars: dict[str, object],
@@ -1407,7 +1408,7 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
         fail_on_stale: bool,
         virtual_env: str | None,
     ) -> int:
-        del project_dir, no_color, json_output, json_output_path
+        del project_dir, no_color, selected_target, json_output, json_output_path
         received_args.append(
             (
                 no_sql_validation,
@@ -1456,6 +1457,7 @@ def test_given_freshness_json_arguments_when_running_then_dispatches_expected_ar
         project_dir: Path | None,
         no_sql_validation: bool,
         no_color: bool,
+        selected_target: str | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         cli_vars: dict[str, object],
@@ -1470,6 +1472,7 @@ def test_given_freshness_json_arguments_when_running_then_dispatches_expected_ar
             project_dir,
             no_sql_validation,
             no_color,
+            selected_target,
             select,
             exclude,
             cli_vars,
@@ -1522,6 +1525,7 @@ def test_given_load_flags_when_running_then_dispatches_expected_arguments(
     def run_load(
         project_dir: Path | None,
         no_color: bool,
+        selected_target: str | None,
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         reload: bool,
@@ -1531,7 +1535,15 @@ def test_given_load_flags_when_running_then_dispatches_expected_arguments(
         json_output: bool,
         json_output_path: Path | None,
     ) -> int:
-        del project_dir, no_color, concurrency, cli_vars, json_output, json_output_path
+        del (
+            project_dir,
+            no_color,
+            selected_target,
+            concurrency,
+            cli_vars,
+            json_output,
+            json_output_path,
+        )
         received_args.append((select, exclude, reload, cursor_overrides))
         return test_case.expected_exit_code
 
@@ -1720,9 +1732,11 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
     def run_query(
         project_dir: Path | None,
         sql: str | None,
+        selected_target: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
+        del selected_target
         received_args.append((project_dir, sql, output_format, limit))
         return test_case.expected_exit_code
 
@@ -1756,8 +1770,10 @@ def test_given_debug_command_arguments_when_running_with_dependencies_then_it_di
         project_dir: Path | None,
         no_color: bool,
         no_connection: bool,
+        selected_target: str | None,
         json_output: bool,
     ) -> int:
+        del selected_target
         received_args.append((project_dir, no_color, no_connection, json_output))
         return test_case.expected_exit_code
 
@@ -2215,6 +2231,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        selected_target: str | None,
         json_output: bool,
         manifest: bool,
         dag_path: str | None,
@@ -2226,6 +2243,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         profile_skip_contracts: bool,
         profile_skip_write: bool,
     ) -> int:
+        del selected_target
         received_args.append(
             (
                 project_dir,
@@ -2379,7 +2397,9 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        defer_clone_from: str | None,
         defer_sources_to: str | None,
+        selected_target: str | None,
         cursor_overrides: object,
         no_color: bool,
         fail_fast: bool,
@@ -2406,7 +2426,9 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         del project_dir
         del no_sql_validation
         del defer_to
+        del defer_clone_from
         del defer_sources_to
+        del selected_target
         del cursor_overrides
         del concurrency
         del select
@@ -2498,6 +2520,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         no_sql_validation: bool,
         defer_to: str | None,
         defer_sources_to: str | None,
+        selected_target: str | None,
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
@@ -2512,7 +2535,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         include_stale_upstreams: bool = False,
         force: bool = False,
     ) -> int:
-        del include_python
+        del include_python, selected_target
         received_args.append(
             (
                 project_dir,
@@ -2575,6 +2598,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
         no_sql_validation: bool,
         defer_to: str | None,
         defer_sources_to: str | None,
+        selected_target: str | None,
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
@@ -2594,6 +2618,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             no_sql_validation,
             defer_to,
             defer_sources_to,
+            selected_target,
             cursor_overrides,
             json_output,
             full_refresh,
@@ -2643,6 +2668,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
         no_sql_validation: bool,
         defer_to: str | None,
         defer_sources_to: str | None,
+        selected_target: str | None,
         cursor_overrides: object,
         json_output: bool,
         full_refresh: bool,
@@ -2662,6 +2688,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             no_sql_validation,
             defer_to,
             defer_sources_to,
+            selected_target,
             cursor_overrides,
             json_output,
             full_refresh,
@@ -2835,6 +2862,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
         project_dir: Path | None,
         no_sql_validation: bool,
         defer_to: str | None,
+        selected_target: str | None,
         json_output: bool,
         manifest: bool,
         dag_path: str | None,
@@ -2848,6 +2876,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     ) -> int:
         del no_sql_validation
         del defer_to
+        del selected_target
         del json_output
         del manifest
         del dag_path
@@ -2864,10 +2893,11 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     def run_query(
         project_dir: Path | None,
         sql: str | None,
+        selected_target: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
-        del project_dir, sql, output_format, limit
+        del project_dir, sql, selected_target, output_format, limit
         raise test_case.error_factory(Path("/tmp/demo"))
 
     exit_code: int = _main_with_dependencies(
@@ -2912,10 +2942,11 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
     def run_query(
         project_dir: Path | None,
         sql: str | None,
+        selected_target: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
-        del project_dir, sql, output_format, limit
+        del project_dir, sql, selected_target, output_format, limit
         raise test_case.error_factory(Path("/tmp/demo"))
 
     exit_code: int = _main_with_dependencies(

@@ -48,6 +48,7 @@ def run_compile(
     project_dir: Path | None,
     no_sql_validation: bool = False,
     defer_to: str | None = None,
+    selected_target: str | None = None,
     json_output: bool = False,
     manifest: bool = False,
     dag_path: str | None = None,
@@ -72,6 +73,7 @@ def run_compile(
         return _run_compile_with_status(
             project_dir=effective_project_dir,
             no_sql_validation=no_sql_validation,
+            selected_target=selected_target,
             json_output=json_output,
             manifest=manifest,
             dag_path=dag_path,
@@ -94,6 +96,7 @@ def _run_compile_with_status(
     *,
     project_dir: Path,
     no_sql_validation: bool,
+    selected_target: str | None,
     json_output: bool,
     manifest: bool,
     dag_path: str | None,
@@ -130,6 +133,7 @@ def _run_compile_with_status(
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         skip_column_inference=profile_skip_column_inference,
         column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),

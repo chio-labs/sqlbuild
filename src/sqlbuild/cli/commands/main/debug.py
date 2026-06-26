@@ -15,6 +15,7 @@ def run_debug(
     project_dir: Path | None,
     no_color: bool = False,
     no_connection: bool = False,
+    selected_target: str | None = None,
     json_output: bool = False,
 ) -> int:
     """Validate project config and the active connection."""
@@ -23,6 +24,7 @@ def run_debug(
     result: DebugResult = build_debug_result(
         project_dir=effective_project_dir,
         check_connection=not no_connection,
+        selected_target=selected_target,
     )
     if json_output:
         sys.stdout.write(format_debug_json(result) + "\n")
