@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
@@ -37,6 +37,9 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
     expand_combined_upstream,
+)
+from sqlbuild.integrations.dbt.helpers.planning.concurrent_reads import (
+    run_state_reads_in_parallel,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_graph_identity_nodes,
@@ -79,19 +82,49 @@ def build_dbt_model_planning_result(
     force: bool = False,
     adapter: BaseAdapter,
     connection: Any,
+    connection_config: dict[str, object],
 ) -> DbtModelPlanningResult:
     """Classify dbt model candidates as runnable or current from state and relations."""
 
-    fingerprints: dict[tuple[str, str], Fingerprint] = _read_dbt_fingerprints(
-        project=project,
-        adapter=adapter,
-        connection=connection,
+    expanded_candidate_unique_ids: tuple[str, ...] = _expand_candidate_unique_ids(
+        candidate_unique_ids=candidate_unique_ids,
+        graph=graph,
     )
-    source_freshness: StandardSourceFreshnessPlanningResult = _source_freshness_result(
-        manifest=manifest,
-        project=project,
+    candidate_models: tuple[DbtManifestModel, ...] = tuple(
+        model
+        for unique_id in expanded_candidate_unique_ids
+        if (model := manifest.models_by_unique_id.get(unique_id)) is not None
+    )
+    state_reads: dict[str, object] = run_state_reads_in_parallel(
         adapter=adapter,
-        connection=connection,
+        connection_config=connection_config,
+        reads={
+            "fingerprints": lambda read_connection: _read_dbt_fingerprints(
+                project=project,
+                adapter=adapter,
+                connection=read_connection,
+            ),
+            "source_freshness": lambda read_connection: _source_freshness_result(
+                manifest=manifest,
+                project=project,
+                adapter=adapter,
+                connection=read_connection,
+            ),
+            "existing_relation_keys": lambda read_connection: _existing_model_relation_keys(
+                adapter=adapter,
+                connection=read_connection,
+                models=candidate_models,
+            ),
+        },
+    )
+    fingerprints: dict[tuple[str, str], Fingerprint] = cast(
+        "dict[tuple[str, str], Fingerprint]", state_reads["fingerprints"]
+    )
+    source_freshness: StandardSourceFreshnessPlanningResult = cast(
+        "StandardSourceFreshnessPlanningResult", state_reads["source_freshness"]
+    )
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = cast(
+        "frozenset[tuple[str | None, str | None, str]]", state_reads["existing_relation_keys"]
     )
     blocked_source_unique_ids: frozenset[str] = frozenset(
         identity.source_name
@@ -116,22 +149,6 @@ def build_dbt_model_planning_result(
     expected_version_hashes: dict[str, str | None] = build_expected_dbt_model_version_hashes(
         manifest=manifest,
         graph=graph,
-    )
-    expanded_candidate_unique_ids: tuple[str, ...] = _expand_candidate_unique_ids(
-        candidate_unique_ids=candidate_unique_ids,
-        graph=graph,
-    )
-    candidate_models: tuple[DbtManifestModel, ...] = tuple(
-        model
-        for unique_id in expanded_candidate_unique_ids
-        if (model := manifest.models_by_unique_id.get(unique_id)) is not None
-    )
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = (
-        _existing_model_relation_keys(
-            adapter=adapter,
-            connection=connection,
-            models=candidate_models,
-        )
     )
     for unique_id in expanded_candidate_unique_ids:
         model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
