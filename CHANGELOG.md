@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.41.1](https://github.com/chio-labs/sqlbuild/compare/v0.41.0...v0.41.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **planner:** memoize write-identity hashes to avoid exponential hang ([df812df](https://github.com/chio-labs/sqlbuild/commit/df812df5762a45bf07d3cdec68ff9c23d5076cdb))
+* **planner:** memoize write-identity hashes to avoid exponential hang ([c98f865](https://github.com/chio-labs/sqlbuild/commit/c98f8658df26080c9dc9ee274b165210f922086a))
+
 ## [0.41.0](https://github.com/chio-labs/sqlbuild/compare/v0.40.1...v0.41.0) (2026-06-26)
 
 
