@@ -15,6 +15,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.helpers.clone import (
     acquire_model_lease,
@@ -23,10 +25,10 @@ from sqlbuild.virtual.executor.helpers.clone import (
     build_workspace_model_versions,
     build_workspace_seed_versions,
     hydrate_relation,
+    origin_lookup_location,
     register_hydrated_relation,
     register_hydrated_seed_relation,
     release_model_lease,
-    replace_location_database,
 )
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_physical_destination,
@@ -223,6 +225,43 @@ def run_virtual_clone(
         if origin_database_alias is not None
         else adapter.connect(origin_connection_config)
     )
+    model_origin_lookup_locations: dict[str, CompiledRelationLocation] = {
+        model_name: origin_lookup_location(
+            adapter=adapter,
+            location=build_physical_destination(
+                adapter=adapter,
+                target=origin_models_by_name[model_name].destination,
+                model_name=model_name,
+                version_hash=version_hashes[model_name],
+            ),
+            origin_database_alias=origin_database_alias,
+        )
+        for model_name in model_names
+    }
+    seed_origin_lookup_locations: dict[str, CompiledRelationLocation] = {
+        seed_name: origin_lookup_location(
+            adapter=adapter,
+            location=build_physical_seed_destination(
+                adapter=adapter,
+                target=origin_seeds_by_name[seed_name].destination,
+                seed_name=seed_name,
+                version_hash=seed_versions[seed_name].version_hash,
+            ),
+            origin_database_alias=origin_database_alias,
+        )
+        for seed_name in seed_names
+    }
+    origin_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=origin_connection,
+        locations=tuple(
+            (location.database, location.schema, location.name)
+            for location in (
+                *model_origin_lookup_locations.values(),
+                *seed_origin_lookup_locations.values(),
+            )
+        ),
+    )
     results: list[VirtualCloneItemResult] = []
     try:
         for model_name in model_names:
@@ -235,26 +274,16 @@ def run_virtual_clone(
                 model_name=model_name,
                 version_hash=version_hash,
             )
-            origin_lookup_location: CompiledRelationLocation = (
-                replace_location_database(
-                    adapter=adapter,
-                    location=origin_location,
-                    database=origin_database_alias,
-                )
-                if origin_database_alias is not None
-                else origin_location
-            )
+            lookup_location: CompiledRelationLocation = model_origin_lookup_locations[model_name]
             destination_location: CompiledRelationLocation = build_physical_destination(
                 adapter=adapter,
                 target=destination_model.destination,
                 model_name=model_name,
                 version_hash=version_hash,
             )
-            if not adapter.relation_exists(
-                origin_connection,
-                database=origin_lookup_location.database,
-                schema=origin_lookup_location.schema,
-                name=origin_lookup_location.name,
+            if not origin_lookup.exists(
+                schema=lookup_location.schema,
+                name=lookup_location.name,
             ):
                 results.append(
                     VirtualCloneItemResult(
@@ -324,26 +353,16 @@ def run_virtual_clone(
                 seed_name=seed_name,
                 version_hash=seed_version_hash,
             )
-            origin_lookup_location = (
-                replace_location_database(
-                    adapter=adapter,
-                    location=origin_location,
-                    database=origin_database_alias,
-                )
-                if origin_database_alias is not None
-                else origin_location
-            )
+            lookup_location = seed_origin_lookup_locations[seed_name]
             destination_location = build_physical_seed_destination(
                 adapter=adapter,
                 target=destination_seed.destination,
                 seed_name=seed_name,
                 version_hash=seed_version_hash,
             )
-            if not adapter.relation_exists(
-                origin_connection,
-                database=origin_lookup_location.database,
-                schema=origin_lookup_location.schema,
-                name=origin_lookup_location.name,
+            if not origin_lookup.exists(
+                schema=lookup_location.schema,
+                name=lookup_location.name,
             ):
                 results.append(
                     VirtualCloneItemResult(

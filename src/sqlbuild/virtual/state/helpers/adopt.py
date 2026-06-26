@@ -12,6 +12,8 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
 from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_destination
@@ -70,10 +72,20 @@ def adopt_into_virtual_state(
         )
         refs: list[VirtualEnvironmentModelRefRecord] = []
         recorder: StatementRecorder = StatementRecorder()
+        relation_lookup: RelationLookup = build_relation_lookup(
+            adapter=adapter,
+            connection=connection,
+            locations=tuple(
+                (
+                    model.destination.database,
+                    model.destination.schema,
+                    model.destination.name,
+                )
+                for model in graph.project.models
+            ),
+        )
         for model in graph.project.models:
-            if not adapter.relation_exists(
-                connection,
-                database=model.destination.database,
+            if not relation_lookup.exists(
                 schema=model.destination.schema,
                 name=model.destination.name,
             ):
