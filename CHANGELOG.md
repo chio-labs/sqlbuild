@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.41.0](https://github.com/chio-labs/sqlbuild/compare/v0.40.1...v0.41.0) (2026-06-26)
+
+
+### Features
+
+* **build:** add --defer-clone-from and per-command --target ([237b8b9](https://github.com/chio-labs/sqlbuild/commit/237b8b9650baa43789919801a4bb9198e6b7deab))
+* **build:** add --defer-clone-from and per-command --target ([c451b02](https://github.com/chio-labs/sqlbuild/commit/c451b020aedd027f70170c89398736e47259b14f))
+* **dbt:** persist a Finalizing dbt run progress line after the event stream ([4b93f42](https://github.com/chio-labs/sqlbuild/commit/4b93f4207f71817f8ff071a68b4b49b687dad529))
+* **dbt:** remove dbt reuse-from-production, keep change-aware builds + clone/diff ([fd6243a](https://github.com/chio-labs/sqlbuild/commit/fd6243a390ae853e7226e39ddbec0c3eb2767a9a))
+* **dbt:** remove sqb dbt identity-diff (dead dbt reuse preview) ([ba8d19d](https://github.com/chio-labs/sqlbuild/commit/ba8d19d687c469a5298160b17c276261de7dd2f4))
+* **dbt:** remove sqb dbt identity-diff (dead dbt reuse preview) ([4eca08e](https://github.com/chio-labs/sqlbuild/commit/4eca08e6eccd1b44ed85655c31835df2ae2800e2))
+* **dbt:** render a completion status and PASS/WARN/FAIL/SKIP/TOTAL f… ([d40576b](https://github.com/chio-labs/sqlbuild/commit/d40576b7c353cf59eb36de213753e092156dea11))
+* **dbt:** render a completion status and PASS/WARN/FAIL/SKIP/TOTAL footer for dbt build ([b3a2447](https://github.com/chio-labs/sqlbuild/commit/b3a2447c1873e94bf27e7eaaef33d107383c8230))
+* **dbt:** report progress during post-build state persistence ([d2d1ba1](https://github.com/chio-labs/sqlbuild/commit/d2d1ba1141cebf8740d54044a0a991fd17c280c3))
+* **reuse:** enforce strict native reuse and render source freshness via adapter ([beca26e](https://github.com/chio-labs/sqlbuild/commit/beca26ecf6d6f371629f83e59e5ea783241d8416))
+
+
+### Bug Fixes
+
+* **dbt:** batch model relation planning checks ([19105d7](https://github.com/chio-labs/sqlbuild/commit/19105d7a6b1146a6b68015d99fad0cb599d83625))
+* **dbt:** ensure fingerprint schema exists before writing dbt fingerprints ([5fb28a8](https://github.com/chio-labs/sqlbuild/commit/5fb28a8a7029a8f82761cc085ad858b91e89b49f))
+* **dbt:** only run changed seeds when models build ([2f5d3a4](https://github.com/chio-labs/sqlbuild/commit/2f5d3a4de7e1ec8a36e0bd8af02d54c7dde211c3))
+* **reuse:** satisfy type and test-convention checks for reuse rework ([7ff2829](https://github.com/chio-labs/sqlbuild/commit/7ff2829f9f0ce6c3e275817223a8435a1bf610f3))
+* sync release-please manifest to 0.40.1 after revert ([0be12c6](https://github.com/chio-labs/sqlbuild/commit/0be12c637f28ec462b5cc92b265a07881445b764))
+* sync release-please manifest to 0.40.1 after revert ([cfd5bcb](https://github.com/chio-labs/sqlbuild/commit/cfd5bcbe15616315447a594450aea3f7d564785b))
+* **virtual:** disable reuse planning in virtual environment plans ([309a17d](https://github.com/chio-labs/sqlbuild/commit/309a17d8b5f6917979dd79a7824926bc1c6d620f))
+
 ## [0.39.0](https://github.com/chio-labs/sqlbuild/compare/v0.38.0...v0.39.0) (2026-06-26)
 
 
