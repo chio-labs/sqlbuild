@@ -10,6 +10,8 @@ from typing import Any, TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.helpers.clone.output import (
     is_clone_success,
+    render_clone_header,
+    render_clone_item_line,
     render_clone_output,
 )
 from sqlbuild.cli.commands.main.helpers.clone.validation import validate_clone_request
@@ -33,7 +35,7 @@ from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.executor.main.clone import run_virtual_clone
@@ -157,7 +159,26 @@ def run_clone(
         if not destination_model_entries and not destination_seed_entries:
             raise CliUserError("no cloneable resources found in the selected scope", code="C407")
 
-        progress.start("Cloning relations...")
+        progress.finish()
+        clone_total: int = len(destination_model_entries) + len(destination_seed_entries)
+        progress_stream.write(
+            render_clone_header(
+                origin_target_name=origin_target_name,
+                destination_target_name=destination_target_name,
+                total=clone_total,
+                use_color=use_color,
+            )
+            + "\n"
+        )
+        progress_stream.flush()
+
+        def _on_clone_item(index: int, total: int, item: CloneItemResult) -> None:
+            progress_stream.write(
+                render_clone_item_line(index=index, total=total, item=item, use_color=use_color)
+                + "\n"
+            )
+            progress_stream.flush()
+
         clone_start = time.monotonic()
         result: CloneExecutionResult = execute_clone(
             origin_model_entries=clone_pipeline.origin_model_entries,
@@ -168,6 +189,7 @@ def run_clone(
             origin_connection=origin_connection,
             destination_connection=destination_connection,
             hard_copy=hard_copy,
+            on_item=_on_clone_item,
         )
         copy_clone_fingerprints(
             result=result,
@@ -181,16 +203,15 @@ def run_clone(
             run_id=clone_pipeline.destination_project.run_id,
             query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
         )
-        progress.complete(f"Cloned relations. ({time.monotonic() - clone_start:.2f}s)")
+        clone_elapsed: float = time.monotonic() - clone_start
     finally:
-        progress.finish(blank_line_after=True)
+        progress.finish(blank_line_after=False)
         adapter.close(origin_connection)
         adapter.close(destination_connection)
 
     render_clone_output(
         result=result,
-        origin_target_name=origin_target_name,
-        destination_target_name=destination_target_name,
+        elapsed_seconds=clone_elapsed,
         use_color=use_color,
     )
     return 0 if is_clone_success(result) else 1
