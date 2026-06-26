@@ -12,52 +12,52 @@ from sqlbuild.integrations.dbt.exceptions import (
     DbtReuseUnavailableError,
 )
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.reuse import reuse_from
-from sqlbuild.integrations.dbt.main.compile_reuse_from_manifest import (
-    compile_reuse_from_dbt_manifest,
+from sqlbuild.integrations.dbt.helpers.reuse import production_ref
+from sqlbuild.integrations.dbt.main.compile_production_ref_manifest import (
+    compile_production_ref_dbt_manifest,
 )
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
-    DbtReuseFromCompileResult,
+    DbtProductionRefCompileResult,
 )
-from sqlbuild.spec.models.project import DbtReuseFromConfig
+from sqlbuild.spec.models.project import DbtProductionRefConfig
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
-    DbtReuseFromCompileErrorTestCase,
-    DbtReuseFromCompileSetupErrorTestCase,
-    RealDbtReuseFromCompileTestCase,
+    DbtProductionRefCompileErrorTestCase,
+    DbtProductionRefCompileSetupErrorTestCase,
+    RealDbtProductionRefCompileTestCase,
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
-    build_local_reuse_from_git_project,
+    build_local_production_ref_git_project,
     count_available_reuse_refs,
     run_git_command,
     set_git_identity,
 )
 
-REUSE_FROM_COMPILE_ERROR_TEST_CASES: list[DbtReuseFromCompileErrorTestCase] = [
-    DbtReuseFromCompileErrorTestCase(
+PRODUCTION_REF_COMPILE_ERROR_TEST_CASES: list[DbtProductionRefCompileErrorTestCase] = [
+    DbtProductionRefCompileErrorTestCase(
         description="raises when git ref cannot be archived",
         git_ref="missing-ref",
         command_returncode=0,
         command_stdout="",
         expected_error_type=DbtReuseUnavailableError,
         expected_error_fragment=(
-            "dbt reuse_from git_ref 'missing-ref' does not exist in this repository"
+            "dbt production_ref git_ref 'missing-ref' does not exist in this repository"
         ),
         extra_branch_count=12,
         expected_help_fragments=(
-            "sqlbuild_project.toml [dbt.reuse_from].git_ref",
+            "sqlbuild_project.toml [dbt.production_ref].git_ref",
             "Available local branches/tags include:",
         ),
         expected_available_ref_count=10,
     ),
-    DbtReuseFromCompileErrorTestCase(
+    DbtProductionRefCompileErrorTestCase(
         description="raises when injected dbt compile fails",
         git_ref="prod",
         command_returncode=2,
         command_stdout="compile exploded",
         expected_error_type=DbtInteropRuntimeError,
-        expected_error_fragment="dbt reuse_from compile failed",
+        expected_error_fragment="dbt production_ref compile failed",
     ),
 ]
 
@@ -65,7 +65,7 @@ REUSE_FROM_COMPILE_ERROR_TEST_CASES: list[DbtReuseFromCompileErrorTestCase] = [
 @pytest.mark.parametrize(
     "test_case",
     [
-        RealDbtReuseFromCompileTestCase(
+        RealDbtProductionRefCompileTestCase(
             description="compiles dbt project at git ref with schema macro override",
             git_ref="prod",
             override_relative_path=Path("dbt/macros/prod_generate_schema_name.sql"),
@@ -77,23 +77,23 @@ REUSE_FROM_COMPILE_ERROR_TEST_CASES: list[DbtReuseFromCompileErrorTestCase] = [
     ids=["compiles dbt project at git ref with schema macro override"],
 )
 @pytest.mark.dbt
-def test_given_dbt_reuse_from_git_ref_when_compiling_then_returns_overridden_manifest(
-    test_case: RealDbtReuseFromCompileTestCase,
+def test_given_dbt_production_ref_git_ref_when_compiling_then_returns_overridden_manifest(
+    test_case: RealDbtProductionRefCompileTestCase,
     tmp_path: Path,
     real_dbt_executable: str,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
 
-    result: DbtReuseFromCompileResult = compile_reuse_from_dbt_manifest(
+    result: DbtProductionRefCompileResult = compile_production_ref_dbt_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(
             project_dir=dbt_project_dir,
             profiles_dir=profiles_dir,
             target_path=dbt_project_dir / "target",
         ),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref=test_case.git_ref,
             generate_schema_name_override=macro_relative_path.as_posix(),
         ),
@@ -113,15 +113,15 @@ def test_given_dbt_reuse_from_git_ref_when_compiling_then_returns_overridden_man
 
 @pytest.mark.parametrize(
     "test_case",
-    REUSE_FROM_COMPILE_ERROR_TEST_CASES,
-    ids=[case.description for case in REUSE_FROM_COMPILE_ERROR_TEST_CASES],
+    PRODUCTION_REF_COMPILE_ERROR_TEST_CASES,
+    ids=[case.description for case in PRODUCTION_REF_COMPILE_ERROR_TEST_CASES],
 )
-def test_given_invalid_reuse_from_compile_inputs_when_compiling_then_raises_clear_error(
-    test_case: DbtReuseFromCompileErrorTestCase,
+def test_given_invalid_production_ref_compile_inputs_when_compiling_then_raises_clear_error(
+    test_case: DbtProductionRefCompileErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     branch_index: int
     for branch_index in range(test_case.extra_branch_count):
@@ -138,14 +138,14 @@ def test_given_invalid_reuse_from_compile_inputs_when_compiling_then_raises_clea
         )
 
     with pytest.raises(test_case.expected_error_type) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref=test_case.git_ref,
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -163,7 +163,7 @@ def test_given_invalid_reuse_from_compile_inputs_when_compiling_then_raises_clea
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when reuse git ref is current branch",
             setup_kind="current_branch",
             expected_error_fragment="git_ref must not be the current branch",
@@ -171,23 +171,23 @@ def test_given_invalid_reuse_from_compile_inputs_when_compiling_then_raises_clea
     ],
     ids=["raises when reuse git ref is current branch"],
 )
-def test_given_reuse_from_git_ref_is_current_branch_when_compiling_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_production_ref_git_ref_is_current_branch_when_compiling_then_raises_clear_error(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
 
     with pytest.raises(DbtReuseUnavailableError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="main",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -200,7 +200,7 @@ def test_given_reuse_from_git_ref_is_current_branch_when_compiling_then_raises_c
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when git executable is missing",
             setup_kind="missing_git",
             expected_error_fragment="requires git to be installed and available on PATH",
@@ -208,30 +208,30 @@ def test_given_reuse_from_git_ref_is_current_branch_when_compiling_then_raises_c
     ],
     ids=["raises when git executable is missing"],
 )
-def test_given_git_is_missing_when_compiling_reuse_from_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_git_is_missing_when_compiling_production_ref_then_raises_clear_error(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
 
     def raise_missing_git(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         del args, kwargs
         raise FileNotFoundError("git")
 
-    monkeypatch.setattr(reuse_from.subprocess, "run", raise_missing_git)
+    monkeypatch.setattr(production_ref.subprocess, "run", raise_missing_git)
 
     with pytest.raises(DbtInteropConfigError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="prod",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -244,7 +244,7 @@ def test_given_git_is_missing_when_compiling_reuse_from_then_raises_clear_error(
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileErrorTestCase(
+        DbtProductionRefCompileErrorTestCase(
             description="raises when compile succeeds without manifest",
             git_ref="prod",
             command_returncode=0,
@@ -255,12 +255,12 @@ def test_given_git_is_missing_when_compiling_reuse_from_then_raises_clear_error(
     ],
     ids=["raises when compile succeeds without manifest"],
 )
-def test_given_dbt_compile_without_manifest_when_compiling_reuse_from_then_raises_clear_error(
-    test_case: DbtReuseFromCompileErrorTestCase,
+def test_given_dbt_compile_without_manifest_when_compiling_production_ref_then_raises_clear_error(
+    test_case: DbtProductionRefCompileErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
 
     def invoke(argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
@@ -271,14 +271,14 @@ def test_given_dbt_compile_without_manifest_when_compiling_reuse_from_then_raise
         )
 
     with pytest.raises(test_case.expected_error_type) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref=test_case.git_ref,
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -291,7 +291,7 @@ def test_given_dbt_compile_without_manifest_when_compiling_reuse_from_then_raise
 @pytest.mark.parametrize(
     "test_case",
     [
-        RealDbtReuseFromCompileTestCase(
+        RealDbtProductionRefCompileTestCase(
             description="refreshes tracked git ref before compiling",
             git_ref="prod",
             override_relative_path=Path("dbt/macros/prod_generate_schema_name.sql"),
@@ -302,12 +302,12 @@ def test_given_dbt_compile_without_manifest_when_compiling_reuse_from_then_raise
     ],
     ids=["refreshes tracked git ref before compiling"],
 )
-def test_given_reuse_from_git_ref_tracks_remote_when_compiling_then_fetches_latest_ref(
-    test_case: RealDbtReuseFromCompileTestCase,
+def test_given_production_ref_git_ref_tracks_remote_when_compiling_then_fetches_latest_ref(
+    test_case: RealDbtProductionRefCompileTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     repo_dir: Path = sqlbuild_project_dir.parent
     remote_dir: Path = tmp_path / "remote.git"
@@ -350,14 +350,14 @@ def test_given_reuse_from_git_ref_tracks_remote_when_compiling_then_fetches_late
         )
         return DbtCommandResult(argv=argv, returncode=0)
 
-    result: DbtReuseFromCompileResult = compile_reuse_from_dbt_manifest(
+    result: DbtProductionRefCompileResult = compile_production_ref_dbt_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(
             project_dir=dbt_project_dir,
             profiles_dir=profiles_dir,
             target_path=dbt_project_dir / "target",
         ),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref=test_case.git_ref,
             generate_schema_name_override=macro_relative_path.as_posix(),
         ),
@@ -370,7 +370,7 @@ def test_given_reuse_from_git_ref_tracks_remote_when_compiling_then_fetches_late
 @pytest.mark.parametrize(
     "test_case",
     [
-        RealDbtReuseFromCompileTestCase(
+        RealDbtProductionRefCompileTestCase(
             description="uses local git ref when no upstream is configured",
             git_ref="prod",
             override_relative_path=Path("dbt/macros/prod_generate_schema_name.sql"),
@@ -381,12 +381,12 @@ def test_given_reuse_from_git_ref_tracks_remote_when_compiling_then_fetches_late
     ],
     ids=["uses local git ref when no upstream is configured"],
 )
-def test_given_reuse_from_git_ref_has_no_upstream_when_compiling_then_uses_local_ref(
-    test_case: RealDbtReuseFromCompileTestCase,
+def test_given_production_ref_git_ref_has_no_upstream_when_compiling_then_uses_local_ref(
+    test_case: RealDbtProductionRefCompileTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
 
     def invoke(argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
@@ -400,14 +400,14 @@ def test_given_reuse_from_git_ref_has_no_upstream_when_compiling_then_uses_local
         )
         return DbtCommandResult(argv=argv, returncode=0)
 
-    result: DbtReuseFromCompileResult = compile_reuse_from_dbt_manifest(
+    result: DbtProductionRefCompileResult = compile_production_ref_dbt_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(
             project_dir=dbt_project_dir,
             profiles_dir=profiles_dir,
             target_path=dbt_project_dir / "target",
         ),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref=test_case.git_ref,
             generate_schema_name_override=macro_relative_path.as_posix(),
         ),
@@ -421,7 +421,7 @@ def test_given_reuse_from_git_ref_has_no_upstream_when_compiling_then_uses_local
 @pytest.mark.parametrize(
     "test_case",
     [
-        RealDbtReuseFromCompileTestCase(
+        RealDbtProductionRefCompileTestCase(
             description="uses local git ref when tracking config is local only",
             git_ref="prod",
             override_relative_path=Path("dbt/macros/prod_generate_schema_name.sql"),
@@ -432,12 +432,12 @@ def test_given_reuse_from_git_ref_has_no_upstream_when_compiling_then_uses_local
     ],
     ids=["uses local git ref when tracking config is local only"],
 )
-def test_given_reuse_from_git_ref_has_local_tracking_when_compiling_then_uses_local_ref(
-    test_case: RealDbtReuseFromCompileTestCase,
+def test_given_production_ref_git_ref_has_local_tracking_when_compiling_then_uses_local_ref(
+    test_case: RealDbtProductionRefCompileTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     repo_dir: Path = sqlbuild_project_dir.parent
     run_git_command(repo_dir=repo_dir, args=("config", "branch.prod.remote", "."))
@@ -454,14 +454,14 @@ def test_given_reuse_from_git_ref_has_local_tracking_when_compiling_then_uses_lo
         )
         return DbtCommandResult(argv=argv, returncode=0)
 
-    result: DbtReuseFromCompileResult = compile_reuse_from_dbt_manifest(
+    result: DbtProductionRefCompileResult = compile_production_ref_dbt_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(
             project_dir=dbt_project_dir,
             profiles_dir=profiles_dir,
             target_path=dbt_project_dir / "target",
         ),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref=test_case.git_ref,
             generate_schema_name_override=macro_relative_path.as_posix(),
         ),
@@ -475,7 +475,7 @@ def test_given_reuse_from_git_ref_has_local_tracking_when_compiling_then_uses_lo
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when tracked git ref cannot be refreshed",
             setup_kind="refresh_failure",
             expected_error_fragment="git_ref could not be refreshed from its remote",
@@ -483,26 +483,26 @@ def test_given_reuse_from_git_ref_has_local_tracking_when_compiling_then_uses_lo
     ],
     ids=["raises when tracked git ref cannot be refreshed"],
 )
-def test_given_reuse_from_git_ref_refresh_fails_when_compiling_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_production_ref_git_ref_refresh_fails_when_compiling_then_raises_clear_error(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     repo_dir: Path = sqlbuild_project_dir.parent
     run_git_command(repo_dir=repo_dir, args=("config", "branch.prod.remote", "missing-origin"))
     run_git_command(repo_dir=repo_dir, args=("config", "branch.prod.merge", "refs/heads/prod"))
 
     with pytest.raises(DbtReuseUnavailableError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="prod",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -515,7 +515,7 @@ def test_given_reuse_from_git_ref_refresh_fails_when_compiling_then_raises_clear
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when dbt project directory is missing",
             setup_kind="missing_project_dir",
             expected_error_fragment="dbt project directory is not configured",
@@ -523,23 +523,23 @@ def test_given_reuse_from_git_ref_refresh_fails_when_compiling_then_raises_clear
     ],
     ids=["raises when dbt project directory is missing"],
 )
-def test_given_missing_dbt_project_dir_when_compiling_reuse_from_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_missing_dbt_project_dir_when_compiling_production_ref_then_raises_clear_error(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
 
     with pytest.raises(DbtInteropConfigError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=None,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="prod",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -552,7 +552,7 @@ def test_given_missing_dbt_project_dir_when_compiling_reuse_from_then_raises_cle
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when macro override file is missing",
             setup_kind="missing_macro_file",
             expected_error_fragment="generate_schema_name_override was not found",
@@ -560,24 +560,24 @@ def test_given_missing_dbt_project_dir_when_compiling_reuse_from_then_raises_cle
     ],
     ids=["raises when macro override file is missing"],
 )
-def test_given_missing_macro_override_when_compiling_reuse_from_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_missing_macro_override_when_compiling_production_ref_then_raises_clear_error(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     sqlbuild_project_dir.joinpath(macro_relative_path).unlink()
 
     with pytest.raises(DbtInteropConfigError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="prod",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -590,7 +590,7 @@ def test_given_missing_macro_override_when_compiling_reuse_from_then_raises_clea
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when SQLBuild project is not in a git repo",
             setup_kind="no_git_repo",
             expected_error_fragment="requires the SQLBuild project to be in a git repository",
@@ -598,8 +598,8 @@ def test_given_missing_macro_override_when_compiling_reuse_from_then_raises_clea
     ],
     ids=["raises when SQLBuild project is not in a git repo"],
 )
-def test_given_sqlbuild_project_outside_git_repo_when_compiling_reuse_from_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_sqlbuild_project_outside_git_repo_when_compiling_production_ref_then_raises(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir: Path = tmp_path / "sqlbuild_project"
@@ -612,14 +612,14 @@ def test_given_sqlbuild_project_outside_git_repo_when_compiling_reuse_from_then_
     sqlbuild_project_dir.joinpath(macro_relative_path).write_text("macro", encoding="utf-8")
 
     with pytest.raises(DbtReuseUnavailableError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="prod",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -632,7 +632,7 @@ def test_given_sqlbuild_project_outside_git_repo_when_compiling_reuse_from_then_
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtReuseFromCompileSetupErrorTestCase(
+        DbtProductionRefCompileSetupErrorTestCase(
             description="raises when dbt project is outside git repo",
             setup_kind="dbt_outside_git_repo",
             expected_error_fragment=(
@@ -642,25 +642,25 @@ def test_given_sqlbuild_project_outside_git_repo_when_compiling_reuse_from_then_
     ],
     ids=["raises when dbt project is outside git repo"],
 )
-def test_given_dbt_project_outside_git_repo_when_compiling_reuse_from_then_raises_clear_error(
-    test_case: DbtReuseFromCompileSetupErrorTestCase,
+def test_given_dbt_project_outside_git_repo_when_compiling_production_ref_then_raises_clear_error(
+    test_case: DbtProductionRefCompileSetupErrorTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, _dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     dbt_project_dir: Path = tmp_path / "external_dbt_project"
     dbt_project_dir.mkdir()
 
     with pytest.raises(DbtReuseUnavailableError) as exc_info:
-        compile_reuse_from_dbt_manifest(
+        compile_production_ref_dbt_manifest(
             sqlbuild_project_dir=sqlbuild_project_dir,
             dbt_options=DbtCliOptions(
                 project_dir=dbt_project_dir,
                 profiles_dir=profiles_dir,
                 target_path=dbt_project_dir / "target",
             ),
-            reuse_from=DbtReuseFromConfig(
+            production_ref=DbtProductionRefConfig(
                 git_ref="prod",
                 generate_schema_name_override=macro_relative_path.as_posix(),
             ),
@@ -673,7 +673,7 @@ def test_given_dbt_project_outside_git_repo_when_compiling_reuse_from_then_raise
 @pytest.mark.parametrize(
     "test_case",
     [
-        RealDbtReuseFromCompileTestCase(
+        RealDbtProductionRefCompileTestCase(
             description="writes manifest to isolated temp target path",
             git_ref="prod",
             override_relative_path=Path("dbt/macros/prod_generate_schema_name.sql"),
@@ -684,12 +684,12 @@ def test_given_dbt_project_outside_git_repo_when_compiling_reuse_from_then_raise
     ],
     ids=["writes manifest to isolated temp target path"],
 )
-def test_given_reuse_from_compile_when_running_dbt_then_uses_isolated_target_path(
-    test_case: RealDbtReuseFromCompileTestCase,
+def test_given_production_ref_compile_when_running_dbt_then_uses_isolated_target_path(
+    test_case: RealDbtProductionRefCompileTestCase,
     tmp_path: Path,
 ) -> None:
     sqlbuild_project_dir, dbt_project_dir, profiles_dir, macro_relative_path = (
-        build_local_reuse_from_git_project(tmp_path=tmp_path)
+        build_local_production_ref_git_project(tmp_path=tmp_path)
     )
     observed_target_paths: list[Path] = []
 
@@ -703,14 +703,14 @@ def test_given_reuse_from_compile_when_running_dbt_then_uses_isolated_target_pat
         )
         return DbtCommandResult(argv=argv, returncode=0)
 
-    result: DbtReuseFromCompileResult = compile_reuse_from_dbt_manifest(
+    result: DbtProductionRefCompileResult = compile_production_ref_dbt_manifest(
         sqlbuild_project_dir=sqlbuild_project_dir,
         dbt_options=DbtCliOptions(
             project_dir=dbt_project_dir,
             profiles_dir=profiles_dir,
             target_path=dbt_project_dir / "target",
         ),
-        reuse_from=DbtReuseFromConfig(
+        production_ref=DbtProductionRefConfig(
             git_ref=test_case.git_ref,
             generate_schema_name_override=macro_relative_path.as_posix(),
         ),

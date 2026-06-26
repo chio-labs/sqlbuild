@@ -270,6 +270,42 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC045", "SC045"),
     ),
     CheckPathsTestCase(
+        description="reports ambiguous clone source target terminology",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/executor/clone/main/example.py": (
+                "def run_clone(source_target_name: str) -> str:\n"
+                "    source_connection = source_target_name\n"
+                "    return source_connection\n"
+            )
+        },
+        expected_violation_codes=("SC045", "SC045", "SC045", "SC045"),
+    ),
+    CheckPathsTestCase(
+        description="allows source target terminology in source deferral logic",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/compiler/planner/helpers/warehouse/source_deferral.py": (
+                "def resolve() -> str | None:\n"
+                "    source_target_name = 'prod'\n"
+                "    return source_target_name\n"
+            )
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="allows source connection terminology in virtual source logic",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/virtual/planner/main/plan.py": (
+                "def resolve(connection: object) -> object:\n"
+                "    source_connection = connection\n"
+                "    return source_connection\n"
+            )
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="allows real adapter source relation terminology outside reuse modules",
         repo_files=compliant_repo_files()
         | {

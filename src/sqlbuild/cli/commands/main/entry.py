@@ -65,6 +65,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     compile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.COMPILE)
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     compile_parser.add_argument("--defer-to", default=None)
+    compile_parser.add_argument("--target", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
     compile_parser.add_argument("--manifest", action="store_true", default=False)
     compile_parser.add_argument("--dag", nargs="?", const="", default=None)
@@ -112,6 +113,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--defer-sources-to", default=None)
+    plan_parser.add_argument("--target", default=None)
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     plan_parser.add_argument("--virtual-env", default=None)
@@ -137,7 +139,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     build_parser.add_argument("--defer-to", default=None)
+    build_parser.add_argument("--defer-clone-from", default=None)
     build_parser.add_argument("--defer-sources-to", default=None)
+    build_parser.add_argument("--target", default=None)
     build_parser.add_argument("--json", action="store_true", default=False)
     build_parser.add_argument("--virtual-env", default=None)
     build_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
@@ -167,6 +171,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     freshness_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     freshness_parser.add_argument("--json", action="store_true", default=False)
     freshness_parser.add_argument("--state", action="store_true", default=False)
+    freshness_parser.add_argument("--target", default=None)
     freshness_parser.add_argument("--virtual-env", default=None)
     freshness_parser.add_argument("--fail-on-error", action="store_true", default=False)
     freshness_parser.add_argument("--fail-on-stale", action="store_true", default=False)
@@ -178,6 +183,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     test_parser.add_argument("--json", action="store_true", default=False)
+    test_parser.add_argument("--target", default=None)
     add_execution_json_output_arg(test_parser)
     add_select_args(test_parser)
     add_vars_args(test_parser)
@@ -186,6 +192,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     check_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CHECK)
     check_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     check_parser.add_argument("--json", action="store_true", default=False)
+    check_parser.add_argument("--target", default=None)
     add_execution_json_output_arg(check_parser)
     add_select_args(check_parser)
     add_vars_args(check_parser)
@@ -194,6 +201,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
+    audit_parser.add_argument("--target", default=None)
     audit_parser.add_argument("--json", action="store_true", default=False)
     add_execution_json_output_arg(audit_parser)
     add_select_args(audit_parser)
@@ -203,6 +211,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     load_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LOAD)
     load_parser.add_argument("--reload", action="store_true", default=False)
     load_parser.add_argument("--json", action="store_true", default=False)
+    load_parser.add_argument("--target", default=None)
     load_parser.add_argument("--concurrency", type=int, default=None)
     add_execution_json_output_arg(load_parser)
     add_select_args(load_parser)
@@ -211,6 +220,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     seed_parser.add_argument("--json", action="store_true", default=False)
+    seed_parser.add_argument("--target", default=None)
     seed_parser.add_argument("--concurrency", type=int, default=None)
     add_execution_json_output_arg(seed_parser)
     add_select_args(seed_parser)
@@ -279,9 +289,11 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     add_vars_args(rollback_parser)
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
+    debug_parser.add_argument("--target", default=None)
     debug_parser.add_argument("--no-connection", action="store_true", default=False)
     query_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.QUERY)
     query_parser.add_argument("query_sql", nargs="?", metavar="sql")
+    query_parser.add_argument("--target", default=None)
     query_parser.add_argument(
         "--format",
         dest="query_format",
@@ -652,6 +664,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.target,
                 args.json,
                 args.manifest,
                 args.dag,
@@ -682,6 +695,7 @@ def _main_with_dependencies(
                 args.no_sql_validation,
                 args.defer_to,
                 args.defer_sources_to,
+                args.target,
                 cursor_overrides,
                 args.json,
                 args.full_refresh,
@@ -740,7 +754,9 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.defer_to,
+                args.defer_clone_from,
                 args.defer_sources_to,
+                args.target,
                 cursor_overrides,
                 args.no_color,
                 args.fail_fast,
@@ -769,6 +785,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,
+                args.target,
                 select,
                 tuple(args.exclude),
                 args.vars,
@@ -784,6 +801,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,
+                args.target,
                 select,
                 tuple(args.exclude),
                 args.vars,
@@ -795,6 +813,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_sql_validation,
                 args.no_color,
+                args.target,
                 select,
                 tuple(args.exclude),
                 args.vars,
@@ -807,6 +826,7 @@ def _main_with_dependencies(
                 args.no_sql_validation,
                 args.defer_to,
                 args.no_color,
+                args.target,
                 select,
                 tuple(args.exclude),
                 args.vars,
@@ -823,6 +843,7 @@ def _main_with_dependencies(
             return handlers.run_load(
                 project_dir,
                 args.no_color,
+                args.target,
                 select,
                 tuple(args.exclude),
                 args.reload,
@@ -836,6 +857,7 @@ def _main_with_dependencies(
             return handlers.run_seed(
                 project_dir,
                 args.no_color,
+                args.target,
                 select,
                 tuple(args.exclude),
                 args.concurrency,
@@ -941,6 +963,7 @@ def _main_with_dependencies(
             return handlers.run_query(
                 project_dir,
                 args.query_sql,
+                args.target,
                 args.query_format,
                 query_limit,
             )
@@ -949,6 +972,7 @@ def _main_with_dependencies(
                 project_dir,
                 args.no_color,
                 args.no_connection,
+                args.target,
                 args.json,
             )
         if args.command == CliCommand.JANITOR:

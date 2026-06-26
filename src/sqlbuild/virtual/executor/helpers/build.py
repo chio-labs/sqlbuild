@@ -148,6 +148,7 @@ def run_virtual_build(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
+    selected_target: str | None = None,
     no_sql_validation: bool = False,
     defer_sources_to: str | None = None,
     cursor_overrides: CursorOverrides | None = None,
@@ -188,6 +189,7 @@ def run_virtual_build(
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
@@ -202,7 +204,7 @@ def run_virtual_build(
     physical_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_target=None,
+        selected_target=selected_target,
     )
     unsuffixed_virtual_environment_name: str | None = None
     if physical_target_name is not None:

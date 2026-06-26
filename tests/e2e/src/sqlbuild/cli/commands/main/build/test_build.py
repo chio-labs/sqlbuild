@@ -12,6 +12,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     BuildE2ETestCase,
+    DeferCloneBuildE2ETestCase,
     DependencyBaselineBuildE2ETestCase,
     DirectChangesOnlyBuildE2ETestCase,
     PythonBuildE2ETestCase,
@@ -23,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     StandardPythonBuildHardeningE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    assert_defer_clone_build_case,
     assert_dependency_baseline_build_case,
     build_freshness_error_branch_source_yml,
     downstream_model_sql,
@@ -113,6 +115,58 @@ DEPENDENCY_BASELINE_TEST_CASES: list[DependencyBaselineBuildE2ETestCase] = [
         expected_fingerprint_rows=(("model", "downstream"),),
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeferCloneBuildE2ETestCase(
+            description="selected downstream clones missing upstream boundary from prod",
+            project_name="defer_clone_build",
+            initial_upstream_sql=(
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'prod_version' AS label\n"
+            ),
+            changed_upstream_sql=(
+                "MODEL (materialized table);\n\nSELECT 1 AS id, 'dev_version' AS label\n"
+            ),
+            downstream_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT id, label || '_downstream' AS label FROM __ref(\"upstream\")\n"
+            ),
+            prod_build_command=("--no-color", "build", "--target", "prod"),
+            dev_build_command=(
+                "--no-color",
+                "build",
+                "--target",
+                "dev",
+                "--select",
+                "downstream",
+                "--defer-clone-from",
+                "prod",
+            ),
+            expected_stdout_fragments=(
+                "Cloning deferred boundary relations",
+                "Existing destination inputs (1)",
+                "upstream",
+                "First run (1)",
+                "downstream",
+                "Completed successfully.",
+            ),
+            unexpected_stdout_fragments=("cannot build selected scope",),
+            expected_prod_upstream_rows=((1, "prod_version"),),
+            expected_dev_upstream_rows=((1, "prod_version"),),
+            expected_dev_downstream_rows=((1, "prod_version_downstream"),),
+            expected_fingerprint_rows=(("model", "downstream"), ("model", "upstream")),
+        )
+    ],
+    ids=["selected downstream clones missing upstream boundary from prod"],
+)
+def test_given_selected_downstream_when_building_with_defer_clone_then_clones_boundary(
+    tmp_path: Path,
+    test_case: DeferCloneBuildE2ETestCase,
+) -> None:
+    assert test_case.expected_stdout_fragments
+    assert_defer_clone_build_case(tmp_path=tmp_path, test_case=test_case)
 
 
 @pytest.mark.parametrize(

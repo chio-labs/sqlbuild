@@ -42,6 +42,7 @@ def run_audit(
     no_sql_validation: bool = False,
     defer_to: str | None = None,
     no_color: bool = False,
+    selected_target: str | None = None,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
@@ -64,6 +65,7 @@ def run_audit(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
         cli_vars=cli_vars,
     )
     use_color: bool = not no_color and supports_color()
@@ -91,6 +93,7 @@ def run_audit(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         defer_to=defer_to,
         select=select,

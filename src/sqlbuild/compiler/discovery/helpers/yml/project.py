@@ -21,7 +21,7 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,
     DbtConfig,
-    DbtReuseFromConfig,
+    DbtProductionRefConfig,
     DefaultsConfig,
     JanitorConfig,
     LocalClonePolicy,
@@ -668,6 +668,11 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
     """Load optional dbt interop configuration."""
 
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
+    if "reuse_from" in mapping:
+        raise ProjectConfigError(
+            f"{file_path} [dbt.reuse_from] was renamed to [dbt.production_ref]; "
+            "rename the table and its keys accordingly"
+        )
     _validate_allowed_keys(
         mapping=mapping,
         allowed_keys=frozenset(
@@ -678,7 +683,7 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
                 "target_path",
                 "vars",
                 "replay_on_change",
-                "reuse_from",
+                "production_ref",
             }
         ),
         label="dbt",
@@ -691,8 +696,8 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         target_path=_optional_str(payload=mapping, key="target_path"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
-        reuse_from=_load_dbt_reuse_from(
-            payload=mapping.get("reuse_from"),
+        production_ref=_load_dbt_production_ref(
+            payload=mapping.get("production_ref"),
             file_path=file_path,
         ),
     )
@@ -714,10 +719,10 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
     )
 
 
-def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromConfig:
+def _load_dbt_production_ref(*, payload: object, file_path: Path) -> DbtProductionRefConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload,
-        label="dbt.reuse_from",
+        label="dbt.production_ref",
         file_path=file_path,
     )
     _validate_allowed_keys(
@@ -725,11 +730,11 @@ def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromCon
         allowed_keys=frozenset(
             {"git_ref", "generate_schema_name_override", "refresh", "git_timeout_seconds"}
         ),
-        label="dbt.reuse_from",
+        label="dbt.production_ref",
         file_path=file_path,
     )
     if not mapping:
-        return DbtReuseFromConfig()
+        return DbtProductionRefConfig()
 
     git_ref: str = _require_str(payload=mapping, key="git_ref", file_path=file_path)
     generate_schema_name_override: str = _require_str(
@@ -737,7 +742,7 @@ def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromCon
         key="generate_schema_name_override",
         file_path=file_path,
     )
-    _validate_dbt_reuse_macro_path(
+    _validate_dbt_production_ref_macro_path(
         value=generate_schema_name_override,
         file_path=file_path,
     )
@@ -747,8 +752,8 @@ def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromCon
         default=30,
     )
     if git_timeout_seconds <= 0:
-        raise ProjectConfigError(f"{file_path} dbt.reuse_from.git_timeout_seconds must be > 0")
-    return DbtReuseFromConfig(
+        raise ProjectConfigError(f"{file_path} dbt.production_ref.git_timeout_seconds must be > 0")
+    return DbtProductionRefConfig(
         git_ref=git_ref,
         generate_schema_name_override=generate_schema_name_override,
         refresh=_optional_bool(mapping=mapping, key="refresh", default=True),
@@ -756,21 +761,22 @@ def _load_dbt_reuse_from(*, payload: object, file_path: Path) -> DbtReuseFromCon
     )
 
 
-def _validate_dbt_reuse_macro_path(*, value: str, file_path: Path) -> None:
+def _validate_dbt_production_ref_macro_path(*, value: str, file_path: Path) -> None:
     macro_path: Path = Path(value)
     if macro_path.is_absolute() or ".." in macro_path.parts:
         raise ProjectConfigError(
-            f"{file_path} dbt.reuse_from.generate_schema_name_override must be a relative "
+            f"{file_path} dbt.production_ref.generate_schema_name_override must be a relative "
             "path under dbt/macros/"
         )
     if len(macro_path.parts) < 3 or macro_path.parts[:2] != ("dbt", "macros"):
         raise ProjectConfigError(
-            f"{file_path} dbt.reuse_from.generate_schema_name_override must be under dbt/macros/"
+            f"{file_path} dbt.production_ref.generate_schema_name_override must be under "
+            "dbt/macros/"
         )
     resolved_macro_path: Path = file_path.parent / macro_path
     if not resolved_macro_path.is_file():
         raise ProjectConfigError(
-            f"{file_path} dbt.reuse_from.generate_schema_name_override file not found: "
+            f"{file_path} dbt.production_ref.generate_schema_name_override file not found: "
             f"{resolved_macro_path}"
         )
 

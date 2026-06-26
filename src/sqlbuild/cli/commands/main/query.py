@@ -21,6 +21,7 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 def run_query(
     project_dir: Path | None,
     sql: str | None,
+    selected_target: str | None = None,
     output_format: str = "long",
     limit: int | None = 20,
 ) -> int:
@@ -48,6 +49,7 @@ def run_query(
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
+        selected_target=selected_target,
     )
     connection: object = adapter.connect(connection_config)
     try:

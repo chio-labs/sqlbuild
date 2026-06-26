@@ -61,6 +61,25 @@ class DependencyBaselineBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DeferCloneBuildE2ETestCase:
+    """Test case for direct-mode build defer clone behavior."""
+
+    description: str
+    project_name: str
+    initial_upstream_sql: str
+    changed_upstream_sql: str
+    downstream_sql: str
+    prod_build_command: tuple[str, ...]
+    dev_build_command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    expected_prod_upstream_rows: tuple[tuple[object, ...], ...]
+    expected_dev_upstream_rows: tuple[tuple[object, ...], ...]
+    expected_dev_downstream_rows: tuple[tuple[object, ...], ...]
+    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class SelectionAwareStalenessBuildE2ETestCase:
     description: str
     project_name: str

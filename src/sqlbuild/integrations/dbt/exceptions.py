@@ -36,7 +36,7 @@ class DbtInteropArgumentError(DbtInteropError):
 
 
 class DbtReuseUnavailableError(DbtInteropError):
-    """Raised when reuse_from preconditions are unmet; reuse is skipped, not fatal."""
+    """Raised when production_ref preconditions are unmet; reuse is skipped, not fatal."""
 
     code: str = "C243"
 

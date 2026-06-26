@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
                 'source = "dbt_profile"',
                 'profile = "analytics"',
                 'target = "dev"',
-                "[dbt.reuse_from]",
+                "[dbt.production_ref]",
                 'git_ref = "main"',
                 'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"',
                 "[targets.dev]",
