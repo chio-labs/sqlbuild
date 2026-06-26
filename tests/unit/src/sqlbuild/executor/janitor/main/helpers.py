@@ -318,6 +318,7 @@ class FakeJanitorAdapter(BaseAdapter):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         raise NotImplementedError

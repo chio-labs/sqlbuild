@@ -27,6 +27,7 @@ class SnowflakeRenderCloneTestCase:
     source: str
     target: str
     hard_copy: bool
+    origin_is_transient: bool
     expected_statements: tuple[str, ...]
     expected_supports_zero_copy: bool
 

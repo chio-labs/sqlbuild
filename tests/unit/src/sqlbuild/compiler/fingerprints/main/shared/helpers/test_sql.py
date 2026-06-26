@@ -139,31 +139,44 @@ def test_given_schema_when_building_qualified_name_then_returns_expected(
     assert result == test_case.expected_name
 
 
+CREATE_TABLE_SQL_TEST_CASES: list[BuildCreateTableSqlTestCase] = [
+    BuildCreateTableSqlTestCase(
+        description="contains create table if not exists with all columns",
+        database=None,
+        schema="analytics",
+        expected_contains=(
+            "CREATE TABLE IF NOT EXISTS",
+            f"analytics.{FINGERPRINT_TABLE_NAME}",
+            "node_type VARCHAR NOT NULL",
+            "node_name VARCHAR NOT NULL",
+            "target_database VARCHAR,",
+            "target_schema VARCHAR,",
+            "target_name VARCHAR,",
+            "run_id VARCHAR NOT NULL",
+            "definition_hash VARCHAR NOT NULL",
+            "schema_fingerprint VARCHAR NOT NULL",
+            "definition_b64 VARCHAR NOT NULL",
+            "metadata_json_b64 VARCHAR NOT NULL",
+            "ts TIMESTAMP NOT NULL",
+        ),
+    ),
+    BuildCreateTableSqlTestCase(
+        description="emits transient table when requested",
+        database=None,
+        schema="analytics",
+        transient=True,
+        expected_contains=(
+            "CREATE TRANSIENT TABLE IF NOT EXISTS",
+            f"analytics.{FINGERPRINT_TABLE_NAME}",
+        ),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     "test_case",
-    [
-        BuildCreateTableSqlTestCase(
-            description="contains create table if not exists with all columns",
-            database=None,
-            schema="analytics",
-            expected_contains=(
-                "CREATE TABLE IF NOT EXISTS",
-                f"analytics.{FINGERPRINT_TABLE_NAME}",
-                "node_type VARCHAR NOT NULL",
-                "node_name VARCHAR NOT NULL",
-                "target_database VARCHAR,",
-                "target_schema VARCHAR,",
-                "target_name VARCHAR,",
-                "run_id VARCHAR NOT NULL",
-                "definition_hash VARCHAR NOT NULL",
-                "schema_fingerprint VARCHAR NOT NULL",
-                "definition_b64 VARCHAR NOT NULL",
-                "metadata_json_b64 VARCHAR NOT NULL",
-                "ts TIMESTAMP NOT NULL",
-            ),
-        ),
-    ],
-    ids=["contains create table if not exists with all columns"],
+    CREATE_TABLE_SQL_TEST_CASES,
+    ids=[case.description for case in CREATE_TABLE_SQL_TEST_CASES],
 )
 def test_given_schema_when_building_create_table_sql_then_contains_expected_fragments(
     test_case: BuildCreateTableSqlTestCase,
@@ -173,6 +186,7 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        transient=test_case.transient,
     )
 
     fragment: str

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanAction
 from sqlbuild.virtual.executor.helpers.seeding import (
@@ -43,7 +43,10 @@ class FakeSeedAdapter(BaseAdapter):
     def supports_durable_clone(self) -> bool:
         return self._supports_durable_clone
 
-    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+    def render_durable_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> tuple[str, ...]:
+        del origin_is_transient
         return (f"CREATE TABLE {destination} DEEP CLONE {origin}",)
 
     def relation_exists(
@@ -56,6 +59,17 @@ class FakeSeedAdapter(BaseAdapter):
     ) -> bool:
         del connection, database, schema, name
         return self._target_exists
+
+    def list_relations(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection, database, schemas, names
+        return ()
 
     def ensure_schema(
         self,
@@ -154,6 +168,7 @@ def test_given_incremental_seed_context_when_seeding_then_selects_expected_strat
         origin="source_relation",
         destination="target_relation",
         entry=entry,
+        origin_is_transient=False,
         statement_recorder=StatementRecorder(),
     )
 

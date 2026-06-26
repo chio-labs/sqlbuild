@@ -103,6 +103,7 @@ class MaterializationMixin(ABC):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         """Clone a relation using zero-copy where supported."""
@@ -115,6 +116,7 @@ class MaterializationMixin(ABC):
         *,
         origin: str,
         destination: str,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         """Clone/copy a relation into a durable independent destination."""

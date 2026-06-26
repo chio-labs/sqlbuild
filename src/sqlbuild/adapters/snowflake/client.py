@@ -69,6 +69,7 @@ class SnowflakeAdapter(BaseAdapter):
     adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value
     sql_analysis_dialect_name: ClassVar[str | None] = "snowflake"
     max_identifier_length: ClassVar[int] = 255
+    state_tables_transient: ClassVar[bool] = True
     connection_routing_keys: ClassVar[frozenset[str]] = frozenset(
         {"source", "profile", "target", "project_dir", "profiles_dir"}
     )
@@ -134,6 +135,7 @@ class SnowflakeAdapter(BaseAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
         )
 
     def render_create_node_result_index_sqls(
@@ -411,7 +413,7 @@ class SnowflakeAdapter(BaseAdapter):
             self.execute(connection, stmt)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
+        return (f"CREATE OR REPLACE TRANSIENT TABLE {destination} AS {sql}",)
 
     def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
@@ -663,12 +665,14 @@ class SnowflakeAdapter(BaseAdapter):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
             origin=origin,
             destination=destination,
             hard_copy=hard_copy,
+            origin_is_transient=origin_is_transient,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1417,7 +1421,8 @@ class SnowflakeAdapter(BaseAdapter):
         names: tuple[str, ...] | None = None,
     ) -> tuple[Any, ...]:
         query: str = (
-            "SELECT table_name, table_schema, table_type FROM information_schema.tables WHERE 1=1"
+            "SELECT table_name, table_schema, table_type, is_transient "
+            "FROM information_schema.tables WHERE 1=1"
         )
         params: list[str] = []
         if schemas:
@@ -1445,6 +1450,7 @@ class SnowflakeAdapter(BaseAdapter):
                 schema=None if row[1] is None else str(row[1]).lower(),
                 name=str(row[0]).lower(),
                 relation_type=str(row[2]).lower(),
+                is_transient=None if row[3] is None else str(row[3]).upper() == "YES",
             )
             for row in rows
         )
@@ -1689,6 +1695,7 @@ class SnowflakeAdapter(BaseAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
         )
 
     def render_table_function_call(self, *, target: str, call_suffix_sql: str) -> str:
@@ -1791,15 +1798,20 @@ class SnowflakeAdapter(BaseAdapter):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
     ) -> tuple[str, ...]:
         if hard_copy:
             return self.render_create_table_as(
                 destination=destination, sql=f"SELECT * FROM {origin}"
             )
-        return (f"CREATE OR REPLACE TABLE {destination} CLONE {origin}",)
+        table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
+        return (f"CREATE OR REPLACE {table_kind} {destination} CLONE {origin}",)
 
-    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TABLE {destination} CLONE {origin}",)
+    def render_durable_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> tuple[str, ...]:
+        table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
+        return (f"CREATE OR REPLACE {table_kind} {destination} CLONE {origin}",)
 
     def render_query_with_cursor_bounds(
         self,
@@ -1857,10 +1869,11 @@ class SnowflakeAdapter(BaseAdapter):
         *,
         origin: str,
         destination: str,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_durable_clone(
-            origin=origin, destination=destination
+            origin=origin, destination=destination, origin_is_transient=origin_is_transient
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1888,7 +1901,7 @@ class SnowflakeAdapter(BaseAdapter):
                 statement_recorder=statement_recorder,
             )
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
-        create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
+        create_sql: str = f"CREATE TRANSIENT TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
         self.execute(connection, create_sql)
 

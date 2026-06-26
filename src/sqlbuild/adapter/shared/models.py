@@ -69,6 +69,7 @@ class RelationInfo:
     relation_type: str
     created_at: datetime | None = None
     last_altered_at: datetime | None = None
+    is_transient: bool | None = None
 
 
 @dataclass(frozen=True)

@@ -20,6 +20,7 @@ def clone_relation_by_names(
     adapter: BaseAdapter,
     connection: Any,
     hard_copy: bool,
+    origin_is_transient: bool = False,
 ) -> CloneItemResult:
     """Drop then clone or copy origin into destination, returning a timed item result."""
 
@@ -46,6 +47,7 @@ def clone_relation_by_names(
             origin=origin_relation,
             destination=destination_relation,
             hard_copy=hard_copy,
+            origin_is_transient=origin_is_transient,
             statement_recorder=recorder,
         )
     except Exception as exc:

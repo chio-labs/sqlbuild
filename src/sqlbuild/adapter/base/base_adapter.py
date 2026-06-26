@@ -47,6 +47,7 @@ class BaseAdapter(StrictAdapter):
     adapter_name: ClassVar[str]
     sql_analysis_dialect_name: ClassVar[str | None] = None
     max_identifier_length: ClassVar[int] = 63
+    state_tables_transient: ClassVar[bool] = False
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -466,11 +467,15 @@ class BaseAdapter(StrictAdapter):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
     ) -> tuple[str, ...]:
-        del hard_copy
+        del hard_copy, origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_durable_clone(self, *, origin: str, destination: str) -> tuple[str, ...]:
+    def render_durable_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> tuple[str, ...]:
+        del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
     def render_query_with_cursor_bounds(
@@ -1173,12 +1178,14 @@ class BaseAdapter(StrictAdapter):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_clone(
             origin=origin,
             destination=destination,
             hard_copy=hard_copy,
+            origin_is_transient=origin_is_transient,
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1191,10 +1198,11 @@ class BaseAdapter(StrictAdapter):
         *,
         origin: str,
         destination: str,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         statements: tuple[str, ...] = self.render_durable_clone(
-            origin=origin, destination=destination
+            origin=origin, destination=destination, origin_is_transient=origin_is_transient
         )
         statement_recorder.record_many(statements)
         stmt: str
@@ -1780,6 +1788,7 @@ class BaseAdapter(StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
         )
 
     def render_read_latest_fingerprints_sql(
@@ -1853,6 +1862,7 @@ class BaseAdapter(StrictAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
         )
 
     def render_create_node_result_index_sqls(

@@ -7,8 +7,13 @@ from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
+from sqlbuild.executor.clone.main.origin_snapshot import build_clone_origin_snapshot
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import (
+    CloneExecutionResult,
+    CloneItemResult,
+    CloneOriginSnapshot,
+)
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
@@ -88,15 +93,23 @@ def execute_dbt_clone(
         and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
     )
     total: int = len(clonable_models)
+    origin_locations: dict[str, tuple[str | None, str | None, str]] = {
+        reuse_model.unique_id: _relation_location(model=reuse_model)
+        for _, reuse_model in clonable_models
+    }
+    origin_snapshot: CloneOriginSnapshot = build_clone_origin_snapshot(
+        adapter=adapter,
+        connection=connection,
+        origin_locations=tuple(origin_locations.values()),
+    )
     results: list[CloneItemResult] = []
     index: int = 0
     current_model: DbtManifestModel
     reuse_model: DbtManifestModel
     for current_model, reuse_model in clonable_models:
         index += 1
-        origin_exists: bool = _relation_exists(
-            adapter=adapter, connection=connection, model=reuse_model
-        )
+        _, origin_schema, origin_name = origin_locations[reuse_model.unique_id]
+        origin_exists: bool = origin_snapshot.exists(schema=origin_schema, name=origin_name)
         if _model_materialization(model=current_model) == DBT_MATERIALIZATION_VIEW:
             item_result: CloneItemResult = recreate_view_by_names(
                 name=current_model.name,
@@ -116,6 +129,9 @@ def execute_dbt_clone(
                 adapter=adapter,
                 connection=connection,
                 hard_copy=hard_copy,
+                origin_is_transient=origin_snapshot.is_transient(
+                    schema=origin_schema, name=origin_name
+                ),
             )
         results.append(item_result)
         if on_item is not None:
@@ -179,13 +195,13 @@ def _compiled_model_sql(*, model: DbtManifestModel) -> str:
     return model.query_sql
 
 
-def _relation_exists(*, adapter: BaseAdapter, connection: Any, model: DbtManifestModel) -> bool:
+def _relation_location(*, model: DbtManifestModel) -> tuple[str | None, str | None, str]:
     database: str | None = model.database
     schema: str | None = model.schema
     name: str = model.alias or model.name
     if database is None or schema is None:
-        database, schema, name = _relation_parts(relation_name=model.relation_name)
-    return adapter.relation_exists(connection, database=database, schema=schema, name=name)
+        return _relation_parts(relation_name=model.relation_name)
+    return database, schema, name
 
 
 def _relation_parts(*, relation_name: str) -> tuple[str | None, str | None, str]:
