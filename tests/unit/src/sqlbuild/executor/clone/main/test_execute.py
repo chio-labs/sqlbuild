@@ -34,7 +34,9 @@ from tests.unit.src.sqlbuild.executor.clone.main._test_types import CloneStreamT
 def test_given_clone_entries_when_executing_then_streams_each_item(
     test_case: CloneStreamTestCase,
 ) -> None:
-    adapter: FakeCloneAdapter = FakeCloneAdapter(supports_zero_copy=True)
+    adapter: FakeCloneAdapter = FakeCloneAdapter(
+        supports_zero_copy=True, origin_names=test_case.model_names
+    )
     origin_entries: tuple[ModelPlanEntry, ...] = tuple(
         build_clone_model_entry(schema=test_case.origin_schema, name=name)
         for name in test_case.model_names

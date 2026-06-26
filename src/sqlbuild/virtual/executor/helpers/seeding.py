@@ -71,6 +71,13 @@ def seed_virtual_physical_version(
         origin=source,
         destination=target,
         entry=entry,
+        origin_is_transient=_origin_is_transient(
+            adapter=adapter,
+            connection=connection,
+            database=parent_relation.database_name,
+            schema=parent_relation.schema_name,
+            name=parent_relation.relation_name,
+        ),
         statement_recorder=recorder,
     )
     backend.upsert_physical_relation_ancestry(
@@ -93,6 +100,7 @@ def _seed_physical_relation(
     origin: str,
     destination: str,
     entry: ModelPlanEntry,
+    origin_is_transient: bool,
     statement_recorder: StatementRecorder,
 ) -> str:
     if _requires_append_bounded_seed(entry=entry):
@@ -115,6 +123,7 @@ def _seed_physical_relation(
             connection,
             origin=origin,
             destination=destination,
+            origin_is_transient=origin_is_transient,
             statement_recorder=statement_recorder,
         )
         return "durable_clone"
@@ -126,6 +135,28 @@ def _seed_physical_relation(
         statement_recorder=statement_recorder,
     )
     return "copy"
+
+
+def _origin_is_transient(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    database: str | None,
+    schema: str | None,
+    name: str,
+) -> bool:
+    """Return whether the origin warehouse relation is transient, defaulting to False."""
+
+    if schema is None:
+        return False
+    relations: tuple[Any, ...] = adapter.list_relations(
+        connection, database=database, schemas=(schema,), names=(name,)
+    )
+    target_name: str = name.lower()
+    for relation in relations:
+        if relation.name == target_name:
+            return bool(relation.is_transient)
+    return False
 
 
 def _should_seed_physical_version(*, entry: ModelPlanEntry) -> bool:

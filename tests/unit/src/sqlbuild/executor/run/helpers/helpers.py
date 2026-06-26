@@ -212,9 +212,10 @@ class FakeRelationReuseAdapter(BaseAdapter):
         origin: str,
         destination: str,
         hard_copy: bool = False,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
-        del connection, origin, destination, hard_copy, statement_recorder
+        del connection, origin, destination, hard_copy, origin_is_transient, statement_recorder
         self.calls.append("clone")
 
     def durable_clone(
@@ -223,9 +224,10 @@ class FakeRelationReuseAdapter(BaseAdapter):
         *,
         origin: str,
         destination: str,
+        origin_is_transient: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
-        del connection, origin, destination, statement_recorder
+        del connection, origin, destination, origin_is_transient, statement_recorder
         self.calls.append("durable_clone")
 
     def create_table_as(

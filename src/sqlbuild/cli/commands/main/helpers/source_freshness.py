@@ -100,4 +100,5 @@ def _append_record_to_affected_model_schemas(
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,
             render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,
+            transient=adapter.state_tables_transient,
         )

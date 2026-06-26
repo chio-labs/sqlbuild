@@ -112,13 +112,13 @@ CLONE_MODE_TEST_CASES: tuple[AdapterCloneModeTestCase, ...] = (
         expected_statements=("CREATE OR REPLACE TABLE dev.fact_orders CLONE prod.fact_orders",),
     ),
     AdapterCloneModeTestCase(
-        description="snowflake hard copy clone uses CTAS fallback",
+        description="snowflake hard copy clone uses transient CTAS fallback",
         adapter=SnowflakeAdapter(),
         source="prod.fact_orders",
         target="dev.fact_orders",
         hard_copy=True,
         expected_statements=(
-            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+            "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
         ),
     ),
     AdapterCloneModeTestCase(

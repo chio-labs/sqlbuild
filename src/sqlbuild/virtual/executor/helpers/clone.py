@@ -133,9 +133,32 @@ def hydrate_relation(
         destination=resolve_relation_location_qualified_name(
             adapter=adapter, location=destination_location
         ),
+        origin_is_transient=_location_is_transient(
+            adapter=adapter, connection=destination_connection, location=clone_origin_location
+        ),
         statement_recorder=StatementRecorder(),
     )
     return "hydrated"
+
+
+def _location_is_transient(
+    *, adapter: BaseAdapter, connection: Any, location: CompiledRelationLocation
+) -> bool:
+    """Return whether the origin warehouse relation is transient, defaulting to False."""
+
+    if location.schema is None:
+        return False
+    relations: tuple[Any, ...] = adapter.list_relations(
+        connection,
+        database=location.database,
+        schemas=(location.schema,),
+        names=(location.name,),
+    )
+    target_name: str = location.name.lower()
+    for relation in relations:
+        if relation.name == target_name:
+            return bool(relation.is_transient)
+    return False
 
 
 def acquire_model_lease(

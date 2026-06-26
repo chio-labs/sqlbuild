@@ -11,3 +11,4 @@ class CloneRelationExecutionTestCase:
     expected_action: CloneAction
     expected_status: CloneStatus
     expected_statements: tuple[str, ...]
+    origin_is_transient: bool = False
