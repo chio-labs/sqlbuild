@@ -222,8 +222,8 @@ def test_given_seed_change_out_of_selection_when_building_leaf_then_warns_until_
     )
     narrow_output: str = narrow_result.stdout + narrow_result.stderr
     assert narrow_result.returncode == 0, narrow_output
-    assert "selected model 'fact_orders' is stale" in narrow_output
-    assert "order_amounts changed but will not be rebuilt" in narrow_output
+    assert "selected model 'fact_orders' will build on" in narrow_output
+    assert "- order_amounts" in narrow_output
     assert "seed      order_amounts" not in narrow_output
     assert query_duckdb(
         db_path=db_path,
@@ -238,7 +238,7 @@ def test_given_seed_change_out_of_selection_when_building_leaf_then_warns_until_
     assert closure_result.returncode == 0, closure_output
     assert f"Plan ready ({test_case.expected_plan_selected_count} selected)" in closure_output
     assert "seed      order_amounts" in closure_output
-    assert "selected model 'fact_orders' is stale" not in closure_output
+    assert "selected model 'fact_orders' will build on" not in closure_output
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT amount_dollars FROM fact_orders ORDER BY order_id",

@@ -1360,7 +1360,11 @@ def _format_warnings(lines: list[str], plan: PlanOutput) -> None:
     for warning in warning_entries:
         if warning.model_name is not None:
             lines.append(f"  {style.object_name(warning.model_name)}")
-        lines.append(f"  {style.warning(f'- {warning.message}')}")
+        message_lines: list[str] = warning.message.split("\n")
+        lines.append(f"  {style.warning(f'- {message_lines[0]}')}")
+        continuation: str
+        for continuation in message_lines[1:]:
+            lines.append(f"    {style.warning(continuation)}")
 
 
 def _format_virtual_metadata(

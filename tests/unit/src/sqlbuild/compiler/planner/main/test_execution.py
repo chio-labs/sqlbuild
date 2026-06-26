@@ -95,7 +95,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("c",),
         expected_model_names=(),
-        expected_warning_fragments=("selected model 'c' is stale", "b changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- b"),
     ),
     StandardSelectionAwareStalenessTestCase(
         description="multi-hop leaf selection with changed root is no-op and warns",
@@ -111,7 +111,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("c",),
         expected_model_names=(),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
     ),
     StandardSelectionAwareStalenessTestCase(
         description="multi-hop selected root and leaf warns for unbuilt intermediate",
@@ -127,7 +127,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("a", "c"),
         expected_model_names=("a",),
-        expected_warning_fragments=("selected model 'c' is stale", "b changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- b"),
         expected_current_version_hash_model_names=("a",),
     ),
     StandardSelectionAwareStalenessTestCase(
@@ -144,7 +144,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("b", "c"),
         expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         expected_current_version_hash_model_names=("b",),
         expected_non_current_version_hash_model_names=("c",),
     ),
@@ -162,7 +162,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("b", "c"),
         expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         model_configs={"c": {"materialized": "view"}},
     ),
     StandardSelectionAwareStalenessTestCase(
@@ -179,7 +179,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("b", "c"),
         expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         model_configs={"c": {"materialized": "incremental", "incremental_strategy": "append"}},
     ),
     StandardSelectionAwareStalenessTestCase(
@@ -196,7 +196,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("b", "c"),
         expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         model_configs={
             "c": {
                 "materialized": "incremental",
@@ -222,7 +222,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("b", "c"),
         expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         model_configs={
             "c": {
                 "materialized": "snapshot",
@@ -246,7 +246,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("b", "c"),
         expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         model_configs={"c": {"materialized": "custom_test_materialization"}},
     ),
     StandardSelectionAwareStalenessTestCase(
@@ -261,7 +261,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("c",),
         expected_model_names=("c",),
-        expected_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- a"),
         model_configs={"c": {"materialized": "table", "run_despite_unchanged": "always"}},
         expected_non_current_version_hash_model_names=("c",),
     ),
@@ -325,7 +325,7 @@ SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCa
         },
         select=("c",),
         expected_model_names=("c",),
-        expected_warning_fragments=("selected model 'c' is stale", "b changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- b"),
         full_refresh=True,
         expected_non_current_version_hash_model_names=("c",),
     ),
@@ -446,7 +446,7 @@ def test_given_standard_pruned_selection_when_upstream_changes_then_respects_sel
     expected_fragment: str
     for expected_fragment in test_case.expected_warning_fragments:
         assert expected_fragment in warning_text
-    assert ("is stale" in warning_text) == bool(test_case.expected_warning_fragments)
+    assert ("will build on" in warning_text) == bool(test_case.expected_warning_fragments)
 
     current_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=current_project.functions,
