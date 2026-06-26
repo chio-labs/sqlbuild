@@ -36,7 +36,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "upstream b"),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- b"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="direct changed model parent in run set does not warn",
@@ -58,7 +58,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "a", "b"),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- a", "- b"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="selected root and leaf still warn for unbuilt intermediate",
@@ -69,7 +69,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "upstream b"),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- b"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="mixed selected and unselected changed parents warns only for unselected",
@@ -80,8 +80,8 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "upstream b"),
-        unexpected_warning_fragments=("upstream a",),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- b"),
+        unexpected_warning_fragments=("- a",),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="changed seed outside selection warns with seed compatibility text",
@@ -93,8 +93,8 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_source_unique_ids=(),
         expected_warning_count=1,
         expected_warning_fragments=(
-            "selected dbt model 'c' is stale",
-            "seed(s) raw_orders changed but were not selected",
+            "selected dbt model 'c' will build on",
+            "- raw_orders",
         ),
     ),
     DbtSelectionStalenessWarningTestCase(
@@ -117,7 +117,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(SOURCE_ORDERS,),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "upstream orders"),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- orders"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="multi-hop changed seed outside selection warns",
@@ -129,8 +129,8 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_source_unique_ids=(),
         expected_warning_count=1,
         expected_warning_fragments=(
-            "selected dbt model 'c' is stale",
-            "seed(s) raw_orders changed but were not selected",
+            "selected dbt model 'c' will build on",
+            "- raw_orders",
         ),
     ),
     DbtSelectionStalenessWarningTestCase(
@@ -142,7 +142,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(SOURCE_ORDERS,),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "b", "orders"),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- b", "- orders"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="selected model can run and still warn for unselected upstream",
@@ -153,7 +153,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "upstream b"),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- b"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="diamond graph reports both stale intermediates",
@@ -164,7 +164,7 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'e' is stale", "c", "d"),
+        expected_warning_fragments=("selected dbt model 'e' will build on", "- c", "- d"),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="self cycle does not report selected model as its own trigger",
@@ -175,8 +175,8 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(),
         expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' is stale", "upstream a"),
-        unexpected_warning_fragments=("c changed but will not be rebuilt",),
+        expected_warning_fragments=("selected dbt model 'c' will build on", "- a"),
+        unexpected_warning_fragments=("- c",),
     ),
 )
 

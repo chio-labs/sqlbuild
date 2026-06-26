@@ -176,7 +176,7 @@ SELECTION_AWARE_EXECUTION_ROUND_TRIP_TEST_CASES: list[SelectionAwareExecutionRou
         model_configs={"c": {"materialized": "table"}},
         expected_built_model_names=("b", "c"),
         expected_replan_model_names=(),
-        expected_replan_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_replan_warning_fragments=("selected model 'c' will build on", "- a"),
         expected_target_rows=((1,), (2,)),
     ),
     SelectionAwareExecutionRoundTripTestCase(
@@ -196,7 +196,7 @@ SELECTION_AWARE_EXECUTION_ROUND_TRIP_TEST_CASES: list[SelectionAwareExecutionRou
         model_configs={"c": {"materialized": "view"}},
         expected_built_model_names=("b", "c"),
         expected_replan_model_names=(),
-        expected_replan_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_replan_warning_fragments=("selected model 'c' will build on", "- a"),
         expected_target_rows=((1,), (2,)),
     ),
     SelectionAwareExecutionRoundTripTestCase(
@@ -216,7 +216,7 @@ SELECTION_AWARE_EXECUTION_ROUND_TRIP_TEST_CASES: list[SelectionAwareExecutionRou
         model_configs={"c": {"materialized": "incremental", "incremental_strategy": "append"}},
         expected_built_model_names=("b", "c"),
         expected_replan_model_names=(),
-        expected_replan_warning_fragments=("selected model 'c' is stale", "a changed"),
+        expected_replan_warning_fragments=("selected model 'c' will build on", "- a"),
         expected_target_rows=((1,), (1,), (2,)),
     ),
 ]

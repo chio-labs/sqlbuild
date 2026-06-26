@@ -127,7 +127,7 @@ def test_given_built_seed_closure_when_rebuilding_then_no_op_proves_identity_rou
                 "planned models: 0 run, 1 current",
                 "Skipping dbt: no dbt work selected.",
                 "Warnings (1)",
-                "seed(s) raw_orders changed but were not selected",
+                "- raw_orders",
             ),
             unexpected_stdout_fragments=(
                 "Upstream changed",
@@ -178,7 +178,7 @@ def test_given_changed_seed_out_of_selection_when_building_leaf_then_no_op_with_
                 "planned models: 1 run, 0 current",
                 "fct_customer_revenue",
                 "Warnings (1)",
-                "seed(s) raw_orders changed but were not selected",
+                "- raw_orders",
             ),
             unexpected_stdout_fragments=("Upstream changed",),
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
@@ -415,7 +415,7 @@ def test_given_two_seed_branches_when_one_seed_changes_then_only_its_branch_casc
             expected_stdout_fragments=(
                 "planned models: 0 run, 1 current",
                 "Warnings (1)",
-                "seed(s) raw_orders changed but were not selected",
+                "- raw_orders",
             ),
             unexpected_stdout_fragments=("Upstream changed",),
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),

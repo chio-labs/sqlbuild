@@ -118,6 +118,18 @@ class SelectionStalenessWarningTestCase:
 
 
 @dataclass(frozen=True)
+class StaleWarningMessageTestCase:
+    description: str
+    model_label: str
+    model_name: str
+    trigger_label: str
+    trigger_names: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+    expected_bullet_count: int
+
+
+@dataclass(frozen=True)
 class SelectionStalenessGraphWarningTestCase:
     description: str
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
