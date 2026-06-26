@@ -50,24 +50,24 @@ DIFF_METADATA_ERROR_E2E_TEST_CASES: tuple[DbtDiffErrorE2ETestCase, ...] = (
 
 DIFF_CONFIG_ERROR_E2E_TEST_CASES: tuple[DbtDiffConfigErrorE2ETestCase, ...] = (
     DbtDiffConfigErrorE2ETestCase(
-        description="missing reuse_from config explains how to configure",
+        description="missing production_ref config explains how to configure",
         command=("dbt", "diff", "--select", "dbt_orders", "--schema-only"),
-        include_reuse_from=False,
-        reuse_git_ref="prod",
+        include_production_ref=False,
+        production_ref_git_ref="prod",
         expected_returncode=1,
         expected_stderr_fragments=(
-            "dbt diff requires [dbt.reuse_from] to be configured",
+            "dbt diff requires [dbt.production_ref] to be configured",
             "sqb dbt init",
         ),
     ),
     DbtDiffConfigErrorE2ETestCase(
         description="invalid reuse git ref explains how to fix",
         command=("dbt", "diff", "--select", "dbt_orders", "--schema-only"),
-        include_reuse_from=True,
-        reuse_git_ref="does-not-exist",
+        include_production_ref=True,
+        production_ref_git_ref="does-not-exist",
         expected_returncode=1,
         expected_stderr_fragments=(
-            "dbt reuse_from git_ref 'does-not-exist' does not exist in this repository",
+            "dbt production_ref git_ref 'does-not-exist' does not exist in this repository",
         ),
     ),
 )
@@ -137,7 +137,7 @@ DIFF_SELECTION_E2E_TEST_CASES: tuple[DbtDiffSelectionE2ETestCase, ...] = (
             expected_absent_stdout_fragments=("Rows",),
             expected_stderr_fragments=(
                 "Compiling dbt project...",
-                "Compiling dbt reuse from git ref 'prod'...",
+                "Compiling dbt production ref git ref 'prod'...",
                 "Resolving dbt selection...",
                 "Connecting to duckdb...",
                 "Comparing dbt relations...",
@@ -307,8 +307,8 @@ def test_given_invalid_diff_config_when_diffing_then_error_explains_fix(
     workspace: Path = prepare_dbt_diff_workspace(
         tmp_path=tmp_path,
         workspace_name="diff_config_error_workspace",
-        include_reuse_from=test_case.include_reuse_from,
-        reuse_git_ref=test_case.reuse_git_ref,
+        include_production_ref=test_case.include_production_ref,
+        production_ref_git_ref=test_case.production_ref_git_ref,
     )
     build_dbt_diff_current_model(workspace=workspace)
 

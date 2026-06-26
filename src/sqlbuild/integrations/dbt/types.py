@@ -117,7 +117,7 @@ class DbtModelOutcomeState(StrEnum):
 
 
 class DbtReuseUnavailableReason(StrEnum):
-    """Why reuse_from could not run, to drive clear user-facing messaging."""
+    """Why production_ref could not run, to drive clear user-facing messaging."""
 
     NO_GIT_REPOSITORY = "no_git_repository"
     PROJECT_OUTSIDE_GIT_ROOT = "project_outside_git_root"

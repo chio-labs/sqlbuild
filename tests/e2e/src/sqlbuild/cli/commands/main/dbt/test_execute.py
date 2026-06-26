@@ -591,7 +591,7 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
             ),
             expected_returncode=0,
             expected_stdout_fragments=(
-                "Compiling dbt reuse from git ref 'prod'",
+                "Compiling dbt production ref git ref 'prod'",
                 "Cloning deferred dbt boundary relations",
                 "Skipping dbt: no dbt work selected.",
                 "SQLBuild execution",

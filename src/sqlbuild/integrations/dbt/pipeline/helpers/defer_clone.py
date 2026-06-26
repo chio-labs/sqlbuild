@@ -11,16 +11,27 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.planner.models import GraphNodeKey
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.graph.core import sqlbuild_model_graph_key
+from sqlbuild.integrations.dbt.helpers.graph.core import (
+    build_dbt_combined_graph,
+    sqlbuild_model_graph_key,
+)
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
     try_write_dbt_node_fingerprint,
 )
-from sqlbuild.integrations.dbt.helpers.reuse.reuse_from import compile_reuse_from_manifest
+from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
+    build_dbt_write_identity_hashes,
+    dbt_graph_node_key,
+)
+from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+    build_expected_dbt_model_version_hashes,
+)
+from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -28,11 +39,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraphKey,
     DbtLsNode,
     DbtNodeExecutionResult,
-    DbtReuseFromCompileResult,
+    DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
-from sqlbuild.spec.models.project import DbtReuseFromConfig
+from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 
 def run_dbt_defer_clone_prephase(
@@ -50,31 +61,33 @@ def run_dbt_defer_clone_prephase(
 ) -> None:
     if not unique_ids:
         return
-    reuse_from: DbtReuseFromConfig = discovered_inputs.project_config.dbt.reuse_from
-    if reuse_from.git_ref is None or reuse_from.generate_schema_name_override is None:
+    production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
+    if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
         raise DbtInteropConfigError(
-            "dbt --defer-clone-from requires [dbt.reuse_from] to be configured",
+            "dbt --defer-clone-from requires [dbt.production_ref] to be configured",
             code="C350",
             help=(
-                "Run sqb dbt init or set [dbt.reuse_from].git_ref and "
+                "Run sqb dbt init or set [dbt.production_ref].git_ref and "
                 "generate_schema_name_override in sqlbuild_project.toml."
             ),
         )
-    _report_progress(on_progress, f"Compiling dbt reuse from git ref '{reuse_from.git_ref}'...")
-    reuse_start: float = time.monotonic()
-    reuse_compile: DbtReuseFromCompileResult = compile_reuse_from_manifest(
+    _report_progress(
+        on_progress, f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
+    )
+    production_ref_start: float = time.monotonic()
+    production_ref_compile: DbtProductionRefCompileResult = compile_production_ref_manifest(
         sqlbuild_project_dir=project_dir,
         dbt_options=dbt_options,
-        reuse_from=reuse_from,
+        production_ref=production_ref,
         runner=runner,
     )
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=json.loads(reuse_compile.manifest_contents)
+        raw_data=json.loads(production_ref_compile.manifest_contents)
     )
     _report_progress(
         on_progress,
-        f"Compiled dbt reuse from git ref '{reuse_from.git_ref}'. "
-        f"({time.monotonic() - reuse_start:.2f}s)",
+        f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
+        f"({time.monotonic() - production_ref_start:.2f}s)",
     )
     selected_nodes: tuple[DbtLsNode, ...] = tuple(
         DbtLsNode(unique_id=unique_id, resource_type=DbtSupportedResourceType.MODEL)
@@ -151,6 +164,18 @@ def _write_defer_clone_dbt_fingerprints(
     )
     if not successful_names:
         return
+    reuse_graph: DbtCombinedGraph = build_dbt_combined_graph(
+        manifest=reuse_manifest, project=project
+    )
+    reuse_expected_version_hashes: dict[str, str | None] = build_expected_dbt_model_version_hashes(
+        manifest=reuse_manifest, graph=reuse_graph
+    )
+    reuse_write_version_hashes: dict[GraphNodeKey, str] = build_dbt_write_identity_hashes(
+        manifest=reuse_manifest,
+        graph=reuse_graph,
+        run_unique_ids=frozenset(unique_ids),
+        expected_version_hash_by_unique_id=reuse_expected_version_hashes,
+    )
     warnings: list[str] = []
     unique_id: str
     for unique_id in unique_ids:
@@ -185,7 +210,10 @@ def _write_defer_clone_dbt_fingerprints(
             target_name=project.effective_target_name,
             warnings=warnings,
             query_sql=reuse_model.query_sql,
-            version_hash_override=reuse_model.definition_fingerprint or reuse_model.node_checksum,
+            version_hash_override=(
+                reuse_write_version_hashes.get(dbt_graph_node_key(unique_id))
+                or reuse_model.node_checksum
+            ),
         )
     if warnings:
         _report_progress(on_progress, "; ".join(warnings))

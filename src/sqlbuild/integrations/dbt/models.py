@@ -191,8 +191,8 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
-class DbtReuseFromCompileResult:
-    """Manifest produced by compiling a dbt project at a reuse git ref."""
+class DbtProductionRefCompileResult:
+    """Manifest produced by compiling a dbt project at a production git ref."""
 
     git_ref: str
     manifest_contents: str

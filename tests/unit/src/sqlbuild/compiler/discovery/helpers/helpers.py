@@ -16,10 +16,12 @@ def write_project_config_test_files(
 ) -> None:
     project_file: Path = tmp_path / "sqlbuild_project.toml"
     project_file.write_text(test_case.project_file_contents, encoding="utf-8")
-    if test_case.expected_dbt_reuse_from_generate_schema_name_override is None:
+    if test_case.expected_dbt_production_ref_generate_schema_name_override is None:
         return
 
-    macro_file: Path = tmp_path / test_case.expected_dbt_reuse_from_generate_schema_name_override
+    macro_file: Path = (
+        tmp_path / test_case.expected_dbt_production_ref_generate_schema_name_override
+    )
     macro_file.parent.mkdir(parents=True, exist_ok=True)
     macro_file.write_text(
         "{% macro generate_schema_name(custom_schema_name, node) %}dev{% endmacro %}",

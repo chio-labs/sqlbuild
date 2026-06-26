@@ -208,7 +208,7 @@ class DbtCloneE2ETestCase:
     expected_rows: tuple[tuple[object, ...], ...] = ()
     rows_sql: str = "SELECT order_id, amount_cents FROM main.dbt_orders ORDER BY order_id"
     expected_absent_relations: tuple[tuple[str, str], ...] = ()
-    include_reuse_from: bool = True
+    include_production_ref: bool = True
 
 
 @dataclass(frozen=True)
@@ -225,8 +225,8 @@ class DbtDiffErrorE2ETestCase:
 class DbtDiffConfigErrorE2ETestCase:
     description: str
     command: tuple[str, ...]
-    include_reuse_from: bool
-    reuse_git_ref: str
+    include_production_ref: bool
+    production_ref_git_ref: str
     expected_returncode: int
     expected_stderr_fragments: tuple[str, ...]
 
