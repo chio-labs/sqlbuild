@@ -193,6 +193,7 @@ class WarehouseSnapshot:
     existing_columns: dict[str, tuple[ColumnInfo, ...]] = field(default_factory=dict)
     fingerprints: WarehouseFingerprints = field(default_factory=WarehouseFingerprints)
     cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
+    source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)

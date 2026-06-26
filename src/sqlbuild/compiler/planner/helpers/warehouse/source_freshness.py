@@ -35,19 +35,25 @@ def build_planner_source_freshness_result(
     connection: Any,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
+    freshness_state_schemas: frozenset[str] = frozenset(),
 ) -> StandardSourceFreshnessPlanningResult:
     """Build standard source freshness comparison data for planner output."""
 
+    state_schemas: tuple[str, ...] = _collect_state_schemas(project=project, scope=scope)
     source_freshness: StandardSourceFreshnessPlanningResult = (
         build_standard_source_freshness_planning_result(
             adapter=adapter,
             connection=connection,
             sources=tuple(relations.source_read_map.values()),
             state_database=_resolve_state_database(project),
-            state_schemas=_collect_state_schemas(project=project, scope=scope),
+            state_schemas=state_schemas,
             observed_at=datetime.now(UTC),
             run_id="planning",
             render_qualified_name=adapter.render_qualified_name,
+            state_table_exists_by_schema={
+                state_schema: state_schema in freshness_state_schemas
+                for state_schema in state_schemas
+            },
         )
     )
     return replace(

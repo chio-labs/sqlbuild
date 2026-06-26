@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.executor.janitor.models import JanitorRelationKey
@@ -33,7 +34,12 @@ def collect_tracked_relation_keys(
             fingerprint_set: FingerprintSet = read_latest_fingerprints(
                 connection=connection,
                 execute=adapter.execute,
-                relation_exists=adapter.relation_exists,
+                table_exists=adapter.relation_exists(
+                    connection,
+                    database=database,
+                    schema=schema,
+                    name=FINGERPRINT_TABLE_NAME,
+                ),
                 database=database,
                 schema=schema,
                 render_qualified_name=adapter.render_qualified_name,

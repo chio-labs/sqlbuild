@@ -10,7 +10,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.main.graph_changes_only import (
@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.models import (
     SelectionStalenessNodeKey,
     SelectionStalenessWarning,
 )
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.planning import (
     build_standard_source_freshness_planning_result,
 )
@@ -94,22 +95,26 @@ def build_dbt_model_planning_result(
         for unique_id in expanded_candidate_unique_ids
         if (model := manifest.models_by_unique_id.get(unique_id)) is not None
     )
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = _existing_relation_keys(
+        adapter=adapter,
+        connection=connection,
+        models=candidate_models,
+        seeds=tuple(manifest.seeds_by_unique_id.values()),
+        state_database=project.effective_target_database,
+        state_schemas=_state_schemas(project),
+    )
     fingerprints: dict[tuple[str, str], Fingerprint] = _read_dbt_fingerprints(
         project=project,
         adapter=adapter,
         connection=connection,
+        existing_relation_keys=existing_relation_keys,
     )
     source_freshness: StandardSourceFreshnessPlanningResult = _source_freshness_result(
         manifest=manifest,
         project=project,
         adapter=adapter,
         connection=connection,
-    )
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = _existing_relation_keys(
-        adapter=adapter,
-        connection=connection,
-        models=candidate_models,
-        seeds=tuple(manifest.seeds_by_unique_id.values()),
+        existing_relation_keys=existing_relation_keys,
     )
     blocked_source_unique_ids: frozenset[str] = frozenset(
         identity.source_name
@@ -395,21 +400,33 @@ def _source_freshness_result(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]],
 ) -> StandardSourceFreshnessPlanningResult:
     sources: tuple[SourceEntry, ...] = translate_manifest_sources_to_sqlbuild_sources(
         manifest=manifest
     )
     if not sources:
         return StandardSourceFreshnessPlanningResult()
+    state_schemas: tuple[str, ...] = _state_schemas(project)
+    state_table_exists_by_schema: dict[str, bool] = {
+        state_schema: _relation_key(
+            database=project.effective_target_database,
+            schema=state_schema,
+            name=SOURCE_FRESHNESS_TABLE_NAME,
+        )
+        in existing_relation_keys
+        for state_schema in state_schemas
+    }
     return build_standard_source_freshness_planning_result(
         adapter=adapter,
         connection=connection,
         sources=sources,
         state_database=project.effective_target_database,
-        state_schemas=_state_schemas(project),
+        state_schemas=state_schemas,
         observed_at=datetime.now(UTC),
         run_id="dbt-planning",
         render_qualified_name=adapter.render_qualified_name,
+        state_table_exists_by_schema=state_table_exists_by_schema,
     )
 
 
@@ -545,15 +562,27 @@ def _state_schemas(project: CompiledProject) -> tuple[str, ...]:
 
 
 def _read_dbt_fingerprints(
-    *, project: CompiledProject, adapter: BaseAdapter, connection: Any
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    connection: Any,
+    existing_relation_keys: frozenset[tuple[str | None, str | None, str]],
 ) -> dict[tuple[str, str], Fingerprint]:
     schema: str | None = project.effective_target_schema
     if schema is None:
         return {}
+    table_exists: bool = (
+        _relation_key(
+            database=project.effective_target_database,
+            schema=schema,
+            name=FINGERPRINT_TABLE_NAME,
+        )
+        in existing_relation_keys
+    )
     fingerprint_set: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=adapter.execute,
-        relation_exists=adapter.relation_exists,
+        table_exists=table_exists,
         database=project.effective_target_database,
         schema=schema,
         render_qualified_name=adapter.render_qualified_name,
@@ -637,10 +666,18 @@ def _existing_relation_keys(
     connection: Any,
     models: tuple[DbtManifestModel, ...],
     seeds: tuple[DbtManifestSeed, ...],
+    state_database: str | None,
+    state_schemas: tuple[str, ...],
 ) -> frozenset[tuple[str | None, str | None, str]]:
+    state_locations: tuple[tuple[str | None, str | None, str], ...] = tuple(
+        (state_database, state_schema, state_table_name)
+        for state_schema in state_schemas
+        for state_table_name in (FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME)
+    )
     locations: tuple[tuple[str | None, str | None, str], ...] = (
         *((model.database, model.schema, model.alias or model.name) for model in models),
         *((seed.database, seed.schema, seed.alias or seed.name) for seed in seeds),
+        *state_locations,
     )
     if not locations:
         return frozenset()

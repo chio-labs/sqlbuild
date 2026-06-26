@@ -44,6 +44,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -151,7 +152,10 @@ def gather_warehouse_snapshot(
         return WarehouseSnapshot()
     query_schemas: tuple[str, ...] | None = schemas or None
 
-    relations: dict[str, RelationInfo] = _gather_relations(
+    relations: dict[str, RelationInfo]
+    fingerprint_state_schemas: frozenset[str]
+    freshness_state_schemas: frozenset[str]
+    relations, fingerprint_state_schemas, freshness_state_schemas = _gather_relations(
         adapter=adapter,
         connection=connection,
         database=database,
@@ -171,6 +175,7 @@ def gather_warehouse_snapshot(
         execute=execute,
         database=database,
         schemas=query_schemas,
+        fingerprint_state_schemas=fingerprint_state_schemas,
     )
 
     skip_cursors: bool = full_refresh or (
@@ -194,6 +199,7 @@ def gather_warehouse_snapshot(
         existing_columns=columns,
         fingerprints=fingerprints,
         cursor_snapshots=cursor_snapshots,
+        source_freshness_state_schemas=freshness_state_schemas,
     )
 
 
@@ -286,6 +292,8 @@ def _build_metadata_name_filter(
             names.add(upstream_intermediate_source.table or upstream_intermediate_source.name)
     if not names or len(names) > METADATA_NAME_FILTER_LIMIT:
         return None
+    names.add(FINGERPRINT_TABLE_NAME)
+    names.add(SOURCE_FRESHNESS_TABLE_NAME)
     return tuple(sorted(names))
 
 
@@ -327,19 +335,27 @@ def _gather_relations(
     database: str | None,
     schemas: tuple[str, ...] | None,
     names: tuple[str, ...] | None,
-) -> dict[str, RelationInfo]:
-    """Fetch all existing relations across target schemas."""
+) -> tuple[dict[str, RelationInfo], frozenset[str], frozenset[str]]:
+    """Fetch relations and the schemas where the fingerprint/freshness state tables exist."""
 
     relations: tuple[RelationInfo, ...] = adapter.list_relations(
         connection, database=database, schemas=schemas, names=names
     )
     result: dict[str, RelationInfo] = {}
+    fingerprint_schemas: set[str] = set()
+    freshness_schemas: set[str] = set()
     relation: RelationInfo
     for relation in relations:
         if relation.name == FINGERPRINT_TABLE_NAME:
+            if relation.schema is not None:
+                fingerprint_schemas.add(relation.schema)
+            continue
+        if relation.name == SOURCE_FRESHNESS_TABLE_NAME:
+            if relation.schema is not None:
+                freshness_schemas.add(relation.schema)
             continue
         result[relation.name] = relation
-    return result
+    return result, frozenset(fingerprint_schemas), frozenset(freshness_schemas)
 
 
 def _gather_columns(
@@ -365,6 +381,7 @@ def _gather_fingerprints(
     execute: Any,
     database: str | None,
     schemas: tuple[str, ...] | None,
+    fingerprint_state_schemas: frozenset[str],
 ) -> WarehouseFingerprints:
     """Read latest fingerprints across all target schemas grouped by node type."""
 
@@ -379,7 +396,7 @@ def _gather_fingerprints(
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=execute,
-            relation_exists=adapter.relation_exists,
+            table_exists=schema in fingerprint_state_schemas,
             database=database,
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,

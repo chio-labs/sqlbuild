@@ -20,6 +20,7 @@ from sqlbuild.adapter.shared.models import (
 )
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -872,7 +873,12 @@ def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_
     fingerprint_set: FingerprintSet = read_latest_fingerprints(
         connection=connection,
         execute=adapter.execute,
-        relation_exists=adapter.relation_exists,
+        table_exists=adapter.relation_exists(
+            connection,
+            database=databricks_catalog,
+            schema=databricks_schema,
+            name=FINGERPRINT_TABLE_NAME,
+        ),
         database=databricks_catalog,
         schema=databricks_schema,
         render_qualified_name=adapter.render_qualified_name,
