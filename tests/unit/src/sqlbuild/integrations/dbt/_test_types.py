@@ -729,3 +729,19 @@ class DbtSelectionStalenessWarningTestCase:
     expected_warning_count: int
     expected_warning_fragments: tuple[str, ...]
     unexpected_warning_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ConcurrentStateReadsTestCase:
+    description: str
+    read_names: tuple[str, ...]
+    expected_results: dict[str, str]
+    expected_open_connection_count: int
+
+
+@dataclass(frozen=True)
+class ConcurrentStateReadsErrorTestCase:
+    description: str
+    failing_read_name: str
+    expected_error_message: str
+    expected_open_connection_count: int

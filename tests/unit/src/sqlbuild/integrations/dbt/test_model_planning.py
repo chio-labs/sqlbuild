@@ -119,7 +119,8 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
     tmp_path: Path,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
-    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_model_plan.duckdb")})
+    connection_config: dict[str, object] = {"database": str(tmp_path / "dbt_model_plan.duckdb")}
+    connection: Any = adapter.connect(connection_config)
     project: CompiledProject = replace(
         build_compiled_project_with_models({}),
         effective_target_schema="main",
@@ -154,6 +155,7 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
             project=project,
             adapter=adapter,
             connection=connection,
+            connection_config=connection_config,
             force=test_case.force,
         )
     finally:
@@ -185,7 +187,8 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
     tmp_path: Path,
 ) -> None:
     adapter: CountingModelPlanningAdapter = CountingModelPlanningAdapter()
-    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_model_prefetch.duckdb")})
+    connection_config: dict[str, object] = {"database": str(tmp_path / "dbt_model_prefetch.duckdb")}
+    connection: Any = adapter.connect(connection_config)
     project: CompiledProject = replace(
         build_compiled_project_with_models({}),
         effective_target_schema="main",
@@ -244,6 +247,7 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
             graph=graph,
             adapter=adapter,
             connection=connection,
+            connection_config=connection_config,
         )
     finally:
         adapter.close(connection)
@@ -1197,7 +1201,10 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     tmp_path: Path,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
-    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_source_blocking.duckdb")})
+    connection_config: dict[str, object] = {
+        "database": str(tmp_path / "dbt_source_blocking.duckdb")
+    }
+    connection: Any = adapter.connect(connection_config)
     project: CompiledProject = replace(
         build_compiled_project_with_models(
             {"downstream_orders": 'select * from __dbt_ref("fact_orders")'}
@@ -1271,6 +1278,7 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
             graph=graph,
             adapter=adapter,
             connection=connection,
+            connection_config=connection_config,
         )
     finally:
         adapter.close(connection)
@@ -1303,7 +1311,8 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
     tmp_path: Path,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
-    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_source_changed.duckdb")})
+    connection_config: dict[str, object] = {"database": str(tmp_path / "dbt_source_changed.duckdb")}
+    connection: Any = adapter.connect(connection_config)
     project: CompiledProject = replace(
         build_compiled_project_with_models(
             {"downstream_orders": 'select * from __dbt_ref("fact_orders")'}
@@ -1397,6 +1406,7 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
             graph=graph,
             adapter=adapter,
             connection=connection,
+            connection_config=connection_config,
         )
     finally:
         adapter.close(connection)

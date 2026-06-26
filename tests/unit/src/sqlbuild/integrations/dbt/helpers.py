@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -1528,6 +1529,31 @@ class FakeReusePlanAdapter(BaseAdapter):
             and (schemas is None or relation.schema in schemas)
             and (names is None or relation.name in names)
         )
+
+
+class ConnectionTrackingAdapter(BaseAdapter):
+    """Adapter stub that records connect/close calls and hands out distinct connections."""
+
+    adapter_name: ClassVar[str] = "connection_tracking"
+
+    def __init__(self) -> None:
+        self._lock: threading.Lock = threading.Lock()
+        self.opened_connections: list[object] = []
+        self.closed_connections: list[object] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        connection: object = object()
+        with self._lock:
+            self.opened_connections.append(connection)
+        return connection
+
+    def execute(self, connection: object, sql: str) -> object:
+        raise AssertionError("execute should not be called in connection tracking tests")
+
+    def close(self, connection: object) -> None:
+        with self._lock:
+            self.closed_connections.append(connection)
 
 
 class CountingModelPlanningAdapter(DuckDbAdapter):
