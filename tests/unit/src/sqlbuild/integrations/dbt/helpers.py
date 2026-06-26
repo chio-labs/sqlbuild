@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import threading
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -1093,6 +1092,9 @@ def build_manifest_seed_node(
     package_name: str = "analytics",
     name: str = "countries",
     relation_name: str | None = None,
+    database: str | None = None,
+    schema: str | None = None,
+    alias: str | None = None,
     checksum: str | None = None,
     config_overrides: dict[str, object] | None = None,
     root_path: str | None = None,
@@ -1108,6 +1110,12 @@ def build_manifest_seed_node(
     }
     if relation_name is not None:
         node["relation_name"] = relation_name
+    if database is not None:
+        node["database"] = database
+    if schema is not None:
+        node["schema"] = schema
+    if alias is not None:
+        node["alias"] = alias
     if checksum is not None:
         node["checksum"] = {"checksum": checksum}
     if config_overrides is not None:
@@ -1529,31 +1537,6 @@ class FakeReusePlanAdapter(BaseAdapter):
             and (schemas is None or relation.schema in schemas)
             and (names is None or relation.name in names)
         )
-
-
-class ConnectionTrackingAdapter(BaseAdapter):
-    """Adapter stub that records connect/close calls and hands out distinct connections."""
-
-    adapter_name: ClassVar[str] = "connection_tracking"
-
-    def __init__(self) -> None:
-        self._lock: threading.Lock = threading.Lock()
-        self.opened_connections: list[object] = []
-        self.closed_connections: list[object] = []
-
-    def connect(self, config: dict[str, object]) -> object:
-        del config
-        connection: object = object()
-        with self._lock:
-            self.opened_connections.append(connection)
-        return connection
-
-    def execute(self, connection: object, sql: str) -> object:
-        raise AssertionError("execute should not be called in connection tracking tests")
-
-    def close(self, connection: object) -> None:
-        with self._lock:
-            self.closed_connections.append(connection)
 
 
 class CountingModelPlanningAdapter(DuckDbAdapter):
