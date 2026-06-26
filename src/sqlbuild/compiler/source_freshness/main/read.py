@@ -6,7 +6,6 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import (
     build_qualified_table_name,
@@ -22,29 +21,18 @@ def read_latest_source_freshness(
     *,
     connection: Any,
     execute: Any,
-    relation_exists: Callable[..., bool],
+    table_exists: bool,
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_read_latest_sql: Callable[..., str],
 ) -> SourceFreshnessSet:
-    """Read latest source freshness rows from adapter-rendered SQL.
-
-    State table existence is checked via adapter metadata (`relation_exists`) rather
-    than by swallowing probe-query errors, so operational failures propagate instead
-    of being misread as "no freshness state".
-    """
+    """Read latest source freshness rows, trusting the caller-resolved table existence."""
 
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
-    )
-    table_exists: bool = relation_exists(
-        connection,
-        database=database,
-        schema=schema,
-        name=SOURCE_FRESHNESS_TABLE_NAME,
     )
     if not table_exists:
         return SourceFreshnessSet(schema=schema, records={})

@@ -12,7 +12,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
@@ -50,6 +50,7 @@ def run_dbt_clone_from_project(
     project_dir: Path,
     args: tuple[str, ...],
     on_progress: Callable[[str], None] | None = None,
+    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
 ) -> DbtCloneRun:
     """Compile current and reuse manifests and clone selected dbt models."""
 
@@ -132,8 +133,6 @@ def run_dbt_clone_from_project(
     _report_progress(on_progress, f"Connecting to {adapter_name}...")
     connection: Any = adapter.connect(connection_config)
     try:
-        _report_progress(on_progress, "Applying clone plan...")
-        clone_start: float = time.monotonic()
         result: CloneExecutionResult = execute_dbt_clone(
             adapter=adapter,
             connection=connection,
@@ -141,9 +140,7 @@ def run_dbt_clone_from_project(
             reuse_manifest=reuse_manifest,
             selected_nodes=selected_nodes,
             hard_copy=options.hard_copy,
-        )
-        _report_progress(
-            on_progress, f"Applied clone plan. ({time.monotonic() - clone_start:.2f}s)"
+            on_item=on_item,
         )
     finally:
         adapter.close(connection)

@@ -52,9 +52,9 @@ CLONE_ERROR_E2E_TEST_CASES: tuple[DbtCloneE2ETestCase, ...] = (
             command=("--no-color", "dbt", "clone", "--select", "dbt_orders", "--hard-copy"),
             expected_returncode=0,
             expected_stdout_fragments=(
-                "sqb clone  origin=prod destination=dev",
                 "dbt_orders",
                 "copied",
+                "1/1",
                 "Completed successfully.",
                 "COPIED=1",
             ),
@@ -62,7 +62,6 @@ CLONE_ERROR_E2E_TEST_CASES: tuple[DbtCloneE2ETestCase, ...] = (
                 "Compiling dbt project...",
                 "Compiling dbt production ref git ref 'prod'...",
                 "Resolving dbt selection...",
-                "Applying clone plan...",
             ),
             expected_rows=((1, 900), (2, 900)),
             rows_sql="SELECT order_id, amount_cents FROM main.dbt_orders ORDER BY order_id",
