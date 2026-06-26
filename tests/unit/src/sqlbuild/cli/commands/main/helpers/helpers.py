@@ -18,6 +18,8 @@ from sqlbuild.compiler.source_freshness.models import (
 
 
 class RecordingAdapter:
+    state_tables_transient: bool = False
+
     def __init__(self) -> None:
         self.insert_count: int = 0
         self.executed_sql: list[str] = []

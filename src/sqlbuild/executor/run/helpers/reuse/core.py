@@ -6,12 +6,33 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import RelationReusePlan
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+
+
+def _origin_is_transient(
+    *, adapter: BaseAdapter, connection: Any, location: CompiledRelationLocation
+) -> bool:
+    """Return whether the reuse origin warehouse relation is transient, defaulting to False."""
+
+    if location.schema is None:
+        return False
+    relations: tuple[Any, ...] = adapter.list_relations(
+        connection,
+        database=location.database,
+        schemas=(location.schema,),
+        names=(location.name,),
+    )
+    target_name: str = location.name.lower()
+    for relation in relations:
+        if relation.name == target_name:
+            return bool(relation.is_transient)
+    return False
 
 
 def create_relation_from_reuse_origin(
@@ -22,6 +43,7 @@ def create_relation_from_reuse_origin(
     destination_relation: str,
     hard_copy: bool,
     statement_recorder: StatementRecorder,
+    origin_is_transient: bool = False,
     destination_target_name: str | None = None,
     reuse_from_target_name: str | None = None,
 ) -> None:
@@ -54,6 +76,7 @@ def create_relation_from_reuse_origin(
         origin=origin_relation,
         destination=destination_relation,
         hard_copy=False,
+        origin_is_transient=origin_is_transient,
         statement_recorder=statement_recorder,
     )
 
@@ -89,6 +112,9 @@ def create_relation_from_reuse_plan(
         destination_relation=destination_relation,
         hard_copy=relation_reuse.hard_copy,
         statement_recorder=statement_recorder,
+        origin_is_transient=_origin_is_transient(
+            adapter=adapter, connection=connection, location=relation_reuse.origin
+        ),
         destination_target_name=relation_reuse.destination_target_name,
         reuse_from_target_name=relation_reuse.reuse_from_target_name,
     )

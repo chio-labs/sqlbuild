@@ -10,7 +10,12 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.main.origin_snapshot import build_clone_origin_snapshot
+from sqlbuild.executor.clone.models import (
+    CloneExecutionResult,
+    CloneItemResult,
+    CloneOriginSnapshot,
+)
 
 
 def _ensure_destination_schemas(
@@ -76,6 +81,18 @@ def execute_clone(
         )
         is not None
     )
+    origin_snapshot: CloneOriginSnapshot = build_clone_origin_snapshot(
+        adapter=adapter,
+        connection=origin_connection,
+        origin_locations=tuple(
+            (
+                origin_entry.destination.database,
+                origin_entry.destination.schema,
+                origin_entry.destination.name,
+            )
+            for _, origin_entry in clonable_entries
+        ),
+    )
     total: int = len(clonable_entries)
     index: int = 0
     destination_entry: SeedPlanEntry | ModelPlanEntry
@@ -90,17 +107,17 @@ def execute_clone(
                 destination_entry=destination_entry,
                 origin_entry=origin_entry,
                 adapter=adapter,
-                origin_connection=origin_connection,
                 destination_connection=destination_connection,
+                origin_snapshot=origin_snapshot,
             )
         else:
             item_result = clone_relation(
                 destination_entry=destination_entry,
                 origin_entry=origin_entry,
                 adapter=adapter,
-                origin_connection=origin_connection,
                 destination_connection=destination_connection,
                 hard_copy=hard_copy,
+                origin_snapshot=origin_snapshot,
             )
         results.append(item_result)
         if on_item is not None:

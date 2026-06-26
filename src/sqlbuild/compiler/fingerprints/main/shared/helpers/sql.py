@@ -48,6 +48,7 @@ def build_create_table_sql(
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
+    transient: bool = False,
 ) -> str:
     """Build a CREATE TABLE IF NOT EXISTS statement for the fingerprint table."""
 
@@ -58,8 +59,9 @@ def build_create_table_sql(
     )
     string_type: str = render_framework_type(FrameworkType.STRING)
     timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
+    table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
     return (
-        f"CREATE TABLE IF NOT EXISTS {qualified_name} ("
+        f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ("
         f"{COLUMN_NODE_TYPE} {string_type} NOT NULL, "
         f"{COLUMN_NODE_NAME} {string_type} NOT NULL, "
         f"{COLUMN_TARGET_DATABASE} {string_type}, "

@@ -251,16 +251,29 @@ SNOWFLAKE_RENDER_CLONE_TEST_CASES: list[SnowflakeRenderCloneTestCase] = [
         source="prod.fact_orders",
         target="dev.fact_orders",
         hard_copy=False,
+        origin_is_transient=False,
         expected_statements=("CREATE OR REPLACE TABLE dev.fact_orders CLONE prod.fact_orders",),
         expected_supports_zero_copy=True,
     ),
     SnowflakeRenderCloneTestCase(
-        description="renders CTAS when hard copy is requested",
+        description="renders transient clone when origin is transient",
+        source="prod.fact_orders",
+        target="dev.fact_orders",
+        hard_copy=False,
+        origin_is_transient=True,
+        expected_statements=(
+            "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
+        ),
+        expected_supports_zero_copy=True,
+    ),
+    SnowflakeRenderCloneTestCase(
+        description="renders transient CTAS when hard copy is requested",
         source="prod.fact_orders",
         target="dev.fact_orders",
         hard_copy=True,
+        origin_is_transient=False,
         expected_statements=(
-            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+            "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
         ),
         expected_supports_zero_copy=True,
     ),
@@ -327,6 +340,7 @@ def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_s
         origin=test_case.source,
         destination=test_case.target,
         hard_copy=test_case.hard_copy,
+        origin_is_transient=test_case.origin_is_transient,
     )
 
     assert adapter.supports_zero_copy_clone() is test_case.expected_supports_zero_copy
