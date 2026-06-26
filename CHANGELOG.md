@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/chio-labs/sqlbuild/compare/v0.42.0...v0.42.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **snowflake:** default tables to transient and mirror origin transient-ness on clone ([61b2146](https://github.com/chio-labs/sqlbuild/commit/61b2146afd1a40223d8acdba8a3a0c6d48ca6df9))
+
 ## [0.42.0](https://github.com/chio-labs/sqlbuild/compare/v0.41.3...v0.42.0) (2026-06-26)
 
 
