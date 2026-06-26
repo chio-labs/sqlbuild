@@ -555,10 +555,12 @@ def append_stale_out_of_selection_warning(
     stale_seeds: tuple[str, ...] = dbt_model_plan.stale_out_of_selection_seed_unique_ids
     if not stale_seeds:
         return plan
-    names: str = ", ".join(seed.split(".")[-1] for seed in stale_seeds)
+    bullet_lines: str = "\n".join(f"    - {seed.split('.')[-1]}" for seed in stale_seeds)
     warning: str = (
-        f"selected models are stale: seed(s) {names} changed but were not selected; "
-        "rebuild with a closure selector (e.g. +model) to incorporate them"
+        f"selected models will build on {len(stale_seeds)} stale seed(s) "
+        "not selected for rebuild:\n"
+        f"{bullet_lines}\n"
+        "    rebuild the closure to refresh them: --select +model"
     )
     return replace(plan, warnings=(*plan.warnings, warning))
 

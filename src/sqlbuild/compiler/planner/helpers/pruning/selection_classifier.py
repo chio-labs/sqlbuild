@@ -8,6 +8,32 @@ from sqlbuild.compiler.planner.models import (
     SelectionStalenessWarning,
 )
 
+_STALE_TRIGGER_DISPLAY_LIMIT: int = 5
+
+
+def format_stale_upstream_warning_message(
+    *,
+    model_label: str,
+    model_name: str,
+    trigger_label: str,
+    trigger_names: tuple[str, ...],
+) -> str:
+    """Build a multi-line stale-selection warning: summary, capped bullet list, single hint."""
+
+    count: int = len(trigger_names)
+    displayed: tuple[str, ...] = trigger_names[:_STALE_TRIGGER_DISPLAY_LIMIT]
+    lines: list[str] = [
+        f"{model_label} '{model_name}' will build on {count} stale {trigger_label} "
+        "not selected for rebuild:"
+    ]
+    name: str
+    for name in displayed:
+        lines.append(f"    - {name}")
+    if count > _STALE_TRIGGER_DISPLAY_LIMIT:
+        lines.append(f"    +{count - _STALE_TRIGGER_DISPLAY_LIMIT} more")
+    lines.append(f"    rebuild the closure to refresh them: --select +{model_name}")
+    return "\n".join(lines)
+
 
 def classify_selection_staleness_warnings(
     graph: SelectionStalenessGraph,

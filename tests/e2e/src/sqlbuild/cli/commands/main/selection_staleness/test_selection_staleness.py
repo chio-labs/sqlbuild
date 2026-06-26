@@ -78,8 +78,8 @@ CORE_SCENARIOS: tuple[SelectionStalenessE2ETestCase, ...] = (
                 expected_exact_stdout_fragments=(
                     "Plan ready (full refresh, 1 selected)",
                     "table     fact_orders",
-                    "selected model 'fact_orders' is stale",
-                    "stg_orders changed but will not be rebuilt",
+                    "selected model 'fact_orders' will build on",
+                    "- stg_orders",
                 ),
             ),
             "dbt": SelectionStalenessEngineOverride(
@@ -94,8 +94,8 @@ CORE_SCENARIOS: tuple[SelectionStalenessE2ETestCase, ...] = (
                 expected_exact_stdout_fragments=(
                     "planned models: 1 run",
                     "fact_orders",
-                    "selected dbt model 'fact_orders' is stale",
-                    "stg_orders changed but will not be rebuilt or is stale",
+                    "selected dbt model 'fact_orders' will build on",
+                    "- stg_orders",
                 ),
             ),
         },

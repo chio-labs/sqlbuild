@@ -1049,7 +1049,11 @@ def _format_warning_section(lines: list[str], plan: DbtInteropPlan) -> None:
     lines.append(style.warning_strong(f"Warnings ({len(plan.warnings)})"))
     warning: str
     for warning in plan.warnings:
-        lines.append(f"  {style.warning(f'- {warning}')}")
+        message_lines: list[str] = warning.split("\n")
+        lines.append(f"  {style.warning(f'- {message_lines[0]}')}")
+        continuation: str
+        for continuation in message_lines[1:]:
+            lines.append(f"    {style.warning(continuation)}")
 
 
 def _strip_ansi(text: str) -> str:

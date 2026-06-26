@@ -192,13 +192,13 @@ def test_given_dependency_baseline_project_when_building_downstream_then_prepare
             mixed_command=("--no-color", "build", "--select", "b", "c"),
             replan_command=("--no-color", "build", "--select", "c"),
             expected_mixed_stdout_fragments=(
-                "selected model 'c' is stale",
-                "a changed but will not be rebuilt",
+                "selected model 'c' will build on",
+                "- a",
                 "Completed successfully.",
             ),
             expected_replan_stdout_fragments=(
-                "selected model 'c' is stale",
-                "a changed but will not be rebuilt",
+                "selected model 'c' will build on",
+                "- a",
             ),
             unexpected_replan_stdout_fragments=("table      c",),
             expected_c_rows=((1,), (2,)),
