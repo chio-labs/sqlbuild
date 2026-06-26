@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.41.2](https://github.com/chio-labs/sqlbuild/compare/v0.41.1...v0.41.2) (2026-06-26)
+
+
+### Bug Fixes
+
+* **dbt:** run independent planning state reads in parallel ([76d60a0](https://github.com/chio-labs/sqlbuild/commit/76d60a0af5585926a40049bef88e51e455e02db0))
+* **dbt:** run independent planning state reads in parallel ([d422783](https://github.com/chio-labs/sqlbuild/commit/d422783b5ee7ffec71becb02543ca2fb0aa917fa))
+
 ## [0.41.1](https://github.com/chio-labs/sqlbuild/compare/v0.41.0...v0.41.1) (2026-06-26)
 
 
