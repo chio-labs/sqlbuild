@@ -17,6 +17,8 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
@@ -534,43 +536,42 @@ def list_virtual_relation_types(
     virtual_environment_name: str,
     unsuffixed_virtual_environment_name: str | None,
 ) -> dict[str, str]:
+    def virtual_schema_for(schema: str | None) -> str | None:
+        if schema is None:
+            return None
+        if unsuffixed_virtual_environment_name == virtual_environment_name:
+            return schema
+        return f"{schema}__{virtual_environment_name}"
+
+    artifacts: tuple[tuple[str, str | None, str | None, str], ...] = tuple(
+        (
+            model.name,
+            model.destination.database,
+            virtual_schema_for(model.destination.schema),
+            model.destination.name,
+        )
+        for model in graph.project.models
+    ) + tuple(
+        (
+            seed.name,
+            seed.destination.database,
+            virtual_schema_for(seed.destination.schema),
+            seed.destination.name,
+        )
+        for seed in graph.project.seeds
+    )
     connection: Any = adapter.connect(connection_config)
     try:
+        lookup: RelationLookup = build_relation_lookup(
+            adapter=adapter,
+            connection=connection,
+            locations=tuple((database, schema, name) for _, database, schema, name in artifacts),
+        )
         result: dict[str, str] = {}
-        for model in graph.project.models:
-            virtual_schema: str | None
-            if model.destination.schema is None:
-                virtual_schema = None
-            elif unsuffixed_virtual_environment_name == virtual_environment_name:
-                virtual_schema = model.destination.schema
-            else:
-                virtual_schema = f"{model.destination.schema}__{virtual_environment_name}"
-            relations: tuple[RelationInfo, ...] = adapter.list_relations(
-                connection,
-                database=model.destination.database,
-                schemas=((virtual_schema,) if virtual_schema is not None else None),
-            )
-            for relation in relations:
-                if relation.name == model.destination.name:
-                    result[model.name] = relation.relation_type
-                    break
-        for seed in graph.project.seeds:
-            virtual_schema = (
-                None
-                if seed.destination.schema is None
-                else seed.destination.schema
-                if unsuffixed_virtual_environment_name == virtual_environment_name
-                else f"{seed.destination.schema}__{virtual_environment_name}"
-            )
-            relations = adapter.list_relations(
-                connection,
-                database=seed.destination.database,
-                schemas=((virtual_schema,) if virtual_schema is not None else None),
-            )
-            for relation in relations:
-                if relation.name == seed.destination.name:
-                    result[seed.name] = relation.relation_type
-                    break
+        for artifact_name, _, schema, name in artifacts:
+            relation: RelationInfo | None = lookup.get(schema=schema, name=name)
+            if relation is not None:
+                result[artifact_name] = relation.relation_type
         return result
     finally:
         adapter.close(connection)

@@ -7,13 +7,8 @@ from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
-from sqlbuild.executor.clone.main.origin_snapshot import build_clone_origin_snapshot
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
-from sqlbuild.executor.clone.models import (
-    CloneExecutionResult,
-    CloneItemResult,
-    CloneOriginSnapshot,
-)
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
@@ -24,6 +19,8 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtCloneOptions, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 
 
 def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
@@ -97,10 +94,10 @@ def execute_dbt_clone(
         reuse_model.unique_id: _relation_location(model=reuse_model)
         for _, reuse_model in clonable_models
     }
-    origin_snapshot: CloneOriginSnapshot = build_clone_origin_snapshot(
+    origin_lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
         connection=connection,
-        origin_locations=tuple(origin_locations.values()),
+        locations=tuple(origin_locations.values()),
     )
     results: list[CloneItemResult] = []
     index: int = 0
@@ -109,7 +106,7 @@ def execute_dbt_clone(
     for current_model, reuse_model in clonable_models:
         index += 1
         _, origin_schema, origin_name = origin_locations[reuse_model.unique_id]
-        origin_exists: bool = origin_snapshot.exists(schema=origin_schema, name=origin_name)
+        origin_exists: bool = origin_lookup.exists(schema=origin_schema, name=origin_name)
         if _model_materialization(model=current_model) == DBT_MATERIALIZATION_VIEW:
             item_result: CloneItemResult = recreate_view_by_names(
                 name=current_model.name,
@@ -129,7 +126,7 @@ def execute_dbt_clone(
                 adapter=adapter,
                 connection=connection,
                 hard_copy=hard_copy,
-                origin_is_transient=origin_snapshot.is_transient(
+                origin_is_transient=origin_lookup.is_transient(
                     schema=origin_schema, name=origin_name
                 ),
             )

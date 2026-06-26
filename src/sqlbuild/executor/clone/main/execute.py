@@ -10,12 +10,9 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
-from sqlbuild.executor.clone.main.origin_snapshot import build_clone_origin_snapshot
-from sqlbuild.executor.clone.models import (
-    CloneExecutionResult,
-    CloneItemResult,
-    CloneOriginSnapshot,
-)
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 
 
 def _ensure_destination_schemas(
@@ -81,10 +78,10 @@ def execute_clone(
         )
         is not None
     )
-    origin_snapshot: CloneOriginSnapshot = build_clone_origin_snapshot(
+    origin_lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
         connection=origin_connection,
-        origin_locations=tuple(
+        locations=tuple(
             (
                 origin_entry.destination.database,
                 origin_entry.destination.schema,
@@ -108,7 +105,7 @@ def execute_clone(
                 origin_entry=origin_entry,
                 adapter=adapter,
                 destination_connection=destination_connection,
-                origin_snapshot=origin_snapshot,
+                origin_lookup=origin_lookup,
             )
         else:
             item_result = clone_relation(
@@ -117,7 +114,7 @@ def execute_clone(
                 adapter=adapter,
                 destination_connection=destination_connection,
                 hard_copy=hard_copy,
-                origin_snapshot=origin_snapshot,
+                origin_lookup=origin_lookup,
             )
         results.append(item_result)
         if on_item is not None:

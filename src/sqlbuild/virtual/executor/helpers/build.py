@@ -78,7 +78,8 @@ from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup, SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
@@ -1117,26 +1118,33 @@ def _read_available_seed_physical_relations(
     relations: dict[str, PhysicalRelationRecord] = {}
     if not desired_seed_version_hashes:
         return relations
+    records_by_seed: dict[str, PhysicalRelationRecord] = {}
+    seed_name: str
+    version_hash: str
+    for seed_name, version_hash in desired_seed_version_hashes.items():
+        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+            state_connection,
+            schema=config.schema,
+            artifact_type=PhysicalArtifactType.SEED,
+            artifact_name=seed_name,
+            version_hash=version_hash,
+        )
+        if relation is not None:
+            records_by_seed[seed_name] = relation
+    if not records_by_seed:
+        return relations
     warehouse_connection: Any = adapter.connect(connection_config)
     try:
-        seed_name: str
-        version_hash: str
-        for seed_name, version_hash in desired_seed_version_hashes.items():
-            relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-                state_connection,
-                schema=config.schema,
-                artifact_type=PhysicalArtifactType.SEED,
-                artifact_name=seed_name,
-                version_hash=version_hash,
-            )
-            if relation is None:
-                continue
-            if adapter.relation_exists(
-                warehouse_connection,
-                database=relation.database_name,
-                schema=relation.schema_name,
-                name=relation.relation_name,
-            ):
+        relation_lookup: RelationLookup = build_relation_lookup(
+            adapter=adapter,
+            connection=warehouse_connection,
+            locations=tuple(
+                (record.database_name, record.schema_name, record.relation_name)
+                for record in records_by_seed.values()
+            ),
+        )
+        for seed_name, relation in records_by_seed.items():
+            if relation_lookup.exists(schema=relation.schema_name, name=relation.relation_name):
                 relations[seed_name] = relation
     finally:
         adapter.close(warehouse_connection)
