@@ -201,6 +201,13 @@ class GraphIdentityWriteHashesTestCase:
 
 
 @dataclass(frozen=True)
+class GraphIdentityWritePerfTestCase:
+    description: str
+    layer_count: int
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
 class GraphChangesOnlyPropagationTestCase:
     description: str
     upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]]

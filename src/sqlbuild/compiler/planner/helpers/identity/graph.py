@@ -49,17 +49,17 @@ def build_graph_write_identity_hashes(
     compose_identity: Callable[[str, tuple[tuple[GraphNodeKey, str], ...]], str],
 ) -> dict[GraphNodeKey, str]:
     hashes: dict[GraphNodeKey, str] = dict(base_identity_hashes)
+    resolved_selected: dict[GraphNodeKey, str] = {}
 
     def resolve(key: GraphNodeKey, visiting: frozenset[GraphNodeKey]) -> str | None:
-        if key in hashes and key not in selected_keys:
-            return hashes[key]
+        if key not in selected_keys:
+            return hashes.get(key)
+        if key in resolved_selected:
+            return resolved_selected[key]
         node: GraphIdentityNode | None = nodes.get(key)
         if node is None or node.local_hash is None:
             return hashes.get(key)
-        if key not in selected_keys:
-            return hashes.get(key)
         if key in visiting:
-            hashes[key] = node.local_hash
             return node.local_hash
         upstream_hashes: list[tuple[GraphNodeKey, str]] = []
         upstream_key: GraphNodeKey
@@ -67,8 +67,10 @@ def build_graph_write_identity_hashes(
             upstream_hash: str | None = resolve(upstream_key, visiting | {key})
             if upstream_hash is not None:
                 upstream_hashes.append((upstream_key, upstream_hash))
-        hashes[key] = compose_identity(node.local_hash, tuple(upstream_hashes))
-        return hashes[key]
+        composed: str = compose_identity(node.local_hash, tuple(upstream_hashes))
+        resolved_selected[key] = composed
+        hashes[key] = composed
+        return composed
 
     key: GraphNodeKey
     for key in execution_order:
