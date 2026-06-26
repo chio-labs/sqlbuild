@@ -205,14 +205,14 @@ def _default_repair_command(
 def _default_exact_fragments(
     *, engine: SelectionStalenessEngine, test_case: SelectionStalenessE2ETestCase
 ) -> tuple[str, ...]:
-    model_label: str = "selected model 'fact_orders' is stale"
+    model_label: str = "selected model 'fact_orders' will build on"
     if engine == "dbt":
-        model_label = "selected dbt model 'fact_orders' is stale"
+        model_label = "selected dbt model 'fact_orders' will build on"
     if test_case.scenario == "direct_parent":
         return (model_label, _changed_parent_fragment(engine=engine, name="stg_orders"))
     if test_case.scenario == "seed_parent":
         if engine == "dbt":
-            return (model_label, "seed(s) raw_orders changed but were not selected")
+            return (model_label, "- raw_orders")
         return (model_label, _stale_parent_fragment(engine=engine, name="order_amounts"))
     if test_case.scenario == "multi_hop":
         return (
@@ -270,7 +270,7 @@ def _default_unexpected_exact_fragments(
     if test_case.scenario == "selected_root_leaf":
         return (f"{model_prefix} stg_orders",)
     if test_case.scenario == "mixed_parents":
-        return ("upstream selected_parent changed",)
+        return ("- selected_parent",)
     if test_case.scenario == "diamond":
         return (f"{model_prefix} stg_orders_a", f"{model_prefix} stg_orders_b")
     return ()
@@ -300,18 +300,18 @@ def _default_repair_fragments(
 
 def _default_unexpected_repair_fragments(*, engine: SelectionStalenessEngine) -> tuple[str, ...]:
     if engine == "dbt":
-        return ("selected dbt model 'fact_orders' is stale",)
-    return ("selected model 'fact_orders' is stale",)
+        return ("selected dbt model 'fact_orders' will build on",)
+    return ("selected model 'fact_orders' will build on",)
 
 
 def _changed_parent_fragment(*, engine: SelectionStalenessEngine, name: str) -> str:
-    if engine == "dbt":
-        return f"{name} changed but will not be rebuilt or is stale"
-    return f"{name} changed but will not be rebuilt"
+    del engine
+    return f"- {name}"
 
 
 def _stale_parent_fragment(*, engine: SelectionStalenessEngine, name: str) -> str:
-    return f"{name} changed but will not be rebuilt or is stale"
+    del engine
+    return f"- {name}"
 
 
 def assert_dbt_selection_staleness_case(

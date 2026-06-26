@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.pruning.selection_classifier import (
     classify_selection_staleness_warnings,
+    format_stale_upstream_warning_message,
 )
 from sqlbuild.compiler.planner.main.model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
@@ -22,8 +23,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import ChangeKind, WarningSeverity
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-
-_WARNING_TRIGGER_LIMIT: int = 5
 
 
 def build_stale_out_of_selection_warnings(
@@ -83,10 +82,11 @@ def build_stale_out_of_selection_warnings(
             PlanWarning(
                 model_name=warning.model_name,
                 severity=WarningSeverity.WARNING,
-                message=(
-                    f"selected model '{warning.model_name}' is stale: upstream "
-                    f"{_format_trigger_names(warning.trigger_names)}; "
-                    "use a closure selector (for example +model) to incorporate it"
+                message=format_stale_upstream_warning_message(
+                    model_label="selected model",
+                    model_name=warning.model_name,
+                    trigger_label="upstream(s)",
+                    trigger_names=warning.trigger_names,
                 ),
             )
         )
@@ -223,14 +223,3 @@ def _seed_identity_changed(
         return False
     fingerprint: Fingerprint | None = snapshot.fingerprints.seeds.get(seed_name)
     return fingerprint is None or fingerprint.version_hash != expected_hash
-
-
-def _format_trigger_names(names: tuple[str, ...]) -> str:
-    displayed: tuple[str, ...] = names[:_WARNING_TRIGGER_LIMIT]
-    suffix: str = ""
-    if len(names) > _WARNING_TRIGGER_LIMIT:
-        suffix = f" +{len(names) - _WARNING_TRIGGER_LIMIT} more"
-    return (
-        ", ".join(f"{name} changed but will not be rebuilt or is stale" for name in displayed)
-        + suffix
-    )

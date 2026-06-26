@@ -20,6 +20,9 @@ from sqlbuild.compiler.planner.main.graph_identity import build_expected_graph_i
 from sqlbuild.compiler.planner.main.selection_staleness import (
     classify_selection_staleness_warnings,
 )
+from sqlbuild.compiler.planner.main.stale_warning_message import (
+    format_stale_upstream_warning_message,
+)
 from sqlbuild.compiler.planner.models import (
     GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
@@ -330,15 +333,17 @@ def _format_stale_warning(*, warning: SelectionStalenessWarning, manifest: DbtMa
         if trigger_name in manifest.seeds_by_unique_id
     )
     if changed_seed_names:
-        return (
-            f"selected dbt model '{model_name}' "
-            f"is stale: seed(s) {', '.join(changed_seed_names)} changed but were not selected; "
-            "rebuild with a closure selector (e.g. +model) to incorporate it"
+        return format_stale_upstream_warning_message(
+            model_label="selected dbt model",
+            model_name=model_name,
+            trigger_label="seed(s)",
+            trigger_names=changed_seed_names,
         )
-    return (
-        f"selected dbt model '{model_name}' "
-        f"is stale: upstream {_format_trigger_names(trigger_names)}; "
-        "rebuild with a closure selector (e.g. +model) to incorporate it"
+    return format_stale_upstream_warning_message(
+        model_label="selected dbt model",
+        model_name=model_name,
+        trigger_label="upstream(s)",
+        trigger_names=trigger_names,
     )
 
 
@@ -350,10 +355,6 @@ def _display_trigger_name(*, unique_id: str, manifest: DbtManifestIndex) -> str:
     if seed is not None:
         return seed.name
     return unique_id.split(".")[-1]
-
-
-def _format_trigger_names(names: tuple[str, ...]) -> str:
-    return ", ".join(f"{name} changed but will not be rebuilt or is stale" for name in names)
 
 
 def build_downstream_sqlbuild_model_names(

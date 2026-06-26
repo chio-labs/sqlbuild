@@ -8,6 +8,9 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.helpers.pruning.selection_classifier import (
+    format_stale_upstream_warning_message,
+)
 from sqlbuild.compiler.planner.helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
 )
@@ -29,6 +32,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ReuseSatisfiedStalenessTestCase,
     SelectionStalenessGraphWarningTestCase,
     SelectionStalenessWarningTestCase,
+    StaleWarningMessageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_changed_direct_dep_stale_warnings,
@@ -78,7 +82,7 @@ TEST_CASES: list[SelectionStalenessWarningTestCase] = [
         description="changed seed outside selection warns",
         upstream_key=SEED_KEY,
         execution_selected_keys=frozenset(),
-        expected_warning_fragments=("selected model 'c' is stale", "orders_seed changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- orders_seed"),
     ),
     SelectionStalenessWarningTestCase(
         description="changed seed in selected closure does not warn",
@@ -90,7 +94,7 @@ TEST_CASES: list[SelectionStalenessWarningTestCase] = [
         description="changed source outside selection warns",
         upstream_key=SOURCE_KEY,
         execution_selected_keys=frozenset(),
-        expected_warning_fragments=("selected model 'c' is stale", "raw_orders changed"),
+        expected_warning_fragments=("selected model 'c' will build on", "- raw_orders"),
     ),
     SelectionStalenessWarningTestCase(
         description="changed source in selected closure does not warn",
@@ -113,9 +117,9 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset({SEED_ROOT_KEY.name}),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "b changed but will not be rebuilt or is stale",
-            "root_seed changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- b",
+            "- root_seed",
         ),
     ),
     SelectionStalenessGraphWarningTestCase(
@@ -130,9 +134,9 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset({SOURCE_ROOT_KEY.name}),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "b changed but will not be rebuilt or is stale",
-            "root_source changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- b",
+            "- root_source",
         ),
     ),
     SelectionStalenessGraphWarningTestCase(
@@ -147,10 +151,10 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "a changed but will not be rebuilt",
-            "b changed but will not be rebuilt or is stale",
-            "d changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- a",
+            "- b",
+            "- d",
         ),
     ),
     SelectionStalenessGraphWarningTestCase(
@@ -164,10 +168,10 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "b changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- b",
         ),
-        unexpected_warning_fragments=("a changed but will not be rebuilt",),
+        unexpected_warning_fragments=("- a",),
     ),
     SelectionStalenessGraphWarningTestCase(
         description="diamond graph reports both stale intermediates",
@@ -182,10 +186,10 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "a changed but will not be rebuilt",
-            "b changed but will not be rebuilt or is stale",
-            "d changed but will not be rebuilt or is stale",
+            "selected model 'c' will build on",
+            "- a",
+            "- b",
+            "- d",
         ),
     ),
     SelectionStalenessGraphWarningTestCase(
@@ -202,9 +206,9 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "a1 changed but will not be rebuilt",
-            "a5 changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- a1",
+            "- a5",
             "+1 more",
         ),
     ),
@@ -220,8 +224,8 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "a changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- a",
         ),
     ),
     SelectionStalenessGraphWarningTestCase(
@@ -235,10 +239,10 @@ GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
         changed_seed_names=frozenset(),
         changed_source_names=frozenset(),
         expected_warning_fragments=(
-            "selected model 'c' is stale",
-            "a changed but will not be rebuilt",
+            "selected model 'c' will build on",
+            "- a",
         ),
-        unexpected_warning_fragments=("c changed but will not be rebuilt",),
+        unexpected_warning_fragments=("- c",),
     ),
 ]
 
@@ -301,7 +305,7 @@ def test_given_seed_or_source_change_when_classifying_then_warns_only_if_unselec
     )
     warning_text: str = "\n".join(warning.message for warning in warnings)
 
-    assert ("is stale" in warning_text) == bool(test_case.expected_warning_fragments)
+    assert ("will build on" in warning_text) == bool(test_case.expected_warning_fragments)
     expected_fragment: str
     for expected_fragment in test_case.expected_warning_fragments:
         assert expected_fragment in warning_text
@@ -426,6 +430,66 @@ def test_given_changed_upstream_when_classifying_then_respects_reuse_satisfactio
     )
 
     warns: bool = any(
-        "leaf" in warning.message and "is stale" in warning.message for warning in warnings
+        "leaf" in warning.message and "will build on" in warning.message for warning in warnings
     )
     assert warns == test_case.expected_warns
+
+
+STALE_WARNING_MESSAGE_TEST_CASES: list[StaleWarningMessageTestCase] = [
+    StaleWarningMessageTestCase(
+        description="lists every trigger as a bullet when under the cap",
+        model_label="selected model",
+        model_name="leaf",
+        trigger_label="upstream(s)",
+        trigger_names=("a", "b", "c"),
+        expected_fragments=(
+            "selected model 'leaf' will build on 3 stale upstream(s) not selected for rebuild:",
+            "    - a",
+            "    - b",
+            "    - c",
+            "    rebuild the closure to refresh them: --select +leaf",
+        ),
+        unexpected_fragments=("more",),
+        expected_bullet_count=3,
+    ),
+    StaleWarningMessageTestCase(
+        description="caps the bullet list at five and summarizes the remainder",
+        model_label="selected dbt model",
+        model_name="leaf",
+        trigger_label="upstream(s)",
+        trigger_names=("a", "b", "c", "d", "e", "f", "g"),
+        expected_fragments=(
+            "selected dbt model 'leaf' will build on 7 stale upstream(s) not selected for rebuild:",
+            "    - a",
+            "    - e",
+            "    +2 more",
+            "    rebuild the closure to refresh them: --select +leaf",
+        ),
+        unexpected_fragments=("    - f", "    - g"),
+        expected_bullet_count=5,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    STALE_WARNING_MESSAGE_TEST_CASES,
+    ids=[case.description for case in STALE_WARNING_MESSAGE_TEST_CASES],
+)
+def test_given_trigger_names_when_formatting_stale_warning_then_caps_and_structures_message(
+    test_case: StaleWarningMessageTestCase,
+) -> None:
+    message: str = format_stale_upstream_warning_message(
+        model_label=test_case.model_label,
+        model_name=test_case.model_name,
+        trigger_label=test_case.trigger_label,
+        trigger_names=test_case.trigger_names,
+    )
+
+    fragment: str
+    for fragment in test_case.expected_fragments:
+        assert fragment in message
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in message
+    bullet_count: int = sum(1 for line in message.splitlines() if line.strip().startswith("- "))
+    assert bullet_count == test_case.expected_bullet_count
