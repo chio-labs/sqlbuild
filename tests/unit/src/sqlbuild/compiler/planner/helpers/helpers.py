@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -59,6 +60,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     ChangeDetectionResult,
+    GraphIdentityNode,
     GraphNodeKey,
     PlannerChangeResults,
     PlannerScope,
@@ -71,7 +73,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, GraphResourceKind
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -135,6 +137,46 @@ def compose_readable_identity(
         f"{key.node_type}:{key.node_name}={upstream_hash}" for key, upstream_hash in upstream_hashes
     )
     return f"{local_hash}|{rendered}"
+
+
+def compose_hashed_identity(
+    local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+) -> str:
+    if not upstream_hashes:
+        return local_hash
+    payload: str = (
+        local_hash + "|" + ",".join(upstream_hash for _, upstream_hash in upstream_hashes)
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def build_diamond_ladder_identity_nodes(
+    *, layer_count: int
+) -> tuple[dict[GraphNodeKey, GraphIdentityNode], tuple[GraphNodeKey, ...]]:
+    """Build a dense ladder where each layer depends on both nodes of the prior layer."""
+
+    def node_key(name: str) -> GraphNodeKey:
+        return GraphNodeKey(node_type="model", node_name=name)
+
+    nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
+    order: list[GraphNodeKey] = []
+    previous: tuple[GraphNodeKey, ...] = ()
+    layer_index: int
+    for layer_index in range(layer_count):
+        current: list[GraphNodeKey] = []
+        suffix: str
+        for suffix in ("a", "b"):
+            key: GraphNodeKey = node_key(f"L{layer_index}_{suffix}")
+            nodes[key] = GraphIdentityNode(
+                key=key,
+                resource_kind=GraphResourceKind.MODEL,
+                upstream_keys=previous,
+                local_hash=f"local_{key.node_name}",
+            )
+            order.append(key)
+            current.append(key)
+        previous = tuple(current)
+    return nodes, tuple(order)
 
 
 class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
