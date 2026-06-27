@@ -170,7 +170,9 @@ def _read_origin_fingerprint_sets(
             connection=connection,
             execute=adapter.execute,
             table_exists=fingerprint_table_lookup.exists(
-                schema=schema, name=FINGERPRINT_TABLE_NAME
+                database=entry.destination.database,
+                schema=schema,
+                name=FINGERPRINT_TABLE_NAME,
             ),
             database=entry.destination.database,
             schema=schema,

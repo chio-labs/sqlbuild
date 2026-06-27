@@ -14,7 +14,11 @@ from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
 from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
@@ -26,6 +30,10 @@ from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.shared.helpers.graph_algorithms import (
+    resolve_clone_boundary,
+    resolve_skipped_view_chain,
+)
 
 
 def build_defer_clone_boundary_selectors(
@@ -39,8 +47,8 @@ def build_defer_clone_boundary_selectors(
     cli_vars: dict[str, object] | None,
     project_dir: Path,
     auto_load_sources: bool,
-) -> tuple[CompiledProject, tuple[str, ...]]:
-    """Compile and resolve out-of-selection boundary resources to clone."""
+) -> tuple[CompiledProject, tuple[str, ...], tuple[str, ...]]:
+    """Resolve out-of-selection clone boundaries and the view chain to rebuild over them."""
 
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
@@ -59,32 +67,46 @@ def build_defer_clone_boundary_selectors(
         exclude=exclude,
         auto_load_sources=auto_load_sources,
     )
-    return project, defer_clone_boundary_selectors(scope=scope)
+    return (
+        project,
+        defer_clone_boundary_selectors(scope=scope),
+        defer_clone_view_chain_selectors(scope=scope),
+    )
+
+
+def _scope_is_view(*, scope: PlannerScope, key: CompiledObjectKey) -> bool:
+    model: CompiledModel | None = scope.models_by_name.get(key.name)
+    if model is None:
+        return False
+    return str(model.config.values.get("materialized", "view")).lower() == "view"
+
+
+def _scope_is_clonable(key: CompiledObjectKey) -> bool:
+    return key.resource_type in {CompiledResourceType.MODEL, CompiledResourceType.SEED}
 
 
 def defer_clone_boundary_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
-    """Return clone selectors for model/seed upstreams outside the selected scope."""
+    """Return clone selectors for the first non-view model/seed upstreams outside selection."""
 
-    boundary_keys: set[CompiledObjectKey] = set()
-    selected_keys: frozenset[CompiledObjectKey] = scope.selected_keys
-
-    def visit(key: CompiledObjectKey) -> None:
-        upstream_key: CompiledObjectKey
-        for upstream_key in scope.upstream_deps.get(key, ()):
-            if upstream_key in selected_keys:
-                visit(upstream_key)
-                continue
-            if upstream_key.resource_type in {
-                CompiledResourceType.MODEL,
-                CompiledResourceType.SEED,
-            }:
-                boundary_keys.add(upstream_key)
-            visit(upstream_key)
-
-    selected_key: CompiledObjectKey
-    for selected_key in selected_keys:
-        visit(selected_key)
+    boundary_keys: frozenset[CompiledObjectKey] = resolve_clone_boundary(
+        selected=scope.selected_keys,
+        upstream=scope.upstream_deps,
+        is_clonable=_scope_is_clonable,
+        is_view=lambda key: _scope_is_view(scope=scope, key=key),
+    )
     return tuple(sorted(key.name for key in boundary_keys))
+
+
+def defer_clone_view_chain_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
+    """Return out-of-selection view models that must rebuild over cloned boundaries."""
+
+    view_keys: frozenset[CompiledObjectKey] = resolve_skipped_view_chain(
+        selected=scope.selected_keys,
+        upstream=scope.upstream_deps,
+        is_clonable=_scope_is_clonable,
+        is_view=lambda key: _scope_is_view(scope=scope, key=key),
+    )
+    return tuple(sorted(key.name for key in view_keys))
 
 
 def run_defer_clone_prephase(

@@ -5,7 +5,11 @@ import pytest
 from sqlbuild.compiler.planner.main.graph_changes_only import (
     build_graph_changes_only_propagation,
 )
-from sqlbuild.compiler.planner.models import GraphChangesOnlyPropagationResult, GraphNodeKey
+from sqlbuild.compiler.planner.models import (
+    GraphChangesOnlyPropagationInput,
+    GraphChangesOnlyPropagationResult,
+    GraphNodeKey,
+)
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     GraphChangesOnlyPropagationTestCase,
 )
@@ -72,15 +76,17 @@ def test_given_changes_only_graph_when_propagating_then_returns_expected_result(
     test_case: GraphChangesOnlyPropagationTestCase,
 ) -> None:
     result: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
-        upstream_deps=test_case.upstream_deps,
-        model_keys=test_case.model_keys,
-        selected_model_keys=test_case.selected_model_keys,
-        current_model_keys=test_case.current_model_keys,
-        run_model_keys=test_case.run_model_keys,
-        version_mismatch_model_keys=test_case.version_mismatch_model_keys,
-        changed_seed_keys=test_case.changed_seed_keys,
-        changed_source_keys=test_case.changed_source_keys,
-        blocked_source_keys=test_case.blocked_source_keys,
+        request=GraphChangesOnlyPropagationInput(
+            upstream_deps=dict(test_case.upstream_deps),
+            model_keys=test_case.model_keys,
+            selected_model_keys=test_case.selected_model_keys,
+            current_model_keys=test_case.current_model_keys,
+            run_model_keys=test_case.run_model_keys,
+            version_mismatch_model_keys=test_case.version_mismatch_model_keys,
+            changed_seed_keys=test_case.changed_seed_keys,
+            changed_source_keys=test_case.changed_source_keys,
+            blocked_source_keys=test_case.blocked_source_keys,
+        )
     )
 
     assert result == test_case.expected_result

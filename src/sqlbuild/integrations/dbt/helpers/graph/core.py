@@ -9,7 +9,11 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
+from sqlbuild.integrations.dbt.helpers.manifest.core import (
+    dbt_manifest_model_materialization,
+    resolve_dbt_manifest_model,
+)
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,
@@ -20,7 +24,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraphKey,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
+from sqlbuild.shared.helpers.graph_algorithms import invert_edges, transitive_closure
 from sqlbuild.shared.types import SqlReferenceKind
+
+_SQLBUILD_VIEW_MATERIALIZATION: str = "view"
 
 
 def build_dbt_combined_graph(
@@ -75,21 +82,47 @@ def dbt_source_graph_key(unique_id: str) -> DbtCombinedGraphKey:
     )
 
 
+def combined_graph_node_is_clonable(
+    *, key: DbtCombinedGraphKey, manifest: DbtManifestIndex
+) -> bool:
+    """Return whether a combined graph node is a model or seed (not a true source)."""
+
+    if key.resource_type == DbtCombinedGraphResourceType.MODEL:
+        return True
+    return key.name in manifest.seeds_by_unique_id
+
+
+def combined_graph_node_is_view(
+    *,
+    key: DbtCombinedGraphKey,
+    manifest: DbtManifestIndex,
+    project: CompiledProject,
+) -> bool:
+    """Return whether a combined graph node is materialized as a view."""
+
+    if key.owner == DbtCombinedGraphOwner.DBT:
+        model: DbtManifestModel | None = manifest.models_by_unique_id.get(key.name)
+        if model is None:
+            return False
+        return dbt_manifest_model_materialization(model=model) == DBT_MATERIALIZATION_VIEW
+    sqlbuild_model: CompiledModel | None = next(
+        (model for model in project.models if model.name == key.name), None
+    )
+    if sqlbuild_model is None:
+        return False
+    materialized: object | None = sqlbuild_model.config.values.get(
+        "materialized", _SQLBUILD_VIEW_MATERIALIZATION
+    )
+    return str(materialized).lower() == _SQLBUILD_VIEW_MATERIALIZATION
+
+
 def build_combined_downstream_deps(
     upstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
 ) -> dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]:
     """Return downstream edges keyed by upstream combined graph key."""
 
-    downstream: dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]] = {}
-    key: DbtCombinedGraphKey
-    for key in upstream:
-        downstream.setdefault(key, [])
-    dep_keys: tuple[DbtCombinedGraphKey, ...]
-    for key, dep_keys in upstream.items():
-        dep_key: DbtCombinedGraphKey
-        for dep_key in dep_keys:
-            downstream.setdefault(dep_key, []).append(key)
-    return {key: _sorted_keys(values) for key, values in downstream.items()}
+    inverted: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]] = invert_edges(upstream)
+    return {key: _sorted_keys(list(values)) for key, values in inverted.items()}
 
 
 def expand_combined_upstream(
@@ -98,7 +131,7 @@ def expand_combined_upstream(
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return all transitive upstream combined graph keys."""
 
-    return _expand(key=key, edges=upstream)
+    return transitive_closure(start=key, edges=upstream)
 
 
 def expand_combined_downstream(
@@ -107,7 +140,7 @@ def expand_combined_downstream(
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return all transitive downstream combined graph keys."""
 
-    return _expand(key=key, edges=downstream)
+    return transitive_closure(start=key, edges=downstream)
 
 
 def _add_dbt_model_edges(
@@ -161,24 +194,6 @@ def _add_sqlbuild_model_edges(
                 name=reference.ref_name,
             )
             upstream[key].append(dbt_model_graph_key(dbt_model.unique_id))
-
-
-def _expand(
-    *,
-    key: DbtCombinedGraphKey,
-    edges: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
-) -> frozenset[DbtCombinedGraphKey]:
-    visited: set[DbtCombinedGraphKey] = set()
-    stack: list[DbtCombinedGraphKey] = [key]
-    while stack:
-        current: DbtCombinedGraphKey = stack.pop()
-        neighbor: DbtCombinedGraphKey
-        for neighbor in edges.get(current, ()):  # pragma: no branch
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
 
 
 def _sorted_keys(keys: list[DbtCombinedGraphKey]) -> tuple[DbtCombinedGraphKey, ...]:

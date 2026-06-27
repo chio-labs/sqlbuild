@@ -48,6 +48,23 @@ class SqlResourceRefKind(StrEnum):
     SOURCE = "source"
 
 
+class LocalNodePlanAction(StrEnum):
+    """Neutral action for one locally classified graph node."""
+
+    RUN = "run"
+    CURRENT = "current"
+
+
+class LocalNodePlanReason(StrEnum):
+    """Neutral reason for one locally classified graph node."""
+
+    FIRST_RUN = "first_run"
+    FULL_REFRESH = "full_refresh"
+    RELATION_MISSING = "relation_missing"
+    LOCAL_CHANGED = "local_changed"
+    NO_CHANGE = "no_change"
+
+
 class SqlReferenceKind(StrEnum):
     REF = "ref"
     SEED = "seed"

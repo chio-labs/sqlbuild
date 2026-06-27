@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -24,6 +23,7 @@ from sqlbuild.compiler.planner.main.stale_warning_message import (
     format_stale_upstream_warning_message,
 )
 from sqlbuild.compiler.planner.models import (
+    GraphChangesOnlyPropagationInput,
     GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
     GraphNodeKey,
@@ -69,6 +69,10 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanReason,
     DbtSupportedResourceType,
 )
+from sqlbuild.shared.helpers.local_node_planning import classify_local_node_plan
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome, RelationLookup
+from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -95,7 +99,7 @@ def build_dbt_model_planning_result(
         for unique_id in expanded_candidate_unique_ids
         if (model := manifest.models_by_unique_id.get(unique_id)) is not None
     )
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]] = _existing_relation_keys(
+    relation_lookup: RelationLookup = _build_relation_lookup(
         adapter=adapter,
         connection=connection,
         models=candidate_models,
@@ -107,14 +111,14 @@ def build_dbt_model_planning_result(
         project=project,
         adapter=adapter,
         connection=connection,
-        existing_relation_keys=existing_relation_keys,
+        relation_lookup=relation_lookup,
     )
     source_freshness: StandardSourceFreshnessPlanningResult = _source_freshness_result(
         manifest=manifest,
         project=project,
         adapter=adapter,
         connection=connection,
-        existing_relation_keys=existing_relation_keys,
+        relation_lookup=relation_lookup,
     )
     blocked_source_unique_ids: frozenset[str] = frozenset(
         identity.source_name
@@ -128,7 +132,7 @@ def build_dbt_model_planning_result(
         manifest=manifest,
         fingerprints=fingerprints,
         full_refresh=full_refresh,
-        existing_relation_keys=existing_relation_keys,
+        relation_lookup=relation_lookup,
     )
     entries_by_unique_id: dict[str, DbtModelPlanEntry] = {}
     unique_id: str
@@ -146,7 +150,7 @@ def build_dbt_model_planning_result(
         entries_by_unique_id[unique_id] = _plan_model(
             model=model,
             fingerprint=fingerprints.get((NODE_TYPE_DBT, unique_id)),
-            relation_exists=_model_relation_key(model=model) in existing_relation_keys,
+            relation_exists=_model_relation_exists(model=model, relation_lookup=relation_lookup),
             full_refresh=full_refresh and unique_id in selected_unique_ids_set,
             expected_version_hash=expected_version_hashes.get(unique_id),
         )
@@ -377,7 +381,7 @@ def _changed_seed_unique_ids(
     manifest: DbtManifestIndex,
     fingerprints: dict[tuple[str, str], Fingerprint],
     full_refresh: bool,
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]],
+    relation_lookup: RelationLookup,
 ) -> frozenset[str]:
     changed: set[str] = set()
     seed: DbtManifestSeed
@@ -389,7 +393,7 @@ def _changed_seed_unique_ids(
         if fingerprint is None or fingerprint.version_hash != seed.identity_hash:
             changed.add(seed.unique_id)
             continue
-        if _seed_relation_key(seed=seed) not in existing_relation_keys:
+        if not _seed_relation_exists(seed=seed, relation_lookup=relation_lookup):
             changed.add(seed.unique_id)
     return frozenset(changed)
 
@@ -400,7 +404,7 @@ def _source_freshness_result(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]],
+    relation_lookup: RelationLookup,
 ) -> StandardSourceFreshnessPlanningResult:
     sources: tuple[SourceEntry, ...] = translate_manifest_sources_to_sqlbuild_sources(
         manifest=manifest
@@ -409,12 +413,11 @@ def _source_freshness_result(
         return StandardSourceFreshnessPlanningResult()
     state_schemas: tuple[str, ...] = _state_schemas(project)
     state_table_exists_by_schema: dict[str, bool] = {
-        state_schema: _relation_key(
+        state_schema: relation_lookup.exists(
             database=project.effective_target_database,
             schema=state_schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
         )
-        in existing_relation_keys
         for state_schema in state_schemas
     }
     return build_standard_source_freshness_planning_result(
@@ -441,35 +444,39 @@ def _apply_graph_propagation(
 ) -> dict[str, DbtModelPlanEntry]:
     propagated: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
     propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
-        upstream_deps=_dbt_neutral_upstream_deps(graph=graph),
-        model_keys=frozenset(dbt_graph_node_key(unique_id) for unique_id in entries_by_unique_id),
-        selected_model_keys=frozenset(
-            dbt_graph_node_key(unique_id) for unique_id in selected_unique_ids
-        ),
-        current_model_keys=frozenset(
-            dbt_graph_node_key(unique_id)
-            for unique_id, entry in entries_by_unique_id.items()
-            if entry.action == DbtModelPlanAction.CURRENT
-        ),
-        run_model_keys=frozenset(
-            dbt_graph_node_key(unique_id)
-            for unique_id, entry in entries_by_unique_id.items()
-            if entry.action == DbtModelPlanAction.RUN
-        ),
-        version_mismatch_model_keys=frozenset(
-            dbt_graph_node_key(unique_id)
-            for unique_id, entry in entries_by_unique_id.items()
-            if _entry_version_mismatch(entry)
-        ),
-        changed_seed_keys=frozenset(
-            dbt_graph_node_key(unique_id) for unique_id in changed_seed_unique_ids
-        ),
-        changed_source_keys=frozenset(
-            dbt_graph_node_key(unique_id) for unique_id in changed_source_unique_ids
-        ),
-        blocked_source_keys=frozenset(
-            dbt_graph_node_key(unique_id) for unique_id in blocked_source_unique_ids
-        ),
+        request=GraphChangesOnlyPropagationInput(
+            upstream_deps=_dbt_neutral_upstream_deps(graph=graph),
+            model_keys=frozenset(
+                dbt_graph_node_key(unique_id) for unique_id in entries_by_unique_id
+            ),
+            selected_model_keys=frozenset(
+                dbt_graph_node_key(unique_id) for unique_id in selected_unique_ids
+            ),
+            current_model_keys=frozenset(
+                dbt_graph_node_key(unique_id)
+                for unique_id, entry in entries_by_unique_id.items()
+                if entry.action == DbtModelPlanAction.CURRENT
+            ),
+            run_model_keys=frozenset(
+                dbt_graph_node_key(unique_id)
+                for unique_id, entry in entries_by_unique_id.items()
+                if entry.action == DbtModelPlanAction.RUN
+            ),
+            version_mismatch_model_keys=frozenset(
+                dbt_graph_node_key(unique_id)
+                for unique_id, entry in entries_by_unique_id.items()
+                if _entry_version_mismatch(entry)
+            ),
+            changed_seed_keys=frozenset(
+                dbt_graph_node_key(unique_id) for unique_id in changed_seed_unique_ids
+            ),
+            changed_source_keys=frozenset(
+                dbt_graph_node_key(unique_id) for unique_id in changed_source_unique_ids
+            ),
+            blocked_source_keys=frozenset(
+                dbt_graph_node_key(unique_id) for unique_id in blocked_source_unique_ids
+            ),
+        )
     )
     unique_id: str
     for unique_id, entry in tuple(propagated.items()):
@@ -566,18 +573,15 @@ def _read_dbt_fingerprints(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
-    existing_relation_keys: frozenset[tuple[str | None, str | None, str]],
+    relation_lookup: RelationLookup,
 ) -> dict[tuple[str, str], Fingerprint]:
     schema: str | None = project.effective_target_schema
     if schema is None:
         return {}
-    table_exists: bool = (
-        _relation_key(
-            database=project.effective_target_database,
-            schema=schema,
-            name=FINGERPRINT_TABLE_NAME,
-        )
-        in existing_relation_keys
+    table_exists: bool = relation_lookup.exists(
+        database=project.effective_target_database,
+        schema=schema,
+        name=FINGERPRINT_TABLE_NAME,
     )
     fingerprint_set: FingerprintSet = read_latest_fingerprints(
         connection=connection,
@@ -620,47 +624,43 @@ def _plan_model(
     full_refresh: bool,
     expected_version_hash: str | None,
 ) -> DbtModelPlanEntry:
-    if full_refresh:
-        return _entry(
-            model=model,
-            action=DbtModelPlanAction.RUN,
-            reason=DbtModelPlanReason.FULL_REFRESH,
-            fingerprint=fingerprint,
-            expected_version_hash=expected_version_hash,
+    outcome: LocalNodePlanOutcome = classify_local_node_plan(
+        LocalNodePlanInput(
+            fingerprint_exists=fingerprint is not None,
+            relation_exists=relation_exists,
+            full_refresh=full_refresh,
+            local_hash=model.node_checksum,
+            previous_hash=fingerprint.definition_hash if fingerprint is not None else None,
         )
-    if fingerprint is None:
-        return _entry(
-            model=model,
-            action=DbtModelPlanAction.RUN,
-            reason=DbtModelPlanReason.FIRST_RUN,
-            expected_version_hash=expected_version_hash,
-        )
-    if not relation_exists:
-        return _entry(
-            model=model,
-            action=DbtModelPlanAction.RUN,
-            reason=DbtModelPlanReason.RELATION_MISSING,
-            fingerprint=fingerprint,
-            expected_version_hash=expected_version_hash,
-        )
-    if model.node_checksum is not None and fingerprint.definition_hash != model.node_checksum:
-        return _entry(
-            model=model,
-            action=DbtModelPlanAction.RUN,
-            reason=DbtModelPlanReason.CHECKSUM_CHANGED,
-            fingerprint=fingerprint,
-            expected_version_hash=expected_version_hash,
-        )
+    )
     return _entry(
         model=model,
-        action=DbtModelPlanAction.CURRENT,
-        reason=DbtModelPlanReason.NO_CHANGE,
+        action=_dbt_model_plan_action(outcome.action),
+        reason=_dbt_model_plan_reason(outcome.reason),
         fingerprint=fingerprint,
         expected_version_hash=expected_version_hash,
     )
 
 
-def _existing_relation_keys(
+def _dbt_model_plan_action(action: LocalNodePlanAction) -> DbtModelPlanAction:
+    if action == LocalNodePlanAction.RUN:
+        return DbtModelPlanAction.RUN
+    return DbtModelPlanAction.CURRENT
+
+
+def _dbt_model_plan_reason(reason: LocalNodePlanReason) -> DbtModelPlanReason:
+    if reason == LocalNodePlanReason.FIRST_RUN:
+        return DbtModelPlanReason.FIRST_RUN
+    if reason == LocalNodePlanReason.FULL_REFRESH:
+        return DbtModelPlanReason.FULL_REFRESH
+    if reason == LocalNodePlanReason.RELATION_MISSING:
+        return DbtModelPlanReason.RELATION_MISSING
+    if reason == LocalNodePlanReason.LOCAL_CHANGED:
+        return DbtModelPlanReason.CHECKSUM_CHANGED
+    return DbtModelPlanReason.NO_CHANGE
+
+
+def _build_relation_lookup(
     *,
     adapter: BaseAdapter,
     connection: Any,
@@ -668,7 +668,7 @@ def _existing_relation_keys(
     seeds: tuple[DbtManifestSeed, ...],
     state_database: str | None,
     state_schemas: tuple[str, ...],
-) -> frozenset[tuple[str | None, str | None, str]]:
+) -> RelationLookup:
     state_locations: tuple[tuple[str | None, str | None, str], ...] = tuple(
         (state_database, state_schema, state_table_name)
         for state_schema in state_schemas
@@ -679,71 +679,22 @@ def _existing_relation_keys(
         *((seed.database, seed.schema, seed.alias or seed.name) for seed in seeds),
         *state_locations,
     )
-    if not locations:
-        return frozenset()
-    wanted_keys: frozenset[tuple[str | None, str | None, str]] = frozenset(
-        _relation_key(database=database, schema=schema, name=name)
-        for database, schema, name in locations
-    )
-    keys: set[tuple[str | None, str | None, str]] = set()
-    database: str | None
-    for database in tuple(dict.fromkeys(location[0] for location in locations)):
-        database_locations: tuple[tuple[str | None, str | None, str], ...] = tuple(
-            location for location in locations if location[0] == database
-        )
-        schemas: tuple[str | None, ...] = tuple(
-            dict.fromkeys(location[1] for location in database_locations)
-        )
-        names: tuple[str, ...] = tuple(
-            dict.fromkeys(location[2] for location in database_locations)
-        )
-        relations: tuple[RelationInfo, ...] = adapter.list_relations(
-            connection,
-            database=database,
-            schemas=None
-            if any(schema is None for schema in schemas)
-            else tuple(schema for schema in schemas if schema is not None),
-            names=names,
-        )
-        relation: RelationInfo
-        for relation in relations:
-            key: tuple[str | None, str | None, str] = _relation_info_key(relation=relation)
-            if key in wanted_keys:
-                keys.add(key)
-    return frozenset(keys)
+    return build_relation_lookup(adapter=adapter, connection=connection, locations=locations)
 
 
-def _model_relation_key(model: DbtManifestModel) -> tuple[str | None, str | None, str]:
-    return _relation_key(
+def _model_relation_exists(*, model: DbtManifestModel, relation_lookup: RelationLookup) -> bool:
+    return relation_lookup.exists(
         database=model.database,
         schema=model.schema,
         name=model.alias or model.name,
     )
 
 
-def _seed_relation_key(*, seed: DbtManifestSeed) -> tuple[str | None, str | None, str]:
-    return _relation_key(
+def _seed_relation_exists(*, seed: DbtManifestSeed, relation_lookup: RelationLookup) -> bool:
+    return relation_lookup.exists(
         database=seed.database,
         schema=seed.schema,
         name=seed.alias or seed.name,
-    )
-
-
-def _relation_info_key(*, relation: RelationInfo) -> tuple[str | None, str | None, str]:
-    return _relation_key(
-        database=relation.database,
-        schema=relation.schema,
-        name=relation.name,
-    )
-
-
-def _relation_key(
-    *, database: str | None, schema: str | None, name: str
-) -> tuple[str | None, str | None, str]:
-    return (
-        database.upper() if database is not None else None,
-        schema.upper() if schema is not None else None,
-        name.upper(),
     )
 
 

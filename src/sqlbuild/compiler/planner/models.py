@@ -81,6 +81,24 @@ class GraphChangesOnlyPropagationResult:
 
 
 @dataclass(frozen=True)
+class GraphChangesOnlyPropagationInput:
+    """Neutral graph execution propagation input for selected model nodes."""
+
+    upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]]
+    model_keys: frozenset[GraphNodeKey]
+    selected_model_keys: frozenset[GraphNodeKey]
+    current_model_keys: frozenset[GraphNodeKey]
+    run_model_keys: frozenset[GraphNodeKey]
+    version_mismatch_model_keys: frozenset[GraphNodeKey]
+    run_parent_keys: frozenset[GraphNodeKey] | None = None
+    selected_parent_keys: frozenset[GraphNodeKey] | None = None
+    identity_stale_model_keys: frozenset[GraphNodeKey] = frozenset()
+    changed_seed_keys: frozenset[GraphNodeKey] = frozenset()
+    changed_source_keys: frozenset[GraphNodeKey] = frozenset()
+    blocked_source_keys: frozenset[GraphNodeKey] = frozenset()
+
+
+@dataclass(frozen=True)
 class CursorOverrides:
     """Typed cursor override values from CLI flags."""
 

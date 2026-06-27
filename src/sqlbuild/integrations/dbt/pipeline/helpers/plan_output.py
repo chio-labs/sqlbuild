@@ -83,7 +83,11 @@ def find_sqlbuild_models_with_missing_dbt_relations(
     )
     blocked: dict[str, list[DbtManifestModel]] = {}
     for model_name, dbt_model in candidates:
-        if relation_lookup.exists(schema=dbt_model.schema, name=dbt_model.alias or dbt_model.name):
+        if relation_lookup.exists(
+            database=dbt_model.database,
+            schema=dbt_model.schema,
+            name=dbt_model.alias or dbt_model.name,
+        ):
             continue
         blocked.setdefault(model_name, []).append(dbt_model)
     return {name: tuple(models) for name, models in blocked.items()}

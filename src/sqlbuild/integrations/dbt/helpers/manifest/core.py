@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.integrations.dbt.constants import (
     DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
     DBT_MANIFEST_CONFIG_KEY,
+    DBT_MANIFEST_MATERIALIZED_KEY,
 )
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
@@ -183,6 +184,18 @@ def resolve_dbt_manifest_model(
             ),
         )
     return matches[0]
+
+
+def dbt_manifest_model_materialization(*, model: DbtManifestModel) -> str | None:
+    """Return the lowercased dbt materialization for a manifest model, if declared."""
+
+    config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
+    if not isinstance(config, dict):
+        return None
+    materialized: object | None = cast(dict[str, object], config).get(DBT_MANIFEST_MATERIALIZED_KEY)
+    if not isinstance(materialized, str) or not materialized.strip():
+        return None
+    return materialized.strip().lower()
 
 
 def _parse_model(

@@ -282,6 +282,7 @@ def run_virtual_clone(
                 version_hash=version_hash,
             )
             if not origin_lookup.exists(
+                database=lookup_location.database,
                 schema=lookup_location.schema,
                 name=lookup_location.name,
             ):
@@ -361,6 +362,7 @@ def run_virtual_clone(
                 version_hash=seed_version_hash,
             )
             if not origin_lookup.exists(
+                database=lookup_location.database,
                 schema=lookup_location.schema,
                 name=lookup_location.name,
             ):
