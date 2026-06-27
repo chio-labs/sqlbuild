@@ -1638,6 +1638,52 @@ TEST_CASES: list[CheckPathsTestCase] = [
         },
         expected_violation_codes=(),
     ),
+    CheckPathsTestCase(
+        description="flags a transitively metadata-bearing helper called inside a loop",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/indirect.py": dedent(
+                """
+                def _exists(adapter, connection, name) -> bool:
+                    return adapter.relation_exists(
+                        connection, database=None, schema="s", name=name
+                    )
+
+
+                def _exists_named(adapter, connection, name) -> bool:
+                    return _exists(adapter, connection, name)
+
+
+                def collect_missing(adapter, connection, entries) -> list[str]:
+                    missing: list[str] = []
+                    for entry in entries:
+                        if not _exists_named(adapter, connection, entry):
+                            missing.append(entry)
+                    return missing
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
+        description="does not flag a same-named helper that is not metadata-bearing",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/unrelated.py": dedent(
+                """
+                def _exists(value) -> bool:
+                    return value is not None
+
+
+                def collect(values) -> list[object]:
+                    return [value for value in values if _exists(value)]
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
 ]
 
 

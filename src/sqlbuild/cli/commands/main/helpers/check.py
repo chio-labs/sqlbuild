@@ -30,7 +30,8 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup, SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind, SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -173,15 +174,26 @@ def run_check_read_side_dependencies(
         relation_targets=relation_targets,
         providers=providers,
     )
+    sql_refs: tuple[SqlResourceRef, ...] = tuple(
+        sorted(_read_side_sql_refs(read_side_names, python_graph), key=_sql_ref_sort_key)
+    )
+    relation_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            location
+            for sql_ref in sql_refs
+            if (location := _check_sql_ref_location(pipeline_result=pipeline_result, ref=sql_ref))
+            is not None
+        ),
+    )
     sql_ref: SqlResourceRef
-    for sql_ref in sorted(
-        _read_side_sql_refs(read_side_names, python_graph), key=_sql_ref_sort_key
-    ):
+    for sql_ref in sql_refs:
         _validate_check_sql_ref_exists(
             adapter=adapter,
-            connection=connection,
             pipeline_result=pipeline_result,
             relation_targets=relation_targets,
+            relation_lookup=relation_lookup,
             ref=sql_ref,
         )
         if sql_ref.kind == SqlResourceRefKind.MODEL:
@@ -363,9 +375,9 @@ def _read_side_sql_refs(
 def _validate_check_sql_ref_exists(
     *,
     adapter: BaseAdapter,
-    connection: Any,
     pipeline_result: CompilePipelineResult,
     relation_targets: dict[SqlResourceRef, str],
+    relation_lookup: RelationLookup,
     ref: SqlResourceRef,
 ) -> None:
     if ref.kind == SqlResourceRefKind.MODEL:
@@ -377,12 +389,7 @@ def _validate_check_sql_ref_exists(
                 f"Python check dependency requires unknown SQL model '{ref.name}'",
                 code="C682",
             )
-        exists: bool = adapter.relation_exists(
-            connection,
-            database=target.database,
-            schema=target.schema,
-            name=target.name,
-        )
+        exists: bool = relation_lookup.exists(schema=target.schema, name=target.name)
         relation: str = resolve_relation_location_qualified_name(adapter=adapter, location=target)
     elif ref.kind == SqlResourceRefKind.SOURCE:
         source: SourceEntry | None = (
@@ -390,12 +397,7 @@ def _validate_check_sql_ref_exists(
         ).get(ref.name)
         if source is None or source.expression is not None or source.table is None:
             return
-        exists = adapter.relation_exists(
-            connection,
-            database=source.database,
-            schema=source.schema,
-            name=source.table,
-        )
+        exists = relation_lookup.exists(schema=source.schema, name=source.table)
         relation = relation_targets[ref]
     else:
         return
@@ -406,6 +408,26 @@ def _validate_check_sql_ref_exists(
         f"'{relation}' for {ref.kind.value} '{ref.name}'; run sqb build first",
         code="C682",
     )
+
+
+def _check_sql_ref_location(
+    *, pipeline_result: CompilePipelineResult, ref: SqlResourceRef
+) -> tuple[str | None, str | None, str] | None:
+    if ref.kind == SqlResourceRefKind.MODEL:
+        target: CompiledRelationLocation | None = pipeline_result.plan_output.model_locations.get(
+            ref.name
+        )
+        if target is None:
+            return None
+        return (target.database, target.schema, target.name)
+    if ref.kind == SqlResourceRefKind.SOURCE:
+        source: SourceEntry | None = (
+            pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map
+        ).get(ref.name)
+        if source is None or source.expression is not None or source.table is None:
+            return None
+        return (source.database, source.schema, source.table)
+    return None
 
 
 def _sql_ref_sort_key(ref: SqlResourceRef) -> tuple[str, str]:

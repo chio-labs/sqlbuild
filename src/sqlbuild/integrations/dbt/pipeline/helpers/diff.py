@@ -13,6 +13,8 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInt
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtDiffOptions, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 
 
 def parse_dbt_diff_options(args: tuple[str, ...]) -> DbtDiffOptions:
@@ -108,21 +110,28 @@ def execute_dbt_diff(
 ) -> DiffExecutionResult:
     """Execute schema/row diffs for selected dbt models."""
 
+    diffable_models: tuple[tuple[DbtManifestModel, DbtManifestModel], ...] = tuple(
+        (current_model, reuse_model)
+        for node in selected_nodes
+        if node.resource_type == DbtSupportedResourceType.MODEL
+        and (current_model := current_manifest.models_by_unique_id.get(node.unique_id)) is not None
+        and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
+    )
+    relation_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (model.database, model.schema, model.alias or model.name)
+            for current_model, reuse_model in diffable_models
+            for model in (current_model, reuse_model)
+        ),
+    )
     results: list[ModelDiffResult] = []
-    node: DbtLsNode
-    for node in selected_nodes:
-        if node.resource_type != DbtSupportedResourceType.MODEL:
-            continue
-        current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(
-            node.unique_id
-        )
-        reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(
-            node.unique_id
-        )
-        if current_model is None or reuse_model is None:
-            continue
-        _raise_if_missing_relation(adapter=adapter, connection=connection, model=reuse_model)
-        _raise_if_missing_relation(adapter=adapter, connection=connection, model=current_model)
+    current_model: DbtManifestModel
+    reuse_model: DbtManifestModel
+    for current_model, reuse_model in diffable_models:
+        _raise_if_missing_relation(relation_lookup=relation_lookup, model=reuse_model)
+        _raise_if_missing_relation(relation_lookup=relation_lookup, model=current_model)
         schema_result: SchemaDiffResult = adapter.diff_schema(
             connection,
             left=reuse_model.relation_name,
@@ -266,15 +275,8 @@ def _dbt_bool_flags() -> frozenset[str]:
     return frozenset(("--defer",))
 
 
-def _raise_if_missing_relation(
-    *, adapter: BaseAdapter, connection: Any, model: DbtManifestModel
-) -> None:
-    if adapter.relation_exists(
-        connection,
-        database=model.database,
-        schema=model.schema,
-        name=model.alias or model.name,
-    ):
+def _raise_if_missing_relation(*, relation_lookup: RelationLookup, model: DbtManifestModel) -> None:
+    if relation_lookup.exists(schema=model.schema, name=model.alias or model.name):
         return
     raise DbtInteropConfigError(
         f"dbt diff relation for model '{model.name}' does not exist: {model.relation_name}",
