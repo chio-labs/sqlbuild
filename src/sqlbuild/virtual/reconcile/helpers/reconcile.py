@@ -331,7 +331,9 @@ def build_reconcile_report(
             issues.append(f"missing tracked physical relation: {model.name}")
             continue
         if not physical_relation_lookup.exists(
-            schema=relation.schema_name, name=relation.relation_name
+            database=relation.database_name,
+            schema=relation.schema_name,
+            name=relation.relation_name,
         ):
             issues.append(f"missing physical relation: {model.name}")
         relation_type: str | None = relation_types.get(model.name)
@@ -349,7 +351,9 @@ def build_reconcile_report(
                 issues.append(f"missing tracked physical seed relation: {seed.name}")
                 continue
             if not physical_relation_lookup.exists(
-                schema=relation.schema_name, name=relation.relation_name
+                database=relation.database_name,
+                schema=relation.schema_name,
+                name=relation.relation_name,
             ):
                 issues.append(f"missing physical seed relation: {seed.name}")
             relation_type = relation_types.get(seed.name)
@@ -573,8 +577,8 @@ def list_virtual_relation_types(
             locations=tuple((database, schema, name) for _, database, schema, name in artifacts),
         )
         result: dict[str, str] = {}
-        for artifact_name, _, schema, name in artifacts:
-            relation: RelationInfo | None = lookup.get(schema=schema, name=name)
+        for artifact_name, database, schema, name in artifacts:
+            relation: RelationInfo | None = lookup.get(database=database, schema=schema, name=name)
             if relation is not None:
                 result[artifact_name] = relation.relation_type
         return result

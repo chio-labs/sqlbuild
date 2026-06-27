@@ -39,7 +39,9 @@ def read_standard_freshness_state_for_command(
                 connection=connection,
                 execute=adapter.execute,
                 table_exists=state_table_lookup.exists(
-                    schema=state_schema, name=SOURCE_FRESHNESS_TABLE_NAME
+                    database=state_database,
+                    schema=state_schema,
+                    name=SOURCE_FRESHNESS_TABLE_NAME,
                 ),
                 database=state_database,
                 schema=state_schema,

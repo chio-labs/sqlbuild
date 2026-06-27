@@ -69,4 +69,69 @@ class RelationLookupTestCase:
     expected_exists: bool
     expected_is_transient: bool
     expected_list_relations_calls: int
-    expected_queried_schema_groups: tuple[tuple[str, ...], ...]
+    expected_queried_relation_calls: tuple[tuple[str | None, tuple[str, ...]], ...]
+    probe_database: str | None = None
+
+
+@dataclass(frozen=True)
+class LocalNodePlanningTestCase:
+    description: str
+    fingerprint_exists: bool
+    relation_exists: bool
+    full_refresh: bool
+    local_hash: str | None
+    previous_hash: str | None
+    expected_action: str
+    expected_reason: str
+
+
+@dataclass(frozen=True)
+class InvertEdgesTestCase:
+    description: str
+    edges: dict[str, tuple[str, ...]]
+    expected_edges: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class TransitiveClosureTestCase:
+    description: str
+    edges: dict[str, tuple[str, ...]]
+    start: str
+    max_depth: int | None
+    expected_nodes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PathNodesTestCase:
+    description: str
+    downstream: dict[str, tuple[str, ...]]
+    start: str
+    end: str
+    expected_nodes: frozenset[str] | None
+
+
+@dataclass(frozen=True)
+class CloneBoundaryTestCase:
+    description: str
+    upstream: dict[str, tuple[str, ...]]
+    selected: frozenset[str]
+    clonable_nodes: frozenset[str]
+    view_nodes: frozenset[str]
+    expected_boundary_nodes: frozenset[str]
+    expected_view_chain_nodes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SelectorExpansionTestCase:
+    description: str
+    raw: str
+    expected_core: str
+    expected_upstream: bool
+    expected_downstream: bool
+
+
+@dataclass(frozen=True)
+class SelectorExpansionErrorTestCase:
+    description: str
+    raw: str
+    expected_error_type: type[Exception]

@@ -279,7 +279,7 @@ def _direct_state_prune_candidates(
     state_table_lookup: RelationLookup,
 ) -> tuple[JanitorDirectStatePruneCandidate, ...]:
     candidates: list[JanitorDirectStatePruneCandidate] = []
-    if state_table_lookup.exists(schema=schema, name=FINGERPRINT_TABLE_NAME):
+    if state_table_lookup.exists(database=database, schema=schema, name=FINGERPRINT_TABLE_NAME):
         candidates.append(
             JanitorDirectStatePruneCandidate(
                 database=database,
@@ -293,7 +293,9 @@ def _direct_state_prune_candidates(
                 ),
             )
         )
-    if state_table_lookup.exists(schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME):
+    if state_table_lookup.exists(
+        database=database, schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME
+    ):
         candidates.append(
             JanitorDirectStatePruneCandidate(
                 database=database,

@@ -66,6 +66,8 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
     resolve_defer_clone_unique_ids,
+    resolve_defer_clone_view_chain_terms,
+    resolve_defer_clone_view_chain_unique_ids,
     run_dbt_defer_clone_prephase,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
@@ -309,6 +311,8 @@ def execute_dbt_interop_from_project(
     defer_clone_unique_ids: frozenset[str] = (
         resolve_defer_clone_unique_ids(
             graph=graph,
+            manifest=manifest,
+            project=project,
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
             required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
         )
@@ -328,6 +332,26 @@ def execute_dbt_interop_from_project(
             unique_ids=tuple(sorted(defer_clone_unique_ids)),
             on_progress=on_progress,
         )
+    defer_clone_view_chain_terms: tuple[str, ...] = (
+        resolve_defer_clone_view_chain_terms(
+            graph=graph,
+            manifest=manifest,
+            project=project,
+            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+        )
+        if routed.defer_clone_from
+        else ()
+    )
+    defer_clone_view_chain_unique_ids: frozenset[str] = (
+        resolve_defer_clone_view_chain_unique_ids(
+            graph=graph,
+            manifest=manifest,
+            project=project,
+            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+        )
+        if routed.defer_clone_from
+        else frozenset()
+    )
     merged_dbt_argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
         command=command,
         options=dbt_options,
@@ -335,6 +359,7 @@ def execute_dbt_interop_from_project(
         plan=plan,
         replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
         defer_clone_unique_ids=defer_clone_unique_ids,
+        defer_clone_view_chain_terms=defer_clone_view_chain_terms,
     )
     missing_dbt_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]] = {}
     if merged_dbt_argv is None and plan.sqlbuild_skip_reason is None:
@@ -347,7 +372,11 @@ def execute_dbt_interop_from_project(
             adapter_name=adapter_name,
             selected_model_names=plan.selection.sqlbuild_model_names,
             dbt_unique_ids_selected_for_execution=frozenset(
-                (*plan.dbt_selected_unique_ids, *plan.selection.dbt_required_unique_ids)
+                (
+                    *plan.dbt_selected_unique_ids,
+                    *plan.selection.dbt_required_unique_ids,
+                    *defer_clone_view_chain_unique_ids,
+                )
             ),
             output_stream=output_stream,
         )
@@ -543,6 +572,7 @@ def execute_dbt_interop_from_project(
                 (
                     *plan.dbt_selected_unique_ids,
                     *plan.selection.dbt_required_unique_ids,
+                    *defer_clone_view_chain_unique_ids,
                 )
             ),
             output_stream=output_stream,

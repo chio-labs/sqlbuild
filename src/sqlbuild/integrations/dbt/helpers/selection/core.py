@@ -4,27 +4,33 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from sqlbuild.compiler.compile.models.core import (
-    CompiledModel,
-    CompiledProject,
+from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.planner.main.sqlbuild_model_selectors import (
+    resolve_sqlbuild_model_selector_names,
 )
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
     expand_combined_upstream,
     sqlbuild_model_graph_key,
 )
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtInteropSelectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner
+from sqlbuild.shared.helpers.graph_algorithms import path_nodes
+from sqlbuild.shared.helpers.selector_expansion import split_selector_expansion
+from sqlbuild.shared.models import SelectorExpansion
 
 
 def resolve_dbt_interop_sqlbuild_selection(
     *,
     project: CompiledProject,
+    manifest: DbtManifestIndex | None = None,
     graph: DbtCombinedGraph,
     select: Sequence[str],
     exclude: Sequence[str] = (),
@@ -33,7 +39,6 @@ def resolve_dbt_interop_sqlbuild_selection(
     """Resolve selected SQLBuild models and required dbt nodes from `sqb dbt` selectors."""
 
     anchors_by_term: Mapping[str, Sequence[str]] = dbt_anchor_unique_ids_by_term or {}
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
     selected_sqlbuild: set[str] = set()
     required_dbt: set[str] = set()
     anchor_terms: list[str] = []
@@ -42,11 +47,33 @@ def resolve_dbt_interop_sqlbuild_selection(
 
     term: str
     for term in select:
-        parsed: _ParsedSelectionTerm = _parse_selection_term(term)
+        parsed: SelectorExpansion = split_selector_expansion(term)
+        path_keys: frozenset[DbtCombinedGraphKey] | None = _resolve_path_between_keys(
+            project=project,
+            manifest=manifest,
+            graph=graph,
+            parsed=parsed,
+            raw_term=term,
+        )
+        if path_keys is not None:
+            expanded_keys: set[DbtCombinedGraphKey] = set(path_keys)
+            key: DbtCombinedGraphKey
+            if parsed.upstream:
+                for key in tuple(path_keys):
+                    expanded_keys.update(expand_combined_upstream(key, graph.upstream_deps))
+            if parsed.downstream:
+                for key in tuple(path_keys):
+                    expanded_keys.update(expand_combined_downstream(key, graph.downstream_deps))
+            _add_expanded_keys(
+                keys=frozenset(expanded_keys),
+                selected_sqlbuild=selected_sqlbuild,
+                required_dbt=required_dbt,
+            )
+            continue
+
         direct_keys: frozenset[DbtCombinedGraphKey]
         direct_keys, translated_path = _resolve_direct_sqlbuild_keys(
             project=project,
-            models_by_name=models_by_name,
             term=parsed.core,
         )
         if translated_path is not None:
@@ -84,7 +111,6 @@ def resolve_dbt_interop_sqlbuild_selection(
 
     excluded_sqlbuild: frozenset[str] = _resolve_excluded_sqlbuild_names(
         project=project,
-        models_by_name=models_by_name,
         exclude=exclude,
     )
     selected_sqlbuild.difference_update(excluded_sqlbuild)
@@ -97,48 +123,86 @@ def resolve_dbt_interop_sqlbuild_selection(
     )
 
 
-class _ParsedSelectionTerm:
-    def __init__(self, *, core: str, upstream: bool, downstream: bool) -> None:
-        self.core = core
-        self.upstream = upstream
-        self.downstream = downstream
+def _resolve_path_between_keys(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex | None,
+    graph: DbtCombinedGraph,
+    parsed: SelectorExpansion,
+    raw_term: str,
+) -> frozenset[DbtCombinedGraphKey] | None:
+    if "~" not in parsed.core:
+        return None
+    start_name, end_name = _path_endpoint_names(term=parsed.core, raw_term=raw_term)
+    start_key: DbtCombinedGraphKey = _resolve_path_endpoint_key(
+        project=project,
+        manifest=manifest,
+        endpoint=start_name,
+        raw_term=raw_term,
+    )
+    end_key: DbtCombinedGraphKey = _resolve_path_endpoint_key(
+        project=project,
+        manifest=manifest,
+        endpoint=end_name,
+        raw_term=raw_term,
+    )
+    return path_nodes(start=start_key, end=end_key, downstream=graph.downstream_deps) or frozenset()
 
 
-def _parse_selection_term(term: str) -> _ParsedSelectionTerm:
-    upstream: bool = term.startswith("+")
-    downstream: bool = term.endswith("+")
-    core: str = term.removeprefix("+").removesuffix("+")
-    return _ParsedSelectionTerm(core=core, upstream=upstream, downstream=downstream)
+def _path_endpoint_names(*, term: str, raw_term: str) -> tuple[str, str]:
+    start_name, end_name = (part.strip() for part in term.split("~", 1))
+    if not start_name or not end_name:
+        raise DbtInteropArgumentError(
+            f"path selector '{raw_term}' requires names on both sides of '~'",
+            code="C237",
+        )
+    return start_name, end_name
+
+
+def _resolve_path_endpoint_key(
+    *,
+    project: CompiledProject,
+    manifest: DbtManifestIndex | None,
+    endpoint: str,
+    raw_term: str,
+) -> DbtCombinedGraphKey:
+    sqlbuild_model_names, _translation = resolve_sqlbuild_model_selector_names(
+        project=project,
+        term=endpoint,
+    )
+    if sqlbuild_model_names:
+        return sqlbuild_model_graph_key(sqlbuild_model_names[0])
+    if manifest is None:
+        raise DbtInteropArgumentError(
+            f"path selector '{raw_term}' endpoint '{endpoint}' is not a SQLBuild model",
+            code="C237",
+        )
+    dbt_models: tuple[DbtManifestModel, ...] = tuple(
+        model for model in manifest.models_by_unique_id.values() if model.name == endpoint
+    )
+    if len(dbt_models) == 1:
+        return dbt_model_graph_key(dbt_models[0].unique_id)
+    if len(dbt_models) > 1:
+        raise DbtInteropArgumentError(
+            f"path selector '{raw_term}' endpoint '{endpoint}' is ambiguous across dbt models",
+            code="C237",
+        )
+    raise DbtInteropArgumentError(
+        f"path selector '{raw_term}' endpoint '{endpoint}' is not a known SQLBuild or dbt model",
+        code="C237",
+    )
 
 
 def _resolve_direct_sqlbuild_keys(
-    *, project: CompiledProject, models_by_name: dict[str, CompiledModel], term: str
+    *, project: CompiledProject, term: str
 ) -> tuple[frozenset[DbtCombinedGraphKey], str | None]:
-    if term in models_by_name:
-        return frozenset((sqlbuild_model_graph_key(term),)), None
-    if term.startswith("tag:"):
-        tag: str = term.removeprefix("tag:")
-        return (
-            frozenset(
-                sqlbuild_model_graph_key(model.name)
-                for model in project.models
-                if tag in _as_string_tuple(model.config.values.get("tags"))
-            ),
-            None,
-        )
-    if term.startswith("path:"):
-        raw_path: str = term.removeprefix("path:")
-        translated_path: str = _translate_dbt_path_selector(raw_path)
-        return (
-            frozenset(
-                sqlbuild_model_graph_key(model.name)
-                for model in project.models
-                if _model_path_selector(model) == translated_path
-                or _model_path_selector(model).startswith(f"{translated_path}/")
-            ),
-            f"path:{translated_path}" if translated_path != raw_path else None,
-        )
-    return frozenset(), None
+    model_names, translated_path = resolve_sqlbuild_model_selector_names(
+        project=project,
+        term=term,
+    )
+    return frozenset(
+        sqlbuild_model_graph_key(model_name) for model_name in model_names
+    ), translated_path
 
 
 def _add_expanded_keys(
@@ -156,15 +220,14 @@ def _add_expanded_keys(
 
 
 def _resolve_excluded_sqlbuild_names(
-    *, project: CompiledProject, models_by_name: dict[str, CompiledModel], exclude: Sequence[str]
+    *, project: CompiledProject, exclude: Sequence[str]
 ) -> frozenset[str]:
     excluded: set[str] = set()
     term: str
     for term in exclude:
-        parsed: _ParsedSelectionTerm = _parse_selection_term(term)
+        parsed: SelectorExpansion = split_selector_expansion(term)
         keys, _translation = _resolve_direct_sqlbuild_keys(
             project=project,
-            models_by_name=models_by_name,
             term=parsed.core,
         )
         key: DbtCombinedGraphKey
@@ -172,19 +235,3 @@ def _resolve_excluded_sqlbuild_names(
             if key.owner == DbtCombinedGraphOwner.SQLBUILD:
                 excluded.add(key.name)
     return frozenset(excluded)
-
-
-def _translate_dbt_path_selector(raw_path: str) -> str:
-    return raw_path.replace("\\", "/")
-
-
-def _model_path_selector(model: CompiledModel) -> str:
-    return model.relative_path.parent.as_posix()
-
-
-def _as_string_tuple(value: object) -> tuple[str, ...]:
-    if isinstance(value, tuple):
-        return tuple(str(item) for item in value)
-    if isinstance(value, list):
-        return tuple(str(item) for item in value)
-    return ()

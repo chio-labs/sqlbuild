@@ -86,6 +86,7 @@ def adopt_into_virtual_state(
         )
         for model in graph.project.models:
             if not relation_lookup.exists(
+                database=model.destination.database,
                 schema=model.destination.schema,
                 name=model.destination.name,
             ):

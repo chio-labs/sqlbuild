@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.helpers.graph.core import (
@@ -27,6 +25,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
 )
+from sqlbuild.shared.helpers.graph_algorithms import transitive_closure
 
 
 def select_dbt_lineage_target(
@@ -47,9 +46,9 @@ def select_dbt_lineage_target(
     )
     selected: set[DbtCombinedGraphKey] = {key}
     if direction in {DbtLineageDirection.UPSTREAM, DbtLineageDirection.BOTH}:
-        selected.update(_walk_bounded(anchors=(key,), deps=graph.upstream_deps, max_depth=depth))
+        selected.update(transitive_closure(start=key, edges=graph.upstream_deps, max_depth=depth))
     if direction in {DbtLineageDirection.DOWNSTREAM, DbtLineageDirection.BOTH}:
-        selected.update(_walk_bounded(anchors=(key,), deps=graph.downstream_deps, max_depth=depth))
+        selected.update(transitive_closure(start=key, edges=graph.downstream_deps, max_depth=depth))
     return build_dbt_lineage_graph(
         project=project,
         manifest=manifest,
@@ -113,49 +112,6 @@ def build_dbt_lineage_graph(
         focus_keys=focus_keys,
         direction=direction,
     )
-
-
-def _walk_bounded(
-    *,
-    anchors: Iterable[DbtCombinedGraphKey],
-    deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
-    max_depth: int | None,
-) -> frozenset[DbtCombinedGraphKey]:
-    if max_depth is None:
-        result: set[DbtCombinedGraphKey] = set()
-        for anchor in anchors:
-            result.update(_walk_all(anchor, deps))
-        return frozenset(result)
-    if max_depth == 0:
-        return frozenset()
-    visited: set[DbtCombinedGraphKey] = set()
-    queue: list[tuple[DbtCombinedGraphKey, int]] = [(anchor, 0) for anchor in anchors]
-    while queue:
-        current, current_depth = queue.pop(0)
-        if current_depth >= max_depth:
-            continue
-        for neighbor in deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            queue.append((neighbor, current_depth + 1))
-    return frozenset(visited)
-
-
-def _walk_all(
-    key: DbtCombinedGraphKey,
-    deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
-) -> frozenset[DbtCombinedGraphKey]:
-    visited: set[DbtCombinedGraphKey] = set()
-    stack: list[DbtCombinedGraphKey] = [key]
-    while stack:
-        current: DbtCombinedGraphKey = stack.pop()
-        for neighbor in deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
 
 
 def _build_node(

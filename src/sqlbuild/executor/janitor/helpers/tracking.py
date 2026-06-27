@@ -46,7 +46,9 @@ def collect_tracked_relation_keys(
                 connection=connection,
                 execute=adapter.execute,
                 table_exists=fingerprint_table_lookup.exists(
-                    schema=schema, name=FINGERPRINT_TABLE_NAME
+                    database=database,
+                    schema=schema,
+                    name=FINGERPRINT_TABLE_NAME,
                 ),
                 database=database,
                 schema=schema,

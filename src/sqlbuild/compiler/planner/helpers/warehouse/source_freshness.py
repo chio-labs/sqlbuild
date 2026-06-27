@@ -99,7 +99,11 @@ def build_reuse_from_source_freshness_result(
             run_id="planning",
             render_qualified_name=adapter.render_qualified_name,
             state_table_exists_by_schema={
-                schema: state_table_lookup.exists(schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME)
+                schema: state_table_lookup.exists(
+                    database=state_database,
+                    schema=schema,
+                    name=SOURCE_FRESHNESS_TABLE_NAME,
+                )
                 for schema in state_schemas
             },
         )

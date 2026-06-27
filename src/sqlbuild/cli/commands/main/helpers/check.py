@@ -389,7 +389,9 @@ def _validate_check_sql_ref_exists(
                 f"Python check dependency requires unknown SQL model '{ref.name}'",
                 code="C682",
             )
-        exists: bool = relation_lookup.exists(schema=target.schema, name=target.name)
+        exists: bool = relation_lookup.exists(
+            database=target.database, schema=target.schema, name=target.name
+        )
         relation: str = resolve_relation_location_qualified_name(adapter=adapter, location=target)
     elif ref.kind == SqlResourceRefKind.SOURCE:
         source: SourceEntry | None = (
@@ -397,7 +399,9 @@ def _validate_check_sql_ref_exists(
         ).get(ref.name)
         if source is None or source.expression is not None or source.table is None:
             return
-        exists = relation_lookup.exists(schema=source.schema, name=source.table)
+        exists = relation_lookup.exists(
+            database=source.database, schema=source.schema, name=source.table
+        )
         relation = relation_targets[ref]
     else:
         return

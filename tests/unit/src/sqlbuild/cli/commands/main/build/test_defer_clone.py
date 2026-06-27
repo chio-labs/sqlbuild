@@ -22,7 +22,7 @@ SOURCE_RAW: CompiledObjectKey = build_compiled_object_key(CompiledResourceType.S
 
 TEST_CASES: list[DeferCloneBoundaryTestCase] = [
     DeferCloneBoundaryTestCase(
-        description="returns recursive non-selected model and seed upstreams",
+        description="clones the first non-view ancestor and stops",
         selected_keys=frozenset({MODEL_C}),
         upstream_deps={
             MODEL_C: (MODEL_B, SOURCE_RAW),
@@ -31,7 +31,7 @@ TEST_CASES: list[DeferCloneBoundaryTestCase] = [
             SEED_COUNTRIES: (),
             SOURCE_RAW: (),
         },
-        expected_selectors=("a", "b", "countries"),
+        expected_selectors=("b",),
     ),
     DeferCloneBoundaryTestCase(
         description="excludes selected upstreams but includes their own boundary",

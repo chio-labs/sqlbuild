@@ -14,6 +14,15 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.shared.helpers.graph_algorithms import (
+    invert_edges,
+    path_nodes,
+    transitive_closure,
+)
+
+
+def _key_sort_key(key: CompiledObjectKey) -> tuple[str, str]:
+    return (key.resource_type, key.name)
 
 
 def build_upstream_deps(
@@ -109,19 +118,7 @@ def build_downstream_deps(
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
     """Return downstream edges keyed by upstream object key."""
 
-    downstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
-    key: CompiledObjectKey
-    for key in upstream:
-        downstream.setdefault(key, [])
-    dep_keys: tuple[CompiledObjectKey, ...]
-    for key, dep_keys in upstream.items():
-        dep_key: CompiledObjectKey
-        for dep_key in dep_keys:
-            downstream.setdefault(dep_key, []).append(key)
-    return {
-        k: tuple(sorted(v, key=lambda obj: (obj.resource_type, obj.name)))
-        for k, v in downstream.items()
-    }
+    return invert_edges(upstream, sort_key=_key_sort_key)
 
 
 def topologically_order_keys(
@@ -146,7 +143,7 @@ def topologically_order_keys(
     )
     ready: list[CompiledObjectKey] = sorted(
         (key for key, count in indegree.items() if count == 0),
-        key=lambda obj: (obj.resource_type, obj.name),
+        key=_key_sort_key,
     )
     ordered: list[CompiledObjectKey] = []
 
@@ -160,14 +157,14 @@ def topologically_order_keys(
             indegree[downstream_key] -= 1
             if indegree[downstream_key] == 0:
                 ready.append(downstream_key)
-                ready.sort(key=lambda obj: (obj.resource_type, obj.name))
+                ready.sort(key=_key_sort_key)
 
     if len(ordered) != len(node_keys):
         ordered_set: set[CompiledObjectKey] = set(ordered)
         cycle_keys: tuple[CompiledObjectKey, ...] = tuple(
             sorted(
                 (key for key in node_keys if key not in ordered_set),
-                key=lambda obj: (obj.resource_type, obj.name),
+                key=_key_sort_key,
             )
         )
         cycle_names: str = ", ".join(f"{k.resource_type}:{k.name}" for k in cycle_keys)
@@ -182,17 +179,7 @@ def expand_upstream(
 ) -> frozenset[CompiledObjectKey]:
     """Return all transitive upstream keys reachable from the given key."""
 
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        neighbor: CompiledObjectKey
-        for neighbor in upstream.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
+    return transitive_closure(start=key, edges=upstream)
 
 
 def expand_downstream(
@@ -201,17 +188,7 @@ def expand_downstream(
 ) -> frozenset[CompiledObjectKey]:
     """Return all transitive downstream keys reachable from the given key."""
 
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        neighbor: CompiledObjectKey
-        for neighbor in downstream.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
+    return transitive_closure(start=key, edges=downstream)
 
 
 def find_path_keys(
@@ -224,34 +201,14 @@ def find_path_keys(
     Raises ValueError if end is not downstream of start.
     """
 
-    reachable_from_start: frozenset[CompiledObjectKey] = expand_downstream(start, downstream)
-    if end not in reachable_from_start:
+    on_path: frozenset[CompiledObjectKey] | None = path_nodes(
+        start=start,
+        end=end,
+        downstream=downstream,
+    )
+    if on_path is None:
         raise PlannerInputError(
             f"'{end.resource_type}:{end.name}' is not downstream of "
             f"'{start.resource_type}:{start.name}'"
         )
-
-    upstream_from_end: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [end]
-    upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
-    key: CompiledObjectKey
-    dep_keys: tuple[CompiledObjectKey, ...]
-    for key, dep_keys in downstream.items():
-        dep_key: CompiledObjectKey
-        for dep_key in dep_keys:
-            upstream.setdefault(dep_key, []).append(key)
-
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        if current in upstream_from_end:
-            continue
-        upstream_from_end.add(current)
-        parent: CompiledObjectKey
-        for parent in upstream.get(current, ()):
-            if parent in reachable_from_start or parent == start:
-                stack.append(parent)
-
-    on_path: frozenset[CompiledObjectKey] = frozenset(
-        reachable_from_start & upstream_from_end | {start, end}
-    )
     return on_path
