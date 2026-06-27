@@ -91,6 +91,15 @@ def build_standard_reuse_from_target_snapshot(
             for location in reuse_origins_by_model.values()
         ),
     )
+    fingerprint_table_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (location.database, location.schema, FINGERPRINT_TABLE_NAME)
+            for location in reuse_origins_by_model.values()
+            if location.schema is not None
+        ),
+    )
     for model in project.models:
         if model.key not in scope.selected_keys:
             continue
@@ -106,6 +115,7 @@ def build_standard_reuse_from_target_snapshot(
             adapter=adapter,
             connection=connection,
             fingerprint_sets=fingerprint_sets,
+            fingerprint_table_lookup=fingerprint_table_lookup,
             active_target_name=project.effective_target_name,
             reuse_from_target_name=reuse_from_target_name,
             database=reuse_origin.database,
@@ -127,6 +137,7 @@ def build_standard_reuse_from_target_snapshot(
                 connection=connection,
                 model=model,
                 reuse_origin=reuse_origin,
+                reuse_origin_lookup=reuse_origin_lookup,
             ),
         )
     return StandardReuseFromTargetSnapshot(
@@ -141,6 +152,7 @@ def _read_reuse_origin_fingerprints(
     adapter: BaseAdapter,
     connection: Any,
     fingerprint_sets: dict[tuple[str | None, str], FingerprintSet],
+    fingerprint_table_lookup: RelationLookup,
     active_target_name: str,
     reuse_from_target_name: str,
     database: str | None,
@@ -154,11 +166,8 @@ def _read_reuse_origin_fingerprints(
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=adapter.execute,
-            table_exists=adapter.relation_exists(
-                connection,
-                database=database,
-                schema=schema,
-                name=FINGERPRINT_TABLE_NAME,
+            table_exists=fingerprint_table_lookup.exists(
+                schema=schema, name=FINGERPRINT_TABLE_NAME
             ),
             database=database,
             schema=schema,
@@ -251,6 +260,7 @@ def _read_reuse_origin_cursor_max(
     connection: Any,
     model: CompiledModel,
     reuse_origin: CompiledRelationLocation,
+    reuse_origin_lookup: RelationLookup,
 ) -> str | None:
     cursor_column: str | None = _get_config_str(model, "cursor")
     materialized: str | None = _get_config_str(model, "materialized")
@@ -260,12 +270,7 @@ def _read_reuse_origin_cursor_max(
         or reuse_origin.qualified_name is None
     ):
         return None
-    if not adapter.relation_exists(
-        connection,
-        database=reuse_origin.database,
-        schema=reuse_origin.schema,
-        name=reuse_origin.name,
-    ):
+    if not reuse_origin_lookup.exists(schema=reuse_origin.schema, name=reuse_origin.name):
         return None
     rendered_cursor_column: str = adapter.render_identifier(cursor_column)
     sql: str = (

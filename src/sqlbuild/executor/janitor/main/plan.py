@@ -37,7 +37,9 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateBackupCandidate,
     JanitorVirtualStatePruneCandidate,
 )
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.helpers.scenario_artifact_names import is_scenario_artifact_physical_name
+from sqlbuild.shared.models import RelationLookup
 
 
 def build_janitor_plan(
@@ -113,6 +115,23 @@ def build_janitor_plan(
     age_supported: bool = adapter.supports_relation_age_metadata()
     effective_exclude_patterns: tuple[str, ...] = BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns
     protection_reasons: dict[JanitorRelationKey, str] = protected_relation_reasons or {}
+    state_table_locations: list[tuple[str | None, str | None, str]] = []
+    state_table_database: str | None
+    state_table_schema: str | None
+    for state_table_database, state_table_schema in target_schemas:
+        if state_table_schema is None:
+            continue
+        state_table_locations.append(
+            (state_table_database, state_table_schema, FINGERPRINT_TABLE_NAME)
+        )
+        state_table_locations.append(
+            (state_table_database, state_table_schema, SOURCE_FRESHNESS_TABLE_NAME)
+        )
+    state_table_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(state_table_locations),
+    )
 
     schema_key: tuple[str | None, str | None]
     for schema_key in sorted(target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
@@ -120,10 +139,10 @@ def build_janitor_plan(
             direct_state_prune_candidates.extend(
                 _direct_state_prune_candidates(
                     adapter=adapter,
-                    connection=connection,
                     database=schema_key[0],
                     schema=schema_key[1],
                     retain_versions=direct_state_history_versions,
+                    state_table_lookup=state_table_lookup,
                 )
             )
         schema_relations: tuple[RelationInfo, ...] = relations_by_schema.get(schema_key, ())
@@ -254,18 +273,13 @@ def _matching_exclude_pattern(
 def _direct_state_prune_candidates(
     *,
     adapter: BaseAdapter,
-    connection: Any,
     database: str | None,
     schema: str,
     retain_versions: int,
+    state_table_lookup: RelationLookup,
 ) -> tuple[JanitorDirectStatePruneCandidate, ...]:
     candidates: list[JanitorDirectStatePruneCandidate] = []
-    if adapter.relation_exists(
-        connection,
-        database=database,
-        schema=schema,
-        name=FINGERPRINT_TABLE_NAME,
-    ):
+    if state_table_lookup.exists(schema=schema, name=FINGERPRINT_TABLE_NAME):
         candidates.append(
             JanitorDirectStatePruneCandidate(
                 database=database,
@@ -279,12 +293,7 @@ def _direct_state_prune_candidates(
                 ),
             )
         )
-    if adapter.relation_exists(
-        connection,
-        database=database,
-        schema=schema,
-        name=SOURCE_FRESHNESS_TABLE_NAME,
-    ):
+    if state_table_lookup.exists(schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME):
         candidates.append(
             JanitorDirectStatePruneCandidate(
                 database=database,
