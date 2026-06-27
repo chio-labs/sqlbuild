@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.43.0](https://github.com/chio-labs/sqlbuild/compare/v0.42.1...v0.43.0) (2026-06-27)
+
+
+### Features
+
+* **structure:** add SC051 flagging warehouse metadata calls inside loops ([36456c8](https://github.com/chio-labs/sqlbuild/commit/36456c824eba3a0f27fa6bf5f0e398e92dbda188))
+* **structure:** make SC051 transitive ([dae144d](https://github.com/chio-labs/sqlbuild/commit/dae144d7736f5b69168e257712d315ef5ec05274))
+* **structure:** make SC051 transitive and fix the hidden helper-in-loop N+1s ([ef5de4b](https://github.com/chio-labs/sqlbuild/commit/ef5de4b43ea8145ba3bf5d5d9c7b3f23b4e9a534))
+
+
+### Performance Improvements
+
+* collapse per-item warehouse metadata lookups into one batched RelationLookup ([f5a75b9](https://github.com/chio-labs/sqlbuild/commit/f5a75b922d7e55cdefb381cf47ade319bc4c772e))
+
 ## [0.42.1](https://github.com/chio-labs/sqlbuild/compare/v0.42.0...v0.42.1) (2026-06-26)
 
 
