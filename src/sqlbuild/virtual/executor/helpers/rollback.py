@@ -15,6 +15,8 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.virtual.executor.helpers.functions import (
     decode_function_arguments,
     decode_function_body_sql,
@@ -259,28 +261,33 @@ def validate_physical_relations_exist(
     models_by_name: dict[str, CompiledModel],
     physical_relations: dict[str, PhysicalRelationRecord],
 ) -> None:
+    targets_by_model: dict[str, CompiledRelationLocation] = {}
+    model_name: str
+    relation: PhysicalRelationRecord
+    for model_name, relation in physical_relations.items():
+        model: CompiledModel | None = models_by_name.get(model_name)
+        if model is None:
+            raise PlannerInputError(
+                f"checkpoint references unknown model '{model_name}'",
+                code="S023",
+            )
+        targets_by_model[model_name] = build_virtual_destination_from_physical_relation(
+            adapter=adapter,
+            relation=relation,
+            fallback_target=model.destination,
+        )
     connection: Any = adapter.connect(connection_config)
     try:
-        model_name: str
-        relation: PhysicalRelationRecord
-        for model_name, relation in physical_relations.items():
-            model: CompiledModel | None = models_by_name.get(model_name)
-            if model is None:
-                raise PlannerInputError(
-                    f"checkpoint references unknown model '{model_name}'",
-                    code="S023",
-                )
-            target: CompiledRelationLocation = build_virtual_destination_from_physical_relation(
-                adapter=adapter,
-                relation=relation,
-                fallback_target=model.destination,
-            )
-            if not adapter.relation_exists(
-                connection,
-                database=target.database,
-                schema=target.schema,
-                name=target.name,
-            ):
+        relation_lookup: RelationLookup = build_relation_lookup(
+            adapter=adapter,
+            connection=connection,
+            locations=tuple(
+                (target.database, target.schema, target.name)
+                for target in targets_by_model.values()
+            ),
+        )
+        for model_name, target in targets_by_model.items():
+            if not relation_lookup.exists(schema=target.schema, name=target.name):
                 raise PlannerInputError(
                     f"checkpoint references missing warehouse relation for model '{model_name}'",
                     code="S024",

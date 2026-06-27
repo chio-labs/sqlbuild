@@ -326,3 +326,18 @@ def replace_location_database(
         logical_schema=location.logical_schema,
         logical_database=location.logical_database,
     )
+
+
+def origin_lookup_location(
+    *,
+    adapter: BaseAdapter,
+    location: CompiledRelationLocation,
+    origin_database_alias: str | None,
+) -> CompiledRelationLocation:
+    """Resolve the origin relation location, applying the attached-database alias when present."""
+
+    if origin_database_alias is None:
+        return location
+    return replace_location_database(
+        adapter=adapter, location=location, database=origin_database_alias
+    )

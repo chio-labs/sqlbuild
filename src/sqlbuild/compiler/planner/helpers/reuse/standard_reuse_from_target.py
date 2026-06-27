@@ -24,6 +24,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
 from sqlbuild.shared.helpers.project_var_values import render_project_var_text
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from sqlbuild.spec.models.targets import resolve_target_config
 
@@ -63,22 +65,43 @@ def build_standard_reuse_from_target_snapshot(
     )
     fingerprint_sets: dict[tuple[str | None, str], FingerprintSet] = {}
     model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot] = {}
+    reuse_origins_by_model: dict[str, CompiledRelationLocation] = {}
     model: CompiledModel
     for model in project.models:
         if model.key not in scope.selected_keys:
             continue
-        reuse_origin: CompiledRelationLocation = _reuse_origin_destination(
+        reuse_origin_location: CompiledRelationLocation = _reuse_origin_destination(
             model=model,
             adapter=adapter,
             reuse_from_target=reuse_from_target,
             reuse_from_vars=reuse_from_vars,
         )
+        if reuse_origin_location.schema is None:
+            raise PlannerInputError(
+                f"target '{project.effective_target_name}' has reuse_from = "
+                f"'{reuse_from_target_name}', but model '{model.name}' reuse origin does not "
+                "resolve to a fingerprint schema"
+            )
+        reuse_origins_by_model[model.name] = reuse_origin_location
+    reuse_origin_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (location.database, location.schema, location.name)
+            for location in reuse_origins_by_model.values()
+        ),
+    )
+    for model in project.models:
+        if model.key not in scope.selected_keys:
+            continue
+        reuse_origin: CompiledRelationLocation = reuse_origins_by_model[model.name]
         if reuse_origin.schema is None:
             raise PlannerInputError(
                 f"target '{project.effective_target_name}' has reuse_from = "
                 f"'{reuse_from_target_name}', but model '{model.name}' reuse origin does not "
                 "resolve to a fingerprint schema"
             )
+        reuse_origin_schema: str = reuse_origin.schema
         fingerprint_set: FingerprintSet = _read_reuse_origin_fingerprints(
             adapter=adapter,
             connection=connection,
@@ -86,18 +109,16 @@ def build_standard_reuse_from_target_snapshot(
             active_target_name=project.effective_target_name,
             reuse_from_target_name=reuse_from_target_name,
             database=reuse_origin.database,
-            schema=reuse_origin.schema,
+            schema=reuse_origin_schema,
         )
         fingerprint: Fingerprint | None = fingerprint_set.fingerprints.get(model.name)
         model_snapshots[model.name] = StandardReuseFromTargetModelSnapshot(
             model_name=model.name,
             reuse_origin=reuse_origin,
             reuse_origin_fingerprint_database=reuse_origin.database,
-            reuse_origin_fingerprint_schema=reuse_origin.schema,
-            relation_exists=adapter.relation_exists(
-                connection,
-                database=reuse_origin.database,
-                schema=reuse_origin.schema,
+            reuse_origin_fingerprint_schema=reuse_origin_schema,
+            relation_exists=reuse_origin_lookup.exists(
+                schema=reuse_origin_schema,
                 name=reuse_origin.name,
             ),
             built_version_hash=fingerprint.version_hash if fingerprint is not None else None,

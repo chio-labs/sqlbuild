@@ -34,6 +34,7 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessUnknownTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
+    state_table_exists_map,
     write_optional_previous_record,
     write_previous_record_to_schema,
 )
@@ -147,6 +148,12 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
                 observed_at=datetime(2026, 1, 15, 12, 0, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -234,6 +241,12 @@ def test_given_source_freshness_age_policy_when_planning_then_records_age_status
                 observed_at=test_case.observed_at,
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -289,6 +302,12 @@ def test_given_adapter_metadata_age_policy_when_planning_then_records_age_status
                 observed_at=datetime(2026, 1, 15, 12, 0, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -385,6 +404,12 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
                 observed_at=datetime(2026, 1, 15, 12, 30, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -420,6 +445,12 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
                 observed_at=datetime(2026, 1, 15, 12, 0, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -467,6 +498,12 @@ def test_given_column_freshness_expression_when_planning_then_observes_subquery(
                 observed_at=datetime(2026, 1, 15, 12, 0, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -508,6 +545,12 @@ def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_o
                 observed_at=datetime(2026, 1, 15, 12, 5, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -548,6 +591,12 @@ def test_given_managed_source_when_planning_source_freshness_then_skips_observat
                 observed_at=datetime(2026, 1, 15, 12, 5, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_schema",),
+                ),
             )
         )
     finally:
@@ -613,6 +662,12 @@ def test_given_multiple_state_schemas_when_planning_then_merges_previous_records
                 observed_at=datetime(2026, 1, 15, 12, 5, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_a", "state_b"),
+                ),
             )
         )
     finally:
@@ -681,6 +736,12 @@ def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_obs
                 observed_at=datetime(2026, 1, 15, 12, 5, 0),
                 run_id="planning",
                 render_qualified_name=RENDER_QUALIFIED_NAME,
+                state_table_exists_by_schema=state_table_exists_map(
+                    adapter=adapter,
+                    connection=connection,
+                    state_database=None,
+                    state_schemas=("state_a", "state_b"),
+                ),
             )
         )
     finally:

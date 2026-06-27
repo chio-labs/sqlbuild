@@ -9,6 +9,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.state.main.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import SourceFreshnessRecord as VirtualSourceFreshnessRecord
@@ -21,17 +23,23 @@ def read_standard_freshness_state_for_command(
 
     records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {}
     state_database: str | None = _resolve_state_database(project=project)
+    state_schemas: tuple[str, ...] = tuple(_collect_state_schemas(project=project))
+    state_table_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (state_database, state_schema, SOURCE_FRESHNESS_TABLE_NAME)
+            for state_schema in state_schemas
+        ),
+    )
     state_schema: str
-    for state_schema in _collect_state_schemas(project=project):
+    for state_schema in state_schemas:
         records.update(
             read_latest_source_freshness(
                 connection=connection,
                 execute=adapter.execute,
-                table_exists=adapter.relation_exists(
-                    connection,
-                    database=state_database,
-                    schema=state_schema,
-                    name=SOURCE_FRESHNESS_TABLE_NAME,
+                table_exists=state_table_lookup.exists(
+                    schema=state_schema, name=SOURCE_FRESHNESS_TABLE_NAME
                 ),
                 database=state_database,
                 schema=state_schema,

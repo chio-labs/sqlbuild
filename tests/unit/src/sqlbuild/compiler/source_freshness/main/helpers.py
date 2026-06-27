@@ -8,6 +8,7 @@ from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -17,7 +18,31 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
 )
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+
+
+def state_table_exists_map(
+    *,
+    adapter: Any,
+    connection: Any,
+    state_database: str | None,
+    state_schemas: tuple[str, ...],
+) -> dict[str, bool]:
+    """Build the freshness state-table existence map the planning entrypoint requires."""
+
+    lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (state_database, schema, SOURCE_FRESHNESS_TABLE_NAME) for schema in state_schemas
+        ),
+    )
+    return {
+        schema: lookup.exists(schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME)
+        for schema in state_schemas
+    }
 
 
 class FakeSourceFreshnessExecute:

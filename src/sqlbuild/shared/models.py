@@ -4,12 +4,42 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
 from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.types import PythonCheckSeverity, SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
+
+
+@dataclass(frozen=True)
+class RelationLookup:
+    """Existing warehouse relations gathered once, queried by schema and name in memory."""
+
+    relations_by_key: dict[tuple[str | None, str], RelationInfo]
+
+    @staticmethod
+    def key(*, schema: str | None, name: str) -> tuple[str | None, str]:
+        """Build the case-insensitive lookup key for one relation."""
+
+        return (None if schema is None else schema.lower(), name.lower())
+
+    def get(self, *, schema: str | None, name: str) -> RelationInfo | None:
+        """Return the gathered relation at one schema and name, or None when absent."""
+
+        return self.relations_by_key.get(self.key(schema=schema, name=name))
+
+    def exists(self, *, schema: str | None, name: str) -> bool:
+        """Return whether a relation was present at one schema and name."""
+
+        return self.key(schema=schema, name=name) in self.relations_by_key
+
+    def is_transient(self, *, schema: str | None, name: str) -> bool:
+        """Return whether a relation is transient, defaulting to False when absent or unknown."""
+
+        relation: RelationInfo | None = self.get(schema=schema, name=name)
+        return bool(relation.is_transient) if relation is not None else False
 
 
 @dataclass(frozen=True)

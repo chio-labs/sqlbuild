@@ -8,7 +8,6 @@ from typing import Any
 
 from sqlbuild.adapter.shared.exceptions import AdapterUserError
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
-from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.helpers.age_policy import (
     evaluate_source_freshness_age_policy,
@@ -49,7 +48,7 @@ def build_standard_source_freshness_planning_result(
     observed_at: datetime,
     run_id: str,
     render_qualified_name: Callable[..., str | None],
-    state_table_exists_by_schema: dict[str, bool] | None = None,
+    state_table_exists_by_schema: dict[str, bool],
 ) -> StandardSourceFreshnessPlanningResult:
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = (
         _read_previous_records(
@@ -205,22 +204,12 @@ def _read_previous_records(
     state_database: str | None,
     state_schemas: tuple[str, ...],
     render_qualified_name: Callable[..., str | None],
-    state_table_exists_by_schema: dict[str, bool] | None = None,
+    state_table_exists_by_schema: dict[str, bool],
 ) -> dict[SourceFreshnessIdentity, SourceFreshnessRecord]:
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {}
     state_schema: str
     for state_schema in state_schemas:
-        table_exists: bool = (
-            state_table_exists_by_schema[state_schema]
-            if state_table_exists_by_schema is not None
-            and state_schema in state_table_exists_by_schema
-            else adapter.relation_exists(
-                connection,
-                database=state_database,
-                schema=state_schema,
-                name=SOURCE_FRESHNESS_TABLE_NAME,
-            )
-        )
+        table_exists: bool = state_table_exists_by_schema.get(state_schema, False)
         previous_set: SourceFreshnessSet = read_latest_source_freshness(
             connection=connection,
             execute=adapter.execute,

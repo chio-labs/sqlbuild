@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     StandardReuseFromTargetModelSnapshot,
     StandardReuseFromTargetSnapshot,
 )
+from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.planning import (
     build_standard_source_freshness_planning_result,
 )
@@ -26,6 +27,8 @@ from sqlbuild.compiler.source_freshness.main.propagation import (
     build_standard_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 
 
 def build_planner_source_freshness_result(
@@ -76,16 +79,29 @@ def build_reuse_from_source_freshness_result(
 ) -> StandardSourceFreshnessPlanningResult:
     """Compare current source freshness against reuse_from target state."""
 
+    state_database: str | None = _resolve_reuse_origin_state_database(reuse_from_snapshot)
+    state_schemas: tuple[str, ...] = _collect_reuse_origin_state_schemas(reuse_from_snapshot)
+    state_table_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (state_database, schema, SOURCE_FRESHNESS_TABLE_NAME) for schema in state_schemas
+        ),
+    )
     source_freshness: StandardSourceFreshnessPlanningResult = (
         build_standard_source_freshness_planning_result(
             adapter=adapter,
             connection=connection,
             sources=tuple(relations.source_read_map.values()),
-            state_database=_resolve_reuse_origin_state_database(reuse_from_snapshot),
-            state_schemas=_collect_reuse_origin_state_schemas(reuse_from_snapshot),
+            state_database=state_database,
+            state_schemas=state_schemas,
             observed_at=datetime.now(UTC),
             run_id="planning",
             render_qualified_name=adapter.render_qualified_name,
+            state_table_exists_by_schema={
+                schema: state_table_lookup.exists(schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME)
+                for schema in state_schemas
+            },
         )
     )
     return replace(
