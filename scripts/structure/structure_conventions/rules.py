@@ -902,21 +902,29 @@ def check_no_metadata_calls_in_loops(file_path: Path, module: ast.Module) -> lis
         for child in ast.iter_child_nodes(parent):
             parents[child] = parent
 
+    bearing_method_names, bearing_function_names = _metadata_bearing_helper_names(
+        module=module, parents=parents
+    )
+
     violations: list[Violation] = []
     node: ast.AST
     for node in ast.walk(module):
-        if not _is_warehouse_metadata_call(node):
+        if not isinstance(node, ast.Call):
             continue
-        if not _call_is_inside_loop(node=node, parents=parents):
+        label: str | None = _metadata_call_label(
+            node=node,
+            bearing_method_names=bearing_method_names,
+            bearing_function_names=bearing_function_names,
+        )
+        if label is None or not _call_is_inside_loop(node=node, parents=parents):
             continue
-        attribute: ast.Attribute = node.func
         violations.append(
             Violation(
                 code="SC051",
                 path=file_path,
                 line=node.lineno,
                 message=(
-                    f"warehouse metadata call '.{attribute.attr}' runs inside a loop and "
+                    f"'{label}' reaches a warehouse metadata call and runs inside a loop, which "
                     "scales as N+1 queries; gather relations once with build_relation_lookup "
                     "(or a planner WarehouseSnapshot) before the loop. If the loop already "
                     "batches one query per database or runs per microbatch window, add a "
@@ -936,12 +944,92 @@ def _is_adapter_implementation_file(file_path: Path) -> bool:
     return path_text.endswith("/adapter/base/base_adapter.py")
 
 
-def _is_warehouse_metadata_call(node: ast.AST) -> bool:
+def _metadata_call_label(
+    *,
+    node: ast.Call,
+    bearing_method_names: frozenset[str],
+    bearing_function_names: frozenset[str],
+) -> str | None:
+    if isinstance(node.func, ast.Attribute):
+        if node.func.attr in _WAREHOUSE_METADATA_METHODS:
+            return f".{node.func.attr}"
+        if node.func.attr in bearing_method_names:
+            return node.func.attr
+        return None
+    if isinstance(node.func, ast.Name) and node.func.id in bearing_function_names:
+        return node.func.id
+    return None
+
+
+def _metadata_bearing_helper_names(
+    *, module: ast.Module, parents: dict[ast.AST, ast.AST]
+) -> tuple[frozenset[str], frozenset[str]]:
+    method_calls_by_function: dict[ast.AST, set[str]] = {}
+    function_calls_by_function: dict[ast.AST, set[str]] = {}
+    directly_bearing: set[ast.AST] = set()
+    method_names_by_function: dict[ast.AST, str] = {}
+    function_names_by_function: dict[ast.AST, str] = {}
+
+    definition: ast.AST
+    for definition in ast.walk(module):
+        if not isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        method_calls: set[str] = set()
+        function_calls: set[str] = set()
+        called: ast.AST
+        for called in ast.walk(definition):
+            if not isinstance(called, ast.Call):
+                continue
+            if isinstance(called.func, ast.Attribute):
+                method_calls.add(called.func.attr)
+                if called.func.attr in _WAREHOUSE_METADATA_METHODS:
+                    directly_bearing.add(definition)
+            elif isinstance(called.func, ast.Name):
+                function_calls.add(called.func.id)
+        method_calls_by_function[definition] = method_calls
+        function_calls_by_function[definition] = function_calls
+        if _is_method_definition(definition=definition, parents=parents):
+            method_names_by_function[definition] = definition.name
+        else:
+            function_names_by_function[definition] = definition.name
+
+    bearing: set[ast.AST] = set(directly_bearing)
+    changed: bool = True
+    while changed:
+        changed = False
+        bearing_method_names: set[str] = {
+            method_names_by_function[fn] for fn in bearing if fn in method_names_by_function
+        }
+        bearing_function_names: set[str] = {
+            function_names_by_function[fn] for fn in bearing if fn in function_names_by_function
+        }
+        function: ast.AST
+        for function in method_calls_by_function:
+            if function in bearing:
+                continue
+            if method_calls_by_function[function] & bearing_method_names or (
+                function_calls_by_function[function] & bearing_function_names
+            ):
+                bearing.add(function)
+                changed = True
+
     return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in _WAREHOUSE_METADATA_METHODS
+        frozenset(method_names_by_function[fn] for fn in bearing if fn in method_names_by_function),
+        frozenset(
+            function_names_by_function[fn] for fn in bearing if fn in function_names_by_function
+        ),
     )
+
+
+def _is_method_definition(*, definition: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    current: ast.AST = definition
+    while current in parents:
+        current = parents[current]
+        if isinstance(current, ast.ClassDef):
+            return True
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+    return False
 
 
 def _call_is_inside_loop(*, node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
