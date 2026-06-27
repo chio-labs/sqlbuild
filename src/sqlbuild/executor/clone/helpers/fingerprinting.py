@@ -20,6 +20,8 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 
 
 def copy_clone_fingerprints(
@@ -146,6 +148,15 @@ def _read_origin_fingerprint_sets(
 ) -> dict[tuple[str | None, str], FingerprintSet]:
     """Read each distinct origin (database, schema) fingerprint state once."""
 
+    fingerprint_table_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (entry.destination.database, entry.destination.schema, FINGERPRINT_TABLE_NAME)
+            for entry in origin_entries
+            if entry.destination.schema is not None
+        ),
+    )
     fingerprint_sets: dict[tuple[str | None, str], FingerprintSet] = {}
     entry: ModelPlanEntry | SeedPlanEntry
     for entry in origin_entries:
@@ -158,11 +169,8 @@ def _read_origin_fingerprint_sets(
         fingerprint_sets[cache_key] = read_latest_fingerprints(
             connection=connection,
             execute=adapter.execute,
-            table_exists=adapter.relation_exists(
-                connection,
-                database=entry.destination.database,
-                schema=schema,
-                name=FINGERPRINT_TABLE_NAME,
+            table_exists=fingerprint_table_lookup.exists(
+                schema=schema, name=FINGERPRINT_TABLE_NAME
             ),
             database=entry.destination.database,
             schema=schema,

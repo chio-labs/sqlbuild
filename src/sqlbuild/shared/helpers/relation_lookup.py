@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.models import RelationLookup
 
 
 def build_relation_lookup(
     *,
-    adapter: BaseAdapter,
+    adapter: StrictAdapter,
     connection: Any,
     locations: tuple[tuple[str | None, str | None, str], ...],
 ) -> RelationLookup:

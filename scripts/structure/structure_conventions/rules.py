@@ -23,6 +23,32 @@ _TARGET_REUSE_PATH_MARKERS: tuple[str, ...] = (
     "reuse_plan.py",
     "reuse.py",
 )
+_WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
+    {
+        "list_relations",
+        "relation_exists",
+        "get_columns",
+        "get_all_columns",
+        "list_functions",
+    }
+)
+_SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
+    "src/sqlbuild/shared/helpers/relation_lookup.py": "shared single-query lookup builder",
+    "src/sqlbuild/executor/janitor/helpers/plan.py": "one list_relations per database",
+    "src/sqlbuild/integrations/dbt/helpers/planning/model_planning.py": (
+        "one list_relations per database"
+    ),
+    "src/sqlbuild/compiler/planner/helpers/output/plan_entry.py": (
+        "one get_all_columns per database"
+    ),
+    "src/sqlbuild/executor/pipeline/helpers/testing.py": (
+        "list_functions grouped per database, schema, and name batch"
+    ),
+    "src/sqlbuild/executor/run/helpers/materializations/microbatch.py": (
+        "schema-change get_columns gated to the first batch by schema_checked (delta is "
+        "staged inside the loop); DML get_columns is per window by design"
+    ),
+}
 _GLOBAL_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "source_fingerprint",
     "source_target_name",
@@ -856,6 +882,79 @@ def check_no_swallowed_exception_probes(file_path: Path, module: ast.Module) -> 
             )
         )
     return violations
+
+
+def check_no_metadata_calls_in_loops(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject per-iteration warehouse metadata calls that scale as N+1 queries."""
+
+    if not _is_runtime_source_file(file_path):
+        return []
+    if _is_adapter_implementation_file(file_path):
+        return []
+    path_text: str = file_path.as_posix()
+    if any(marker in path_text for marker in _SC051_BATCHED_REASON_BY_PATH):
+        return []
+
+    parents: dict[ast.AST, ast.AST] = {}
+    parent: ast.AST
+    for parent in ast.walk(module):
+        child: ast.AST
+        for child in ast.iter_child_nodes(parent):
+            parents[child] = parent
+
+    violations: list[Violation] = []
+    node: ast.AST
+    for node in ast.walk(module):
+        if not _is_warehouse_metadata_call(node):
+            continue
+        if not _call_is_inside_loop(node=node, parents=parents):
+            continue
+        attribute: ast.Attribute = node.func
+        violations.append(
+            Violation(
+                code="SC051",
+                path=file_path,
+                line=node.lineno,
+                message=(
+                    f"warehouse metadata call '.{attribute.attr}' runs inside a loop and "
+                    "scales as N+1 queries; gather relations once with build_relation_lookup "
+                    "(or a planner WarehouseSnapshot) before the loop. If the loop already "
+                    "batches one query per database or runs per microbatch window, add a "
+                    "narrow path exception in SC051 with a reason."
+                ),
+            )
+        )
+    return violations
+
+
+def _is_adapter_implementation_file(file_path: Path) -> bool:
+    path_text: str = file_path.as_posix()
+    if path_text.endswith("/client.py"):
+        return True
+    if "/adapters/shared/classes/" in path_text:
+        return True
+    return path_text.endswith("/adapter/base/base_adapter.py")
+
+
+def _is_warehouse_metadata_call(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _WAREHOUSE_METADATA_METHODS
+    )
+
+
+def _call_is_inside_loop(*, node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    current: ast.AST = node
+    while current in parents:
+        current = parents[current]
+        if isinstance(
+            current, (ast.For, ast.While, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+        ):
+            return True
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+    return False
 
 
 def check_private_definition_ordering(file_path: Path, module: ast.Module) -> list[Violation]:

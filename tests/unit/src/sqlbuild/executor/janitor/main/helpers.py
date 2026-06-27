@@ -102,9 +102,20 @@ class FakeJanitorAdapter(BaseAdapter):
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
+        tracked_fingerprint_tables: tuple[RelationInfo, ...] = tuple(
+            RelationInfo(
+                database=tracked_database,
+                schema=tracked_schema,
+                name=FINGERPRINT_TABLE_NAME,
+                relation_type="base table",
+            )
+            for tracked_database, tracked_schema in {
+                (tracked[0], tracked[1]) for tracked in self.tracked_relations
+            }
+        )
         return tuple(
             relation
-            for relation in self.relation_infos
+            for relation in (*self.relation_infos, *tracked_fingerprint_tables)
             if relation.database == database
             and (schemas is None or relation.schema in schemas)
             and (not names or relation.name in names)
