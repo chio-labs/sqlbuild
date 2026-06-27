@@ -314,6 +314,11 @@ def build_reconcile_report(
         virtual_environment_name=virtual_environment_name,
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
     )
+    physical_relation_lookup: RelationLookup = _build_physical_relation_lookup(
+        adapter=adapter,
+        connection_config=connection_config,
+        relations=(*physical_map.values(), *seed_physical_map.values()),
+    )
     issues: list[str] = []
     for model in graph.project.models:
         if model.name not in target_names:
@@ -325,8 +330,8 @@ def build_reconcile_report(
         if relation is None:
             issues.append(f"missing tracked physical relation: {model.name}")
             continue
-        if not physical_relation_exists(
-            adapter=adapter, connection_config=connection_config, relation=relation
+        if not physical_relation_lookup.exists(
+            schema=relation.schema_name, name=relation.relation_name
         ):
             issues.append(f"missing physical relation: {model.name}")
         relation_type: str | None = relation_types.get(model.name)
@@ -343,8 +348,8 @@ def build_reconcile_report(
             if relation is None:
                 issues.append(f"missing tracked physical seed relation: {seed.name}")
                 continue
-            if not physical_relation_exists(
-                adapter=adapter, connection_config=connection_config, relation=relation
+            if not physical_relation_lookup.exists(
+                schema=relation.schema_name, name=relation.relation_name
             ):
                 issues.append(f"missing physical seed relation: {seed.name}")
             relation_type = relation_types.get(seed.name)
@@ -573,6 +578,26 @@ def list_virtual_relation_types(
             if relation is not None:
                 result[artifact_name] = relation.relation_type
         return result
+    finally:
+        adapter.close(connection)
+
+
+def _build_physical_relation_lookup(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    relations: tuple[PhysicalRelationRecord, ...],
+) -> RelationLookup:
+    connection: Any = adapter.connect(connection_config)
+    try:
+        return build_relation_lookup(
+            adapter=adapter,
+            connection=connection,
+            locations=tuple(
+                (relation.database_name, relation.schema_name, relation.relation_name)
+                for relation in relations
+            ),
+        )
     finally:
         adapter.close(connection)
 
