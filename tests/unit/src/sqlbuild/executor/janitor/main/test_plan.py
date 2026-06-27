@@ -108,6 +108,9 @@ PLAN_TEST_CASES: list[JanitorPlanTestCase] = [
         tracked_relations=((None, "analytics", "old_orders"),),
         expected_candidate_names=("old_orders",),
         expected_direct_state_table_names=(FINGERPRINT_TABLE_NAME,),
+        expected_skipped_relation_reasons=(
+            "relation matches exclude pattern '_sqlbuild_fingerprints'",
+        ),
     ),
     JanitorPlanTestCase(
         description="scenario artifact is eligible when tracked-only is enabled",

@@ -1600,6 +1600,44 @@ TEST_CASES: list[CheckPathsTestCase] = [
         },
         expected_violation_codes=(),
     ),
+    CheckPathsTestCase(
+        description="flags warehouse metadata calls inside a loop as N+1 risks",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load(adapter, connection, entries) -> list[str]:
+                    found: list[str] = []
+                    for entry in entries:
+                        if adapter.relation_exists(
+                            connection, database=None, schema="s", name=entry
+                        ):
+                            found.append(entry)
+                    return found
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
+        description="allows warehouse metadata calls gathered once before a loop",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/gather.py": dedent(
+                """
+                def gather(adapter, connection, entries) -> list[str]:
+                    relations = adapter.list_relations(
+                        connection, database=None, schemas=("s",)
+                    )
+                    names = {relation.name for relation in relations}
+                    return [entry for entry in entries if entry in names]
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
 ]
 
 

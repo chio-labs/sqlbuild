@@ -24,7 +24,7 @@ def build_standard_source_freshness_planning_result(
     observed_at: datetime,
     run_id: str,
     render_qualified_name: Callable[..., str | None],
-    state_table_exists_by_schema: dict[str, bool] | None = None,
+    state_table_exists_by_schema: dict[str, bool],
 ) -> StandardSourceFreshnessPlanningResult:
     """Observe standard source freshness and compare it to latest append-only state."""
 
