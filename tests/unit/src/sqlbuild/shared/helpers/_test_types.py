@@ -57,3 +57,16 @@ class SummaryFooterTestCase:
     elapsed: str | None
     expected_no_color: str
     expected_color_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RelationLookupTestCase:
+    description: str
+    warehouse_relations: tuple[tuple[str | None, str, bool | None], ...]
+    locations: tuple[tuple[str | None, str | None, str], ...]
+    probe_schema: str | None
+    probe_name: str
+    expected_exists: bool
+    expected_is_transient: bool
+    expected_list_relations_calls: int
+    expected_queried_schema_groups: tuple[tuple[str, ...], ...]

@@ -36,6 +36,8 @@ from sqlbuild.integrations.dbt.models import (
     DbtModelPlanningResult,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.shared.types import SqlReferenceKind
 
 
@@ -56,7 +58,7 @@ def find_sqlbuild_models_with_missing_dbt_relations(
     """Return selected SQLBuild models blocked by absent, unselected dbt refs."""
 
     selected_names: frozenset[str] = frozenset(selected_model_names)
-    blocked: dict[str, list[DbtManifestModel]] = {}
+    candidates: list[tuple[str, DbtManifestModel]] = []
     for model in project.models:
         if model.name not in selected_names:
             continue
@@ -70,14 +72,20 @@ def find_sqlbuild_models_with_missing_dbt_relations(
             )
             if dbt_model.unique_id in dbt_unique_ids_selected_for_execution:
                 continue
-            if adapter.relation_exists(
-                connection,
-                database=dbt_model.database,
-                schema=dbt_model.schema,
-                name=dbt_model.alias or dbt_model.name,
-            ):
-                continue
-            blocked.setdefault(model.name, []).append(dbt_model)
+            candidates.append((model.name, dbt_model))
+    relation_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=tuple(
+            (dbt_model.database, dbt_model.schema, dbt_model.alias or dbt_model.name)
+            for _, dbt_model in candidates
+        ),
+    )
+    blocked: dict[str, list[DbtManifestModel]] = {}
+    for model_name, dbt_model in candidates:
+        if relation_lookup.exists(schema=dbt_model.schema, name=dbt_model.alias or dbt_model.name):
+            continue
+        blocked.setdefault(model_name, []).append(dbt_model)
     return {name: tuple(models) for name, models in blocked.items()}
 
 

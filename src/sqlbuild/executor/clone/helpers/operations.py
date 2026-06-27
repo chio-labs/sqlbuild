@@ -8,8 +8,9 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
-from sqlbuild.executor.clone.models import CloneItemResult, CloneOriginSnapshot
+from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.models import RelationLookup
 
 
 def clone_relation(
@@ -19,19 +20,19 @@ def clone_relation(
     adapter: BaseAdapter,
     destination_connection: Any,
     hard_copy: bool,
-    origin_snapshot: CloneOriginSnapshot,
+    origin_lookup: RelationLookup,
 ) -> CloneItemResult:
     return clone_relation_by_names(
         name=destination_entry.name,
         origin_relation=qualified_name(adapter=adapter, entry=origin_entry),
         destination_relation=qualified_name(adapter=adapter, entry=destination_entry),
-        origin_exists=origin_snapshot.exists(
+        origin_exists=origin_lookup.exists(
             schema=origin_entry.destination.schema, name=origin_entry.destination.name
         ),
         adapter=adapter,
         connection=destination_connection,
         hard_copy=hard_copy,
-        origin_is_transient=origin_snapshot.is_transient(
+        origin_is_transient=origin_lookup.is_transient(
             schema=origin_entry.destination.schema, name=origin_entry.destination.name
         ),
     )
@@ -43,14 +44,14 @@ def recreate_view(
     origin_entry: SeedPlanEntry | ModelPlanEntry,
     adapter: BaseAdapter,
     destination_connection: Any,
-    origin_snapshot: CloneOriginSnapshot,
+    origin_lookup: RelationLookup,
 ) -> CloneItemResult:
     return recreate_view_by_names(
         name=destination_entry.name,
         origin_relation=qualified_name(adapter=adapter, entry=origin_entry),
         destination_relation=qualified_name(adapter=adapter, entry=destination_entry),
         view_sql=destination_entry.resolved_sql,
-        origin_exists=origin_snapshot.exists(
+        origin_exists=origin_lookup.exists(
             schema=origin_entry.destination.schema, name=origin_entry.destination.name
         ),
         adapter=adapter,

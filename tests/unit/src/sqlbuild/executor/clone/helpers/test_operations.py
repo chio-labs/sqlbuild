@@ -5,9 +5,10 @@ import pytest
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone.helpers.operations import clone_relation
-from sqlbuild.executor.clone.main.origin_snapshot import build_clone_origin_snapshot
-from sqlbuild.executor.clone.models import CloneItemResult, CloneOriginSnapshot
+from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.models import RelationLookup
 from tests.unit.src.sqlbuild.executor.clone.helpers._test_types import (
     CloneRelationExecutionTestCase,
 )
@@ -79,10 +80,10 @@ def test_given_clone_relation_when_executing_then_records_sql_and_reports_copy_m
     )
     origin_entry: ModelPlanEntry = build_clone_model_entry(schema="prod", name="fact_orders")
     destination_entry: ModelPlanEntry = build_clone_model_entry(schema="dev", name="fact_orders")
-    origin_snapshot: CloneOriginSnapshot = build_clone_origin_snapshot(
+    origin_lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
         connection=object(),
-        origin_locations=((None, "prod", "fact_orders"),),
+        locations=((None, "prod", "fact_orders"),),
     )
 
     result: CloneItemResult = clone_relation(
@@ -91,7 +92,7 @@ def test_given_clone_relation_when_executing_then_records_sql_and_reports_copy_m
         adapter=adapter,
         destination_connection=object(),
         hard_copy=test_case.hard_copy,
-        origin_snapshot=origin_snapshot,
+        origin_lookup=origin_lookup,
     )
 
     assert result.action == test_case.expected_action

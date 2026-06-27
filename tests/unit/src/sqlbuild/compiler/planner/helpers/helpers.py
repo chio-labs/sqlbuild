@@ -214,6 +214,27 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
             return self.fingerprint_table_exists
         return (database, schema, name) in self.existing_relations
 
+    def list_relations(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection, database, names
+        requested: frozenset[str] | None = frozenset(schemas) if schemas is not None else None
+        return tuple(
+            RelationInfo(
+                database=relation_database,
+                schema=relation_schema,
+                name=relation_name,
+                relation_type="base table",
+            )
+            for relation_database, relation_schema, relation_name in self.existing_relations
+            if requested is None or relation_schema in requested
+        )
+
     def render_qualified_name(
         self,
         *,

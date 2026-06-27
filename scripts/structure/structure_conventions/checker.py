@@ -37,6 +37,7 @@ from scripts.structure.structure_conventions.rules import (
     check_nested_runtime_package_direct_subpackages,
     check_no_internal_helper_exports,
     check_no_internal_reexport_modules,
+    check_no_metadata_calls_in_loops,
     check_no_raw_color_helper_imports,
     check_no_raw_runtime_diagnostics,
     check_no_relative_imports,
@@ -97,6 +98,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_no_raw_runtime_diagnostics(file_path, module))
         violations.extend(check_target_reuse_terminology(file_path))
         violations.extend(check_no_swallowed_exception_probes(file_path, module))
+        violations.extend(check_no_metadata_calls_in_loops(file_path, module))
         violations.extend(check_private_definition_ordering(file_path, module))
         violations.extend(check_type_declarations_outside_types(file_path, module))
         violations.extend(check_exception_declarations_outside_exceptions(file_path, module))

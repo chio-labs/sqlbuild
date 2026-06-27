@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
@@ -23,6 +25,25 @@ class CloneFingerprintAdapter:
     def relation_exists(self, *args: object, **kwargs: object) -> bool:
         del args, kwargs
         return True
+
+    def list_relations(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection, names
+        return tuple(
+            RelationInfo(
+                database=database,
+                schema=schema,
+                name=FINGERPRINT_TABLE_NAME,
+                relation_type="base table",
+            )
+            for schema in (schemas or ())
+        )
 
     def render_qualified_name(self, **kwargs: object) -> str:
         return ".".join(str(value) for value in kwargs.values() if value is not None)
