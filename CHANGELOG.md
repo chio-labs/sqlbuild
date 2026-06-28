@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.2](https://github.com/chio-labs/sqlbuild/compare/v0.44.1...v0.44.2) (2026-06-28)
+
+
+### Bug Fixes
+
+* **dbt:** make clone selection fail-safe ([ecf7f81](https://github.com/chio-labs/sqlbuild/commit/ecf7f81c7d1caf4b824459861b621f9b00357945))
+* **dbt:** make clone selection fail-safe ([cbbb4fb](https://github.com/chio-labs/sqlbuild/commit/cbbb4fbc6e09cfebfae5c61c13fff9915dd5e41a))
+
 ## [0.44.1](https://github.com/chio-labs/sqlbuild/compare/v0.44.0...v0.44.1) (2026-06-28)
 
 
