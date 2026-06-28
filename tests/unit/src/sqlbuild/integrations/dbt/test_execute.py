@@ -20,6 +20,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers import execute as execute_helpers
+from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import resolve_dbt_defer_clone_from
 from sqlbuild.integrations.dbt.pipeline.main import execute as execute_module
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
@@ -33,6 +34,7 @@ from sqlbuild.spec.models.project import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
+    DbtDeferCloneResolutionTestCase,
     DbtExecutionSelectionStatusTestCase,
     DbtExecutionSpacingTestCase,
     DbtExecutionSummaryFooterTestCase,
@@ -41,6 +43,47 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CompileOnlyDbtRunner,
     emit_connection_progress,
 )
+
+DBT_DEFER_CLONE_RESOLUTION_TEST_CASES: list[DbtDeferCloneResolutionTestCase] = [
+    DbtDeferCloneResolutionTestCase(
+        description="uses project config when cli and local are absent",
+        cli_defer_clone_from=None,
+        project_defer_clone_from=True,
+        local_defer_clone_from=None,
+        expected_defer_clone_from=True,
+    ),
+    DbtDeferCloneResolutionTestCase(
+        description="uses local override before project config",
+        cli_defer_clone_from=None,
+        project_defer_clone_from=True,
+        local_defer_clone_from=False,
+        expected_defer_clone_from=False,
+    ),
+    DbtDeferCloneResolutionTestCase(
+        description="uses cli flag before local override",
+        cli_defer_clone_from=True,
+        project_defer_clone_from=False,
+        local_defer_clone_from=False,
+        expected_defer_clone_from=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DBT_DEFER_CLONE_RESOLUTION_TEST_CASES,
+    ids=[case.description for case in DBT_DEFER_CLONE_RESOLUTION_TEST_CASES],
+)
+def test_given_dbt_defer_clone_sources_when_resolving_then_precedence_is_applied(
+    test_case: DbtDeferCloneResolutionTestCase,
+) -> None:
+    defer_clone_from: bool = resolve_dbt_defer_clone_from(
+        cli_defer_clone_from=test_case.cli_defer_clone_from,
+        project_defer_clone_from=test_case.project_defer_clone_from,
+        local_defer_clone_from=test_case.local_defer_clone_from,
+    )
+
+    assert defer_clone_from is test_case.expected_defer_clone_from
 
 
 @pytest.mark.parametrize(

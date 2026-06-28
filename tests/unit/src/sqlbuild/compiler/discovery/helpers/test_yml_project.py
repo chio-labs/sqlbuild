@@ -53,6 +53,7 @@ user = "kevin"
 
 [dbt]
 target = "pat"
+defer_clone_from = false
 
 [dbt.vars]
 shared = "local"
@@ -82,6 +83,7 @@ max_total_bytes = 78
         expected_vars={"user": "kevin"},
         expected_dbt_target="pat",
         expected_dbt_vars={"shared": "local", "threads": 2},
+        expected_dbt_defer_clone_from=False,
         expected_force=True,
         expected_scenario_local_type_overrides={
             "snowflake": {
@@ -153,6 +155,7 @@ target = "dev"
 database = "local_db"
 schema = "local_schema"
 defer_sources_to = "prod"
+defer_clone_from = "prod"
 reuse_from = "prod"
 force = false
 reuse_hard_copy = true
@@ -183,6 +186,7 @@ allow_as_clone_destination = false
                 "database": "local_db",
                 "schema": "local_schema",
                 "defer_sources_to": "prod",
+                "defer_clone_from": "prod",
                 "reuse_from": "prod",
                 "force": False,
                 "reuse_hard_copy": True,
@@ -751,6 +755,7 @@ schema = "dev"
                 "database": None,
                 "schema": "dev",
                 "defer_sources_to": None,
+                "defer_clone_from": None,
                 "reuse_from": None,
                 "force": None,
                 "reuse_hard_copy": False,
@@ -803,6 +808,7 @@ user = "kevin"
 [targets.dev]
 schema = "dev_${user}"
 defer_sources_to = "prod"
+defer_clone_from = "prod"
 reuse_from = "prod"
 force = true
 reuse_hard_copy = true
@@ -849,6 +855,7 @@ project_dir = "../dbt"
 profiles_dir = "../profiles"
 target = "prod"
 target_path = "target/dbt"
+defer_clone_from = true
 
 [dbt.vars]
 country = "US"
@@ -890,6 +897,7 @@ git_timeout_seconds = 12
                 "database": None,
                 "schema": "dev_${user}",
                 "defer_sources_to": "prod",
+                "defer_clone_from": "prod",
                 "reuse_from": "prod",
                 "force": True,
                 "reuse_hard_copy": True,
@@ -925,6 +933,7 @@ git_timeout_seconds = 12
         expected_dbt_target="prod",
         expected_dbt_target_path="target/dbt",
         expected_dbt_vars={"country": "US", "limit": 100, "enabled": True},
+        expected_dbt_defer_clone_from=True,
         expected_dbt_production_ref_git_ref="prod",
         expected_dbt_production_ref_generate_schema_name_override=(
             "dbt/macros/prod_generate_schema_name.sql"
@@ -970,6 +979,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "database": target_config.database,
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
+            "defer_clone_from": target_config.defer_clone_from,
             "reuse_from": target_config.reuse_from,
             "force": target_config.force,
             "reuse_hard_copy": target_config.reuse_hard_copy,
@@ -1008,6 +1018,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.target_path == test_case.expected_dbt_target_path
     assert config.dbt.vars == test_case.expected_dbt_vars
+    assert config.dbt.defer_clone_from is test_case.expected_dbt_defer_clone_from
     assert config.dbt.production_ref.git_ref == test_case.expected_dbt_production_ref_git_ref
     assert (
         config.dbt.production_ref.generate_schema_name_override
@@ -1050,6 +1061,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.vars == test_case.expected_vars
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.vars == test_case.expected_dbt_vars
+    assert config.dbt.defer_clone_from is test_case.expected_dbt_defer_clone_from
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
     assert {
         "max_rows_per_relation": config.scenario.snapshot_limits.max_rows_per_relation,
@@ -1064,6 +1076,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "database": target_config.database,
             "schema": target_config.schema,
             "defer_sources_to": target_config.defer_sources_to,
+            "defer_clone_from": target_config.defer_clone_from,
             "reuse_from": target_config.reuse_from,
             "force": target_config.force,
             "reuse_hard_copy": target_config.reuse_hard_copy,
