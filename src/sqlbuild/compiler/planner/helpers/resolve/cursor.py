@@ -27,10 +27,7 @@ def compute_cursor_bounds(
     end_cursor_override: str | None,
     is_microbatch: bool,
 ) -> CursorBounds | None:
-    """Compute effective cursor bounds for one incremental model.
-
-    Returns None if no meaningful bounds can be derived (empty upstreams).
-    """
+    """Compute effective cursor bounds for one incremental model."""
 
     if is_microbatch:
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
@@ -86,11 +83,7 @@ def _compute_raw_end(snapshot: ModelCursorSnapshot) -> str | None:
 
 
 def _subtract_duration(value: str, duration: str) -> str | None:
-    """Subtract a duration string from a cursor value.
-
-    Handles timestamp strings via datetime parsing and integer strings via
-    integer arithmetic with duration-to-seconds conversion.
-    """
+    """Subtract a duration string from a cursor value."""
 
     td: timedelta | None = _parse_duration(duration)
     if td is None:

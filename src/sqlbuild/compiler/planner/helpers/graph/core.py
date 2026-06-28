@@ -28,12 +28,7 @@ def _key_sort_key(key: CompiledObjectKey) -> tuple[str, str]:
 def build_upstream_deps(
     project: CompiledProject,
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    """Return upstream edges keyed by object key (what each node depends on).
-
-    SQL tests are virtual nodes with no warehouse deps. Each test is placed
-    before its target models by adding the test key as an upstream dep of
-    each target model key.
-    """
+    """Return upstream edges keyed by object key."""
 
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
     upstream.update({model.key: list(model.deps) for model in project.models})
@@ -196,10 +191,7 @@ def find_path_keys(
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
-    """Return all keys on directed paths from start to end (inclusive).
-
-    Raises ValueError if end is not downstream of start.
-    """
+    """Return all keys on directed paths from start to end."""
 
     on_path: frozenset[CompiledObjectKey] | None = path_nodes(
         start=start,

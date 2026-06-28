@@ -5,23 +5,23 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from sqlbuild.compiler.compile.models.core import (
-    CompiledModel,
     CompiledProject,
-    CompileSqlReference,
 )
 from sqlbuild.compiler.planner.main.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
+    resolve_sqlbuild_model_dbt_refs,
+)
 from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
     resolve_dbt_sql_test_target_names,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
@@ -32,7 +32,6 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 from sqlbuild.shared.helpers.selector_expansion import split_selector_expansion
 from sqlbuild.shared.models import SelectorExpansion
-from sqlbuild.shared.types import SqlReferenceKind
 
 
 def plan_dbt_interop_command(
@@ -168,28 +167,19 @@ def _build_required_dbt_selector_terms(
     required_ids: frozenset[str] = frozenset(required_unique_ids)
     if not required_ids:
         return ()
-    selected_names: frozenset[str] = frozenset(selected_model_names)
     terms: set[str] = set()
-    model: CompiledModel
-    for model in project.models:
-        if model.name not in selected_names:
+    for _model, dbt_model in resolve_sqlbuild_model_dbt_refs(
+        project=project,
+        manifest=manifest,
+        selected_model_names=selected_model_names,
+    ):
+        if dbt_model.unique_id not in required_ids:
             continue
-        reference: CompileSqlReference
-        for reference in model.references:
-            if reference.ref_kind != SqlReferenceKind.DBT_REF:
-                continue
-            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
-                manifest=manifest,
-                package_name=reference.ref_package,
-                name=reference.ref_name,
-            )
-            if dbt_model.unique_id not in required_ids:
-                continue
-            selector_term: str = dbt_fqn_selector_term(
-                fqn=dbt_model.fqn,
-                fallback=dbt_model.name,
-            )
-            terms.add(f"+{selector_term}")
+        selector_term: str = dbt_fqn_selector_term(
+            fqn=dbt_model.fqn,
+            fallback=dbt_model.name,
+        )
+        terms.add(f"+{selector_term}")
     return tuple(sorted(terms))
 
 

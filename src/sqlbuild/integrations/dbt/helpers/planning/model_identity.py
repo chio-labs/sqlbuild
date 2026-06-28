@@ -6,21 +6,19 @@ import hashlib
 import json
 from collections.abc import Sequence
 
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.planner.main.graph_write_identity import build_graph_write_identity_hashes
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
 from sqlbuild.compiler.planner.types import GraphResourceKind
-from sqlbuild.integrations.dbt.helpers.graph.core import dbt_model_graph_key
+from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
+    dbt_graph_node_key,
+    dbt_identity_upstream_keys,
+)
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSeed,
 )
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtCombinedGraphKey
-from sqlbuild.integrations.dbt.types import (
-    DbtCombinedGraphOwner,
-    DbtCombinedGraphResourceType,
-)
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph
 
 
 def compose_dbt_version_hash(*, own_hash: str, upstream_hashes: Sequence[tuple[str, str]]) -> str:
@@ -55,7 +53,7 @@ def build_dbt_graph_identity_nodes(
         nodes[key] = GraphIdentityNode(
             key=key,
             resource_kind=GraphResourceKind.MODEL,
-            upstream_keys=_dbt_graph_identity_upstream_keys(
+            upstream_keys=dbt_identity_upstream_keys(
                 unique_id=model.unique_id,
                 manifest=manifest,
                 graph=graph,
@@ -69,10 +67,6 @@ def dbt_graph_identity_execution_order(*, manifest: DbtManifestIndex) -> tuple[G
     return tuple(dbt_graph_node_key(unique_id) for unique_id in manifest.models_by_unique_id)
 
 
-def dbt_graph_node_key(unique_id: str) -> GraphNodeKey:
-    return GraphNodeKey(node_type=NODE_TYPE_DBT, node_name=unique_id)
-
-
 def build_dbt_write_identity_hashes(
     *,
     manifest: DbtManifestIndex,
@@ -81,11 +75,7 @@ def build_dbt_write_identity_hashes(
     expected_version_hash_by_unique_id: dict[str, str | None],
     previous_version_hash_by_unique_id: dict[str, str] | None = None,
 ) -> dict[GraphNodeKey, str]:
-    """Compose the version hashes recorded for dbt nodes written in one run.
-
-    Shared by the dbt build path and the defer-clone prephase so both persist
-    identical version hashes for the same manifest state.
-    """
+    """Compose the version hashes recorded for dbt nodes written in one run."""
 
     previous_version_hash_by_unique_id = previous_version_hash_by_unique_id or {}
     nodes: dict[GraphNodeKey, GraphIdentityNode] = build_dbt_graph_identity_nodes(
@@ -124,23 +114,3 @@ def compose_dbt_graph_version_hash(
             (key.node_name, upstream_hash) for key, upstream_hash in upstream_hashes
         ),
     )
-
-
-def _dbt_graph_identity_upstream_keys(
-    *, unique_id: str, manifest: DbtManifestIndex, graph: DbtCombinedGraph | None
-) -> tuple[GraphNodeKey, ...]:
-    if graph is None:
-        return ()
-    upstream_keys: list[GraphNodeKey] = []
-    key: DbtCombinedGraphKey
-    for key in graph.upstream_deps.get(dbt_model_graph_key(unique_id), ()):
-        if key.owner != DbtCombinedGraphOwner.DBT:
-            continue
-        if key.resource_type == DbtCombinedGraphResourceType.MODEL:
-            upstream_keys.append(dbt_graph_node_key(key.name))
-        elif (
-            key.resource_type == DbtCombinedGraphResourceType.SOURCE
-            and key.name in manifest.seeds_by_unique_id
-        ):
-            upstream_keys.append(dbt_graph_node_key(key.name))
-    return tuple(upstream_keys)

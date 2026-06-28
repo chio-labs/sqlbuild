@@ -146,12 +146,7 @@ def _query_target_max_raw(
     target_name: str,
     cursor_column: str,
 ) -> object | None:
-    """Read the target cursor high-water mark, or None when the target does not exist yet.
-
-    Existence is checked via adapter metadata rather than by swallowing query errors, so
-    operational failures (permissions, connectivity) propagate instead of silently widening
-    the replay window to the full upstream range.
-    """
+    """Read the target cursor high-water mark or None when the target does not exist."""
 
     if not adapter.relation_exists(
         connection,

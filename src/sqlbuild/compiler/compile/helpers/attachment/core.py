@@ -1422,10 +1422,7 @@ def _bool_from_dict(values: dict[str, object], key: str) -> bool:
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
-    """Resolve whether SQL validation is active for a model.
-
-    Per-model override in MODEL header takes precedence over project setting.
-    """
+    """Resolve whether SQL validation is active for a model."""
 
     raw: object | None = model_config.values.get("sql_validation")
     if isinstance(raw, bool):

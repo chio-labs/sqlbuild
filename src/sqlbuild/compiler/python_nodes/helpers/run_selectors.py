@@ -25,10 +25,7 @@ def resolve_python_sql_run_selectors(
     project_graph: ProjectGraph,
     python_graph: PythonNodeGraph,
 ) -> PythonSqlRunSelection:
-    """Resolve build-style selectors across SQL resources and Python nodes.
-
-    Python checks are intentionally excluded; use `sqb check` instead.
-    """
+    """Resolve build-style selectors across SQL resources and Python nodes."""
 
     selection: PythonSqlSelection = resolve_python_sql_selectors(
         select=select,

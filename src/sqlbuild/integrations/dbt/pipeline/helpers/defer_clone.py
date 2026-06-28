@@ -26,9 +26,11 @@ from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_i
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
     try_write_dbt_node_fingerprint,
 )
+from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
+    dbt_graph_node_key,
+)
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_write_identity_hashes,
-    dbt_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes,
@@ -140,11 +142,7 @@ def resolve_defer_clone_unique_ids(
     selected_sqlbuild_model_names: tuple[str, ...],
     required_dbt_unique_ids: tuple[str, ...],
 ) -> frozenset[str]:
-    """Resolve the first non-view dbt ancestors to clone for SQLBuild-selected boundaries.
-
-    Walks upstream from each selected SQLBuild model, skipping view boundaries so the
-    view chain is recreated on top of the first cloned non-view dbt ancestor.
-    """
+    """Resolve the first non-view dbt ancestors to clone for SQLBuild-selected boundaries."""
 
     selected: frozenset[DbtCombinedGraphKey] = frozenset(
         sqlbuild_model_graph_key(model_name) for model_name in selected_sqlbuild_model_names

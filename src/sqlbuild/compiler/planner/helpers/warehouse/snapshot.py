@@ -703,12 +703,7 @@ def _assemble_cursor_snapshots(
 
 
 def _get_cursor_inputs(model: CompiledModel, cursor_column: str) -> dict[str, str]:
-    """Resolve cursor column mapping per upstream ref.
-
-    For single-input models without explicit cursor_inputs, the cursor column
-    is applied to all ref/source dependencies. For multi-input models,
-    cursor_inputs must be explicit.
-    """
+    """Resolve cursor column mapping per upstream ref."""
 
     raw: object | None = model.config.values.get("cursor_inputs")
     if isinstance(raw, dict):

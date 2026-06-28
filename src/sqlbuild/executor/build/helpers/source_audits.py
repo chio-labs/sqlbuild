@@ -36,10 +36,7 @@ def run_pending_source_audits(
     all_source_audit_results: list[AuditExecutionResult],
     fail_fast: bool,
 ) -> bool:
-    """Execute pending source audits for a model's direct source dependencies.
-
-    Returns True if any source audit errored, blocking the model.
-    """
+    """Execute pending source audits and return whether any audit blocked the model."""
 
     any_blocked: bool = False
     dep_key: CompiledObjectKey

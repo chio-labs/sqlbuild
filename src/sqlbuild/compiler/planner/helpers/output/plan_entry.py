@@ -665,11 +665,7 @@ def resolve_cursor_overrides(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
 ) -> tuple[str | None, str | None]:
-    """Resolve typed cursor overrides to generic start/end for one model.
-
-    If cursor_overrides is provided, the model's cursor_type determines which
-    typed field applies. Generic overrides serve as fallback.
-    """
+    """Resolve typed cursor overrides to generic start/end for one model."""
 
     if cursor_overrides is None:
         return start_cursor_override, end_cursor_override
@@ -711,11 +707,7 @@ def build_tag_index(
 def build_path_index(
     project: CompiledProject,
 ) -> dict[CompiledObjectKey, str]:
-    """Build a key-to-folder lookup from compiled model relative paths.
-
-    The folder value is the model's parent directory relative to models/,
-    with the implicit models/ prefix stripped.
-    """
+    """Build a key-to-folder lookup from compiled model relative paths."""
 
     index: dict[CompiledObjectKey, str] = {}
     model: CompiledModel

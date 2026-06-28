@@ -1,9 +1,4 @@
-"""Generic box-drawing tree renderers shared by lineage output commands.
-
-This module is intentionally dependency-neutral: it operates on opaque node and
-column values through caller-provided callables, so both native and dbt lineage
-output can share one rendering implementation and never drift in style.
-"""
+"""Generic box-drawing tree renderers shared by lineage output commands."""
 
 from __future__ import annotations
 

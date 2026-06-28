@@ -20,11 +20,7 @@ def render_audit_sql(
     adapter: BaseAdapter | None = None,
     relation_overrides: dict[str, str] | None = None,
 ) -> str:
-    """Render audit SQL from unresolved markers with optional relation overrides.
-
-    Relation overrides take precedence for specific ref names. All other refs
-    and sources resolve normally through model/seed locations and source map.
-    """
+    """Render audit SQL from unresolved markers with optional relation overrides."""
 
     effective_overrides: dict[str, str] = (
         relation_overrides if relation_overrides is not None else {}

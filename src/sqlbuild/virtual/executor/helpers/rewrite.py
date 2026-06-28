@@ -200,12 +200,7 @@ def build_rewritten_model_locations(
     selected_model_version_hashes: dict[str, str],
     bound_physical_relations: dict[str, PhysicalRelationRecord],
 ) -> dict[str, CompiledRelationLocation]:
-    """Build rewritten model locations for virtual build execution.
-
-    Selected models point to new physical version targets. Unselected models with
-    existing bound physical relations point to those physical relations so
-    downstream selected models resolve refs against the same physical lineage.
-    """
+    """Build rewritten model locations for virtual build execution."""
 
     rewritten_locations: dict[str, CompiledRelationLocation] = {}
     model: CompiledModel

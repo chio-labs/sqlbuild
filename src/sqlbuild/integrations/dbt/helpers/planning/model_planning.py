@@ -28,7 +28,6 @@ from sqlbuild.compiler.planner.models import (
     GraphIdentityNode,
     GraphNodeKey,
     SelectionStalenessGraph,
-    SelectionStalenessNodeKey,
     SelectionStalenessWarning,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
@@ -42,11 +41,15 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
     expand_combined_downstream,
     expand_combined_upstream,
 )
+from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
+    dbt_graph_node_key,
+    dbt_graph_node_upstream_deps,
+    dbt_selection_staleness_upstream_deps,
+)
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_graph_identity_nodes,
     compose_dbt_graph_version_hash,
     dbt_graph_identity_execution_order,
-    dbt_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.runtime.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
@@ -67,7 +70,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtModelPlanAction,
     DbtModelPlanReason,
-    DbtSupportedResourceType,
 )
 from sqlbuild.shared.helpers.local_node_planning import classify_local_node_plan
 from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
@@ -242,7 +244,7 @@ def _stale_out_of_selection_warning_messages(
     if graph is None:
         return ()
     neutral_graph: SelectionStalenessGraph = SelectionStalenessGraph(
-        upstream_deps=_neutral_upstream_deps(graph=graph, manifest=manifest),
+        upstream_deps=dbt_selection_staleness_upstream_deps(graph=graph, manifest=manifest),
         selected_model_names=frozenset(
             unique_id
             for unique_id in selected_unique_ids
@@ -267,31 +269,6 @@ def _stale_out_of_selection_warning_messages(
         _format_stale_warning(warning=warning, manifest=manifest)
         for warning in classify_selection_staleness_warnings(neutral_graph)
     )
-
-
-def _neutral_upstream_deps(
-    *, graph: DbtCombinedGraph, manifest: DbtManifestIndex
-) -> dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]:
-    return {
-        _neutral_key(key=key, manifest=manifest): tuple(
-            _neutral_key(key=upstream_key, manifest=manifest) for upstream_key in upstream_keys
-        )
-        for key, upstream_keys in graph.upstream_deps.items()
-        if key.owner == DbtCombinedGraphOwner.DBT
-    }
-
-
-def _neutral_key(
-    *, key: DbtCombinedGraphKey, manifest: DbtManifestIndex
-) -> SelectionStalenessNodeKey:
-    resource_type: str = DbtSupportedResourceType.MODEL
-    if key.resource_type == DbtCombinedGraphResourceType.SOURCE:
-        resource_type = (
-            DbtSupportedResourceType.SEED
-            if key.name in manifest.seeds_by_unique_id
-            else DbtSupportedResourceType.SOURCE
-        )
-    return SelectionStalenessNodeKey(resource_type=resource_type, name=key.name)
 
 
 def _entry_is_own_changed(entry: DbtModelPlanEntry) -> bool:
@@ -445,7 +422,7 @@ def _apply_graph_propagation(
     propagated: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
     propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
         request=GraphChangesOnlyPropagationInput(
-            upstream_deps=_dbt_neutral_upstream_deps(graph=graph),
+            upstream_deps=dbt_graph_node_upstream_deps(graph=graph),
             model_keys=frozenset(
                 dbt_graph_node_key(unique_id) for unique_id in entries_by_unique_id
             ),
@@ -514,20 +491,6 @@ def _apply_graph_propagation(
                 reason=DbtModelPlanReason.UPSTREAM_CHANGED,
             )
     return propagated
-
-
-def _dbt_neutral_upstream_deps(
-    *, graph: DbtCombinedGraph
-) -> dict[GraphNodeKey, tuple[GraphNodeKey, ...]]:
-    return {
-        dbt_graph_node_key(key.name): tuple(
-            dbt_graph_node_key(upstream_key.name)
-            for upstream_key in upstream_keys
-            if upstream_key.owner == DbtCombinedGraphOwner.DBT
-        )
-        for key, upstream_keys in graph.upstream_deps.items()
-        if key.owner == DbtCombinedGraphOwner.DBT
-    }
 
 
 def _blocked_sqlbuild_model_names(

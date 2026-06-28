@@ -35,9 +35,9 @@ from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_grap
 from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest.core import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
+from sqlbuild.integrations.dbt.helpers.planning.graph_projection import dbt_graph_node_key
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_write_identity_hashes,
-    dbt_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes,

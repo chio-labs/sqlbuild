@@ -162,7 +162,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/adapters/example/client.py": "class ExampleAdapter:\n    pass\n"
-            + "    # implementation detail\n" * 2000,
+            + "    FILLER = 'implementation detail'\n" * 2000,
         },
         expected_violation_codes=(),
     ),
@@ -171,7 +171,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/virtual/state/classes/example.py": "class ExampleState:\n    pass\n"
-            + "    # implementation detail\n" * 2000,
+            + "    FILLER = 'implementation detail'\n" * 2000,
         },
         expected_violation_codes=(),
     ),
@@ -1678,6 +1678,119 @@ TEST_CASES: list[CheckPathsTestCase] = [
 
                 def collect(values) -> list[object]:
                     return [value for value in values if _exists(value)]
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="flags ad hoc dbt ref-kind scans outside centralized resolver",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/dbt/helpers/planning/ref_scan.py": dedent(
+                """
+                from sqlbuild.shared.types import SqlReferenceKind
+
+
+                def is_dbt_ref(reference) -> bool:
+                    return reference.ref_kind == SqlReferenceKind.DBT_REF
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC052",),
+    ),
+    CheckPathsTestCase(
+        description="allows dbt ref-kind scan in centralized resolver",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/dbt/helpers/manifest/sqlbuild_refs.py": dedent(
+                """
+                from sqlbuild.shared.types import SqlReferenceKind
+
+
+                def is_dbt_ref(reference) -> bool:
+                    return reference.ref_kind == SqlReferenceKind.DBT_REF
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
+        description="flags ad hoc dbt neutral graph key construction",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/dbt/helpers/planning/projection.py": dedent(
+                """
+                from sqlbuild.compiler.planner.models import GraphNodeKey
+
+
+                def project(unique_id: str) -> GraphNodeKey:
+                    return GraphNodeKey(node_type="dbt", node_name=unique_id)
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC053",),
+    ),
+    CheckPathsTestCase(
+        description="flags ad hoc selector plus parsing in dbt code",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/integrations/dbt/helpers/selection/core.py": dedent(
+                """
+                def parse(raw: str) -> tuple[bool, str]:
+                    return raw.startswith("+"), raw.lstrip("+")
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC054", "SC054"),
+    ),
+    CheckPathsTestCase(
+        description="flags multiline docstrings",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                '''
+                def load_example() -> str:
+                    """Load an example.
+
+                    More context belongs in docs or tests.
+                    """
+
+                    return "demo"
+                '''
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC055",),
+    ),
+    CheckPathsTestCase(
+        description="flags standalone comments",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_example() -> str:
+                    # Claude thought this comment was helpful.
+                    return "demo"
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC056",),
+    ),
+    CheckPathsTestCase(
+        description="allows tool pragma comments",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                def load_example(value) -> str:
+                    return value  # type: ignore[no-any-return]
                 """
             ).strip()
             + "\n",
