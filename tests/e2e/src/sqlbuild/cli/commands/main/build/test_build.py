@@ -145,7 +145,6 @@ DEPENDENCY_BASELINE_TEST_CASES: list[DependencyBaselineBuildE2ETestCase] = [
                 "prod",
             ),
             expected_stdout_fragments=(
-                "Cloning deferred boundary relations",
                 "Prephase  defer clone",
                 "Existing destination inputs (1)",
                 "upstream",

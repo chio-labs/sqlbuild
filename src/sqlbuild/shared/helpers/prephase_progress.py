@@ -2,14 +2,85 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TextIO
 
+from sqlbuild.executor.clone.models import CloneItemResult
+from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.models import PrephaseProgressRow
 
 _TYPE_WIDTH: int = 10
 _NAME_WIDTH: int = 40
 _MAX_CAUSE_NAMES: int = 4
+
+
+def run_prephase_clone_stream[RESULT](
+    *,
+    stream: TextIO,
+    title: str,
+    caused_by_names: tuple[str, ...],
+    use_color: bool,
+    run_clone: Callable[[Callable[[int, int, CloneItemResult], None]], RESULT],
+) -> RESULT:
+    """Run clone work with shared prephase streaming output."""
+
+    write_prephase_header(stream=stream, title=title, use_color=use_color)
+    _write_prephase_transient_status(stream=stream, message="Cloning...")
+
+    def on_item(index: int, total: int, item: CloneItemResult) -> None:
+        _clear_prephase_transient_status(stream=stream)
+        write_prephase_row(
+            stream=stream,
+            row=prephase_row_from_clone_item(item=item, caused_by_names=caused_by_names),
+            index=index,
+            total=total,
+            use_color=use_color,
+        )
+        if index < total:
+            _write_prephase_transient_status(
+                stream=stream,
+                message=f"Cloning {index + 1}/{total}...",
+            )
+
+    try:
+        return run_clone(on_item)
+    finally:
+        _clear_prephase_transient_status(stream=stream)
+
+
+def prephase_row_from_clone_item(
+    *, item: CloneItemResult, caused_by_names: tuple[str, ...]
+) -> PrephaseProgressRow:
+    """Build a shared prephase row from a clone item result."""
+
+    return PrephaseProgressRow(
+        label=clone_item_label(item),
+        name=item.name,
+        status=clone_item_status(item),
+        duration_seconds=item.duration_seconds,
+        caused_by_names=caused_by_names,
+    )
+
+
+def clone_item_label(item: CloneItemResult) -> str:
+    """Return the shared prephase row label for a clone item action."""
+
+    if item.action == CloneAction.RECREATED_VIEW:
+        return "view"
+    if item.action == CloneAction.COPIED:
+        return "copy"
+    return "clone"
+
+
+def clone_item_status(item: CloneItemResult) -> str:
+    """Return the shared prephase row status token for a clone item status."""
+
+    if item.status == CloneStatus.SUCCESS:
+        return "OK"
+    if item.status == CloneStatus.WARNING:
+        return "WARN"
+    return "FAIL"
 
 
 def write_prephase_header(*, stream: TextIO, title: str, use_color: bool) -> None:
@@ -86,3 +157,21 @@ def _truncate(value: str, width: int) -> str:
     if width <= 3:
         return value[:width]
     return value[: width - 3] + "..."
+
+
+def _stream_is_tty(stream: TextIO) -> bool:
+    return hasattr(stream, "isatty") and stream.isatty()
+
+
+def _write_prephase_transient_status(*, stream: TextIO, message: str) -> None:
+    if not _stream_is_tty(stream):
+        return
+    stream.write(f"\r  {message}")
+    stream.flush()
+
+
+def _clear_prephase_transient_status(*, stream: TextIO) -> None:
+    if not _stream_is_tty(stream):
+        return
+    stream.write("\r\033[K")
+    stream.flush()

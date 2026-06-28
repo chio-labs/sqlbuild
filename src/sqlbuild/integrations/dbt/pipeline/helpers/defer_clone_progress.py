@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TextIO
 
-from sqlbuild.executor.clone.models import CloneItemResult
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_command_argv
 from sqlbuild.integrations.dbt.helpers.runtime.event_stream import execute_dbt_json_event_stream
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
@@ -18,9 +16,7 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.shared.helpers.prephase_progress import (
     format_prephase_cause_annotation,
     write_prephase_header,
-    write_prephase_row,
 )
-from sqlbuild.shared.models import PrephaseProgressRow
 
 
 def selected_dbt_defer_clone_cause_names(
@@ -37,42 +33,6 @@ def selected_dbt_defer_clone_cause_names(
         model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
         names.add(model.name if model is not None else unique_id)
     return tuple(sorted(names))
-
-
-def write_dbt_defer_clone_prephase_header(
-    *,
-    stream: TextIO,
-    use_color: bool,
-) -> None:
-    """Write dbt defer-clone clone/copy prephase header."""
-
-    write_prephase_header(stream=stream, title="dbt defer clone", use_color=use_color)
-
-
-def write_dbt_defer_clone_prephase_row(
-    *,
-    stream: TextIO,
-    item: CloneItemResult,
-    index: int,
-    total: int,
-    caused_by_names: tuple[str, ...],
-    use_color: bool,
-) -> None:
-    """Write one dbt defer-clone clone/copy row with shared prephase formatting."""
-
-    write_prephase_row(
-        stream=stream,
-        row=PrephaseProgressRow(
-            label=_clone_item_label(item),
-            name=item.name,
-            status=_clone_item_status(item),
-            duration_seconds=item.duration_seconds,
-            caused_by_names=caused_by_names,
-        ),
-        index=index,
-        total=total,
-        use_color=use_color,
-    )
 
 
 def run_dbt_defer_clone_view_chain_prephase(
@@ -111,19 +71,3 @@ def run_dbt_defer_clone_view_chain_prephase(
         enable_status=False,
     )
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
-
-
-def _clone_item_label(item: CloneItemResult) -> str:
-    if item.action == CloneAction.RECREATED_VIEW:
-        return "view"
-    if item.action == CloneAction.COPIED:
-        return "copy"
-    return "clone"
-
-
-def _clone_item_status(item: CloneItemResult) -> str:
-    if item.status == CloneStatus.SUCCESS:
-        return "OK"
-    if item.status == CloneStatus.WARNING:
-        return "WARN"
-    return "FAIL"

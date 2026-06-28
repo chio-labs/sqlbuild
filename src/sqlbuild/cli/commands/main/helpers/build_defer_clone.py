@@ -28,14 +28,13 @@ from sqlbuild.compiler.planner.main.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.types import CloneStatus
 from sqlbuild.shared.helpers.graph_algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
-from sqlbuild.shared.helpers.prephase_progress import write_prephase_header, write_prephase_row
-from sqlbuild.shared.models import PrephaseProgressRow
+from sqlbuild.shared.helpers.prephase_progress import run_prephase_clone_stream
 
 
 def build_defer_clone_boundary_selectors(
@@ -168,33 +167,30 @@ def run_defer_clone_prephase(
         )
         if on_progress is not None:
             on_progress(f"Prepared defer clone plan. ({time.monotonic() - start:.2f}s)")
-            on_progress("Cloning deferred boundary relations...")
-        if progress_stream is not None:
-            write_prephase_header(stream=progress_stream, title="defer clone", use_color=use_color)
-        clone_start: float = time.monotonic()
-        result: CloneExecutionResult = execute_clone(
-            origin_model_entries=clone_pipeline.origin_model_entries,
-            destination_model_entries=clone_pipeline.destination_model_entries,
-            origin_seed_entries=clone_pipeline.origin_seed_entries,
-            destination_seed_entries=clone_pipeline.destination_seed_entries,
-            adapter=adapter,
-            origin_connection=origin_connection,
-            destination_connection=destination_connection,
-            hard_copy=False,
-            on_item=(
-                None
-                if progress_stream is None
-                else lambda index, total, item: write_prephase_row(
-                    stream=progress_stream,
-                    row=_prephase_row_from_clone_item(
-                        item=item,
-                        caused_by_names=caused_by_names,
-                    ),
-                    index=index,
-                    total=total,
-                    use_color=use_color,
-                )
-            ),
+
+        def run_clone(on_item: Any) -> CloneExecutionResult:
+            return execute_clone(
+                origin_model_entries=clone_pipeline.origin_model_entries,
+                destination_model_entries=clone_pipeline.destination_model_entries,
+                origin_seed_entries=clone_pipeline.origin_seed_entries,
+                destination_seed_entries=clone_pipeline.destination_seed_entries,
+                adapter=adapter,
+                origin_connection=origin_connection,
+                destination_connection=destination_connection,
+                hard_copy=False,
+                on_item=on_item,
+            )
+
+        result: CloneExecutionResult = (
+            run_clone(None)
+            if progress_stream is None
+            else run_prephase_clone_stream(
+                stream=progress_stream,
+                title="defer clone",
+                caused_by_names=caused_by_names,
+                use_color=use_color,
+                run_clone=run_clone,
+            )
         )
         failed_or_warning_items: tuple[str, ...] = tuple(
             f"{item.name}: {item.message or item.action.value}"
@@ -219,38 +215,6 @@ def run_defer_clone_prephase(
             run_id=clone_pipeline.destination_project.run_id,
             query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
         )
-        if on_progress is not None:
-            on_progress(
-                f"Cloned deferred boundary relations. ({time.monotonic() - clone_start:.2f}s)"
-            )
     finally:
         adapter.close(origin_connection)
         adapter.close(destination_connection)
-
-
-def _prephase_row_from_clone_item(
-    *, item: CloneItemResult, caused_by_names: tuple[str, ...]
-) -> PrephaseProgressRow:
-    return PrephaseProgressRow(
-        label=_clone_item_label(item),
-        name=item.name,
-        status=_clone_item_status(item),
-        duration_seconds=item.duration_seconds,
-        caused_by_names=caused_by_names,
-    )
-
-
-def _clone_item_label(item: CloneItemResult) -> str:
-    if item.action == CloneAction.RECREATED_VIEW:
-        return "view"
-    if item.action == CloneAction.COPIED:
-        return "copy"
-    return "clone"
-
-
-def _clone_item_status(item: CloneItemResult) -> str:
-    if item.status == CloneStatus.SUCCESS:
-        return "OK"
-    if item.status == CloneStatus.WARNING:
-        return "WARN"
-    return "FAIL"
