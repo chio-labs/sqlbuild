@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.0](https://github.com/chio-labs/sqlbuild/compare/v0.43.0...v0.44.0) (2026-06-28)
+
+
+### Features
+
+* **dbt:** consolidate native and dbt planning helpers ([d99a437](https://github.com/chio-labs/sqlbuild/commit/d99a437a992861567eb5a7133554f042da35c9f7))
+* **structure:** prevent dbt planning drift ([91825b1](https://github.com/chio-labs/sqlbuild/commit/91825b152ec59f15da9dba563b82a450955c63e4))
+
 ## [0.43.0](https://github.com/chio-labs/sqlbuild/compare/v0.42.1...v0.43.0) (2026-06-27)
 
 
