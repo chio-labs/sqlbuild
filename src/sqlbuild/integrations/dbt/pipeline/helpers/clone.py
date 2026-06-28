@@ -96,6 +96,7 @@ def execute_dbt_clone(
     reuse_manifest: DbtManifestIndex,
     selected_nodes: tuple[DbtLsNode, ...],
     hard_copy: bool,
+    on_start: Callable[[int], None] | None = None,
     on_item: Callable[[int, int, CloneItemResult], None] | None = None,
 ) -> CloneExecutionResult:
     """Clone selected dbt models from reuse manifest relations into current relations."""
@@ -109,6 +110,8 @@ def execute_dbt_clone(
         and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
     )
     total: int = len(clonable_models)
+    if on_start is not None:
+        on_start(total)
     origin_locations: dict[str, tuple[str | None, str | None, str]] = {
         reuse_model.unique_id: _relation_location(model=reuse_model)
         for _, reuse_model in clonable_models
