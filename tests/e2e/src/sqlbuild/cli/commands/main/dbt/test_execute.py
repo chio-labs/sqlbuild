@@ -591,8 +591,8 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
             ),
             expected_returncode=0,
             expected_stdout_fragments=(
+                "Plan ready",
                 "Compiling dbt production ref git ref 'prod'",
-                "Cloning deferred dbt boundary relations",
                 "Prephase  dbt defer clone",
                 "[for downstream_orders]",
                 "Skipping dbt: no dbt work selected.",
@@ -642,6 +642,7 @@ def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clone
     fragment: str
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in result.stdout
+    assert result.stdout.index("Plan ready") < result.stdout.index("Prephase  dbt defer clone")
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr
     assert (
@@ -665,8 +666,8 @@ def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clone
             ),
             expected_returncode=0,
             expected_stdout_fragments=(
+                "Plan ready",
                 "Compiling dbt production ref git ref 'prod'",
-                "Cloning deferred dbt boundary relations",
                 "Prephase  dbt defer clone",
                 "[for dbt_bias]",
                 "Prephase  dbt defer clone views",
@@ -710,6 +711,7 @@ def test_given_pure_dbt_selection_when_building_with_defer_clone_then_clones_dbt
     fragment: str
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in result.stdout
+    assert result.stdout.index("Plan ready") < result.stdout.index("Prephase  dbt defer clone")
     assert (
         tuple(query_duckdb(db_path=workspace / "warehouse.duckdb", sql=test_case.rows_sql))
         == test_case.expected_rows
