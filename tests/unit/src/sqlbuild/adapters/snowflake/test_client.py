@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -25,6 +26,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeConnectConfigTestCase,
     SnowflakeExpressionInferenceProfileTestCase,
+    SnowflakeInformationSchemaFilterTestCase,
     SnowflakeLoadSeedTestCase,
     SnowflakeMoveOrCopyRelationTestCase,
     SnowflakePruneSqlTestCase,
@@ -157,6 +159,76 @@ def test_given_mfa_authenticator_when_connecting_then_uses_expected_token_cache_
     adapter.connect(test_case.config)
 
     assert captured_kwargs == test_case.expected_connect_kwargs
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeInformationSchemaFilterTestCase(
+            description="uppercases relation schema filter bind values",
+            database="ANALYTICS",
+            schemas=("staging",),
+            names=("commerce__stg_order",),
+            expected_params=("STAGING", "COMMERCE__STG_ORDER", "ANALYTICS"),
+        )
+    ],
+    ids=["uppercases relation schema filter bind values"],
+)
+def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bind_values(
+    test_case: SnowflakeInformationSchemaFilterTestCase,
+) -> None:
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
+        rows=[("COMMERCE__STG_ORDER", "STAGING", "BASE TABLE", "YES")]
+    )
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    relations: tuple[Any, ...] = adapter.list_relations(
+        cast(Any, connection),
+        database=test_case.database,
+        schemas=test_case.schemas,
+        names=test_case.names,
+    )
+
+    assert cursor.executed_params == test_case.expected_params
+    assert len(relations) == 1
+    assert relations[0].schema == "staging"
+    assert relations[0].name == "commerce__stg_order"
+    assert relations[0].is_transient is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeInformationSchemaFilterTestCase(
+            description="uppercases column schema filter bind values",
+            database="ANALYTICS",
+            schemas=("staging",),
+            names=("commerce__stg_order",),
+            expected_params=("STAGING", "COMMERCE__STG_ORDER", "ANALYTICS"),
+        )
+    ],
+    ids=["uppercases column schema filter bind values"],
+)
+def test_given_lowercase_schema_when_getting_all_columns_then_uppercases_filter_bind_values(
+    test_case: SnowflakeInformationSchemaFilterTestCase,
+) -> None:
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
+        rows=[("COMMERCE__STG_ORDER", "ID", "NUMBER", 38, 0, None)]
+    )
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
+        cast(Any, connection),
+        database=test_case.database,
+        schemas=test_case.schemas,
+        names=test_case.names,
+    )
+
+    assert cursor.executed_params == test_case.expected_params
+    assert tuple(columns) == ("commerce__stg_order",)
+    assert columns["commerce__stg_order"][0].name == "id"
 
 
 @pytest.mark.parametrize(
