@@ -1556,6 +1556,7 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
             ),
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,
+            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
         )
         adapter.execute(
             connection,

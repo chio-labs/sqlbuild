@@ -27,6 +27,7 @@ from sqlbuild.adapter.shared.types import (
     TablePromotionMode,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 
 
 class StrictAdapter(
@@ -759,6 +760,17 @@ class StrictAdapter(
         schema: str,
     ) -> tuple[str, ...]:
         """Render optional source freshness table index DDL statements."""
+        ...
+
+    @abstractmethod
+    def render_insert_source_freshness_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> str:
+        """Render DML that appends source freshness records."""
         ...
 
     @abstractmethod
