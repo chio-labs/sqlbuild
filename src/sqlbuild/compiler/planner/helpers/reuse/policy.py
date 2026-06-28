@@ -7,11 +7,7 @@ from sqlbuild.compiler.planner.types import StandardReuseDecisionKind
 
 
 def decide_reuse_for_node(facts: ReusePolicyNodeFacts) -> str:
-    """Return the canonical planner reuse decision for one physical node.
-
-    Native auto-reuse is always strict: a relation is only reused when the reuse origin's
-    recorded version matches the expected (transitive) version, guaranteeing identical data.
-    """
+    """Return the canonical planner reuse decision for one physical node."""
 
     if (
         facts.expected_identity_present

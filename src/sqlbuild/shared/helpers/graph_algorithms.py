@@ -82,14 +82,7 @@ def resolve_clone_boundary[K](
     is_clonable: Callable[[K], bool],
     is_view: Callable[[K], bool],
 ) -> frozenset[K]:
-    """Return the first non-view clonable ancestors that anchor data for selected nodes.
-
-    Walks upstream from each selected node. Selected nodes and view nodes are walked
-    through (views are recreated, not cloned) so the walk continues to the first
-    clonable non-view ancestor, whose data anchors the recreated view chain. Other
-    non-view nodes stop the walk: they are not cloned and their ancestors are not
-    boundary candidates for this selection.
-    """
+    """Return the first non-view clonable ancestors that anchor data for selected nodes."""
 
     boundary: set[K] = set()
     visited: set[K] = set()
@@ -118,11 +111,7 @@ def resolve_skipped_view_chain[K](
     is_clonable: Callable[[K], bool],
     is_view: Callable[[K], bool],
 ) -> frozenset[K]:
-    """Return out-of-selection view ancestors that must rebuild over cloned boundaries.
-
-    These are the views the clone boundary walk skips; they cannot be cloned as data
-    and must be rebuilt on top of the first cloned non-view ancestor.
-    """
+    """Return out-of-selection view ancestors that must rebuild over cloned boundaries."""
 
     views: set[K] = set()
     visited: set[K] = set()

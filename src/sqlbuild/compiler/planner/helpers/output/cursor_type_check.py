@@ -79,13 +79,7 @@ def check_cursor_type_consistency(
     warehouse_columns: tuple[ColumnInfo, ...],
     sql_analysis_enabled: bool,
 ) -> PlanWarning | None:
-    """Check whether the warehouse column type is consistent with cursor_type.
-
-    Returns a warning or error if a mismatch is detected, None otherwise.
-    With sql_analysis enabled, uses parsed type classification for a hard error on
-    clear mismatches. Without sql_analysis, uses heuristic substring matching for a
-    softer warning.
-    """
+    """Check whether the warehouse column type is consistent with cursor_type."""
 
     if cursor_column is None or cursor_type is None:
         return None
@@ -192,12 +186,7 @@ def _check_with_heuristic(
 
 
 def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
-    """Classify a warehouse type string as timestamp or integer via substrings.
-
-    Returns the matching CursorType or None if unclassifiable. Checks timestamp
-    substrings first to avoid 'INT' matching inside compound names like
-    'TIMESTAMP_NTZ'.
-    """
+    """Classify a warehouse type string as timestamp or integer via substrings."""
 
     upper: str = warehouse_type.upper()
 
@@ -214,11 +203,7 @@ def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
 
 
 def _classify_type_with_polyglot(warehouse_type: str) -> CursorType | None:
-    """Classify a warehouse type string using sql_analysis type parsing.
-
-    Returns the matching CursorType or None if sql_analysis is unavailable or the
-    type cannot be classified.
-    """
+    """Classify a warehouse type string using sql_analysis type parsing."""
 
     polyglot_module: Any | None = import_polyglot()
     if polyglot_module is None:

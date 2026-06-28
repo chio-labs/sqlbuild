@@ -76,11 +76,7 @@ def substitute_sql_vars(
     effective_vars: dict[str, object],
     context_values: Mapping[str, str | None] | None = None,
 ) -> str:
-    """Replace @@name, @@ENV:NAME, and allowed @@CTX:name references in SQL text.
-
-    Interpolation works inside quoted SQL strings. Comments are preserved as
-    authored. Deferred @@@name placeholders are preserved for later phases.
-    """
+    """Replace @@name, @@ENV:NAME, and allowed @@CTX:name references in SQL text."""
 
     if "@@" not in sql:
         return sql

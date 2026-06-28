@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import inspect
+import io
+import tokenize
 from pathlib import Path
 
 from scripts.structure.structure_conventions.constants import (
@@ -80,6 +82,35 @@ _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/shared/classes/*.py",
     "src/sqlbuild/adapter/base/base_adapter.py",
     "src/sqlbuild/virtual/state/classes/*.py",
+)
+_SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
+    "src/sqlbuild/integrations/dbt/helpers/manifest/sqlbuild_refs.py",
+    "src/sqlbuild/integrations/dbt/helpers/manifest/compile_refs.py",
+)
+_SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
+    "src/sqlbuild/shared/helpers/selector_expansion.py",
+)
+_SC056_COMMENT_ALLOWED_PATHS: tuple[str, ...] = (
+    "src/sqlbuild/shared/constants.py",
+    "src/sqlbuild/compiler/compile/helpers/attachment/core.py",
+    "src/sqlbuild/adapter/shared/models.py",
+    "src/sqlbuild/adapters/sqlserver/client.py",
+    "src/sqlbuild/cli/commands/main/helpers/playground/copy.py",
+)
+_SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
+    "#!",
+    "# -*-",
+    "# coding:",
+    "# noqa",
+    "# type: ignore",
+    "# pyright:",
+    "# pylint:",
+    "# pragma:",
+)
+_DOCSTRING_BEARING_NODE_TYPES: tuple[type[ast.AST], ...] = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
 )
 
 
@@ -935,6 +966,160 @@ def check_no_metadata_calls_in_loops(file_path: Path, module: ast.Module) -> lis
     return violations
 
 
+def check_no_ad_hoc_dbt_ref_scans(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject direct dbt ref-kind scans outside the centralized resolver."""
+
+    path_text: str = file_path.as_posix()
+    if "src/sqlbuild/integrations/dbt/" not in path_text:
+        return []
+    if _path_is_allowed(path_text=path_text, allowed_paths=_SC052_DBT_REF_SCAN_ALLOWED_PATHS):
+        return []
+
+    violations: list[Violation] = []
+    node: ast.AST
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Compare):
+            continue
+        if _compare_mentions_dbt_ref_kind(node):
+            violations.append(
+                Violation(
+                    code="SC052",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "dbt integration code must resolve SQLBuild __dbt_ref references through "
+                        "helpers/manifest/sqlbuild_refs.py instead of scanning ref_kind locally"
+                    ),
+                )
+            )
+    return violations
+
+
+def check_no_ad_hoc_dbt_graph_projection(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject direct planner graph-key construction in dbt code outside projection helpers."""
+
+    path_text: str = file_path.as_posix()
+    if "src/sqlbuild/integrations/dbt/" not in path_text:
+        return []
+    if path_text.endswith("src/sqlbuild/integrations/dbt/helpers/planning/graph_projection.py"):
+        return []
+
+    violations: list[Violation] = []
+    node: ast.AST
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call):
+            continue
+        called_name: str | None = _call_base_name(node)
+        if called_name not in {"GraphNodeKey", "SelectionStalenessNodeKey"}:
+            continue
+        violations.append(
+            Violation(
+                code="SC053",
+                path=file_path,
+                line=node.lineno,
+                message=(
+                    "dbt code must construct neutral planner graph keys through "
+                    "helpers/planning/graph_projection.py so model/seed/source mapping cannot drift"
+                ),
+            )
+        )
+    return violations
+
+
+def check_no_ad_hoc_selector_plus_parsing(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject local +selector marker parsing in planner and dbt selection code."""
+
+    path_text: str = file_path.as_posix()
+    if not (
+        "src/sqlbuild/integrations/dbt/" in path_text
+        or "src/sqlbuild/compiler/planner/" in path_text
+    ):
+        return []
+    if _path_is_allowed(
+        path_text=path_text,
+        allowed_paths=_SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS,
+    ):
+        return []
+
+    violations: list[Violation] = []
+    node: ast.AST
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call):
+            continue
+        if not _is_selector_plus_string_method_call(node):
+            continue
+        violations.append(
+            Violation(
+                code="SC054",
+                path=file_path,
+                line=node.lineno,
+                message=(
+                    "planner and dbt selector code must parse + markers with "
+                    "sqlbuild.shared.helpers.selector_expansion.split_selector_expansion"
+                ),
+            )
+        )
+    return violations
+
+
+def check_single_line_docstrings(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject new multiline docstrings in runtime and script code."""
+
+    violations: list[Violation] = []
+    node: ast.AST
+    for node in _docstring_bearing_nodes(module):
+        if not getattr(node, "body", None):
+            continue
+        first_statement: ast.stmt = node.body[0]
+        if not _statement_is_multiline_docstring(first_statement):
+            continue
+        violations.append(
+            Violation(
+                code="SC055",
+                path=file_path,
+                line=first_statement.lineno,
+                message=(
+                    "docstrings must be a single line; move extended explanation into docs or tests"
+                ),
+            )
+        )
+    return violations
+
+
+def check_no_standalone_comments(file_path: Path) -> list[Violation]:
+    """Reject standalone explanatory comments outside narrow legacy/tooling exceptions."""
+
+    path_text: str = file_path.as_posix()
+    if _path_is_allowed(path_text=path_text, allowed_paths=_SC056_COMMENT_ALLOWED_PATHS):
+        return []
+
+    violations: list[Violation] = []
+    source: str = file_path.read_text(encoding="utf-8")
+    token: tokenize.TokenInfo
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        for token in tokens:
+            if token.type != tokenize.COMMENT:
+                continue
+            comment: str = token.string.strip()
+            if comment.startswith(_SC056_COMMENT_ALLOWED_PREFIXES):
+                continue
+            violations.append(
+                Violation(
+                    code="SC056",
+                    path=file_path,
+                    line=token.start[0],
+                    message=(
+                        "standalone comments are not allowed in runtime/script code; prefer clear "
+                        "names or a single-line docstring, and use docs/tests for longer context"
+                    ),
+                )
+            )
+    except tokenize.TokenError:
+        return []
+    return violations
+
+
 def _is_adapter_implementation_file(file_path: Path) -> bool:
     path_text: str = file_path.as_posix()
     if path_text.endswith("/client.py"):
@@ -942,6 +1127,52 @@ def _is_adapter_implementation_file(file_path: Path) -> bool:
     if "/adapters/shared/classes/" in path_text:
         return True
     return path_text.endswith("/adapter/base/base_adapter.py")
+
+
+def _path_is_allowed(*, path_text: str, allowed_paths: tuple[str, ...]) -> bool:
+    return any(path_text.endswith(allowed_path) for allowed_path in allowed_paths)
+
+
+def _compare_mentions_dbt_ref_kind(node: ast.Compare) -> bool:
+    expressions: tuple[ast.expr, ...] = (node.left, *node.comparators)
+    return any(_expression_is_dbt_ref_kind(expression) for expression in expressions)
+
+
+def _expression_is_dbt_ref_kind(node: ast.expr) -> bool:
+    if isinstance(node, ast.Attribute):
+        return node.attr == "DBT_REF" and _base_name(node.value) == "SqlReferenceKind"
+    return False
+
+
+def _call_base_name(node: ast.Call) -> str | None:
+    return _base_name(node.func)
+
+
+def _is_selector_plus_string_method_call(node: ast.Call) -> bool:
+    if not isinstance(node.func, ast.Attribute):
+        return False
+    if node.func.attr not in {"startswith", "endswith", "lstrip", "rstrip"}:
+        return False
+    if not node.args:
+        return False
+    first_arg: ast.expr = node.args[0]
+    return isinstance(first_arg, ast.Constant) and first_arg.value == "+"
+
+
+def _docstring_bearing_nodes(module: ast.Module) -> tuple[ast.AST, ...]:
+    return (
+        module,
+        *(node for node in ast.walk(module) if isinstance(node, _DOCSTRING_BEARING_NODE_TYPES)),
+    )
+
+
+def _statement_is_multiline_docstring(node: ast.stmt) -> bool:
+    if not isinstance(node, ast.Expr):
+        return False
+    if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
+        return False
+    end_lineno: int = getattr(node, "end_lineno", node.lineno)
+    return end_lineno > node.lineno or "\n" in node.value.value
 
 
 def _metadata_call_label(

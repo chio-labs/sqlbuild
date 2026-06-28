@@ -34,11 +34,7 @@ _RESOURCE_TYPE_BY_SELECTOR_KIND: dict[SelectorKind, CompiledResourceType] = {
 
 
 def parse_selector(raw: str) -> ParsedSelector | PathSelector:
-    """Parse one raw selector token into a structured form.
-
-    Returns a ParsedSelector for normal selectors, or a (start, end) tuple
-    for path selectors using the a~b syntax.
-    """
+    """Parse one raw selector token into a structured form."""
 
     stripped: str = raw.strip()
     try:
@@ -104,12 +100,7 @@ def resolve_selectors(
     tag_index: dict[str, frozenset[CompiledObjectKey]] | None = None,
     path_index: dict[CompiledObjectKey, str] | None = None,
 ) -> frozenset[CompiledObjectKey]:
-    """Resolve raw select/exclude strings into a final set of object keys.
-
-    Multiple --select values and space-separated tokens within one --select
-    are unioned. Comma within a token means intersection. --exclude is
-    subtracted from the union.
-    """
+    """Resolve raw select/exclude strings into a final set of object keys."""
 
     effective_tag_index: dict[str, frozenset[CompiledObjectKey]] = tag_index or {}
     effective_path_index: dict[CompiledObjectKey, str] = path_index or {}

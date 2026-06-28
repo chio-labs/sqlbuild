@@ -424,11 +424,7 @@ def _transitive_macro_ids(
 
 
 def _strip_config_block(raw_code: str) -> str:
-    """Return raw_code with leading config blocks and snapshot wrappers removed.
-
-    Snapshot env placement (target_schema) lives in the config() block, so the
-    config text is dropped here; structured config is fingerprinted separately.
-    """
+    """Return raw_code with leading config blocks and snapshot wrappers removed."""
 
     body: str = raw_code
     if _find_jinja_statement(body, "snapshot") is not None:

@@ -247,7 +247,7 @@ def inspect_dbt_source_schemas(
                 try:
                     columns = adapter.describe_relation(connection, relation_name)
                     break
-                except Exception as error:  # best-effort metadata path; surfaced as output warning
+                except Exception as error:
                     errors.append(str(error))
             if columns is None:
                 warnings.append(
@@ -268,7 +268,7 @@ def inspect_dbt_source_schemas(
                 try:
                     seed_columns = adapter.describe_relation(connection, relation_name)
                     break
-                except Exception as error:  # best-effort metadata path; surfaced as output warning
+                except Exception as error:
                     seed_errors.append(str(error))
             if seed_columns is None:
                 warnings.append(

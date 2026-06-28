@@ -20,12 +20,7 @@ _NO_PROGRESS_TRUTHY: frozenset[str] = frozenset({"1", "true", "yes", "on"})
 
 
 def progress_spinners_disabled() -> bool:
-    """Return True when transient spinners are disabled via the environment.
-
-    Color is unaffected. When disabled, status messages are still printed as
-    plain (dimmed) lines, which avoids the animated spinner redrawing over
-    streaming command output (for example when recording terminal GIFs).
-    """
+    """Return True when transient spinners are disabled via the environment."""
 
     value: str | None = os.environ.get(_NO_PROGRESS_ENV_VAR)
     return value is not None and value.strip().lower() in _NO_PROGRESS_TRUTHY

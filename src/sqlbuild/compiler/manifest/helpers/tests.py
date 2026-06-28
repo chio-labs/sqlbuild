@@ -1,7 +1,4 @@
-"""Test node serialization for dbt-compatible manifest.
-
-Maps SQLBuild audits to dbt GenericTest nodes and SQL-native tests to SingularTest nodes.
-"""
+"""Test node serialization for dbt-compatible manifest."""
 
 from __future__ import annotations
 
