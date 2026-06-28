@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.1](https://github.com/chio-labs/sqlbuild/compare/v0.44.0...v0.44.1) (2026-06-28)
+
+
+### Bug Fixes
+
+* **dbt:** show persistent node start progress ([08bb7e2](https://github.com/chio-labs/sqlbuild/commit/08bb7e2a71efbf5d7d2777594e94e9612e5b4002))
+* **dbt:** show persistent node start progress ([ca08eb6](https://github.com/chio-labs/sqlbuild/commit/ca08eb6008dae01580d155234d00be55e623a4e0))
+
 ## [0.44.0](https://github.com/chio-labs/sqlbuild/compare/v0.43.0...v0.44.0) (2026-06-28)
 
 
