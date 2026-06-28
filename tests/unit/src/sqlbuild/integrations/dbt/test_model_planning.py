@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
@@ -1535,22 +1535,24 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
     )
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
     try:
-        write_source_freshness_record(
+        write_source_freshness_records(
             connection=connection,
             execute=adapter.execute,
             database=None,
             schema="main",
-            record=SourceFreshnessRecord(
-                source_name="source.analytics.raw.orders",
-                target_database=None,
-                target_schema="main",
-                target_name="raw_orders",
-                run_id="previous",
-                strategy="column",
-                value_kind="timestamp",
-                data_version="2026-01-01T00:00:00",
-                data_version_hash="previous-hash",
-                observed_at=datetime(2026, 1, 1, tzinfo=UTC),
+            records=(
+                SourceFreshnessRecord(
+                    source_name="source.analytics.raw.orders",
+                    target_database=None,
+                    target_schema="main",
+                    target_name="raw_orders",
+                    run_id="previous",
+                    strategy="column",
+                    value_kind="timestamp",
+                    data_version="2026-01-01T00:00:00",
+                    data_version_hash="previous-hash",
+                    observed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
             ),
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,

@@ -45,6 +45,7 @@ from scripts.structure.structure_conventions.rules import (
     check_no_raw_runtime_diagnostics,
     check_no_relative_imports,
     check_no_sibling_package_imports,
+    check_no_singular_source_freshness_writer,
     check_no_standalone_comments,
     check_no_swallowed_exception_probes,
     check_private_definition_ordering,
@@ -104,6 +105,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_target_reuse_terminology(file_path))
         violations.extend(check_no_swallowed_exception_probes(file_path, module))
         violations.extend(check_no_metadata_calls_in_loops(file_path, module))
+        violations.extend(check_no_singular_source_freshness_writer(file_path, module))
         violations.extend(check_no_ad_hoc_dbt_ref_scans(file_path, module))
         violations.extend(check_no_ad_hoc_dbt_graph_projection(file_path, module))
         violations.extend(check_no_ad_hoc_selector_plus_parsing(file_path, module))

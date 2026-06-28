@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.models import (
     GraphNodeKey,
     PlanOutput,
 )
+from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropArgumentError,
     DbtInteropRuntimeError,
@@ -70,6 +71,11 @@ from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
     resolve_defer_clone_view_chain_terms,
     resolve_defer_clone_view_chain_unique_ids,
     run_dbt_defer_clone_prephase,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone_progress import (
+    run_dbt_defer_clone_view_chain_prephase,
+    selected_dbt_defer_clone_cause_names,
+    write_dbt_defer_clone_prephase_rows,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_manifest_seed_warnings,
@@ -326,8 +332,14 @@ def execute_dbt_interop_from_project(
         if effective_defer_clone_from
         else frozenset()
     )
+    dbt_defer_clone_cause_names: tuple[str, ...] = ()
     if effective_defer_clone_from:
-        run_dbt_defer_clone_prephase(
+        dbt_defer_clone_cause_names = selected_dbt_defer_clone_cause_names(
+            manifest=manifest,
+            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
+        )
+        defer_clone_result: CloneExecutionResult | None = run_dbt_defer_clone_prephase(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             dbt_options=dbt_options,
@@ -338,6 +350,12 @@ def execute_dbt_interop_from_project(
             current_manifest=manifest,
             unique_ids=tuple(sorted(defer_clone_unique_ids)),
             on_progress=on_progress,
+        )
+        write_dbt_defer_clone_prephase_rows(
+            stream=output_stream,
+            result=defer_clone_result,
+            caused_by_names=dbt_defer_clone_cause_names,
+            use_color=use_color,
         )
     defer_clone_view_chain_terms: tuple[str, ...] = (
         resolve_defer_clone_view_chain_terms(
@@ -368,8 +386,20 @@ def execute_dbt_interop_from_project(
         plan=plan,
         replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
         defer_clone_unique_ids=defer_clone_unique_ids,
-        defer_clone_view_chain_terms=defer_clone_view_chain_terms,
     )
+    if defer_clone_view_chain_terms:
+        view_chain_execution: DbtCommandExecutionResult = run_dbt_defer_clone_view_chain_prephase(
+            dbt_options=dbt_options,
+            dbt_executable=plan.dbt_command_argv[0],
+            view_chain_terms=defer_clone_view_chain_terms,
+            view_chain_unique_ids=defer_clone_view_chain_unique_ids,
+            caused_by_names=dbt_defer_clone_cause_names,
+            output_stream=output_stream,
+            use_color=use_color,
+            on_progress=on_progress,
+        )
+        if view_chain_execution.returncode != 0:
+            return view_chain_execution.returncode
     missing_dbt_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]] = {}
     if merged_dbt_argv is None and plan.sqlbuild_skip_reason is None:
         missing_dbt_relation_blocked_models = find_and_report_missing_dbt_relation_blocks(
