@@ -646,3 +646,65 @@ def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clone
         tuple(query_duckdb(db_path=workspace / "warehouse.duckdb", sql=test_case.rows_sql))
         == test_case.expected_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtCloneE2ETestCase(
+            description="dbt build defer-clones dbt boundary for pure dbt selection",
+            command=(
+                "--no-color",
+                "dbt",
+                "build",
+                "--select",
+                "dbt_bias",
+                "--defer-clone-from",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "Compiling dbt production ref git ref 'prod'",
+                "Cloning deferred dbt boundary relations",
+                "dbt execution",
+                "dbt_bias",
+                "SQLBuild (0 selected)",
+                "skipped: no SQLBuild work selected",
+                "Completed successfully.",
+            ),
+            expected_rows=((1, 900), (2, 900)),
+            rows_sql="SELECT order_id, bias_amount_cents FROM main.dbt_bias ORDER BY order_id",
+        )
+    ],
+    ids=["dbt build defer-clones dbt boundary for pure dbt selection"],
+)
+def test_given_pure_dbt_selection_when_building_with_defer_clone_then_clones_dbt_boundary(
+    tmp_path: Path,
+    test_case: DbtCloneE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    workspace: Path = prepare_dbt_diff_workspace(
+        tmp_path=tmp_path,
+        workspace_name="dbt_pure_defer_clone_workspace",
+        include_defer_clone_chain=True,
+    )
+    write_dbt_diff_orders_model(
+        workspace=workspace,
+        amount_cents=111,
+        order_ids=(1, 3),
+        include_unique_key=True,
+        include_cursor_meta=True,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=workspace / "sqlbuild_project",
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    assert (
+        tuple(query_duckdb(db_path=workspace / "warehouse.duckdb", sql=test_case.rows_sql))
+        == test_case.expected_rows
+    )
