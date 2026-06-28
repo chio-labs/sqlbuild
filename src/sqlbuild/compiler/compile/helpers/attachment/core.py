@@ -143,7 +143,6 @@ def build_model_inputs(
             hook_functions=discovered_inputs.hook_functions,
             provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
         )
-        # Keep the interpolated-but-unexpanded form for SQL test macro mocks.
         var_substituted_sql: str = substitute_sql_vars(
             sql=model_file.query_sql,
             file_path=model_file.file_path,

@@ -90,13 +90,6 @@ _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
 _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/shared/helpers/selector_expansion.py",
 )
-_SC056_COMMENT_ALLOWED_PATHS: tuple[str, ...] = (
-    "src/sqlbuild/shared/constants.py",
-    "src/sqlbuild/compiler/compile/helpers/attachment/core.py",
-    "src/sqlbuild/adapter/shared/models.py",
-    "src/sqlbuild/adapters/sqlserver/client.py",
-    "src/sqlbuild/cli/commands/main/helpers/playground/copy.py",
-)
 _SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
     "#!",
     "# -*-",
@@ -1088,10 +1081,6 @@ def check_single_line_docstrings(file_path: Path, module: ast.Module) -> list[Vi
 
 def check_no_standalone_comments(file_path: Path) -> list[Violation]:
     """Reject standalone explanatory comments outside narrow legacy/tooling exceptions."""
-
-    path_text: str = file_path.as_posix()
-    if _path_is_allowed(path_text=path_text, allowed_paths=_SC056_COMMENT_ALLOWED_PATHS):
-        return []
 
     violations: list[Violation] = []
     source: str = file_path.read_text(encoding="utf-8")

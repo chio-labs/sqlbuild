@@ -844,8 +844,6 @@ class SqlServerAdapter(BaseAdapter):
         )
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
-    # Generic contract implementations copied from BaseAdapter for first-class ownership.
-
     def add_columns(
         self,
         connection: Any,
