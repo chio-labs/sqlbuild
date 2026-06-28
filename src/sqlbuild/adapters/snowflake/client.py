@@ -74,6 +74,38 @@ class SnowflakeAdapter(BaseAdapter):
         {"source", "profile", "target", "project_dir", "profiles_dir"}
     )
 
+    @staticmethod
+    def _information_schema_identifier(value: str) -> str:
+        return value.upper()
+
+    @staticmethod
+    def _freshness_request_key(
+        *, database: str | None, schema: str | None, name: str
+    ) -> tuple[str | None, str | None, str]:
+        return (
+            None if database is None else database.upper(),
+            None if schema is None else schema.upper(),
+            name.upper(),
+        )
+
+    @staticmethod
+    def _find_freshness_request_for_row(
+        *,
+        requests_by_key: dict[tuple[str | None, str | None, str], TableFreshnessRequest],
+        database: object | None,
+        schema: object | None,
+        name: object,
+    ) -> TableFreshnessRequest | None:
+        row_database: str | None = None if database is None else str(database).upper()
+        row_schema: str | None = None if schema is None else str(schema).upper()
+        row_name: str = str(name).upper()
+        return (
+            requests_by_key.get((row_database, row_schema, row_name))
+            or requests_by_key.get((None, row_schema, row_name))
+            or requests_by_key.get((row_database, None, row_name))
+            or requests_by_key.get((None, None, row_name))
+        )
+
     def render_read_latest_fingerprints_sql(
         self,
         *,
@@ -229,14 +261,14 @@ class SnowflakeAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
-        clauses: list[str] = ["UPPER(table_name) = UPPER(%s)"]
-        params: list[str] = [name]
+        clauses: list[str] = ["table_name = %s"]
+        params: list[str] = [self._information_schema_identifier(name)]
         if schema is not None:
-            clauses.append("UPPER(table_schema) = UPPER(%s)")
-            params.append(schema)
+            clauses.append("table_schema = %s")
+            params.append(self._information_schema_identifier(schema))
         if database is not None:
-            clauses.append("UPPER(table_catalog) = UPPER(%s)")
-            params.append(database)
+            clauses.append("table_catalog = %s")
+            params.append(self._information_schema_identifier(database))
         cursor: Any = connection.cursor()
         try:
             cursor.execute(
@@ -273,68 +305,79 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         if not requests:
             return {}
-        clauses: list[str] = []
-        params: list[str] = []
+        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
+        requests_by_key: dict[tuple[str | None, str | None, str], TableFreshnessRequest] = {
+            self._freshness_request_key(
+                database=request.database,
+                schema=request.schema,
+                name=request.name,
+            ): request
+            for request in requests
+        }
+        requests_by_scope: dict[tuple[str | None, str | None], list[TableFreshnessRequest]] = {}
         request: TableFreshnessRequest
         for request in requests:
-            request_clauses: list[str] = ["UPPER(table_name) = UPPER(%s)"]
-            params.append(request.name)
-            if request.schema is not None:
-                request_clauses.append("UPPER(table_schema) = UPPER(%s)")
-                params.append(request.schema)
-            if request.database is not None:
-                request_clauses.append("UPPER(table_catalog) = UPPER(%s)")
-                params.append(request.database)
-            clauses.append("(" + " AND ".join(request_clauses) + ")")
-        cursor: Any = connection.cursor()
-        try:
-            cursor.execute(
-                "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
-                "FROM information_schema.tables WHERE " + " OR ".join(clauses),
-                tuple(params),
+            scope: tuple[str | None, str | None] = (
+                None
+                if request.database is None
+                else self._information_schema_identifier(request.database),
+                None
+                if request.schema is None
+                else self._information_schema_identifier(request.schema),
             )
-            rows: list[tuple[Any, ...]] = list(cursor.fetchall())
-        finally:
-            cursor.close()
-
-        results: dict[TableFreshnessRequest, TableFreshnessMetadata] = {}
-        row: tuple[Any, ...]
-        for row in rows:
-            row_database: str | None = str(row[0]) if row[0] is not None else None
-            row_schema: str | None = str(row[1]) if row[1] is not None else None
-            row_name: str = str(row[2])
-            matched_request: TableFreshnessRequest | None = next(
-                (
-                    request
-                    for request in requests
-                    if request not in results
-                    and self._freshness_request_matches(
-                        request=request,
-                        database=row_database,
-                        schema=row_schema,
-                        name=row_name,
+            requests_by_scope.setdefault(scope, []).append(request)
+        for (database, schema), scoped_requests in requests_by_scope.items():
+            clauses: list[str] = []
+            params: list[str] = []
+            if database is not None:
+                clauses.append("table_catalog = %s")
+                params.append(database)
+            if schema is not None:
+                clauses.append("table_schema = %s")
+                params.append(schema)
+            placeholders: str = ", ".join(["%s"] * len(scoped_requests))
+            clauses.append(f"table_name IN ({placeholders})")
+            params.extend(
+                self._information_schema_identifier(request.name) for request in scoped_requests
+            )
+            cursor: Any = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
+                    "FROM information_schema.tables WHERE " + " AND ".join(clauses),
+                    tuple(params),
+                )
+                rows: list[tuple[Any, ...]] = list(cursor.fetchall())
+            finally:
+                cursor.close()
+            row: tuple[Any, ...]
+            for row in rows:
+                matched_request: TableFreshnessRequest | None = (
+                    self._find_freshness_request_for_row(
+                        requests_by_key=requests_by_key,
+                        database=row[0],
+                        schema=row[1],
+                        name=row[2],
                     )
-                ),
-                None,
-            )
-            if matched_request is None:
-                continue
-            table_type: str = str(row[3]).upper()
-            if table_type != "BASE TABLE":
-                raise AdapterUserError(
-                    "Snowflake table freshness metadata only supports physical tables; "
-                    f"found {table_type}"
                 )
-            if row[4] is None:
-                raise AdapterUserError(
-                    "Snowflake table freshness metadata is missing LAST_ALTERED "
-                    f"for {matched_request.name}"
+                if matched_request is None:
+                    continue
+                table_type: str = str(row[3]).upper()
+                if table_type != "BASE TABLE":
+                    raise AdapterUserError(
+                        "Snowflake table freshness metadata only supports physical tables; "
+                        f"found {table_type}"
+                    )
+                if row[4] is None:
+                    raise AdapterUserError(
+                        "Snowflake table freshness metadata is missing LAST_ALTERED "
+                        f"for {matched_request.name}"
+                    )
+                results[matched_request] = TableFreshnessMetadata(
+                    data_version=row[4],
+                    value_kind="timestamp",
+                    observed_at=row[4] if isinstance(row[4], datetime) else None,
                 )
-            results[matched_request] = TableFreshnessMetadata(
-                data_version=row[4],
-                value_kind="timestamp",
-                observed_at=row[4] if isinstance(row[4], datetime) else None,
-            )
         missing_requests: list[TableFreshnessRequest] = [
             request for request in requests if request not in results
         ]
@@ -344,26 +387,6 @@ class SnowflakeAdapter(BaseAdapter):
                 f"Snowflake table freshness metadata not found for {missing_names}"
             )
         return results
-
-    @staticmethod
-    def _freshness_request_matches(
-        *,
-        request: TableFreshnessRequest,
-        database: str | None,
-        schema: str | None,
-        name: str,
-    ) -> bool:
-        if request.name.upper() != name.upper():
-            return False
-        if request.schema is not None and (
-            schema is None or request.schema.upper() != schema.upper()
-        ):
-            return False
-        if request.database is not None and (
-            database is None or request.database.upper() != database.upper()
-        ):
-            return False
-        return True
 
     def persists_python_functions(self) -> bool:
         return True
@@ -1394,14 +1417,14 @@ class SnowflakeAdapter(BaseAdapter):
         schema: str | None,
         name: str,
     ) -> bool:
-        clauses: list[str] = ["UPPER(table_name) = UPPER(%s)"]
-        params: list[str] = [name]
+        clauses: list[str] = ["table_name = %s"]
+        params: list[str] = [self._information_schema_identifier(name)]
         if schema is not None:
-            clauses.append("UPPER(table_schema) = UPPER(%s)")
-            params.append(schema)
+            clauses.append("table_schema = %s")
+            params.append(self._information_schema_identifier(schema))
         if database is not None:
-            clauses.append("UPPER(table_catalog) = UPPER(%s)")
-            params.append(database)
+            clauses.append("table_catalog = %s")
+            params.append(self._information_schema_identifier(database))
         cursor: Any = connection.cursor()
         try:
             cursor.execute(
@@ -1427,15 +1450,15 @@ class SnowflakeAdapter(BaseAdapter):
         params: list[str] = []
         if schemas:
             placeholders: str = ", ".join(["%s"] * len(schemas))
-            query += f" AND UPPER(table_schema) IN ({placeholders})"
-            params.extend(schema.upper() for schema in schemas)
+            query += f" AND table_schema IN ({placeholders})"
+            params.extend(self._information_schema_identifier(schema) for schema in schemas)
         if names:
             placeholders = ", ".join(["%s"] * len(names))
-            query += f" AND UPPER(table_name) IN ({placeholders})"
-            params.extend(name.upper() for name in names)
+            query += f" AND table_name IN ({placeholders})"
+            params.extend(self._information_schema_identifier(name) for name in names)
         if database is not None:
-            query += " AND UPPER(table_catalog) = UPPER(%s)"
-            params.append(database)
+            query += " AND table_catalog = %s"
+            params.append(self._information_schema_identifier(database))
         cursor: Any = connection.cursor()
         try:
             cursor.execute(query, tuple(params))
@@ -1506,15 +1529,15 @@ class SnowflakeAdapter(BaseAdapter):
         query: str = (
             "SELECT column_name, data_type, numeric_precision, numeric_scale, "
             "character_maximum_length FROM information_schema.columns "
-            "WHERE UPPER(table_name) = UPPER(%s)"
+            "WHERE table_name = %s"
         )
-        params: list[str] = [name]
+        params: list[str] = [self._information_schema_identifier(name)]
         if schema is not None:
-            query += " AND UPPER(table_schema) = UPPER(%s)"
-            params.append(schema)
+            query += " AND table_schema = %s"
+            params.append(self._information_schema_identifier(schema))
         if database is not None:
-            query += " AND UPPER(table_catalog) = UPPER(%s)"
-            params.append(database)
+            query += " AND table_catalog = %s"
+            params.append(self._information_schema_identifier(database))
         query += " ORDER BY ordinal_position"
         cursor: Any = connection.cursor()
         try:
@@ -1550,15 +1573,15 @@ class SnowflakeAdapter(BaseAdapter):
         params: list[str] = []
         if schemas:
             placeholders: str = ", ".join(["%s"] * len(schemas))
-            query += f" AND UPPER(table_schema) IN ({placeholders})"
-            params.extend(schema.upper() for schema in schemas)
+            query += f" AND table_schema IN ({placeholders})"
+            params.extend(self._information_schema_identifier(schema) for schema in schemas)
         if names:
             placeholders = ", ".join(["%s"] * len(names))
-            query += f" AND UPPER(table_name) IN ({placeholders})"
-            params.extend(name.upper() for name in names)
+            query += f" AND table_name IN ({placeholders})"
+            params.extend(self._information_schema_identifier(name) for name in names)
         if database is not None:
-            query += " AND UPPER(table_catalog) = UPPER(%s)"
-            params.append(database)
+            query += " AND table_catalog = %s"
+            params.append(self._information_schema_identifier(database))
         query += " ORDER BY table_name, ordinal_position"
         cursor: Any = connection.cursor()
         try:
