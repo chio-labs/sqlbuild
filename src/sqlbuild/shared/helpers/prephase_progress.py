@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
+import threading
+import time
 from collections.abc import Callable
 from typing import TextIO
 
@@ -12,7 +15,9 @@ from sqlbuild.shared.models import PrephaseProgressRow
 
 _TYPE_WIDTH: int = 10
 _NAME_WIDTH: int = 40
+_DURATION_WIDTH: int = 7
 _MAX_CAUSE_NAMES: int = 4
+_SPINNER_FRAMES: tuple[str, ...] = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
 
 def run_prephase_clone_stream[RESULT](
@@ -26,27 +31,37 @@ def run_prephase_clone_stream[RESULT](
     """Run clone work with shared prephase streaming output."""
 
     write_prephase_header(stream=stream, title=title, use_color=use_color)
-    _write_prephase_transient_status(stream=stream, message="Cloning...")
+    stop_spinner: threading.Event = threading.Event()
+    write_lock: threading.Lock = threading.Lock()
+    progress: dict[str, int | None] = {"completed": 0, "total": None}
+    spinner_thread: threading.Thread | None = _start_prephase_spinner(
+        stream=stream,
+        stop_spinner=stop_spinner,
+        write_lock=write_lock,
+        progress=progress,
+    )
 
     def on_item(index: int, total: int, item: CloneItemResult) -> None:
-        _clear_prephase_transient_status(stream=stream)
-        write_prephase_row(
-            stream=stream,
-            row=prephase_row_from_clone_item(item=item, caused_by_names=caused_by_names),
-            index=index,
-            total=total,
-            use_color=use_color,
-        )
-        if index < total:
-            _write_prephase_transient_status(
+        progress["completed"] = index
+        progress["total"] = total
+        with write_lock:
+            _clear_prephase_transient_status(stream=stream)
+            write_prephase_row(
                 stream=stream,
-                message=f"Cloning {index + 1}/{total}...",
+                row=prephase_row_from_clone_item(item=item, caused_by_names=caused_by_names),
+                index=index,
+                total=total,
+                use_color=use_color,
             )
 
     try:
         return run_clone(on_item)
     finally:
-        _clear_prephase_transient_status(stream=stream)
+        stop_spinner.set()
+        if spinner_thread is not None:
+            spinner_thread.join(timeout=1)
+        with write_lock:
+            _clear_prephase_transient_status(stream=stream)
 
 
 def prephase_row_from_clone_item(
@@ -87,7 +102,7 @@ def write_prephase_header(*, stream: TextIO, title: str, use_color: bool) -> Non
     """Write a shared prephase header."""
 
     style: CliStyle = CliStyle(use_color=use_color)
-    stream.write(f"\n{style.object_name('Prephase')}  {style.muted(title)}\n\n")
+    stream.write(f"\n{style.object_name('Prephase')}  {style.muted(title)}\n")
     stream.flush()
 
 
@@ -120,14 +135,13 @@ def write_prephase_row(
     index_width: int = len(str(total)) * 2 + 1
     ctr: str = f"{index}/{total}".rjust(index_width)
     name: str = _truncate(row.name, _NAME_WIDTH)
-    status: str = style.status(row.status)
+    status: str = _pad_styled(value=style.status(row.status), plain_value=row.status, width=6)
     duration: str = _format_duration(row.duration_seconds)
     detail: str = row.detail
-    cause: str = format_prephase_cause_annotation(row.caused_by_names)
+    cause: str = style.muted(format_prephase_cause_annotation(row.caused_by_names))
     suffix: str = "".join(part for part in (detail, cause) if part)
-    stream.write(
-        f"  {ctr}  {row.label:<{_TYPE_WIDTH}}{name:<{_NAME_WIDTH}} {status:<6} {duration}{suffix}\n"
-    )
+    prefix: str = f"  {ctr}  {row.label:<{_TYPE_WIDTH}}{name:<{_NAME_WIDTH}}"
+    stream.write(f"{prefix} {status} {duration:<{_DURATION_WIDTH}}{suffix}\n")
     stream.flush()
 
 
@@ -159,8 +173,62 @@ def _truncate(value: str, width: int) -> str:
     return value[: width - 3] + "..."
 
 
+def _pad_styled(*, value: str, plain_value: str, width: int) -> str:
+    return value + " " * max(0, width - len(plain_value))
+
+
 def _stream_is_tty(stream: TextIO) -> bool:
     return hasattr(stream, "isatty") and stream.isatty()
+
+
+def _start_prephase_spinner(
+    *,
+    stream: TextIO,
+    stop_spinner: threading.Event,
+    write_lock: threading.Lock,
+    progress: dict[str, int | None],
+) -> threading.Thread | None:
+    if not _stream_is_tty(stream):
+        return None
+    thread: threading.Thread = threading.Thread(
+        target=_run_prephase_spinner,
+        kwargs={
+            "stream": stream,
+            "stop_spinner": stop_spinner,
+            "write_lock": write_lock,
+            "progress": progress,
+        },
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def _run_prephase_spinner(
+    *,
+    stream: TextIO,
+    stop_spinner: threading.Event,
+    write_lock: threading.Lock,
+    progress: dict[str, int | None],
+) -> None:
+    frame: str
+    for frame in itertools.cycle(_SPINNER_FRAMES):
+        if stop_spinner.is_set():
+            return
+        with write_lock:
+            _write_prephase_transient_status(
+                stream=stream,
+                message=f"{frame} {_format_clone_progress(progress=progress)}",
+            )
+        time.sleep(0.12)
+
+
+def _format_clone_progress(*, progress: dict[str, int | None]) -> str:
+    completed: int | None = progress["completed"]
+    total: int | None = progress["total"]
+    if completed is None or total is None:
+        return "Cloning..."
+    return f"Cloning {completed}/{total}..."
 
 
 def _write_prephase_transient_status(*, stream: TextIO, message: str) -> None:
