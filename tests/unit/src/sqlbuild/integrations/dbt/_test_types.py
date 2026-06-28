@@ -176,6 +176,7 @@ class DbtEventStreamTestCase:
     stdout_lines: tuple[str, ...]
     expected_unique_ids: tuple[str, ...]
     expected_output_fragments: tuple[str, ...] = ()
+    expected_rendered_rows: int | None = None
 
 
 @dataclass(frozen=True)

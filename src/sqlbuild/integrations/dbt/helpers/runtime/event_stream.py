@@ -71,6 +71,7 @@ def execute_dbt_json_event_stream(
     pending_messages: dict[str, list[DbtNodeMessage]] = {}
     results: list[DbtNodeExecutionResult] = []
     recorded_unique_ids: set[str] = set()
+    started_indexes: dict[str, int] = {}
     display_index: int = 0
     status: TransientStatusReporter | None = _start_dbt_status(
         stream=stream,
@@ -111,6 +112,19 @@ def execute_dbt_json_event_stream(
                         status.start(node_start_message)
                     else:
                         status.update(node_start_message)
+                    start_result: DbtNodeExecutionResult | None = parse_dbt_node_start_result(
+                        event=event
+                    )
+                    if start_result is not None and start_result.unique_id not in started_indexes:
+                        display_index += 1
+                        started_indexes[start_result.unique_id] = display_index
+                        render_dbt_node_result(
+                            stream=stream,
+                            style=style,
+                            result=start_result,
+                            display_index=display_index,
+                            display_total=display_total,
+                        )
                     continue
                 result: DbtNodeExecutionResult | None = parse_dbt_node_result(
                     event=event,
@@ -127,12 +141,15 @@ def execute_dbt_json_event_stream(
                 results.append(result)
                 if on_node_result is not None:
                     on_node_result(result)
-                display_index += 1
+                result_display_index: int | None = started_indexes.get(result.unique_id)
+                if result_display_index is None:
+                    display_index += 1
+                    result_display_index = display_index
                 render_dbt_node_result(
                     stream=stream,
                     style=style,
                     result=result,
-                    display_index=display_index,
+                    display_index=result_display_index,
                     display_total=display_total,
                 )
 
@@ -168,6 +185,30 @@ def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
     resource_type: str = _str_value(node_info.get("resource_type")) or "node"
     node_name: str = _str_value(node_info.get("node_name")) or unique_id
     return f"Running dbt {resource_type} {node_name}..."
+
+
+def parse_dbt_node_start_result(*, event: dict[str, object]) -> DbtNodeExecutionResult | None:
+    """Parse a dbt node-start event into a renderable START row."""
+
+    info: dict[str, object] = _dict_value(event.get("info"))
+    event_name: str | None = _str_value(info.get("name"))
+    if event_name not in _NODE_STARTED_EVENT_NAMES:
+        return None
+    data: dict[str, object] = _dict_value(event.get("data"))
+    node_info: dict[str, object] = _dict_value(data.get("node_info"))
+    unique_id: str | None = _str_value(node_info.get("unique_id"))
+    if unique_id is None or unique_id.startswith("unit_test"):
+        return None
+    return DbtNodeExecutionResult(
+        unique_id=unique_id,
+        resource_type=_str_value(node_info.get("resource_type")) or "node",
+        node_name=_str_value(node_info.get("node_name")) or unique_id,
+        status="start",
+        index=_int_value(data.get("index")),
+        total=_int_value(data.get("total")) or _int_value(data.get("num_models")),
+        execution_time=None,
+        materialized=_str_value(node_info.get("materialized")),
+    )
 
 
 def parse_dbt_json_event(*, line: str) -> dict[str, object] | None:
@@ -310,6 +351,8 @@ def _display_status(status: str) -> str:
         return "SKIP"
     if normalized in {"error", "fail", "failed"}:
         return "FAIL"
+    if normalized == "start":
+        return "START"
     return status.upper()
 
 
