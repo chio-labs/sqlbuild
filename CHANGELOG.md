@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.4](https://github.com/chio-labs/sqlbuild/compare/v0.44.3...v0.44.4) (2026-06-28)
+
+
+### Bug Fixes
+
+* **dbt:** order clone views after dependencies ([e135b50](https://github.com/chio-labs/sqlbuild/commit/e135b5004752d3ad8926abb357a1035566b63f7e))
+* **dbt:** order clone views after dependencies ([f201639](https://github.com/chio-labs/sqlbuild/commit/f201639edf3a2cc9b74d2144446ae5965387b76a))
+
 ## [0.44.3](https://github.com/chio-labs/sqlbuild/compare/v0.44.2...v0.44.3) (2026-06-28)
 
 
