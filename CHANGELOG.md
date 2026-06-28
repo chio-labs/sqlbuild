@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.45.0](https://github.com/chio-labs/sqlbuild/compare/v0.44.4...v0.45.0) (2026-06-28)
+
+
+### Features
+
+* configure defer clone from project config ([6242def](https://github.com/chio-labs/sqlbuild/commit/6242def3f72b6d14bae98bd680143793ce71aa94))
+
+
+### Performance Improvements
+
+* optimize source freshness metadata planning ([ac737bf](https://github.com/chio-labs/sqlbuild/commit/ac737bf3f9135668260107d4819172643031c8f0))
+
 ## [0.44.4](https://github.com/chio-labs/sqlbuild/compare/v0.44.3...v0.44.4) (2026-06-28)
 
 
