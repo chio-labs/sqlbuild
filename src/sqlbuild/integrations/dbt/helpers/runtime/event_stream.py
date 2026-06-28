@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
@@ -72,6 +73,7 @@ def execute_dbt_json_event_stream(
     results: list[DbtNodeExecutionResult] = []
     recorded_unique_ids: set[str] = set()
     started_indexes: dict[str, int] = {}
+    active_nodes: dict[str, tuple[str, float]] = {}
     display_index: int = 0
     status: TransientStatusReporter | None = _start_dbt_status(
         stream=stream,
@@ -128,6 +130,16 @@ def execute_dbt_json_event_stream(
                             display_index=display_index,
                             display_total=display_total,
                         )
+                        active_nodes[start_result.unique_id] = (
+                            start_result.node_name,
+                            time.monotonic(),
+                        )
+                        status = _update_active_node_status(
+                            status=status,
+                            active_nodes=active_nodes,
+                            stream=stream,
+                            use_color=use_color,
+                        )
                     continue
                 result: DbtNodeExecutionResult | None = parse_dbt_node_result(
                     event=event,
@@ -141,6 +153,7 @@ def execute_dbt_json_event_stream(
                 if status is not None:
                     status.close()
                     status = None
+                active_nodes.pop(result.unique_id, None)
                 results.append(result)
                 if on_node_result is not None:
                     on_node_result(result)
@@ -154,6 +167,12 @@ def execute_dbt_json_event_stream(
                     result=result,
                     display_index=result_display_index,
                     display_total=display_total,
+                )
+                status = _update_active_node_status(
+                    status=status,
+                    active_nodes=active_nodes,
+                    stream=stream,
+                    use_color=use_color,
                 )
 
     returncode: int = process.wait()
@@ -171,6 +190,38 @@ def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusRepo
     )
     status.start("Waiting for dbt node output...")
     return status
+
+
+def _update_active_node_status(
+    *,
+    status: TransientStatusReporter | None,
+    active_nodes: dict[str, tuple[str, float]],
+    stream: TextIO,
+    use_color: bool,
+) -> TransientStatusReporter | None:
+    if not stream.isatty() or not active_nodes:
+        return None
+    message: str = _format_active_node_status(active_nodes=active_nodes)
+    if status is None:
+        status = TransientStatusReporter(stream=stream, use_color=use_color)
+        status.start(message)
+        return status
+    status.update(message)
+    return status
+
+
+def _format_active_node_status(*, active_nodes: dict[str, tuple[str, float]]) -> str:
+    now: float = time.monotonic()
+    ordered: tuple[tuple[str, float], ...] = tuple(
+        sorted(active_nodes.values(), key=lambda item: item[1])
+    )
+    displayed: tuple[str, ...] = tuple(
+        f"{name} {max(0, int(now - started_at))}s" for name, started_at in ordered[:3]
+    )
+    extra_count: int = len(ordered) - len(displayed)
+    suffix: str = f", +{extra_count} more" if extra_count > 0 else ""
+    node_label: str = "node" if len(active_nodes) == 1 else "nodes"
+    return f"running {len(active_nodes)} dbt {node_label}: {', '.join(displayed)}{suffix}"
 
 
 def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
