@@ -36,6 +36,7 @@ def run_prephase_clone_stream[RESULT](
     progress: dict[str, int | None] = {"completed": 0, "total": None}
     spinner_thread: threading.Thread | None = _start_prephase_spinner(
         stream=stream,
+        use_color=use_color,
         stop_spinner=stop_spinner,
         write_lock=write_lock,
         progress=progress,
@@ -62,6 +63,7 @@ def run_prephase_clone_stream[RESULT](
             spinner_thread.join(timeout=1)
         with write_lock:
             _clear_prephase_transient_status(stream=stream)
+            _show_cursor(stream=stream)
 
 
 def prephase_row_from_clone_item(
@@ -184,16 +186,19 @@ def _stream_is_tty(stream: TextIO) -> bool:
 def _start_prephase_spinner(
     *,
     stream: TextIO,
+    use_color: bool,
     stop_spinner: threading.Event,
     write_lock: threading.Lock,
     progress: dict[str, int | None],
 ) -> threading.Thread | None:
     if not _stream_is_tty(stream):
         return None
+    _hide_cursor(stream=stream)
     thread: threading.Thread = threading.Thread(
         target=_run_prephase_spinner,
         kwargs={
             "stream": stream,
+            "use_color": use_color,
             "stop_spinner": stop_spinner,
             "write_lock": write_lock,
             "progress": progress,
@@ -207,10 +212,12 @@ def _start_prephase_spinner(
 def _run_prephase_spinner(
     *,
     stream: TextIO,
+    use_color: bool,
     stop_spinner: threading.Event,
     write_lock: threading.Lock,
     progress: dict[str, int | None],
 ) -> None:
+    style: CliStyle = CliStyle(use_color=use_color)
     frame: str
     for frame in itertools.cycle(_SPINNER_FRAMES):
         if stop_spinner.is_set():
@@ -218,7 +225,7 @@ def _run_prephase_spinner(
         with write_lock:
             _write_prephase_transient_status(
                 stream=stream,
-                message=f"{frame} {_format_clone_progress(progress=progress)}",
+                message=f"{style.success(frame)} {_format_clone_progress(progress=progress)}",
             )
         time.sleep(0.12)
 
@@ -242,4 +249,18 @@ def _clear_prephase_transient_status(*, stream: TextIO) -> None:
     if not _stream_is_tty(stream):
         return
     stream.write("\r\033[K")
+    stream.flush()
+
+
+def _hide_cursor(*, stream: TextIO) -> None:
+    if not _stream_is_tty(stream):
+        return
+    stream.write("\033[?25l")
+    stream.flush()
+
+
+def _show_cursor(*, stream: TextIO) -> None:
+    if not _stream_is_tty(stream):
+        return
+    stream.write("\033[?25h")
     stream.flush()
