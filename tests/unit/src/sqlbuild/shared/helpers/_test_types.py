@@ -67,6 +67,15 @@ class PrephaseCauseAnnotationTestCase:
 
 
 @dataclass(frozen=True)
+class PrephaseCloneItemRowTestCase:
+    description: str
+    action: str
+    status: str
+    expected_label: str
+    expected_status: str
+
+
+@dataclass(frozen=True)
 class RelationLookupTestCase:
     description: str
     warehouse_relations: tuple[tuple[str | None, str, bool | None], ...]

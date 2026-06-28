@@ -6,13 +6,13 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import GraphNodeKey
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
@@ -53,6 +53,7 @@ from sqlbuild.shared.helpers.graph_algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
+from sqlbuild.shared.helpers.prephase_progress import run_prephase_clone_stream
 from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 
@@ -83,7 +84,9 @@ def run_dbt_defer_clone_prephase(
     current_manifest: DbtManifestIndex,
     unique_ids: tuple[str, ...],
     on_progress: Callable[[str], None] | None,
-    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
+    output_stream: TextIO,
+    use_color: bool,
+    caused_by_names: tuple[str, ...],
 ) -> CloneExecutionResult | None:
     if not unique_ids:
         _report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
@@ -120,37 +123,42 @@ def run_dbt_defer_clone_prephase(
         DbtLsNode(unique_id=unique_id, resource_type=DbtSupportedResourceType.MODEL)
         for unique_id in unique_ids
     )
-    _report_progress(on_progress, "Cloning deferred dbt boundary relations...")
-    clone_start: float = time.monotonic()
-    connection: Any = adapter.connect(connection_config)
-    try:
-        result: CloneExecutionResult = execute_dbt_clone(
-            adapter=adapter,
-            connection=connection,
-            current_manifest=current_manifest,
-            reuse_manifest=reuse_manifest,
-            selected_nodes=selected_nodes,
-            hard_copy=False,
-            on_item=on_item,
-        )
-        _write_defer_clone_dbt_fingerprints(
-            result=result,
-            adapter=adapter,
-            connection=connection,
-            project=project,
-            current_manifest=current_manifest,
-            reuse_manifest=reuse_manifest,
-            unique_ids=unique_ids,
-            on_progress=on_progress,
-        )
-    finally:
-        adapter.close(connection)
+
+    def run_clone(on_item: Any) -> CloneExecutionResult:
+        connection: Any = adapter.connect(connection_config)
+        try:
+            result: CloneExecutionResult = execute_dbt_clone(
+                adapter=adapter,
+                connection=connection,
+                current_manifest=current_manifest,
+                reuse_manifest=reuse_manifest,
+                selected_nodes=selected_nodes,
+                hard_copy=False,
+                on_item=on_item,
+            )
+            _write_defer_clone_dbt_fingerprints(
+                result=result,
+                adapter=adapter,
+                connection=connection,
+                project=project,
+                current_manifest=current_manifest,
+                reuse_manifest=reuse_manifest,
+                unique_ids=unique_ids,
+                on_progress=on_progress,
+            )
+        finally:
+            adapter.close(connection)
+        return result
+
+    result: CloneExecutionResult = run_prephase_clone_stream(
+        stream=output_stream,
+        title="dbt defer clone",
+        caused_by_names=caused_by_names,
+        use_color=use_color,
+        run_clone=run_clone,
+    )
     if any(item.status == CloneStatus.FAILED for item in result.item_results):
         raise DbtInteropRuntimeError("failed to clone one or more deferred dbt boundary relations")
-    _report_progress(
-        on_progress,
-        f"Cloned deferred dbt boundary relations. ({time.monotonic() - clone_start:.2f}s)",
-    )
     return result
 
 
