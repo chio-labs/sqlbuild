@@ -34,7 +34,7 @@ from sqlbuild.shared.helpers.graph_algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
-from sqlbuild.shared.helpers.prephase_progress import write_prephase_header, write_prephase_rows
+from sqlbuild.shared.helpers.prephase_progress import write_prephase_header, write_prephase_row
 from sqlbuild.shared.models import PrephaseProgressRow
 
 
@@ -169,6 +169,8 @@ def run_defer_clone_prephase(
         if on_progress is not None:
             on_progress(f"Prepared defer clone plan. ({time.monotonic() - start:.2f}s)")
             on_progress("Cloning deferred boundary relations...")
+        if progress_stream is not None:
+            write_prephase_header(stream=progress_stream, title="defer clone", use_color=use_color)
         clone_start: float = time.monotonic()
         result: CloneExecutionResult = execute_clone(
             origin_model_entries=clone_pipeline.origin_model_entries,
@@ -179,6 +181,20 @@ def run_defer_clone_prephase(
             origin_connection=origin_connection,
             destination_connection=destination_connection,
             hard_copy=False,
+            on_item=(
+                None
+                if progress_stream is None
+                else lambda index, total, item: write_prephase_row(
+                    stream=progress_stream,
+                    row=_prephase_row_from_clone_item(
+                        item=item,
+                        caused_by_names=caused_by_names,
+                    ),
+                    index=index,
+                    total=total,
+                    use_color=use_color,
+                )
+            ),
         )
         failed_or_warning_items: tuple[str, ...] = tuple(
             f"{item.name}: {item.message or item.action.value}"
@@ -207,33 +223,20 @@ def run_defer_clone_prephase(
             on_progress(
                 f"Cloned deferred boundary relations. ({time.monotonic() - clone_start:.2f}s)"
             )
-        if progress_stream is not None:
-            write_prephase_header(stream=progress_stream, title="defer clone", use_color=use_color)
-            write_prephase_rows(
-                stream=progress_stream,
-                rows=_prephase_rows_from_clone_result(
-                    result=result,
-                    caused_by_names=caused_by_names,
-                ),
-                use_color=use_color,
-            )
     finally:
         adapter.close(origin_connection)
         adapter.close(destination_connection)
 
 
-def _prephase_rows_from_clone_result(
-    *, result: CloneExecutionResult, caused_by_names: tuple[str, ...]
-) -> tuple[PrephaseProgressRow, ...]:
-    return tuple(
-        PrephaseProgressRow(
-            label=_clone_item_label(item),
-            name=item.name,
-            status=_clone_item_status(item),
-            duration_seconds=item.duration_seconds,
-            caused_by_names=caused_by_names,
-        )
-        for item in result.item_results
+def _prephase_row_from_clone_item(
+    *, item: CloneItemResult, caused_by_names: tuple[str, ...]
+) -> PrephaseProgressRow:
+    return PrephaseProgressRow(
+        label=_clone_item_label(item),
+        name=item.name,
+        status=_clone_item_status(item),
+        duration_seconds=item.duration_seconds,
+        caused_by_names=caused_by_names,
     )
 
 

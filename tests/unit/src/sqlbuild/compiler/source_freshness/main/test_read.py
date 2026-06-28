@@ -106,14 +106,18 @@ def test_given_latest_sql_renderer_when_reading_source_freshness_then_executes_r
     "test_case",
     [
         WriteSourceFreshnessIndexTestCase(
-            description="creates index before inserting source freshness row",
+            description=(
+                "creates index once before inserting source freshness rows in one statement"
+            ),
             expected_index_sql="CREATE INDEX sentinel_source_freshness_idx",
             expected_insert_prefix="INSERT INTO main._sqlbuild_source_freshness",
+            expected_statement_count=3,
+            expected_values_separator="), (",
         )
     ],
-    ids=["creates index before inserting source freshness row"],
+    ids=["creates index once before inserting source freshness rows in one statement"],
 )
-def test_given_index_renderer_when_writing_source_freshness_then_executes_index_before_insert(
+def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts_after_index(
     test_case: WriteSourceFreshnessIndexTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
@@ -137,14 +141,29 @@ def test_given_index_renderer_when_writing_source_freshness_then_executes_index_
                 data_version_hash="hash_orders",
                 observed_at=datetime(2026, 1, 15, 12, 5, 0),
             ),
+            SourceFreshnessRecord(
+                source_name="raw.customers",
+                target_database=None,
+                target_schema="raw",
+                target_name="customers",
+                run_id="run_001",
+                strategy="adapter_metadata",
+                value_kind="timestamp",
+                data_version="2026-01-15T12:10:00",
+                data_version_hash="hash_customers",
+                observed_at=datetime(2026, 1, 15, 12, 15, 0),
+            ),
         ),
         render_qualified_name=render_qualified_name,
         render_framework_type=adapter.render_framework_type,
+        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
         render_create_index_sqls=render_create_source_freshness_index_sqls,
     )
 
+    assert len(execute.executed_sql) == test_case.expected_statement_count
     assert execute.executed_sql[1] == test_case.expected_index_sql
     assert execute.executed_sql[2].startswith(test_case.expected_insert_prefix)
+    assert test_case.expected_values_separator in execute.executed_sql[2]
 
 
 @pytest.mark.parametrize(

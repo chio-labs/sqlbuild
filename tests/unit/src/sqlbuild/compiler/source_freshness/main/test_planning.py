@@ -384,6 +384,7 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
             ),
             render_qualified_name=RENDER_QUALIFIED_NAME,
             render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
         )
 
         result: StandardSourceFreshnessPlanningResult = (

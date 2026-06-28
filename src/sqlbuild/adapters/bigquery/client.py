@@ -42,7 +42,11 @@ from sqlbuild.adapter.shared.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.adapters.shared.helpers.source_freshness import (
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.shared.helpers.diagnostics_logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
@@ -151,6 +155,20 @@ class BigQueryAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         del database, schema
         return ()
+
+    def render_insert_source_freshness_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> str:
+        return render_insert_source_freshness_records_sql(
+            database=database,
+            schema=schema,
+            records=records,
+            render_qualified_name=self.render_qualified_name,
+        )
 
     def render_create_node_result_table_sql(
         self,

@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -55,6 +56,19 @@ class RecordingAdapter:
     ) -> tuple[str, ...]:
         del database, schema
         return ()
+
+    def render_insert_source_freshness_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> str:
+        return DuckDbAdapter().render_insert_source_freshness_records_sql(
+            database=database,
+            schema=schema,
+            records=records,
+        )
 
 
 def model_entry(name: str) -> ModelPlanEntry:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TextIO
 
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_command_argv
 from sqlbuild.integrations.dbt.helpers.runtime.event_stream import execute_dbt_json_event_stream
@@ -18,7 +18,7 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.shared.helpers.prephase_progress import (
     format_prephase_cause_annotation,
     write_prephase_header,
-    write_prephase_rows,
+    write_prephase_row,
 )
 from sqlbuild.shared.models import PrephaseProgressRow
 
@@ -39,30 +39,38 @@ def selected_dbt_defer_clone_cause_names(
     return tuple(sorted(names))
 
 
-def write_dbt_defer_clone_prephase_rows(
+def write_dbt_defer_clone_prephase_header(
     *,
     stream: TextIO,
-    result: CloneExecutionResult | None,
+    use_color: bool,
+) -> None:
+    """Write dbt defer-clone clone/copy prephase header."""
+
+    write_prephase_header(stream=stream, title="dbt defer clone", use_color=use_color)
+
+
+def write_dbt_defer_clone_prephase_row(
+    *,
+    stream: TextIO,
+    item: CloneItemResult,
+    index: int,
+    total: int,
     caused_by_names: tuple[str, ...],
     use_color: bool,
 ) -> None:
-    """Write dbt defer-clone clone/copy rows with shared prephase formatting."""
+    """Write one dbt defer-clone clone/copy row with shared prephase formatting."""
 
-    if result is None or not result.item_results:
-        return
-    write_prephase_header(stream=stream, title="dbt defer clone", use_color=use_color)
-    write_prephase_rows(
+    write_prephase_row(
         stream=stream,
-        rows=tuple(
-            PrephaseProgressRow(
-                label=_clone_item_label(item),
-                name=item.name,
-                status=_clone_item_status(item),
-                duration_seconds=item.duration_seconds,
-                caused_by_names=caused_by_names,
-            )
-            for item in result.item_results
+        row=PrephaseProgressRow(
+            label=_clone_item_label(item),
+            name=item.name,
+            status=_clone_item_status(item),
+            duration_seconds=item.duration_seconds,
+            caused_by_names=caused_by_names,
         ),
+        index=index,
+        total=total,
         use_color=use_color,
     )
 
@@ -82,8 +90,6 @@ def run_dbt_defer_clone_view_chain_prephase(
 
     if not view_chain_terms:
         return DbtCommandExecutionResult(returncode=0)
-    if on_progress is not None:
-        on_progress("Refreshing deferred dbt view chain...")
     write_prephase_header(stream=output_stream, title="dbt defer clone views", use_color=use_color)
     detail: str = format_prephase_cause_annotation(caused_by_names)
     returncode: int
@@ -102,9 +108,8 @@ def run_dbt_defer_clone_view_chain_prephase(
         target_path=dbt_options.target_path,
         display_total=len(view_chain_terms),
         detail_by_unique_id={unique_id: detail for unique_id in view_chain_unique_ids},
+        enable_status=False,
     )
-    if on_progress is not None:
-        on_progress("Refreshed deferred dbt view chain.")
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
 
 

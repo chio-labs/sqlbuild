@@ -28,6 +28,9 @@ from tests.integration.src.sqlbuild.compiler.source_freshness.main._test_types i
 RENDER_QUALIFIED_NAME: Callable[..., str | None] = DuckDbAdapter().render_qualified_name
 RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_framework_type
 RENDER_READ_LATEST_SQL: Callable[..., str] = DuckDbAdapter().render_read_latest_source_freshness_sql
+RENDER_INSERT_RECORDS_SQL: Callable[..., str] = (
+    DuckDbAdapter().render_insert_source_freshness_records_sql
+)
 RELATION_EXISTS: Callable[..., bool] = DuckDbAdapter().relation_exists
 
 SOURCE_FRESHNESS_ROUND_TRIP_TEST_CASES: list[SourceFreshnessRoundTripTestCase] = [
@@ -302,6 +305,7 @@ def test_given_source_freshness_records_when_writing_and_reading_then_returns_ex
         records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
@@ -403,6 +407,7 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
         records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
     )
 
     row: Any = connection.execute(
@@ -438,6 +443,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
         records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
@@ -572,6 +578,7 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
         records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
     )
 
     execute(
@@ -645,6 +652,7 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
         records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
@@ -687,6 +695,7 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
         records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
+        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(

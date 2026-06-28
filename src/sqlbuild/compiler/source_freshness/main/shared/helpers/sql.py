@@ -102,56 +102,6 @@ def build_read_latest_sql(
     )
 
 
-def build_insert_sql(
-    *,
-    database: str | None,
-    schema: str,
-    source_name: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_name: str | None,
-    run_id: str,
-    strategy: str,
-    value_kind: str,
-    data_version: str | None,
-    data_version_hash: str,
-    observed_at: str,
-    render_qualified_name: Callable[..., str | None],
-) -> str:
-    """Build a complete INSERT statement for appending one source freshness row."""
-
-    qualified_name: str = build_qualified_table_name(
-        database=database,
-        schema=schema,
-        render_qualified_name=render_qualified_name,
-    )
-    return (
-        f"INSERT INTO {qualified_name} ("
-        f"{COLUMN_SOURCE_NAME}, "
-        f"{COLUMN_TARGET_DATABASE}, "
-        f"{COLUMN_TARGET_SCHEMA}, "
-        f"{COLUMN_TARGET_NAME}, "
-        f"{COLUMN_RUN_ID}, "
-        f"{COLUMN_STRATEGY}, "
-        f"{COLUMN_VALUE_KIND}, "
-        f"{COLUMN_DATA_VERSION}, "
-        f"{COLUMN_DATA_VERSION_HASH}, "
-        f"{COLUMN_OBSERVED_AT}"
-        f") VALUES ("
-        f"{_required_string_literal(source_name)}, "
-        f"{_optional_string_literal(target_database)}, "
-        f"{_optional_string_literal(target_schema)}, "
-        f"{_optional_string_literal(target_name)}, "
-        f"{_required_string_literal(run_id)}, "
-        f"{_required_string_literal(strategy)}, "
-        f"{_required_string_literal(value_kind)}, "
-        f"{_optional_string_literal(data_version)}, "
-        f"{_required_string_literal(data_version_hash)}, "
-        f"{_required_string_literal(observed_at)}"
-        f")"
-    )
-
-
 def _source_freshness_select_columns() -> str:
     return (
         f"{COLUMN_SOURCE_NAME}, "
@@ -165,14 +115,3 @@ def _source_freshness_select_columns() -> str:
         f"{COLUMN_DATA_VERSION_HASH}, "
         f"{COLUMN_OBSERVED_AT}"
     )
-
-
-def _optional_string_literal(value: str | None) -> str:
-    if value is None:
-        return "NULL"
-    return _required_string_literal(value)
-
-
-def _required_string_literal(value: str) -> str:
-    escaped_value: str = value.replace("'", "''")
-    return f"'{escaped_value}'"
