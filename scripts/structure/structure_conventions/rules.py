@@ -106,6 +106,13 @@ _DOCSTRING_BEARING_NODE_TYPES: tuple[type[ast.AST], ...] = (
     ast.ClassDef,
 )
 _SOURCE_FRESHNESS_SINGULAR_WRITER_NAME: str = "write_source_freshness_record"
+_SOURCE_FRESHNESS_INSERT_ALLOWED_MARKERS: tuple[str, ...] = (
+    "scripts/structure/structure_conventions/rules.py",
+    "src/sqlbuild/adapter/",
+    "src/sqlbuild/adapters/",
+    "src/sqlbuild/virtual/state/classes/",
+    "tests/",
+)
 
 
 def parse_python_module(file_path: Path) -> ast.Module:
@@ -251,6 +258,34 @@ def check_no_singular_source_freshness_writer(
                     message=(
                         "source freshness state writes must use "
                         "write_source_freshness_records() batch writes"
+                    ),
+                )
+            )
+    return violations
+
+
+def check_no_source_freshness_insert_sql_outside_adapters(file_path: Path) -> list[Violation]:
+    """Reject source freshness INSERT SQL outside adapter-owned renderers."""
+
+    path_text: str = file_path.as_posix()
+    if any(marker in path_text for marker in _SOURCE_FRESHNESS_INSERT_ALLOWED_MARKERS):
+        return []
+    contents: str = file_path.read_text(encoding="utf-8")
+    if "SOURCE_FRESHNESS" not in contents and "source_freshness" not in contents:
+        return []
+    violations: list[Violation] = []
+    line_number: int
+    line: str
+    for line_number, line in enumerate(contents.splitlines(), start=1):
+        if "INSERT INTO" in line:
+            violations.append(
+                Violation(
+                    code="SC058",
+                    path=file_path,
+                    line=line_number,
+                    message=(
+                        "source freshness INSERT SQL must be rendered by adapter methods, "
+                        "not runtime/compiler helpers"
                     ),
                 )
             )

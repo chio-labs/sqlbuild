@@ -93,6 +93,23 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC057", "SC057"),
     ),
     CheckPathsTestCase(
+        description="reports source freshness insert sql outside adapters",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+
+
+                def load_example() -> str:
+                    return f"INSERT INTO {SOURCE_FRESHNESS_TABLE_NAME} VALUES (1)"
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC058",),
+    ),
+    CheckPathsTestCase(
         description="reports internal pure re-export module",
         repo_files=compliant_repo_files()
         | {

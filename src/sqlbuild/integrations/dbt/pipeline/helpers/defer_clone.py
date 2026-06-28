@@ -12,7 +12,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import GraphNodeKey
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
@@ -83,6 +83,7 @@ def run_dbt_defer_clone_prephase(
     current_manifest: DbtManifestIndex,
     unique_ids: tuple[str, ...],
     on_progress: Callable[[str], None] | None,
+    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
 ) -> CloneExecutionResult | None:
     if not unique_ids:
         _report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
@@ -130,6 +131,7 @@ def run_dbt_defer_clone_prephase(
             reuse_manifest=reuse_manifest,
             selected_nodes=selected_nodes,
             hard_copy=False,
+            on_item=on_item,
         )
         _write_defer_clone_dbt_fingerprints(
             result=result,

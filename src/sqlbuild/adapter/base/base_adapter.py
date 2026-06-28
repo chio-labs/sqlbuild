@@ -34,6 +34,7 @@ from sqlbuild.adapter.shared.types import (
 )
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
@@ -1840,6 +1841,26 @@ class BaseAdapter(StrictAdapter):
 
         del database, schema
         return ()
+
+    def render_insert_source_freshness_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> str:
+        """Render DML that appends source freshness records."""
+
+        from sqlbuild.adapters.shared.helpers.source_freshness import (
+            render_insert_source_freshness_records_sql,
+        )
+
+        return render_insert_source_freshness_records_sql(
+            database=database,
+            schema=schema,
+            records=records,
+            render_qualified_name=self.render_qualified_name,
+        )
 
     def render_create_node_result_table_sql(
         self,

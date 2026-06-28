@@ -29,6 +29,8 @@ class WriteSourceFreshnessIndexTestCase:
     description: str
     expected_index_sql: str
     expected_insert_prefix: str
+    expected_statement_count: int
+    expected_values_separator: str
 
 
 @dataclass(frozen=True)
