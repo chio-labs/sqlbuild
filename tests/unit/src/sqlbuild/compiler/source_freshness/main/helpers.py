@@ -138,6 +138,7 @@ def write_optional_previous_record(
         records=(previous_record,),
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,
+        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
     )
 
 
@@ -178,6 +179,7 @@ def write_previous_record_to_schema(
         ),
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,
+        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
     )
 
 

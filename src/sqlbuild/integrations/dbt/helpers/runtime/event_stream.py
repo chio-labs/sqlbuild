@@ -66,6 +66,7 @@ def execute_dbt_json_event_stream(
     display_total: int | None = None,
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
     detail_by_unique_id: dict[str, str] | None = None,
+    enable_status: bool = True,
 ) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
     """Run dbt and render SQLBuild-styled rows from JSON events."""
 
@@ -76,9 +77,13 @@ def execute_dbt_json_event_stream(
     started_indexes: dict[str, int] = {}
     active_nodes: dict[str, tuple[str, float]] = {}
     display_index: int = 0
-    status: TransientStatusReporter | None = _start_dbt_status(
-        stream=stream,
-        use_color=use_color,
+    status: TransientStatusReporter | None = (
+        _start_dbt_status(
+            stream=stream,
+            use_color=use_color,
+        )
+        if enable_status
+        else None
     )
     try:
         process: subprocess.Popen[str] = subprocess.Popen(
@@ -110,7 +115,9 @@ def execute_dbt_json_event_stream(
                     continue
                 node_start_message: str | None = parse_dbt_node_start_message(event=event)
                 if node_start_message is not None:
-                    if status is None:
+                    if not enable_status:
+                        pass
+                    elif status is None:
                         status = TransientStatusReporter(stream=stream, use_color=use_color)
                         status.start(node_start_message)
                     else:
@@ -139,12 +146,13 @@ def execute_dbt_json_event_stream(
                             start_result.node_name,
                             time.monotonic(),
                         )
-                        status = _update_active_node_status(
-                            status=status,
-                            active_nodes=active_nodes,
-                            stream=stream,
-                            use_color=use_color,
-                        )
+                        if enable_status:
+                            status = _update_active_node_status(
+                                status=status,
+                                active_nodes=active_nodes,
+                                stream=stream,
+                                use_color=use_color,
+                            )
                     continue
                 result: DbtNodeExecutionResult | None = parse_dbt_node_result(
                     event=event,
@@ -177,12 +185,13 @@ def execute_dbt_json_event_stream(
                         detail_by_unique_id=detail_by_unique_id,
                     ),
                 )
-                status = _update_active_node_status(
-                    status=status,
-                    active_nodes=active_nodes,
-                    stream=stream,
-                    use_color=use_color,
-                )
+                if enable_status:
+                    status = _update_active_node_status(
+                        status=status,
+                        active_nodes=active_nodes,
+                        stream=stream,
+                        use_color=use_color,
+                    )
 
     returncode: int = process.wait()
     if status is not None:
