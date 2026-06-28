@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.45.2](https://github.com/chio-labs/sqlbuild/compare/v0.45.1...v0.45.2) (2026-06-28)
+
+
+### Bug Fixes
+
+* **dbt:** isolate defer clone prephase output ([9806c24](https://github.com/chio-labs/sqlbuild/commit/9806c24e4dfac3362b78e42dffc5af61248a8912))
+* **dbt:** isolate defer clone prephase output ([4a6e9ff](https://github.com/chio-labs/sqlbuild/commit/4a6e9ff60393de9904b62bef5c6fae3880216456))
+
 ## [0.45.1](https://github.com/chio-labs/sqlbuild/compare/v0.45.0...v0.45.1) (2026-06-28)
 
 
