@@ -7,7 +7,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -119,22 +119,24 @@ def test_given_index_renderer_when_writing_source_freshness_then_executes_index_
     adapter: DuckDbAdapter = DuckDbAdapter()
     execute: FakeSourceFreshnessWriteExecute = FakeSourceFreshnessWriteExecute()
 
-    write_source_freshness_record(
+    write_source_freshness_records(
         connection=object(),
         execute=execute,
         database=None,
         schema="main",
-        record=SourceFreshnessRecord(
-            source_name="raw.orders",
-            target_database=None,
-            target_schema="raw",
-            target_name="orders",
-            run_id="run_001",
-            strategy="adapter_metadata",
-            value_kind="timestamp",
-            data_version="2026-01-15T12:00:00",
-            data_version_hash="hash_orders",
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        records=(
+            SourceFreshnessRecord(
+                source_name="raw.orders",
+                target_database=None,
+                target_schema="raw",
+                target_name="orders",
+                run_id="run_001",
+                strategy="adapter_metadata",
+                value_kind="timestamp",
+                data_version="2026-01-15T12:00:00",
+                data_version_hash="hash_orders",
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            ),
         ),
         render_qualified_name=render_qualified_name,
         render_framework_type=adapter.render_framework_type,

@@ -65,6 +65,7 @@ def execute_dbt_json_event_stream(
     target_path: Path | None,
     display_total: int | None = None,
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    detail_by_unique_id: dict[str, str] | None = None,
 ) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
     """Run dbt and render SQLBuild-styled rows from JSON events."""
 
@@ -129,6 +130,10 @@ def execute_dbt_json_event_stream(
                             result=start_result,
                             display_index=display_index,
                             display_total=display_total,
+                            detail=_node_detail(
+                                unique_id=start_result.unique_id,
+                                detail_by_unique_id=detail_by_unique_id,
+                            ),
                         )
                         active_nodes[start_result.unique_id] = (
                             start_result.node_name,
@@ -167,6 +172,10 @@ def execute_dbt_json_event_stream(
                     result=result,
                     display_index=result_display_index,
                     display_total=display_total,
+                    detail=_node_detail(
+                        unique_id=result.unique_id,
+                        detail_by_unique_id=detail_by_unique_id,
+                    ),
                 )
                 status = _update_active_node_status(
                     status=status,
@@ -362,6 +371,7 @@ def render_dbt_node_result(
     result: DbtNodeExecutionResult,
     display_index: int | None = None,
     display_total: int | None = None,
+    detail: str = "",
 ) -> None:
     ctr: str = (
         f"{display_index}/{display_total}"
@@ -381,7 +391,7 @@ def render_dbt_node_result(
         + format_aligned_name_value(
             plain_name=name,
             styled_name=style.dbt_object_name(name),
-            value=f"{style.status(status)} {duration}".rstrip(),
+            value=f"{style.status(status)} {duration}{detail}".rstrip(),
             name_column_width=30,
             prefix=" ",
         )
@@ -391,6 +401,12 @@ def render_dbt_node_result(
         message_status: str = "warn" if message.level == "warn" else "error"
         stream.write(f"         {style.status(message_status):<9} {message.message}\n")
     stream.flush()
+
+
+def _node_detail(*, unique_id: str, detail_by_unique_id: dict[str, str] | None) -> str:
+    if detail_by_unique_id is None:
+        return ""
+    return detail_by_unique_id.get(unique_id, "")
 
 
 def _display_status(status: str) -> str:

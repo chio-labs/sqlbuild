@@ -65,6 +65,18 @@ class SelectorExpansion:
 
 
 @dataclass(frozen=True)
+class PrephaseProgressRow:
+    """One prephase result row for shared runtime output."""
+
+    label: str
+    name: str
+    status: str
+    duration_seconds: float | None = None
+    caused_by_names: tuple[str, ...] = ()
+    detail: str = ""
+
+
+@dataclass(frozen=True)
 class LocalNodePlanInput:
     """Local state needed to classify one graph node before propagation."""
 
