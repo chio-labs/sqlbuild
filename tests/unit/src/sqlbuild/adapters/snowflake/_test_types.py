@@ -116,3 +116,12 @@ class SnowflakeConnectConfigTestCase:
     description: str
     config: dict[str, object]
     expected_connect_kwargs: dict[str, object]
+
+
+@dataclass(frozen=True)
+class SnowflakeInformationSchemaFilterTestCase:
+    description: str
+    database: str
+    schemas: tuple[str, ...]
+    names: tuple[str, ...]
+    expected_params: tuple[str, ...]

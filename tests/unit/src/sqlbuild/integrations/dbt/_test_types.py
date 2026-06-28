@@ -599,6 +599,14 @@ class DbtCloneOptionsTestCase:
 
 
 @dataclass(frozen=True)
+class DbtCloneOptionsErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error_fragment: str
+    expected_help_fragment: str
+
+
+@dataclass(frozen=True)
 class DbtCloneExecuteTestCase:
     description: str
     current_materialized: str
