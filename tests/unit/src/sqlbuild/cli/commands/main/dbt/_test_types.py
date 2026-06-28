@@ -31,6 +31,13 @@ class DbtDebugWrapperTestCase:
 
 
 @dataclass(frozen=True)
+class DbtCloneCommandOutputTestCase:
+    description: str
+    expected_stderr_fragments: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtAutoInitTestCase:
     description: str
     has_current_sqlbuild_project: bool

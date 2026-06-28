@@ -8,6 +8,7 @@ from typing import TextIO
 
 from sqlbuild.cli.commands.main.helpers.clone.output import (
     is_clone_success,
+    render_clone_header,
     render_clone_item_line,
     render_clone_output,
 )
@@ -26,12 +27,26 @@ def run_dbt_clone_command(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr
-    item_stream: TextIO = sys.stdout
+    item_stream: TextIO = progress_stream
     progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,
     )
     streamed_state: dict[str, bool] = {"started": False}
+
+    def _on_clone_start(origin_target_name: str, destination_target_name: str, total: int) -> None:
+        progress.finish()
+        item_stream.write(
+            render_clone_header(
+                origin_target_name=origin_target_name,
+                destination_target_name=destination_target_name,
+                total=total,
+                use_color=use_color,
+            )
+            + "\n"
+        )
+        item_stream.flush()
+        streamed_state["started"] = True
 
     def _on_clone_item(index: int, total: int, item: CloneItemResult) -> None:
         if not streamed_state["started"]:
@@ -47,6 +62,7 @@ def run_dbt_clone_command(
             project_dir=effective_project_dir,
             args=args,
             on_progress=progress.on_progress,
+            on_clone_start=_on_clone_start,
             on_item=_on_clone_item,
         )
     finally:
