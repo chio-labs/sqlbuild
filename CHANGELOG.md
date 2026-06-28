@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.3](https://github.com/chio-labs/sqlbuild/compare/v0.44.2...v0.44.3) (2026-06-28)
+
+
+### Bug Fixes
+
+* **dbt:** align clone output with native clone ([7aecc9e](https://github.com/chio-labs/sqlbuild/commit/7aecc9ec3572754bdd2c08c379bd4b54b5fb616e))
+* **dbt:** align clone output with native clone ([43f50c2](https://github.com/chio-labs/sqlbuild/commit/43f50c25ae307a02db89cd7771d2acdc7a47f78b))
+
 ## [0.44.2](https://github.com/chio-labs/sqlbuild/compare/v0.44.1...v0.44.2) (2026-06-28)
 
 
