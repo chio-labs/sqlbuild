@@ -481,7 +481,14 @@ def execute_dbt_interop_from_project(
         unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
     }
     if project.settings.query_change_tracking and adapter_name != BuiltinAdapter.DUCKDB:
+        state_connect_start: float = time.monotonic()
+        _report_progress(on_progress, "Connecting to warehouse for dbt fingerprint writes...")
         dbt_state_connection = adapter.connect(connection_config)
+        _report_progress(
+            on_progress,
+            "Connected for dbt fingerprint writes. "
+            f"({time.monotonic() - state_connect_start:.2f}s)",
+        )
 
     def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
         if not project.settings.query_change_tracking:

@@ -68,6 +68,6 @@ def run_dbt_defer_clone_view_chain_prephase(
         target_path=dbt_options.target_path,
         display_total=len(view_chain_terms),
         detail_by_unique_id={unique_id: detail for unique_id in view_chain_unique_ids},
-        enable_status=False,
+        enable_status=True,
     )
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
