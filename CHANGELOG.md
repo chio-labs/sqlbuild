@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.45.1](https://github.com/chio-labs/sqlbuild/compare/v0.45.0...v0.45.1) (2026-06-28)
+
+
+### Bug Fixes
+
+* **dbt:** defer clone pure dbt selections ([299fc98](https://github.com/chio-labs/sqlbuild/commit/299fc98c38782844ca4574068e87c3857717bfc6))
+* **dbt:** defer clone pure dbt selections ([978bbdd](https://github.com/chio-labs/sqlbuild/commit/978bbdd36dd8f91a2de8549fb7b8dbd0cb7929ed))
+
 ## [0.45.0](https://github.com/chio-labs/sqlbuild/compare/v0.44.4...v0.45.0) (2026-06-28)
 
 
