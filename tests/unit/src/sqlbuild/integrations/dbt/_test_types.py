@@ -622,6 +622,13 @@ class DbtCloneExecuteTestCase:
 
 
 @dataclass(frozen=True)
+class DbtCloneExecutionOrderTestCase:
+    description: str
+    expected_item_names: tuple[str, ...]
+    expected_child_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DbtDiffOptionsErrorTestCase:
     description: str
     args: tuple[str, ...]

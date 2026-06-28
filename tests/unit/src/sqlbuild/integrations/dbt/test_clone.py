@@ -8,6 +8,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
+from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCloneOptions
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
@@ -16,6 +17,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCloneExecuteTestCase,
+    DbtCloneExecutionOrderTestCase,
     DbtCloneOptionsErrorTestCase,
     DbtCloneOptionsTestCase,
 )
@@ -24,6 +26,9 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_dbt_clone_manifest_index,
     build_dbt_clone_reuse_manifest_index,
     build_dbt_diff_ls_node,
+    build_manifest_data,
+    build_manifest_model_node,
+    create_dbt_clone_relation,
     create_dbt_clone_relation_when_requested,
     read_dbt_clone_rows,
 )
@@ -257,6 +262,117 @@ def test_given_dbt_clone_selection_when_executing_then_clones_expected_relation(
         assert (
             read_dbt_clone_rows(adapter=adapter, connection=connection, schema="main")
             == test_case.expected_destination_rows
+        )
+    finally:
+        adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtCloneExecutionOrderTestCase(
+            description="orders selected dependencies before dependent views",
+            expected_item_names=("base_orders", "child_orders"),
+            expected_child_rows=((1, "origin"),),
+        )
+    ],
+    ids=["orders selected dependencies before dependent views"],
+)
+def test_given_view_selected_before_dependency_when_executing_clone_then_clones_dependency_first(
+    test_case: DbtCloneExecutionOrderTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "ordered_clone.duckdb")})
+    try:
+        create_dbt_clone_relation(
+            adapter=adapter,
+            connection=connection,
+            schema="prod",
+            name="base_orders",
+            rows=test_case.expected_child_rows,
+        )
+        create_dbt_clone_relation(
+            adapter=adapter,
+            connection=connection,
+            schema="prod",
+            name="child_orders",
+            rows=((99, "origin_view_placeholder"),),
+        )
+        current_manifest: DbtManifestIndex = build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id="model.analytics.base_orders",
+                        package_name="analytics",
+                        name="base_orders",
+                        relation_name="main.base_orders",
+                        schema="main",
+                        alias="base_orders",
+                        materialized="table",
+                    ),
+                    build_manifest_model_node(
+                        unique_id="model.analytics.child_orders",
+                        package_name="analytics",
+                        name="child_orders",
+                        relation_name="main.child_orders",
+                        schema="main",
+                        alias="child_orders",
+                        materialized="view",
+                        compiled_code="SELECT order_id, status FROM main.base_orders",
+                        depends_on_nodes=("model.analytics.base_orders",),
+                    ),
+                )
+            )
+        )
+        reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id="model.analytics.base_orders",
+                        package_name="analytics",
+                        name="base_orders",
+                        relation_name="prod.base_orders",
+                        schema="prod",
+                        alias="base_orders",
+                        materialized="table",
+                    ),
+                    build_manifest_model_node(
+                        unique_id="model.analytics.child_orders",
+                        package_name="analytics",
+                        name="child_orders",
+                        relation_name="prod.child_orders",
+                        schema="prod",
+                        alias="child_orders",
+                        materialized="view",
+                    ),
+                )
+            )
+        )
+        streamed_item_names: list[str] = []
+
+        result: CloneExecutionResult = execute_dbt_clone(
+            adapter=adapter,
+            connection=connection,
+            current_manifest=current_manifest,
+            reuse_manifest=reuse_manifest,
+            selected_nodes=(
+                build_dbt_diff_ls_node(
+                    unique_id="model.analytics.child_orders", name="child_orders"
+                ),
+                build_dbt_diff_ls_node(unique_id="model.analytics.base_orders", name="base_orders"),
+            ),
+            hard_copy=True,
+            on_item=lambda _index, _total, item: streamed_item_names.append(item.name),
+        )
+
+        assert tuple(item.name for item in result.item_results) == test_case.expected_item_names
+        assert tuple(streamed_item_names) == test_case.expected_item_names
+        assert (
+            read_dbt_clone_rows(
+                adapter=adapter, connection=connection, schema="main", name="child_orders"
+            )
+            == test_case.expected_child_rows
         )
     finally:
         adapter.close(connection)
