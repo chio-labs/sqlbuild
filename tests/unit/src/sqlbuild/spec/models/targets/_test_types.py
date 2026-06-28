@@ -16,6 +16,7 @@ class TargetConfigResolutionTestCase:
     expected_connection: dict[str, object]
     expected_allow_reset: bool
     expected_reuse_from: str | None = None
+    expected_defer_clone_from: str | None = None
     expected_force: bool | None = None
     expected_reuse_hard_copy: bool = False
 

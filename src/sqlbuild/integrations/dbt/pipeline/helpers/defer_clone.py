@@ -55,6 +55,21 @@ from sqlbuild.shared.helpers.graph_algorithms import (
 from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 
+def resolve_dbt_defer_clone_from(
+    *,
+    cli_defer_clone_from: bool | None,
+    project_defer_clone_from: bool,
+    local_defer_clone_from: bool | None,
+) -> bool:
+    """Resolve dbt defer-clone enablement from CLI, local config, and project config."""
+
+    if cli_defer_clone_from is not None:
+        return cli_defer_clone_from
+    if local_defer_clone_from is not None:
+        return local_defer_clone_from
+    return project_defer_clone_from
+
+
 def run_dbt_defer_clone_prephase(
     *,
     project_dir: Path,

@@ -156,6 +156,15 @@ class DbtCompileFullRefreshPipelineTestCase:
 
 
 @dataclass(frozen=True)
+class DbtDeferCloneResolutionTestCase:
+    description: str
+    cli_defer_clone_from: bool | None
+    project_defer_clone_from: bool
+    local_defer_clone_from: bool | None
+    expected_defer_clone_from: bool
+
+
+@dataclass(frozen=True)
 class DbtEventParseTestCase:
     description: str
     event: dict[str, object]
@@ -449,7 +458,7 @@ class DbtArgRoutingTestCase:
     expected_exclude: tuple[str, ...]
     expected_dbt_args: tuple[str, ...]
     expected_sqlbuild_args: tuple[str, ...]
-    expected_defer_clone_from: bool = False
+    expected_defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -470,7 +479,7 @@ class DbtArgParseTestCase:
     expected_full_refresh: bool
     expected_target: str | None
     expected_dbt_passthrough: tuple[str, ...]
-    expected_defer_clone_from: bool = False
+    expected_defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)
