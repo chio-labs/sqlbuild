@@ -87,8 +87,12 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.targets import resolve_effective_force
+from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.targets import (
+    resolve_effective_force,
+    resolve_target_config,
+    resolve_target_name,
+)
 
 
 def run_build(
@@ -127,11 +131,16 @@ def run_build(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    if defer_to is not None and defer_clone_from is not None:
+    effective_defer_clone_from: str | None = _resolve_defer_clone_from(
+        discovered_inputs=discovered_inputs,
+        selected_target=selected_target,
+        cli_defer_clone_from=defer_clone_from,
+    )
+    if defer_to is not None and effective_defer_clone_from is not None:
         raise CliUserError("--defer-clone-from cannot be used with --defer-to", code="C408")
     if (
         discovered_inputs.project_config.settings.virtual_environments
-        and defer_clone_from is not None
+        and effective_defer_clone_from is not None
     ):
         raise CliUserError(
             "build does not support --defer-clone-from when virtual_environments = true",
@@ -215,7 +224,7 @@ def run_build(
                 progress_stream=progress_stream,
                 providers=provider_session.providers,
             )
-        if defer_clone_from is not None:
+        if effective_defer_clone_from is not None:
             cloned_project: CompiledProject
             boundary_selectors: tuple[str, ...]
             view_chain_selectors: tuple[str, ...]
@@ -235,7 +244,7 @@ def run_build(
             run_defer_clone_prephase(
                 discovered_inputs=discovered_inputs,
                 adapter=adapter,
-                origin_target_name=defer_clone_from,
+                origin_target_name=effective_defer_clone_from,
                 destination_target_name=cloned_project.effective_target_name,
                 no_sql_validation=no_sql_validation,
                 select=boundary_selectors,
@@ -495,3 +504,26 @@ def run_build(
         )
     finally:
         provider_session.close()
+
+
+def _resolve_defer_clone_from(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    cli_defer_clone_from: str | None,
+) -> str | None:
+    if cli_defer_clone_from is not None:
+        return cli_defer_clone_from
+    target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=selected_target,
+    )
+    if target_name is None:
+        return None
+    target_config: TargetConfig = resolve_target_config(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        target_name=target_name,
+    )
+    return target_config.defer_clone_from

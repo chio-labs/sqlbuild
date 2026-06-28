@@ -58,6 +58,7 @@ from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSeed,
+    DbtManifestSource,
 )
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
@@ -117,7 +118,9 @@ def build_dbt_model_planning_result(
     )
     source_freshness: StandardSourceFreshnessPlanningResult = _source_freshness_result(
         manifest=manifest,
+        candidate_unique_ids=expanded_candidate_unique_ids,
         project=project,
+        graph=graph,
         adapter=adapter,
         connection=connection,
         relation_lookup=relation_lookup,
@@ -378,13 +381,24 @@ def _changed_seed_unique_ids(
 def _source_freshness_result(
     *,
     manifest: DbtManifestIndex,
+    candidate_unique_ids: Sequence[str],
     project: CompiledProject,
+    graph: DbtCombinedGraph | None,
     adapter: BaseAdapter,
     connection: Any,
     relation_lookup: RelationLookup,
 ) -> StandardSourceFreshnessPlanningResult:
+    sources_by_unique_id: dict[str, DbtManifestSource] = _freshness_sources_by_unique_id(
+        manifest=manifest,
+        candidate_unique_ids=candidate_unique_ids,
+        graph=graph,
+    )
+    scoped_manifest: DbtManifestIndex = replace(
+        manifest,
+        sources_by_unique_id=sources_by_unique_id,
+    )
     sources: tuple[SourceEntry, ...] = translate_manifest_sources_to_sqlbuild_sources(
-        manifest=manifest
+        manifest=scoped_manifest
     )
     if not sources:
         return StandardSourceFreshnessPlanningResult()
@@ -408,6 +422,32 @@ def _source_freshness_result(
         render_qualified_name=adapter.render_qualified_name,
         state_table_exists_by_schema=state_table_exists_by_schema,
     )
+
+
+def _freshness_sources_by_unique_id(
+    *,
+    manifest: DbtManifestIndex,
+    candidate_unique_ids: Sequence[str],
+    graph: DbtCombinedGraph | None,
+) -> dict[str, DbtManifestSource]:
+    if graph is None:
+        return manifest.sources_by_unique_id
+    source_unique_ids: set[str] = set()
+    unique_id: str
+    for unique_id in candidate_unique_ids:
+        key: DbtCombinedGraphKey
+        for key in expand_combined_upstream(dbt_model_graph_key(unique_id), graph.upstream_deps):
+            if (
+                key.owner == DbtCombinedGraphOwner.DBT
+                and key.resource_type == DbtCombinedGraphResourceType.SOURCE
+                and key.name in manifest.sources_by_unique_id
+            ):
+                source_unique_ids.add(key.name)
+    return {
+        unique_id: source
+        for unique_id, source in manifest.sources_by_unique_id.items()
+        if unique_id in source_unique_ids
+    }
 
 
 def _apply_graph_propagation(

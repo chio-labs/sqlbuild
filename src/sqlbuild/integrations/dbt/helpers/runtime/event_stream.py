@@ -118,6 +118,9 @@ def execute_dbt_json_event_stream(
                     if start_result is not None and start_result.unique_id not in started_indexes:
                         display_index += 1
                         started_indexes[start_result.unique_id] = display_index
+                        if status is not None:
+                            status.close()
+                            status = None
                         render_dbt_node_result(
                             stream=stream,
                             style=style,

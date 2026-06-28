@@ -448,6 +448,7 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
+            defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
             force=_optional_nullable_bool(mapping=target_mapping, key="force"),
             reuse_hard_copy=_optional_bool(
@@ -514,6 +515,7 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
+            defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
             force=_optional_nullable_bool(mapping=target_mapping, key="force"),
             reuse_hard_copy=_optional_nullable_bool(
@@ -683,6 +685,7 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
                 "target_path",
                 "vars",
                 "replay_on_change",
+                "defer_clone_from",
                 "production_ref",
             }
         ),
@@ -696,6 +699,11 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         target_path=_optional_str(payload=mapping, key="target_path"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
+        defer_clone_from=_optional_bool(
+            mapping=mapping,
+            key="defer_clone_from",
+            default=False,
+        ),
         production_ref=_load_dbt_production_ref(
             payload=mapping.get("production_ref"),
             file_path=file_path,
@@ -709,13 +717,14 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"target", "vars"}),
+        allowed_keys=frozenset({"target", "vars", "defer_clone_from"}),
         label="dbt",
         file_path=file_path,
     )
     return LocalDbtConfig(
         target=_optional_str(payload=mapping, key="target"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
+        defer_clone_from=_optional_nullable_bool(mapping=mapping, key="defer_clone_from"),
     )
 
 

@@ -51,6 +51,7 @@ class LoadProjectConfigTestCase:
     expected_dbt_target: str | None = None
     expected_dbt_target_path: str | None = None
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
+    expected_dbt_defer_clone_from: bool = False
     expected_dbt_production_ref_git_ref: str | None = None
     expected_dbt_production_ref_generate_schema_name_override: str | None = None
     expected_dbt_production_ref_refresh: bool = True
@@ -74,6 +75,7 @@ class LoadLocalConfigTestCase:
     expected_vars: dict[str, str]
     expected_dbt_target: str | None = None
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
+    expected_dbt_defer_clone_from: bool | None = None
     expected_auto_load_sources: bool = True
     expected_force: bool = False
     expected_targets: dict[str, dict[str, object]] = field(default_factory=dict)

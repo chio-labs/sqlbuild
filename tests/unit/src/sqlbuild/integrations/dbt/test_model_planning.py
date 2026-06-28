@@ -57,6 +57,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtModelSourceBlockingTestCase,
     DbtRunResultsFallbackRenderTestCase,
     DbtSeedRelationPrefetchTestCase,
+    DbtSourceFreshnessScopeTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CountingModelPlanningAdapter,
@@ -1381,6 +1382,93 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     )
     assert all(
         entry.reason == DbtModelPlanReason.SOURCE_FRESHNESS_ERROR for entry in result.entries
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSourceFreshnessScopeTestCase(
+            description="observes only sources upstream of selected candidate branch",
+            candidate_unique_ids=("model.analytics.fact_orders",),
+            expected_freshness_request_names=("orders",),
+        )
+    ],
+    ids=["observes only sources upstream of selected candidate branch"],
+)
+def test_given_candidate_branch_when_planning_then_observes_only_upstream_sources(
+    test_case: DbtSourceFreshnessScopeTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: CountingModelPlanningAdapter = CountingModelPlanningAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "dbt_source_scope.duckdb")})
+    project: CompiledProject = replace(
+        build_compiled_project_with_models({}),
+        effective_target_schema="main",
+        effective_target_database=None,
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=(
+                build_manifest_model_node(
+                    unique_id="model.analytics.stg_orders",
+                    package_name="analytics",
+                    name="stg_orders",
+                    schema="main",
+                    alias="stg_orders",
+                    depends_on_nodes=("source.analytics.raw.orders",),
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.fact_orders",
+                    package_name="analytics",
+                    name="fact_orders",
+                    schema="main",
+                    alias="fact_orders",
+                    depends_on_nodes=("model.analytics.stg_orders",),
+                ),
+                build_manifest_model_node(
+                    unique_id="model.analytics.stg_customers",
+                    package_name="analytics",
+                    name="stg_customers",
+                    schema="main",
+                    alias="stg_customers",
+                    depends_on_nodes=("source.analytics.raw.customers",),
+                ),
+            ),
+            sources=(
+                build_manifest_source_node(
+                    unique_id="source.analytics.raw.orders",
+                    source_name="raw",
+                    name="orders",
+                    schema="main",
+                    freshness={"warn_after": {"count": 1, "period": "day"}},
+                ),
+                build_manifest_source_node(
+                    unique_id="source.analytics.raw.customers",
+                    source_name="raw",
+                    name="customers",
+                    schema="main",
+                    freshness={"warn_after": {"count": 1, "period": "day"}},
+                ),
+            ),
+        )
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+    try:
+        build_dbt_model_planning_result(
+            manifest=manifest,
+            candidate_unique_ids=test_case.candidate_unique_ids,
+            project=project,
+            graph=graph,
+            adapter=adapter,
+            connection=connection,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert (
+        tuple(request.name for request in adapter.table_freshness_requests)
+        == test_case.expected_freshness_request_names
     )
 
 

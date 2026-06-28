@@ -65,6 +65,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
+    resolve_dbt_defer_clone_from,
     resolve_defer_clone_unique_ids,
     resolve_defer_clone_view_chain_terms,
     resolve_defer_clone_view_chain_unique_ids,
@@ -308,6 +309,11 @@ def execute_dbt_interop_from_project(
             plan=plan,
         ),
     )
+    effective_defer_clone_from: bool = resolve_dbt_defer_clone_from(
+        cli_defer_clone_from=routed.defer_clone_from,
+        project_defer_clone_from=discovered_inputs.project_config.dbt.defer_clone_from,
+        local_defer_clone_from=discovered_inputs.local_config.dbt.defer_clone_from,
+    )
     defer_clone_unique_ids: frozenset[str] = (
         resolve_defer_clone_unique_ids(
             graph=graph,
@@ -316,10 +322,10 @@ def execute_dbt_interop_from_project(
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
             required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
         )
-        if routed.defer_clone_from
+        if effective_defer_clone_from
         else frozenset()
     )
-    if routed.defer_clone_from:
+    if effective_defer_clone_from:
         run_dbt_defer_clone_prephase(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -339,7 +345,7 @@ def execute_dbt_interop_from_project(
             project=project,
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
         )
-        if routed.defer_clone_from
+        if effective_defer_clone_from
         else ()
     )
     defer_clone_view_chain_unique_ids: frozenset[str] = (
@@ -349,7 +355,7 @@ def execute_dbt_interop_from_project(
             project=project,
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
         )
-        if routed.defer_clone_from
+        if effective_defer_clone_from
         else frozenset()
     )
     merged_dbt_argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
