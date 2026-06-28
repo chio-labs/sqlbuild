@@ -27,12 +27,7 @@ def resolve_attachment_kind(
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> tuple[AuditAttachmentKind, str | None]:
-    """Resolve audit attachment kind and attached target name.
-
-    For schema-attached audits, validates the declared attachment is schedulable.
-    For singular audits, infers attachment from refs and graph structure.
-    Returns (attachment_kind, attached_target_name).
-    """
+    """Resolve audit attachment kind and attached target name."""
 
     if audit.attached_target_kind == AttachedAuditTargetKind.SOURCE:
         _validate_source_attached_audit(audit=audit)
@@ -57,11 +52,7 @@ def resolve_effective_run_scope(
     requested_run_scope: AuditRunScope,
     attached_model_materialization: str | None,
 ) -> AuditRunScope:
-    """Resolve effective run scope after degradation rules.
-
-    delta_and_final degrades to final when the attached model does not expose a delta phase.
-    Source and end audits always pass None materialization, so they degrade naturally.
-    """
+    """Resolve effective run scope after degradation rules."""
 
     if requested_run_scope == AuditRunScope.FINAL:
         return AuditRunScope.FINAL

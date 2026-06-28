@@ -88,3 +88,11 @@ class SelectionStalenessClassifierTestCase:
     description: str
     graph: SelectionStalenessGraph
     expected_warnings: tuple[SelectionStalenessWarning, ...]
+
+
+@dataclass(frozen=True)
+class SqlbuildModelSelectorNamesTestCase:
+    description: str
+    term: str
+    expected_model_names: tuple[str, ...]
+    expected_translation: str | None

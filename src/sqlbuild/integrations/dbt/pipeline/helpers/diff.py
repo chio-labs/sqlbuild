@@ -276,7 +276,11 @@ def _dbt_bool_flags() -> frozenset[str]:
 
 
 def _raise_if_missing_relation(*, relation_lookup: RelationLookup, model: DbtManifestModel) -> None:
-    if relation_lookup.exists(schema=model.schema, name=model.alias or model.name):
+    if relation_lookup.exists(
+        database=model.database,
+        schema=model.schema,
+        name=model.alias or model.name,
+    ):
         return
     raise DbtInteropConfigError(
         f"dbt diff relation for model '{model.name}' does not exist: {model.relation_name}",

@@ -128,6 +128,7 @@ def build_standard_reuse_from_target_snapshot(
             reuse_origin_fingerprint_database=reuse_origin.database,
             reuse_origin_fingerprint_schema=reuse_origin_schema,
             relation_exists=reuse_origin_lookup.exists(
+                database=reuse_origin.database,
                 schema=reuse_origin_schema,
                 name=reuse_origin.name,
             ),
@@ -167,7 +168,7 @@ def _read_reuse_origin_fingerprints(
             connection=connection,
             execute=adapter.execute,
             table_exists=fingerprint_table_lookup.exists(
-                schema=schema, name=FINGERPRINT_TABLE_NAME
+                database=database, schema=schema, name=FINGERPRINT_TABLE_NAME
             ),
             database=database,
             schema=schema,
@@ -270,7 +271,9 @@ def _read_reuse_origin_cursor_max(
         or reuse_origin.qualified_name is None
     ):
         return None
-    if not reuse_origin_lookup.exists(schema=reuse_origin.schema, name=reuse_origin.name):
+    if not reuse_origin_lookup.exists(
+        database=reuse_origin.database, schema=reuse_origin.schema, name=reuse_origin.name
+    ):
         return None
     rendered_cursor_column: str = adapter.render_identifier(cursor_column)
     sql: str = (

@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.integrations.dbt.constants import (
-    DBT_MANIFEST_CONFIG_KEY,
-    DBT_MANIFEST_MATERIALIZED_KEY,
     DBT_MATERIALIZATION_EPHEMERAL,
     DBT_MATERIALIZATION_VIEW,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
+from sqlbuild.integrations.dbt.helpers.manifest.core import dbt_manifest_model_materialization
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtCloneOptions, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
@@ -86,7 +85,7 @@ def execute_dbt_clone(
         for node in selected_nodes
         if node.resource_type == DbtSupportedResourceType.MODEL
         and (current_model := current_manifest.models_by_unique_id.get(node.unique_id)) is not None
-        and _model_materialization(model=current_model) != DBT_MATERIALIZATION_EPHEMERAL
+        and dbt_manifest_model_materialization(model=current_model) != DBT_MATERIALIZATION_EPHEMERAL
         and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
     )
     total: int = len(clonable_models)
@@ -105,9 +104,11 @@ def execute_dbt_clone(
     reuse_model: DbtManifestModel
     for current_model, reuse_model in clonable_models:
         index += 1
-        _, origin_schema, origin_name = origin_locations[reuse_model.unique_id]
-        origin_exists: bool = origin_lookup.exists(schema=origin_schema, name=origin_name)
-        if _model_materialization(model=current_model) == DBT_MATERIALIZATION_VIEW:
+        origin_database, origin_schema, origin_name = origin_locations[reuse_model.unique_id]
+        origin_exists: bool = origin_lookup.exists(
+            database=origin_database, schema=origin_schema, name=origin_name
+        )
+        if dbt_manifest_model_materialization(model=current_model) == DBT_MATERIALIZATION_VIEW:
             item_result: CloneItemResult = recreate_view_by_names(
                 name=current_model.name,
                 origin_relation=reuse_model.relation_name,
@@ -127,7 +128,9 @@ def execute_dbt_clone(
                 connection=connection,
                 hard_copy=hard_copy,
                 origin_is_transient=origin_lookup.is_transient(
-                    schema=origin_schema, name=origin_name
+                    database=origin_database,
+                    schema=origin_schema,
+                    name=origin_name,
                 ),
             )
         results.append(item_result)
@@ -170,16 +173,6 @@ def _dbt_value_flags() -> frozenset[str]:
             "--threads",
         }
     )
-
-
-def _model_materialization(*, model: DbtManifestModel) -> str | None:
-    config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
-    if not isinstance(config, dict):
-        return None
-    materialized: object | None = cast(dict[str, object], config).get(DBT_MANIFEST_MATERIALIZED_KEY)
-    if not isinstance(materialized, str) or not materialized.strip():
-        return None
-    return materialized.strip().lower()
 
 
 def _compiled_model_sql(*, model: DbtManifestModel) -> str:

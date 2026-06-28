@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.integrations.dbt.constants import (
     DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
     DBT_MANIFEST_CONFIG_KEY,
+    DBT_MANIFEST_MATERIALIZED_KEY,
 )
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
@@ -183,6 +184,18 @@ def resolve_dbt_manifest_model(
             ),
         )
     return matches[0]
+
+
+def dbt_manifest_model_materialization(*, model: DbtManifestModel) -> str | None:
+    """Return the lowercased dbt materialization for a manifest model, if declared."""
+
+    config: object | None = model.payload.get(DBT_MANIFEST_CONFIG_KEY)
+    if not isinstance(config, dict):
+        return None
+    materialized: object | None = cast(dict[str, object], config).get(DBT_MANIFEST_MATERIALIZED_KEY)
+    if not isinstance(materialized, str) or not materialized.strip():
+        return None
+    return materialized.strip().lower()
 
 
 def _parse_model(
@@ -411,11 +424,7 @@ def _transitive_macro_ids(
 
 
 def _strip_config_block(raw_code: str) -> str:
-    """Return raw_code with leading config blocks and snapshot wrappers removed.
-
-    Snapshot env placement (target_schema) lives in the config() block, so the
-    config text is dropped here; structured config is fingerprinted separately.
-    """
+    """Return raw_code with leading config blocks and snapshot wrappers removed."""
 
     body: str = raw_code
     if _find_jinja_statement(body, "snapshot") is not None:

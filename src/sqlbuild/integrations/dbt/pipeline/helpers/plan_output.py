@@ -22,7 +22,9 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning
-from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
+    resolve_sqlbuild_model_dbt_refs,
+)
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_dbt_model_planning_result,
 )
@@ -38,7 +40,6 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
-from sqlbuild.shared.types import SqlReferenceKind
 
 
 def dbt_failure_detail(result: DbtCommandResult) -> str | None:
@@ -57,22 +58,15 @@ def find_sqlbuild_models_with_missing_dbt_relations(
 ) -> dict[str, tuple[DbtManifestModel, ...]]:
     """Return selected SQLBuild models blocked by absent, unselected dbt refs."""
 
-    selected_names: frozenset[str] = frozenset(selected_model_names)
     candidates: list[tuple[str, DbtManifestModel]] = []
-    for model in project.models:
-        if model.name not in selected_names:
+    for model, dbt_model in resolve_sqlbuild_model_dbt_refs(
+        project=project,
+        manifest=manifest,
+        selected_model_names=selected_model_names,
+    ):
+        if dbt_model.unique_id in dbt_unique_ids_selected_for_execution:
             continue
-        for reference in model.references:
-            if reference.ref_kind != SqlReferenceKind.DBT_REF:
-                continue
-            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
-                manifest=manifest,
-                package_name=reference.ref_package,
-                name=reference.ref_name,
-            )
-            if dbt_model.unique_id in dbt_unique_ids_selected_for_execution:
-                continue
-            candidates.append((model.name, dbt_model))
+        candidates.append((model.name, dbt_model))
     relation_lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
         connection=connection,
@@ -83,7 +77,11 @@ def find_sqlbuild_models_with_missing_dbt_relations(
     )
     blocked: dict[str, list[DbtManifestModel]] = {}
     for model_name, dbt_model in candidates:
-        if relation_lookup.exists(schema=dbt_model.schema, name=dbt_model.alias or dbt_model.name):
+        if relation_lookup.exists(
+            database=dbt_model.database,
+            schema=dbt_model.schema,
+            name=dbt_model.alias or dbt_model.name,
+        ):
             continue
         blocked.setdefault(model_name, []).append(dbt_model)
     return {name: tuple(models) for name, models in blocked.items()}
@@ -97,20 +95,13 @@ def find_direct_dbt_dependency_unique_ids(
 ) -> tuple[str, ...]:
     """Return direct dbt refs needed by selected SQLBuild models."""
 
-    selected_names: frozenset[str] = frozenset(selected_model_names)
     unique_ids: set[str] = set()
-    for model in project.models:
-        if model.name not in selected_names:
-            continue
-        for reference in model.references:
-            if reference.ref_kind != SqlReferenceKind.DBT_REF:
-                continue
-            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
-                manifest=manifest,
-                package_name=reference.ref_package,
-                name=reference.ref_name,
-            )
-            unique_ids.add(dbt_model.unique_id)
+    for _model, dbt_model in resolve_sqlbuild_model_dbt_refs(
+        project=project,
+        manifest=manifest,
+        selected_model_names=selected_model_names,
+    ):
+        unique_ids.add(dbt_model.unique_id)
     return tuple(sorted(unique_ids))
 
 

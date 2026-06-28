@@ -695,11 +695,7 @@ def _extract_helper_ctes(
 def _extract_expected_ctes(
     test: CompiledSqlTest,
 ) -> dict[str, str]:
-    """Build expected model name to CTE SQL body mapping.
-
-    Expected CTEs are not in authored_ctes. They are reconstructed
-    from the test's raw sql_body by scanning for __expected__ prefixed CTEs.
-    """
+    """Build expected model name to CTE SQL body mapping."""
 
     result: dict[str, str] = {}
     pattern: re.Pattern[str] = re.compile(

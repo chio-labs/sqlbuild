@@ -5,20 +5,23 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from sqlbuild.compiler.compile.models.core import (
-    CompiledModel,
     CompiledProject,
-    CompileSqlReference,
+)
+from sqlbuild.compiler.planner.main.sqlbuild_model_selectors import (
+    resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.manifest.core import resolve_dbt_manifest_model
+from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
+    resolve_sqlbuild_model_dbt_refs,
+)
 from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
     resolve_dbt_sql_test_target_names,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
@@ -27,7 +30,8 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsResult,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.shared.helpers.selector_expansion import split_selector_expansion
+from sqlbuild.shared.models import SelectorExpansion
 
 
 def plan_dbt_interop_command(
@@ -69,6 +73,7 @@ def plan_dbt_interop_command(
 
     selection: DbtInteropSelectionResult = resolve_dbt_interop_sqlbuild_selection(
         project=project,
+        manifest=manifest,
         graph=graph,
         select=select,
         exclude=exclude,
@@ -125,10 +130,12 @@ def plan_dbt_interop_command(
 
 
 def _is_dbt_anchor_term(*, term: str, project: CompiledProject) -> bool:
-    if not term.endswith("+"):
+    parsed: SelectorExpansion = split_selector_expansion(term)
+    if not parsed.downstream:
         return False
-    core: str = term.removeprefix("+").removesuffix("+")
-    return not _matches_sqlbuild_direct_selector(term=core, project=project)
+    if "~" in parsed.core:
+        return False
+    return not _matches_sqlbuild_direct_selector(term=parsed.core, project=project)
 
 
 def _raise_for_dbt_ls_failure(result: DbtLsResult) -> None:
@@ -143,23 +150,11 @@ def _dbt_failure_detail(result: DbtLsResult) -> str | None:
 
 
 def _matches_sqlbuild_direct_selector(*, term: str, project: CompiledProject) -> bool:
-    model_names: frozenset[str] = frozenset(model.name for model in project.models)
-    if term in model_names:
-        return True
-    if term.startswith("tag:"):
-        tag: str = term.removeprefix("tag:")
-        return any(
-            tag in _as_string_tuple(model.config.values.get("tags")) for model in project.models
-        )
-    if term.startswith("path:"):
-        raw_path: str = term.removeprefix("path:")
-        translated_path: str = _translate_dbt_path_selector(raw_path)
-        return any(
-            _model_path_selector(model) == translated_path
-            or _model_path_selector(model).startswith(f"{translated_path}/")
-            for model in project.models
-        )
-    return False
+    model_names, _translated_path = resolve_sqlbuild_model_selector_names(
+        project=project,
+        term=term,
+    )
+    return bool(model_names)
 
 
 def _build_required_dbt_selector_terms(
@@ -172,28 +167,19 @@ def _build_required_dbt_selector_terms(
     required_ids: frozenset[str] = frozenset(required_unique_ids)
     if not required_ids:
         return ()
-    selected_names: frozenset[str] = frozenset(selected_model_names)
     terms: set[str] = set()
-    model: CompiledModel
-    for model in project.models:
-        if model.name not in selected_names:
+    for _model, dbt_model in resolve_sqlbuild_model_dbt_refs(
+        project=project,
+        manifest=manifest,
+        selected_model_names=selected_model_names,
+    ):
+        if dbt_model.unique_id not in required_ids:
             continue
-        reference: CompileSqlReference
-        for reference in model.references:
-            if reference.ref_kind != SqlReferenceKind.DBT_REF:
-                continue
-            dbt_model: DbtManifestModel = resolve_dbt_manifest_model(
-                manifest=manifest,
-                package_name=reference.ref_package,
-                name=reference.ref_name,
-            )
-            if dbt_model.unique_id not in required_ids:
-                continue
-            selector_term: str = dbt_fqn_selector_term(
-                fqn=dbt_model.fqn,
-                fallback=dbt_model.name,
-            )
-            terms.add(f"+{selector_term}")
+        selector_term: str = dbt_fqn_selector_term(
+            fqn=dbt_model.fqn,
+            fallback=dbt_model.name,
+        )
+        terms.add(f"+{selector_term}")
     return tuple(sorted(terms))
 
 
@@ -266,32 +252,16 @@ def resolve_sqlbuild_test_actions(
     has_unit_selector: bool = False
     term: str
     for term in select:
-        core: str = term.removeprefix("+").removesuffix("+")
-        if core == "test_type:data":
+        parsed: SelectorExpansion = split_selector_expansion(term)
+        if parsed.core == "test_type:data":
             has_data_selector = True
-        elif core == "test_type:unit":
+        elif parsed.core == "test_type:unit":
             has_unit_selector = True
     if has_data_selector and not has_unit_selector:
         return (DbtInteropSqlbuildTestAction.AUDIT,)
     if has_unit_selector and not has_data_selector:
         return (DbtInteropSqlbuildTestAction.TEST,)
     return (DbtInteropSqlbuildTestAction.TEST, DbtInteropSqlbuildTestAction.AUDIT)
-
-
-def _translate_dbt_path_selector(raw_path: str) -> str:
-    return raw_path.replace("\\", "/")
-
-
-def _model_path_selector(model: CompiledModel) -> str:
-    return model.relative_path.parent.as_posix()
-
-
-def _as_string_tuple(value: object) -> tuple[str, ...]:
-    if isinstance(value, tuple):
-        return tuple(str(item) for item in value)
-    if isinstance(value, list):
-        return tuple(str(item) for item in value)
-    return ()
 
 
 def _append_dbt_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> tuple[str, ...]:

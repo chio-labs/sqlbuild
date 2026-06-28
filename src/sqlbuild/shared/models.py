@@ -8,7 +8,12 @@ from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
 from sqlbuild.shared.exceptions.errors import SharedInputError
-from sqlbuild.shared.types import PythonCheckSeverity, SqlResourceRefKind
+from sqlbuild.shared.types import (
+    LocalNodePlanAction,
+    LocalNodePlanReason,
+    PythonCheckSeverity,
+    SqlResourceRefKind,
+)
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 
@@ -17,29 +22,65 @@ from sqlbuild.spec.models.types import SourceWriteStrategy
 class RelationLookup:
     """Existing warehouse relations gathered once, queried by schema and name in memory."""
 
-    relations_by_key: dict[tuple[str | None, str], RelationInfo]
+    relations_by_key: dict[tuple[str | None, str | None, str], RelationInfo]
 
     @staticmethod
-    def key(*, schema: str | None, name: str) -> tuple[str | None, str]:
+    def key(
+        *, database: str | None = None, schema: str | None, name: str
+    ) -> tuple[str | None, str | None, str]:
         """Build the case-insensitive lookup key for one relation."""
 
-        return (None if schema is None else schema.lower(), name.lower())
+        return (
+            None if database is None else database.lower(),
+            None if schema is None else schema.lower(),
+            name.lower(),
+        )
 
-    def get(self, *, schema: str | None, name: str) -> RelationInfo | None:
+    def get(
+        self, *, database: str | None = None, schema: str | None, name: str
+    ) -> RelationInfo | None:
         """Return the gathered relation at one schema and name, or None when absent."""
 
-        return self.relations_by_key.get(self.key(schema=schema, name=name))
+        return self.relations_by_key.get(self.key(database=database, schema=schema, name=name))
 
-    def exists(self, *, schema: str | None, name: str) -> bool:
+    def exists(self, *, database: str | None = None, schema: str | None, name: str) -> bool:
         """Return whether a relation was present at one schema and name."""
 
-        return self.key(schema=schema, name=name) in self.relations_by_key
+        return self.key(database=database, schema=schema, name=name) in self.relations_by_key
 
-    def is_transient(self, *, schema: str | None, name: str) -> bool:
+    def is_transient(self, *, database: str | None = None, schema: str | None, name: str) -> bool:
         """Return whether a relation is transient, defaulting to False when absent or unknown."""
 
-        relation: RelationInfo | None = self.get(schema=schema, name=name)
+        relation: RelationInfo | None = self.get(database=database, schema=schema, name=name)
         return bool(relation.is_transient) if relation is not None else False
+
+
+@dataclass(frozen=True)
+class SelectorExpansion:
+    """One selector token split into graph expansion flags and core selector text."""
+
+    core: str
+    upstream: bool = False
+    downstream: bool = False
+
+
+@dataclass(frozen=True)
+class LocalNodePlanInput:
+    """Local state needed to classify one graph node before propagation."""
+
+    fingerprint_exists: bool
+    relation_exists: bool
+    full_refresh: bool = False
+    local_hash: str | None = None
+    previous_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class LocalNodePlanOutcome:
+    """Neutral local action and reason for one graph node."""
+
+    action: LocalNodePlanAction
+    reason: LocalNodePlanReason
 
 
 @dataclass(frozen=True)

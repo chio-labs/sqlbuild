@@ -18,20 +18,25 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInter
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import (
     build_dbt_combined_graph,
+    combined_graph_node_is_clonable,
+    combined_graph_node_is_view,
     sqlbuild_model_graph_key,
 )
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
     try_write_dbt_node_fingerprint,
 )
+from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
+    dbt_graph_node_key,
+)
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_write_identity_hashes,
-    dbt_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes,
 )
 from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
+from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -43,6 +48,10 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
+from sqlbuild.shared.helpers.graph_algorithms import (
+    resolve_clone_boundary,
+    resolve_skipped_view_chain,
+)
 from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 
@@ -128,19 +137,109 @@ def run_dbt_defer_clone_prephase(
 def resolve_defer_clone_unique_ids(
     *,
     graph: DbtCombinedGraph,
+    manifest: DbtManifestIndex,
+    project: CompiledProject,
     selected_sqlbuild_model_names: tuple[str, ...],
     required_dbt_unique_ids: tuple[str, ...],
 ) -> frozenset[str]:
-    """Resolve dbt nodes to clone for SQLBuild-selected boundaries."""
+    """Resolve the first non-view dbt ancestors to clone for SQLBuild-selected boundaries."""
 
+    selected: frozenset[DbtCombinedGraphKey] = frozenset(
+        sqlbuild_model_graph_key(model_name) for model_name in selected_sqlbuild_model_names
+    )
+
+    def is_clonable(key: DbtCombinedGraphKey) -> bool:
+        return key.owner == DbtCombinedGraphOwner.DBT and combined_graph_node_is_clonable(
+            key=key, manifest=manifest
+        )
+
+    def is_view(key: DbtCombinedGraphKey) -> bool:
+        return combined_graph_node_is_view(key=key, manifest=manifest, project=project)
+
+    boundary: frozenset[DbtCombinedGraphKey] = resolve_clone_boundary(
+        selected=selected,
+        upstream=graph.upstream_deps,
+        is_clonable=is_clonable,
+        is_view=is_view,
+    )
     unique_ids: set[str] = set(required_dbt_unique_ids)
-    model_name: str
-    for model_name in selected_sqlbuild_model_names:
-        upstream_key: DbtCombinedGraphKey
-        for upstream_key in graph.upstream_deps.get(sqlbuild_model_graph_key(model_name), ()):
-            if upstream_key.owner == DbtCombinedGraphOwner.DBT:
-                unique_ids.add(upstream_key.name)
+    boundary_key: DbtCombinedGraphKey
+    for boundary_key in boundary:
+        unique_ids.add(boundary_key.name)
     return frozenset(unique_ids)
+
+
+def resolve_defer_clone_view_chain_terms(
+    *,
+    graph: DbtCombinedGraph,
+    manifest: DbtManifestIndex,
+    project: CompiledProject,
+    selected_sqlbuild_model_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return dbt model selector terms for view ancestors that must rebuild over clones."""
+
+    view_chain: frozenset[DbtCombinedGraphKey] = _resolve_defer_clone_view_chain_keys(
+        graph=graph,
+        manifest=manifest,
+        project=project,
+        selected_sqlbuild_model_names=selected_sqlbuild_model_names,
+    )
+    terms: set[str] = set()
+    view_key: DbtCombinedGraphKey
+    for view_key in view_chain:
+        if view_key.owner != DbtCombinedGraphOwner.DBT:
+            continue
+        model: DbtManifestModel | None = manifest.models_by_unique_id.get(view_key.name)
+        if model is not None:
+            terms.add(dbt_fqn_selector_term(fqn=model.fqn, fallback=model.name))
+    return tuple(sorted(terms))
+
+
+def resolve_defer_clone_view_chain_unique_ids(
+    *,
+    graph: DbtCombinedGraph,
+    manifest: DbtManifestIndex,
+    project: CompiledProject,
+    selected_sqlbuild_model_names: tuple[str, ...],
+) -> frozenset[str]:
+    """Return dbt model unique IDs for view ancestors that must rebuild over clones."""
+
+    view_chain: frozenset[DbtCombinedGraphKey] = _resolve_defer_clone_view_chain_keys(
+        graph=graph,
+        manifest=manifest,
+        project=project,
+        selected_sqlbuild_model_names=selected_sqlbuild_model_names,
+    )
+    return frozenset(
+        view_key.name for view_key in view_chain if view_key.owner == DbtCombinedGraphOwner.DBT
+    )
+
+
+def _resolve_defer_clone_view_chain_keys(
+    *,
+    graph: DbtCombinedGraph,
+    manifest: DbtManifestIndex,
+    project: CompiledProject,
+    selected_sqlbuild_model_names: tuple[str, ...],
+) -> frozenset[DbtCombinedGraphKey]:
+    selected: frozenset[DbtCombinedGraphKey] = frozenset(
+        sqlbuild_model_graph_key(model_name) for model_name in selected_sqlbuild_model_names
+    )
+
+    def is_clonable(key: DbtCombinedGraphKey) -> bool:
+        return key.owner == DbtCombinedGraphOwner.DBT and combined_graph_node_is_clonable(
+            key=key, manifest=manifest
+        )
+
+    def is_view(key: DbtCombinedGraphKey) -> bool:
+        return combined_graph_node_is_view(key=key, manifest=manifest, project=project)
+
+    return resolve_skipped_view_chain(
+        selected=selected,
+        upstream=graph.upstream_deps,
+        is_clonable=is_clonable,
+        is_view=is_view,
+    )
 
 
 def _write_defer_clone_dbt_fingerprints(

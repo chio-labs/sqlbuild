@@ -16,10 +16,7 @@ def check_buildability(
     deferred_relations: dict[str, RelationInfo] | None = None,
     satisfied_keys: frozenset[CompiledObjectKey] = frozenset(),
 ) -> tuple[MissingUpstream, ...]:
-    """Validate that all upstream deps for selected keys exist in scope or warehouse.
-
-    Returns a tuple of missing upstreams. Empty means the scope is buildable.
-    """
+    """Validate that all upstream deps for selected keys exist in scope or warehouse."""
 
     missing_map: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
 

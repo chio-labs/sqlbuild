@@ -76,12 +76,7 @@ class _PostgresConnection:
 
 
 class PostgresAdapter(BaseAdapter):
-    """PostgreSQL adapter backed by psycopg.
-
-    psycopg opens implicit transactions by default. The connection is set to
-    autocommit=True so the framework can manage transaction boundaries explicitly
-    via BEGIN/COMMIT/ROLLBACK through the ConnectionMixin.transaction() context manager.
-    """
+    """PostgreSQL adapter backed by psycopg."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.POSTGRES.value
     sql_analysis_dialect_name: ClassVar[str | None] = "postgres"

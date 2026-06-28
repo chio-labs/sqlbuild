@@ -27,13 +27,17 @@ def clone_relation(
         origin_relation=qualified_name(adapter=adapter, entry=origin_entry),
         destination_relation=qualified_name(adapter=adapter, entry=destination_entry),
         origin_exists=origin_lookup.exists(
-            schema=origin_entry.destination.schema, name=origin_entry.destination.name
+            database=origin_entry.destination.database,
+            schema=origin_entry.destination.schema,
+            name=origin_entry.destination.name,
         ),
         adapter=adapter,
         connection=destination_connection,
         hard_copy=hard_copy,
         origin_is_transient=origin_lookup.is_transient(
-            schema=origin_entry.destination.schema, name=origin_entry.destination.name
+            database=origin_entry.destination.database,
+            schema=origin_entry.destination.schema,
+            name=origin_entry.destination.name,
         ),
     )
 
@@ -52,7 +56,9 @@ def recreate_view(
         destination_relation=qualified_name(adapter=adapter, entry=destination_entry),
         view_sql=destination_entry.resolved_sql,
         origin_exists=origin_lookup.exists(
-            schema=origin_entry.destination.schema, name=origin_entry.destination.name
+            database=origin_entry.destination.database,
+            schema=origin_entry.destination.schema,
+            name=origin_entry.destination.name,
         ),
         adapter=adapter,
         connection=destination_connection,

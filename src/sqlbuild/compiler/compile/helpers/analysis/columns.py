@@ -219,12 +219,7 @@ def infer_columns_with_sql_analysis(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
 ) -> tuple[InferredColumn, ...] | None:
-    """Infer output columns from model query SQL using SQL analysis.
-
-    Returns None if SQL analysis is not available or the SQL cannot be parsed.
-    Returns an empty tuple if the outermost SELECT uses SELECT * with no
-    extractable column names.
-    """
+    """Infer output columns from model query SQL using SQL analysis."""
 
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
 

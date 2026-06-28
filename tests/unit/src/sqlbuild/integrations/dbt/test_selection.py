@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
@@ -11,7 +12,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtInteropSelectionResult,
 )
-from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtSelectionTestCase
+from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtSelectionErrorTestCase,
+    DbtSelectionTestCase,
+)
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_compiled_project_with_model_specs,
     build_manifest_data,
@@ -388,6 +392,78 @@ SELECTION_TEST_CASES: list[DbtSelectionTestCase] = [
         expected_sqlbuild_model_names=(),
         expected_dbt_required_unique_ids=(),
     ),
+    DbtSelectionTestCase(
+        description="selects SQLBuild to SQLBuild path-between",
+        manifest_data=_MANIFEST_DATA,
+        sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
+        sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
+        sqlbuild_model_path_by_name=_SQLBUILD_PATHS,
+        select=("fact_orders~mart_orders",),
+        exclude=(),
+        dbt_anchor_unique_ids_by_term={},
+        expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
+        expected_dbt_required_unique_ids=(),
+    ),
+    DbtSelectionTestCase(
+        description="selects dbt to SQLBuild path-between",
+        manifest_data=_MANIFEST_DATA,
+        sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
+        sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
+        sqlbuild_model_path_by_name=_SQLBUILD_PATHS,
+        select=("stg_orders~fact_orders",),
+        exclude=(),
+        dbt_anchor_unique_ids_by_term={},
+        expected_sqlbuild_model_names=("fact_orders",),
+        expected_dbt_required_unique_ids=(
+            "model.analytics.int_orders",
+            "model.analytics.stg_orders",
+        ),
+    ),
+    DbtSelectionTestCase(
+        description="selects dbt to dbt path-between",
+        manifest_data=_MANIFEST_DATA,
+        sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
+        sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
+        sqlbuild_model_path_by_name=_SQLBUILD_PATHS,
+        select=("stg_orders~int_orders",),
+        exclude=(),
+        dbt_anchor_unique_ids_by_term={},
+        expected_sqlbuild_model_names=(),
+        expected_dbt_required_unique_ids=(
+            "model.analytics.int_orders",
+            "model.analytics.stg_orders",
+        ),
+    ),
+    DbtSelectionTestCase(
+        description="selects dbt to SQLBuild path-between with downstream expansion",
+        manifest_data=_MANIFEST_DATA,
+        sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
+        sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
+        sqlbuild_model_path_by_name=_SQLBUILD_PATHS,
+        select=("stg_orders~fact_orders+",),
+        exclude=(),
+        dbt_anchor_unique_ids_by_term={},
+        expected_sqlbuild_model_names=("fact_orders", "mart_orders"),
+        expected_dbt_required_unique_ids=(
+            "model.analytics.int_orders",
+            "model.analytics.stg_orders",
+        ),
+    ),
+    DbtSelectionTestCase(
+        description="selects dbt to SQLBuild path-between with upstream expansion",
+        manifest_data=_MANIFEST_DATA,
+        sqlbuild_model_sql_by_name=_SQLBUILD_SQL,
+        sqlbuild_model_tags_by_name=_SQLBUILD_TAGS,
+        sqlbuild_model_path_by_name=_SQLBUILD_PATHS,
+        select=("+int_orders~fact_orders",),
+        exclude=(),
+        dbt_anchor_unique_ids_by_term={},
+        expected_sqlbuild_model_names=("fact_orders",),
+        expected_dbt_required_unique_ids=(
+            "model.analytics.int_orders",
+            "model.analytics.stg_orders",
+        ),
+    ),
 ]
 
 
@@ -409,6 +485,7 @@ def test_given_dbt_interop_selectors_when_resolving_then_returns_expected_sqlbui
 
     result: DbtInteropSelectionResult = resolve_dbt_interop_sqlbuild_selection(
         project=project,
+        manifest=manifest,
         graph=graph,
         select=test_case.select,
         exclude=test_case.exclude,
@@ -422,3 +499,55 @@ def test_given_dbt_interop_selectors_when_resolving_then_returns_expected_sqlbui
         test_case.expected_dbt_anchor_unique_ids_by_term or {}
     )
     assert result.path_translations == test_case.expected_path_translations
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSelectionErrorTestCase(
+            description="ambiguous dbt path endpoint raises clear error",
+            manifest_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id="model.analytics.stg_orders",
+                        package_name="analytics",
+                        name="stg_orders",
+                        relation_name="analytics.stg_orders",
+                    ),
+                    build_manifest_model_node(
+                        unique_id="model.other.stg_orders",
+                        package_name="other",
+                        name="stg_orders",
+                        relation_name="other.stg_orders",
+                    ),
+                )
+            ),
+            sqlbuild_model_sql_by_name={"fact_orders": "select 1"},
+            sqlbuild_model_tags_by_name={},
+            sqlbuild_model_path_by_name={"fact_orders": "models/marts/fact_orders.sql"},
+            select=("stg_orders~fact_orders",),
+            expected_error_fragment="endpoint 'stg_orders' is ambiguous across dbt models",
+        )
+    ],
+    ids=["ambiguous dbt path endpoint raises clear error"],
+)
+def test_given_invalid_dbt_interop_path_selector_when_resolving_then_raises_clear_error(
+    test_case: DbtSelectionErrorTestCase,
+) -> None:
+    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=test_case.manifest_data)
+    project: CompiledProject = build_compiled_project_with_model_specs(
+        sql_by_model_name=test_case.sqlbuild_model_sql_by_name,
+        tags_by_model_name=test_case.sqlbuild_model_tags_by_name,
+        path_by_model_name=test_case.sqlbuild_model_path_by_name,
+    )
+    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
+
+    with pytest.raises(DbtInteropArgumentError) as exc_info:
+        resolve_dbt_interop_sqlbuild_selection(
+            project=project,
+            manifest=manifest,
+            graph=graph,
+            select=test_case.select,
+        )
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
